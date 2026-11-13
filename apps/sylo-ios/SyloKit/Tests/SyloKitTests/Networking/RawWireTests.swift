@@ -192,6 +192,25 @@ extension APIClientTests {
         #expect(mock.requests.first?.url.absoluteString == "https://example.com/sylo/api/v2/guilds/1/members?q=a%2Bb")
     }
 
+    @Test("An endpoint can ask for a lower limit than the client's, checked as the answer arrives")
+    func endpointLimit() async throws {
+        let mock = MockURLProtocol.state
+        let big = Endpoints.Resource(path: "/c/a.webp", maxDownloadBytes: 100)
+        mock.reset([.response(status: 200, headers: ["Content-Type": "image/webp"], body: Data(repeating: 1, count: 500))])
+        await #expect(throws: NetworkError.tooLarge) { try await rawClient().download(big) }
+
+        mock.reset([.response(status: 200, headers: ["Content-Type": "image/webp"], body: Data(repeating: 1, count: 100))])
+        let file = try await rawClient().download(big)
+        defer { file.discard() }
+        #expect(file.byteCount == 100)
+
+        // A higher request never lifts the client's own limit.
+        mock.reset([.response(status: 200, headers: ["Content-Type": "image/webp"], body: Data(repeating: 1, count: 500))])
+        await #expect(throws: NetworkError.tooLarge) {
+            try await rawClient(maxDownloadBytes: 100).download(Endpoints.Resource(path: "/c/a.webp", maxDownloadBytes: 10_000))
+        }
+    }
+
     @Test("A big download is written in chunks and arrives whole")
     func downloadBig() async throws {
         let mock = MockURLProtocol.state

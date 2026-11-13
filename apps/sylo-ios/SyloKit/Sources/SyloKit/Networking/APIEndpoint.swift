@@ -19,8 +19,12 @@ public protocol APIEndpoint: Sendable {
     var method: HTTPMethod { get }
     var query: [URLQueryItem] { get }
     /// The query exactly as it is to be sent, already percent-encoded; replaces ``query`` when set.
-    /// For a link the server wrote (``Endpoints/Resource``); nil for every other call.
+    /// For a link the server wrote (``Endpoints/Resource``); nil for every other call. It must come
+    /// from a parsed `URL`: invalid percent-encoding is not checked here.
     var percentEncodedQuery: String? { get }
+    /// For ``APIClient/download(_:)``: refuse an answer longer than this, checked against the declared
+    /// length before any byte is read. Never above the client's own limit. nil: the client's limit.
+    var maxDownloadBytes: Int? { get }
     /// Sent as JSON; nil sends no body and no `Content-Type`.
     var body: (any Encodable & Sendable)? { get }
     /// Sent as it is with its own `Content-Type` (a multipart form), instead of ``body``: when both
@@ -34,6 +38,7 @@ extension APIEndpoint {
     public var method: HTTPMethod { .get }
     public var query: [URLQueryItem] { [] }
     public var percentEncodedQuery: String? { nil }
+    public var maxDownloadBytes: Int? { nil }
     public var body: (any Encodable & Sendable)? { nil }
     public var rawBody: RawBody? { nil }
     public var requiresAuth: Bool { true }

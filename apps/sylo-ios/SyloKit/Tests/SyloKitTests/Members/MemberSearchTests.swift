@@ -208,19 +208,91 @@ struct MemberSearchTests {
         #expect(count(Endpoints.SearchTempRoleMembers.self, in: clients) == 2)
     }
 
+    private func waitForCalls(_ clients: StubClients, _ count: Int) async throws {
+        for _ in 0..<1000 where clients.calls.count < count {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(clients.calls.count >= count)
+    }
+
     @Test("An older search that ends does not switch the spinner off under a newer one")
-    func spinnerStaysForNewest() async {
-        let clients = StubClients { _ in MemberSearchResult(members: [Self.alex]) }
+    func spinnerStaysForNewest() async throws {
+        // The stub holds the first two searches until the test lets them go.
+        let gateOld = DispatchSemaphore(value: 0)
+        let gateNew = DispatchSemaphore(value: 0)
+        let clients = StubClients { endpoint in
+            guard let search = endpoint as? Endpoints.SearchMembers else { throw NetworkError.notFound }
+            if search.text == "al" { gateOld.wait() }
+            if search.text == "ale" { gateNew.wait() }
+            return MemberSearchResult(members: [Self.alex])
+        }
+        let model = MemberSearchModel(server: "1", session: makeSignedInSession(clients: clients))
+
+        model.query = "al"
+        let old = Task { await model.search() }
+        try await waitForCalls(clients, 1)
+        model.query = "ale"
+        let new = Task { await model.search() }
+        try await waitForCalls(clients, 2)
+        #expect(model.isSearching)
+
+        // The older search ends first: the newer one is still running, so the spinner stays.
+        gateOld.signal()
+        await old.value
+        #expect(model.isSearching)
+        #expect(model.results.isEmpty)
+
+        gateNew.signal()
+        await new.value
+        #expect(!model.isSearching)
+        #expect(model.results == [Self.alex])
+        #expect(model.searchedText == "ale")
+    }
+
+    @Test("A 404 about the server itself fails that search only and teaches the session nothing")
+    func guildNotFoundIsNotARoute() async {
+        let clients = StubClients { _ in
+            throw NetworkError.notFound(message: "Unknown or unavailable server")
+        }
         let session = makeSignedInSession(clients: clients)
         let model = MemberSearchModel(server: "1", session: session)
-        // The newest search is the one that decides: after an empty one the spinner is off.
-        model.query = "al"
+        model.query = "alex"
+        await model.search()
+        #expect(session.memberSearchRoute == .general)
+        #expect(model.isAvailable)
+        #expect(model.errorMessage == "Unknown or unavailable server")
+        // No fallback was tried.
+        #expect(count(Endpoints.SearchTempRoleMembers.self, in: clients) == 0)
+
+        // The same on the fallback route: still not "no such route".
+        session.memberSearchRoute = .tempRoles
+        await model.search()
+        #expect(session.memberSearchRoute == .tempRoles)
+        #expect(model.isAvailable)
+    }
+
+    @Test("Express's stock 404 for a missing route is a missing route")
+    func stockNotFoundIsARoute() async {
+        let clients = StubClients { endpoint in
+            if endpoint is Endpoints.SearchMembers { throw NetworkError.notFound(message: "Not found") }
+            return MemberSearchResult(members: [Self.alex])
+        }
+        let session = makeSignedInSession(clients: clients)
+        let model = MemberSearchModel(server: "1", session: session)
+        model.query = "alex"
+        await model.search()
+        #expect(session.memberSearchRoute == .tempRoles)
+        #expect(model.results == [Self.alex])
+    }
+
+    @Test("A search that finds the route unavailable clears the spinner it was showing")
+    func unavailableClearsSpinner() async {
+        let session = makeSignedInSession(clients: StubClients { _ in throw NetworkError.notFound })
+        let model = MemberSearchModel(server: "1", session: session)
+        session.memberSearchRoute = .unavailable
+        model.query = "alex"
         await model.search()
         #expect(!model.isSearching)
-        model.query = ""
-        await model.search()
-        #expect(!model.isSearching)
-        #expect(model.results.isEmpty)
     }
 
     @Test("A 401 signs the app out and shows no search error")

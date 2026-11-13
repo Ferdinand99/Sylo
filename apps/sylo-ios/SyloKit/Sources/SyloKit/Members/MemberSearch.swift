@@ -170,7 +170,10 @@ public final class MemberSearchModel {
             isSearching = false
             return
         }
-        guard isAvailable else { return }
+        guard isAvailable else {
+            isSearching = false
+            return
+        }
         // A pasted mention means nothing to the server's name search; its id does.
         let text = MemberReference.id(in: typed) ?? typed
         isSearching = true
@@ -194,15 +197,27 @@ public final class MemberSearchModel {
         if session.memberSearchRoute == .general {
             do {
                 return try await session.send(Endpoints.SearchMembers(server: server, text: text))
-            } catch NetworkError.notFound {
+            } catch let failure as NetworkError {
+                // Only "no such route" moves on to the next one. A 404 that says the server itself is
+                // unknown or not available right now (a restart) fails this search and nothing more.
+                guard Self.isRouteMissing(failure) else { throw failure }
                 session.memberSearchRoute = .tempRoles
             }
         }
         do {
             return try await session.send(Endpoints.SearchTempRoleMembers(server: server, text: text))
-        } catch NetworkError.notFound {
+        } catch let failure as NetworkError {
+            guard Self.isRouteMissing(failure) else { throw failure }
             session.memberSearchRoute = .unavailable
-            throw NetworkError.notFound
+            throw failure
         }
+    }
+
+    /// A 404 from a path the server does not have: no text, or Express's stock "Not found", as opposed to
+    /// the guild lookup's "Unknown or unavailable server".
+    private static func isRouteMissing(_ failure: NetworkError) -> Bool {
+        guard case .notFound(let message) = failure else { return false }
+        guard let message else { return true }
+        return NetworkError.isStockPhrase(message)
     }
 }

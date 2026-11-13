@@ -79,10 +79,10 @@ struct AuthenticatedImage: View {
     private var resource: Endpoints.Resource? {
         switch source {
         case .path(let path, let query):
-            return Endpoints.Resource(path: path, query: query)
+            return Endpoints.Resource(path: path, query: query, maxDownloadBytes: Self.maxPictureBytes)
         case .url(let url):
             guard let url, let server = session.server else { return nil }
-            return Endpoints.Resource(url: url, on: server)
+            return Endpoints.Resource(url: url, on: server, maxDownloadBytes: Self.maxPictureBytes)
         }
     }
 
@@ -108,8 +108,7 @@ struct AuthenticatedImage: View {
             // would come back blank after a memory purge.
             let data: Data
             do {
-                // A picture of a few MB at most; anything bigger is not decoded.
-                guard file.byteCount <= Self.maxPictureBytes else { throw NetworkError.tooLarge }
+                // The download itself is capped at the same size (see `resource`).
                 data = try file.contents()
             } catch {
                 file.discard()

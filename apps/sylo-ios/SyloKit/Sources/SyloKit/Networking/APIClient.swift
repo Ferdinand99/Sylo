@@ -125,10 +125,11 @@ public final class URLSessionAPIClient: APIClient {
 
     public func download<E: APIEndpoint>(_ endpoint: E) async throws -> DownloadedFile where E.Response == EmptyResponse {
         let request = try await makeRequest(for: endpoint, accept: "*/*")
+        let limit = Swift.min(endpoint.maxDownloadBytes ?? maxDownloadBytes, maxDownloadBytes)
         var attempt = 0
         while true {
             do {
-                return try await fetchFile(request)
+                return try await fetchFile(request, limit: limit)
             } catch {
                 let error = NetworkError(error)
                 guard endpoint.method == .get, error.isRetryable, attempt < retryDelays.count else { throw error }
@@ -148,8 +149,7 @@ public final class URLSessionAPIClient: APIClient {
     private static let errorBodyBytes = 16 * 1024
     private static let writeChunkBytes = 64 * 1024
 
-    private func fetchFile(_ request: URLRequest) async throws -> DownloadedFile {
-        let limit = maxDownloadBytes
+    private func fetchFile(_ request: URLRequest, limit: Int) async throws -> DownloadedFile {
         #if canImport(FoundationNetworking)
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw NetworkError.notASyloServer }

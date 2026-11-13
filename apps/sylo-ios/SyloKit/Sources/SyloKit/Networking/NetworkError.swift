@@ -72,7 +72,23 @@ public enum NetworkError: Error, Sendable, Equatable {
 
     /// What the server said about a failed call (its JSON `error` or `message` text), or nil when it
     /// said nothing or the answer was not JSON.
+    /// Only words meant for a person: a code (`invalid_request`) or a framework's stock phrase
+    /// (`Not found`, `Internal server error`) is not text, so it gives nil here; see ``serverCode``.
     public var serverMessage: String? {
+        guard let text = rawServerText, !Self.isCode(text), !Self.isStockPhrase(text) else { return nil }
+        return text
+    }
+
+    /// The server's machine code when its `error` was one (`taken`, `invalid_platform`,
+    /// `already_connected`: lowercase letters, digits and underscores), else nil. For a package that
+    /// maps the codes it knows to its own words.
+    public var serverCode: String? {
+        guard let text = rawServerText, Self.isCode(text) else { return nil }
+        return text
+    }
+
+    /// The server's `error` text as it came, cleaned (see ``serverMessage(in:)``), code or not.
+    var rawServerText: String? {
         switch self {
         case .badRequest(let message), .forbidden(let message), .notFound(let message), .tooLarge(let message):
             return message
@@ -82,6 +98,26 @@ public enum NetworkError: Error, Sendable, Equatable {
             return nil
         }
     }
+
+    /// `^[a-z][a-z0-9_]*$`.
+    static func isCode(_ text: String) -> Bool {
+        guard let first = text.unicodeScalars.first, ("a"..."z").contains(first) else { return false }
+        return text.unicodeScalars.allSatisfy { ("a"..."z").contains($0) || ("0"..."9").contains($0) || $0 == "_" }
+    }
+
+    /// The generic answers Express and proxies give when nothing better is known.
+    static func isStockPhrase(_ text: String) -> Bool {
+        var phrase = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        while phrase.hasSuffix(".") || phrase.hasSuffix("!") { phrase.removeLast() }
+        return stockPhrases.contains(phrase)
+    }
+
+    private static let stockPhrases: Set<String> = [
+        "not found", "internal server error", "payload too large", "request entity too large",
+        "bad request", "forbidden", "unauthorized", "bad gateway", "service unavailable",
+        "gateway timeout", "conflict", "too many requests", "method not allowed",
+        "unprocessable entity", "error", "unknown error", "server error", "something went wrong",
+    ]
 
     /// Maps any error from a request to a `NetworkError`.
     public init(_ error: any Error) {
@@ -105,8 +141,8 @@ public enum NetworkError: Error, Sendable, Equatable {
 
     /// A short sentence for the person: what happened and what to do.
     public var userMessage: String {
-        // The server's own words say more than ours; `invalid_grant` is a code, not words.
-        if let text = serverMessage, !text.isEmpty, text != "invalid_grant" { return text }
+        // The server's own words say more than ours; a code or a stock phrase is not words.
+        if let text = serverMessage { return text }
         return switch self {
         case .unauthorized: "You've been signed out. Sign in again to continue."
         case .forbidden: "You don't have access to this. Ask the server's owner if you think you should."
@@ -183,15 +219,32 @@ public enum NetworkError: Error, Sendable, Equatable {
         }
     }
 
-    /// The `error` (or else `message`) text of a JSON error answer: trimmed, never empty, cut at 500
-    /// characters.
-    private static func serverMessage(in body: Data) -> String? {
+    /// The `error` (or else `message`) text of a JSON error answer, cleaned for showing: line breaks
+    /// become spaces, control and format characters (bidirectional overrides, zero-width characters)
+    /// are dropped, the ends are trimmed, and it is cut at 300 unicode scalars. Nil when nothing is left.
+    static func serverMessage(in body: Data) -> String? {
         guard let parsed = try? JSONDecoder().decode(ErrorBody.self, from: body) else { return nil }
         for candidate in [parsed.error, parsed.message] {
-            let text = candidate?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if !text.isEmpty { return String(text.prefix(500)) }
+            if let text = candidate.flatMap(cleaned), !text.isEmpty { return text }
         }
         return nil
+    }
+
+    static func cleaned(_ text: String) -> String? {
+        var scalars = String.UnicodeScalarView()
+        for scalar in text.unicodeScalars {
+            switch scalar.properties.generalCategory {
+            case .control where scalar == "\n" || scalar == "\r" || scalar == "\t":
+                scalars.append(" ")
+            case .control, .format:
+                continue
+            default:
+                scalars.append(scalar)
+            }
+            if scalars.count >= 300 { break }
+        }
+        let trimmed = String(scalars).trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private static func describe(_ error: DecodingError) -> String {

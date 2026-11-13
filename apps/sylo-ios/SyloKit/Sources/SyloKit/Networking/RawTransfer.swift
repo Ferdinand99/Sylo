@@ -217,19 +217,23 @@ extension Endpoints {
         public let query: [URLQueryItem]
         /// The query of a link, as the server spelled it; used instead of ``query`` when set.
         public let percentEncodedQuery: String?
+        /// A limit for this file (a picture), checked before it is read; see ``APIEndpoint/maxDownloadBytes``.
+        public let maxDownloadBytes: Int?
 
-        public init(path: String, query: [URLQueryItem] = []) {
+        public init(path: String, query: [URLQueryItem] = [], maxDownloadBytes: Int? = nil) {
             self.path = path
             self.query = query
             self.percentEncodedQuery = nil
+            self.maxDownloadBytes = maxDownloadBytes
         }
 
         /// The resource a link on `server` points to; nil for a link to another host.
-        public init?(url: URL, on server: ServerURL) {
+        public init?(url: URL, on server: ServerURL, maxDownloadBytes: Int? = nil) {
             guard let found = server.apiPath(of: url) else { return nil }
             path = found.path
             query = []
             percentEncodedQuery = found.percentEncodedQuery
+            self.maxDownloadBytes = maxDownloadBytes
         }
     }
 }

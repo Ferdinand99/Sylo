@@ -42,7 +42,8 @@ enum ServerPages {
     }
 
     private static func page(for cardID: String) -> ServerPage? {
-        all.first { $0.cardID == cardID }
+        assert(Set(all.map(\.cardID)).count == all.count, "a server page is registered twice")
+        return all.first { $0.cardID == cardID }
     }
 }
 

@@ -84,11 +84,67 @@ struct NetworkErrorMessageTests {
         #expect(error(409, #"{"error":"First","message":"Second"}"#).serverMessage == "First")
     }
 
-    @Test("Text is trimmed and cut at 500 characters")
+    @Test("Text is trimmed, and cut at 300 unicode scalars")
     func trimmed() {
-        #expect(error(409, #"{"error":"  spaced \n"}"#).serverMessage == "spaced")
-        let long = String(repeating: "x", count: 900)
-        #expect(error(409, "{\"error\":\"\(long)\"}").serverMessage?.count == 500)
+        #expect(error(409, #"{"error":"  Spaced out \n"}"#).serverMessage == "Spaced out")
+        let long = String(repeating: "Abcde", count: 200)
+        #expect(error(409, "{\"error\":\"\(long)\"}").serverMessage?.unicodeScalars.count == 300)
+        // A "character" made of many combining marks still counts by scalars.
+        let marks = String(repeating: "e\u{301}", count: 400)
+        let cut = error(409, "{\"error\":\"\(marks)\"}").userMessage
+        #expect(cut.unicodeScalars.count == 300)
+    }
+
+    @Test("A machine code is not shown; it stays available as serverCode", arguments: [
+        (400, "invalid_request"), (404, "not_found"), (409, "already_connected"), (400, "taken"),
+        (503, "push_unavailable"), (409, "identity_linked"), (400, "invalid_platform"), (403, "no_access2"),
+    ])
+    func codes(status: Int, code: String) {
+        let failure = error(status, "{\"error\":\"\(code)\"}")
+        #expect(failure.serverCode == code)
+        #expect(failure.serverMessage == nil)
+        // The person reads the app's own words for that status.
+        #expect(failure.userMessage == error(status, "{}").userMessage)
+    }
+
+    @Test("Text with capitals or spaces is a message, not a code")
+    func notACode() {
+        for text in ["Taken", "already connected", "invalid-request", "9lives", "no_access!"] {
+            let failure = error(409, "{\"error\":\"\(text)\"}")
+            #expect(failure.serverCode == nil, "\(text)")
+            #expect(failure.serverMessage == text, "\(text)")
+        }
+        #expect(error(409, "{}").serverCode == nil)
+    }
+
+    @Test("A framework's stock phrases are not shown", arguments: [
+        (404, "Not found"), (500, "Internal server error"), (413, "Payload too large"), (400, "Bad Request"),
+        (403, "Forbidden"), (502, "Bad gateway."), (404, "  NOT FOUND "), (503, "Service Unavailable"),
+    ])
+    func stockPhrases(status: Int, text: String) {
+        let failure = error(status, "{\"error\":\"\(text)\"}")
+        #expect(failure.serverMessage == nil)
+        #expect(failure.serverCode == nil)
+        #expect(failure.userMessage == error(status, "{}").userMessage)
+    }
+
+    @Test("Direction overrides, zero-width characters and line breaks are removed")
+    func hostileText() {
+        let failure = error(409, #"{"error":"Pay\u202Ement\nfailed\u200B!\u2066\r\u2069 Try\tagain"}"#)
+        #expect(failure.serverMessage == "Payment failed!  Try again")
+        #expect(failure.userMessage == "Payment failed!  Try again")
+        // Nothing but invisible characters is no text.
+        #expect(error(409, #"{"error":"\u200B\u202E\n"}"#).serverMessage == nil)
+        #expect(error(409, #"{"error":"\u200B\u202E\n"}"#).userMessage == error(409, "{}").userMessage)
+    }
+
+    @Test("A 400 code that the app maps itself still reaches it raw")
+    func badRequestKeepsCode() {
+        let failure = error(400, #"{"error":"invalid_grant"}"#)
+        #expect(failure == .badRequest(message: "invalid_grant"))
+        #expect(failure.serverCode == "invalid_grant")
+        #expect(failure.userMessage == NetworkError.badRequest(message: "invalid_grant").userMessage)
+        #expect(failure.userMessage != error(400, "{}").userMessage)
     }
 
     @Test("Equality ignores the text, the number of a status is its code")
@@ -105,9 +161,8 @@ struct NetworkErrorMessageTests {
         #expect(Set([HTTPStatus(409, message: "x"), 409]).count == 1)
     }
 
-    @Test("The text survives the real client, for 403, 404, 409 and 502")
-    func throughTheClient() async throws {
-        // Through the session stub: a thrown error keeps its text all the way to the screen.
+    @Test("Mapping an error again keeps its text")
+    func remapKeepsText() {
         let thrown = NetworkError.from(status: 409, body: Data(#"{"error":"Already decided."}"#.utf8), isJSON: true)
         #expect(NetworkError(thrown).userMessage == "Already decided.")
         #expect(NetworkError(thrown) == .http(status: 409))
