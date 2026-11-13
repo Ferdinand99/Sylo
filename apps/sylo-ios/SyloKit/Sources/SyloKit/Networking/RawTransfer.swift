@@ -16,6 +16,26 @@ public struct RawBody: Sendable, Equatable {
     }
 }
 
+/// A file on disk that is sent as the request body, read from the disk as it goes (a backup of up to
+/// 128 MB): it is never loaded into memory. An endpoint that sets ``APIEndpoint/uploadFile`` sends this
+/// instead of ``APIEndpoint/rawBody`` and ``APIEndpoint/body``.
+///
+/// Every upload carries its own size limit, because the limits differ a lot: the server takes 2 MB for a
+/// picture and 128 MB for a backup. The client measures the file on disk before sending anything and
+/// refuses a longer one with ``NetworkError/tooLarge``.
+public struct UploadFile: Sendable, Equatable {
+    public let fileURL: URL
+    public let contentType: String
+    /// The most the endpoint takes, in bytes.
+    public let maxBytes: Int64
+
+    public init(fileURL: URL, contentType: String, maxBytes: Int64) {
+        self.fileURL = fileURL
+        self.contentType = contentType
+        self.maxBytes = maxBytes
+    }
+}
+
 /// A file the server sent, kept on disk in a temporary folder, never as one big `Data`: the share
 /// sheet and Quick Look read the file, so a large export does not sit in memory.
 ///

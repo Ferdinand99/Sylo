@@ -10,6 +10,8 @@ struct RecordedRequest: Sendable {
     let method: String
     let headers: [String: String]
     let body: Data?
+    /// The body arrived as a stream (an upload read from a file) and not as bytes held by the request.
+    var usedBodyStream = false
 
     func header(_ name: String) -> String? {
         headers.first { $0.key.caseInsensitiveCompare(name) == .orderedSame }?.value
@@ -64,7 +66,8 @@ final class MockURLProtocol: URLProtocol {
             url: request.url!,
             method: request.httpMethod ?? "GET",
             headers: request.allHTTPHeaderFields ?? [:],
-            body: request.httpBody ?? request.httpBodyStream.map(Self.read)
+            body: request.httpBody ?? request.httpBodyStream.map(Self.read),
+            usedBodyStream: request.httpBody == nil && request.httpBodyStream != nil
         )
         switch Self.state.next(for: recorded) {
         case let .response(status, headers, body):

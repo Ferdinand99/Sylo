@@ -18,9 +18,23 @@ public protocol APIClient: Sendable {
     /// A client that downloads must implement this: the default answer is a 404, which is only right
     /// for a client that has no files at all (a stub).
     func download<E: APIEndpoint>(_ endpoint: E) async throws -> DownloadedFile where E.Response == EmptyResponse
+
+    /// Sends the call like ``send(_:)``, and reports how much of an ``APIEndpoint/uploadFile`` has gone
+    /// out: `progress(bytesSent, bytesExpected)`, called on a background queue. Cancelling the task stops
+    /// the transfer. A call without an upload file is a plain `send`, and a client that does not report
+    /// progress (a stub) answers like `send` too.
+    func upload<E: APIEndpoint>(
+        _ endpoint: E, progress: (@Sendable (Int64, Int64) -> Void)?
+    ) async throws -> E.Response
 }
 
 extension APIClient {
+    public func upload<E: APIEndpoint>(
+        _ endpoint: E, progress: (@Sendable (Int64, Int64) -> Void)?
+    ) async throws -> E.Response {
+        try await send(endpoint)
+    }
+
     /// A client that cannot download answers like a server that has no such file.
     public func download<E: APIEndpoint>(_ endpoint: E) async throws -> DownloadedFile where E.Response == EmptyResponse {
         throw NetworkError.notFound
@@ -37,6 +51,12 @@ public final class URLSessionAPIClient: APIClient {
     static let defaultRetryDelays: [Duration] = [.milliseconds(500), .seconds(1)]
     /// The longest download kept (an application export or a ticket transcript is far smaller).
     public static let defaultMaxDownloadBytes = 32 * 1024 * 1024
+    /// The longest download kept for an endpoint that says ``APIEndpoint/isLargeDownload`` (a database
+    /// backup is bigger than any export).
+    public static let largeDownloadBytes = 512 * 1024 * 1024
+    /// A request with a file body waits this long for the server to answer after the last byte (a
+    /// backup is checked before the answer), instead of the usual 20 s.
+    static let uploadTimeout: TimeInterval = 120
 
     public let server: ServerURL
     private let token: @Sendable () async -> String?
@@ -106,6 +126,7 @@ public final class URLSessionAPIClient: APIClient {
     }
 
     public func send<E: APIEndpoint>(_ endpoint: E) async throws -> E.Response {
+        if endpoint.uploadFile != nil { return try await upload(endpoint, progress: nil) }
         let request = try await makeRequest(for: endpoint)
         var attempt = 0
         while true {
@@ -123,9 +144,50 @@ public final class URLSessionAPIClient: APIClient {
         }
     }
 
+    /// Sends an ``APIEndpoint/uploadFile`` straight from the disk (the file is never read into memory)
+    /// as `POST`/`PUT` with its own `Content-Type`, never retried, and decodes the JSON answer.
+    /// A file longer than the endpoint's limit is refused with ``NetworkError/tooLarge`` before anything
+    /// is sent; one that cannot be read is a ``NetworkError/transport(code:)`` error.
+    public func upload<E: APIEndpoint>(
+        _ endpoint: E, progress: (@Sendable (Int64, Int64) -> Void)?
+    ) async throws -> E.Response {
+        guard let file = endpoint.uploadFile else { return try await send(endpoint) }
+        try Self.checkUpload(file)
+        var request = try await makeRequest(for: endpoint)
+        request.timeoutInterval = Self.uploadTimeout
+        let data: Data
+        let response: URLResponse
+        do {
+            #if canImport(FoundationNetworking)
+            request.httpBody = try Data(contentsOf: file.fileURL)
+            (data, response) = try await session.data(for: request)
+            #else
+            (data, response) = try await session.upload(
+                for: request, fromFile: file.fileURL, delegate: UploadDelegate(progress: progress))
+            #endif
+        } catch {
+            throw NetworkError(error)
+        }
+        return try answer(data, response, as: E.Response.self)
+    }
+
+    /// The file's size on disk against the endpoint's limit.
+    static func checkUpload(_ file: UploadFile) throws(NetworkError) {
+        let size: Int64
+        do {
+            let attributes = try FileManager.default.attributesOfItem(atPath: file.fileURL.path)
+            size = (attributes[.size] as? NSNumber)?.int64Value ?? -1
+        } catch {
+            throw .transport(code: CocoaError.fileReadNoSuchFile.rawValue)
+        }
+        guard size >= 0 else { throw .transport(code: CocoaError.fileReadUnknown.rawValue) }
+        guard size <= file.maxBytes else { throw NetworkError.tooLarge }
+    }
+
     public func download<E: APIEndpoint>(_ endpoint: E) async throws -> DownloadedFile where E.Response == EmptyResponse {
         let request = try await makeRequest(for: endpoint, accept: "*/*")
-        let limit = Swift.min(endpoint.maxDownloadBytes ?? maxDownloadBytes, maxDownloadBytes)
+        let ceiling = endpoint.isLargeDownload ? Swift.max(maxDownloadBytes, Self.largeDownloadBytes) : maxDownloadBytes
+        let limit = Swift.min(endpoint.maxDownloadBytes ?? ceiling, ceiling)
         var attempt = 0
         while true {
             do {
@@ -240,7 +302,10 @@ public final class URLSessionAPIClient: APIClient {
         var request = URLRequest(url: server.url(for: endpoint.path, query: endpoint.query, percentEncodedQuery: endpoint.percentEncodedQuery))
         request.httpMethod = endpoint.method.rawValue
         request.setValue(accept, forHTTPHeaderField: "Accept")
-        if let raw = endpoint.rawBody {
+        if let file = endpoint.uploadFile {
+            // The body itself is streamed from the file by `upload(_:progress:)`.
+            request.setValue(file.contentType, forHTTPHeaderField: "Content-Type")
+        } else if let raw = endpoint.rawBody {
             request.httpBody = raw.data
             request.setValue(raw.contentType, forHTTPHeaderField: "Content-Type")
         } else if let body = endpoint.body {
@@ -275,6 +340,14 @@ public final class URLSessionAPIClient: APIClient {
         } catch {
             throw NetworkError(error)
         }
+        return try answer(data, response, as: type)
+    }
+
+    /// What a finished call means: the decoded JSON for a success, the matching ``NetworkError`` for
+    /// anything else.
+    private func answer<Response: Decodable>(
+        _ data: Data, _ response: URLResponse, as type: Response.Type
+    ) throws(NetworkError) -> Response {
         guard let http = response as? HTTPURLResponse else { throw .notASyloServer }
         let isJSON = Self.isJSON(data, contentType: Self.header("Content-Type", in: http))
 
@@ -329,6 +402,39 @@ public final class URLSessionAPIClient: APIClient {
 /// Refuses every redirect: the API never redirects, and following one would send the
 /// `Authorization` header to wherever it points. The 3xx answer becomes ``NetworkError/notASyloServer``.
 final class RefuseRedirects: NSObject, URLSessionTaskDelegate, Sendable {
+    #if canImport(FoundationNetworking)
+    func urlSession(
+        _ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        completionHandler(nil)
+    }
+    #else
+    func urlSession(
+        _ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void
+    ) {
+        completionHandler(nil)
+    }
+    #endif
+}
+
+/// Reports an upload's progress and refuses every redirect, like ``RefuseRedirects``, for the one task
+/// of a file upload.
+final class UploadDelegate: NSObject, URLSessionTaskDelegate, Sendable {
+    private let progress: (@Sendable (Int64, Int64) -> Void)?
+
+    init(progress: (@Sendable (Int64, Int64) -> Void)?) {
+        self.progress = progress
+    }
+
+    func urlSession(
+        _ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64,
+        totalBytesSent: Int64, totalBytesExpectedToSend: Int64
+    ) {
+        progress?(totalBytesSent, totalBytesExpectedToSend)
+    }
+
     #if canImport(FoundationNetworking)
     func urlSession(
         _ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,

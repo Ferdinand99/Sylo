@@ -30,6 +30,12 @@ public protocol APIEndpoint: Sendable {
     /// Sent as it is with its own `Content-Type` (a multipart form), instead of ``body``: when both
     /// are set, this one wins and ``body`` is ignored. nil for every JSON call.
     var rawBody: RawBody? { get }
+    /// A file on disk sent as the body, streamed from the disk (``UploadFile``); wins over ``rawBody`` and
+    /// ``body``. nil for every other call.
+    var uploadFile: UploadFile? { get }
+    /// For ``APIClient/download(_:)``: this answer may be as long as ``URLSessionAPIClient/largeDownloadBytes``
+    /// instead of the client's usual limit (a database backup). False for every other download.
+    var isLargeDownload: Bool { get }
     /// Whether the app token goes along. False only before sign-in (info, code exchange).
     var requiresAuth: Bool { get }
 }
@@ -41,6 +47,8 @@ extension APIEndpoint {
     public var maxDownloadBytes: Int? { nil }
     public var body: (any Encodable & Sendable)? { nil }
     public var rawBody: RawBody? { nil }
+    public var uploadFile: UploadFile? { nil }
+    public var isLargeDownload: Bool { false }
     public var requiresAuth: Bool { true }
 }
 

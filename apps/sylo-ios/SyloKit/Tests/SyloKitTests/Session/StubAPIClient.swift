@@ -16,12 +16,28 @@ final class StubClients: @unchecked Sendable {
     private let lock = NSLock()
     private var handler: Handler
     private var sent: [Call] = []
+    private var progressSteps: [(sent: Int64, total: Int64)] = []
+    private var holdsUploads = false
 
     init(handler: @escaping Handler) {
         self.handler = handler
     }
 
     var calls: [Call] { lock.withLock { sent } }
+
+    /// What an upload reports through its progress closure before it is answered.
+    func setUploadProgress(_ steps: [(sent: Int64, total: Int64)]) {
+        lock.withLock { progressSteps = steps }
+    }
+
+    /// Makes every upload wait (until its task is cancelled) instead of answering.
+    func holdUploads(_ hold: Bool) {
+        lock.withLock { holdsUploads = hold }
+    }
+
+    fileprivate var uploadBehaviour: (steps: [(sent: Int64, total: Int64)], holds: Bool) {
+        lock.withLock { (progressSteps, holdsUploads) }
+    }
 
     func setHandler(_ handler: @escaping Handler) {
         lock.withLock { self.handler = handler }
@@ -53,6 +69,22 @@ final class StubClients: @unchecked Sendable {
             } catch {
                 throw NetworkError(error)
             }
+        }
+
+        /// An upload reports the steps it was given, may wait to be cancelled, then is answered like a send.
+        func upload<E: APIEndpoint>(
+            _ endpoint: E, progress: (@Sendable (Int64, Int64) -> Void)?
+        ) async throws -> E.Response {
+            let behaviour = owner.uploadBehaviour
+            for step in behaviour.steps { progress?(step.sent, step.total) }
+            if behaviour.holds {
+                do {
+                    try await Task.sleep(for: .seconds(60))
+                } catch {
+                    throw NetworkError.cancelled
+                }
+            }
+            return try await send(endpoint)
         }
 
         /// A download is answered with a ``DownloadedFile`` (or thrown error) from the handler.
