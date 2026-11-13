@@ -1,7 +1,7 @@
 import SwiftUI
 import SyloKit
 
-/// One server, with a tab bar: Modules, Tickets and Settings.
+/// One server, with a tab bar: Modules, Tickets, Moderation and Settings.
 ///
 /// The tab view sits inside the detail column's navigation stack (one stack, never nested), so
 /// screens pushed from any tab (a module's settings, a ticket) cover the tab bar the way a
@@ -17,9 +17,11 @@ struct ServerView: View {
     @State private var tickets: TicketsModel
     @State private var settings: GuildSettingsModel
     @State private var isConfirmingDiscard = false
+    /// The open appeals as the appeals screen last saw them; the overview's count until then.
+    @State private var openAppeals: Int?
 
     enum ServerTab: Hashable {
-        case modules, tickets, settings
+        case modules, tickets, moderation, settings
     }
 
     init(summary: ServerSummary, session: AppSession, tab: Binding<ServerTab>) {
@@ -39,6 +41,10 @@ struct ServerView: View {
                 .tabItem { Label("Tickets", systemImage: "bubble.left.and.bubble.right") }
                 .badge(tickets.unreadCount)
                 .tag(ServerTab.tickets)
+            ModerationTabView(server: summary.id, session: session) { openAppeals = $0 }
+                .tabItem { Label("Moderation", systemImage: "shield") }
+                .badge(openAppeals ?? overview.overview?.openAppeals ?? 0)
+                .tag(ServerTab.moderation)
             GuildSettingsForm(model: settings)
                 .tabItem { Label("Settings", systemImage: "gearshape") }
                 .tag(ServerTab.settings)
@@ -74,6 +80,7 @@ struct ServerView: View {
         switch tab {
         case .modules: summary.name
         case .tickets: String(localized: "Tickets")
+        case .moderation: String(localized: "Moderation")
         case .settings: String(localized: "Server Settings")
         }
     }
