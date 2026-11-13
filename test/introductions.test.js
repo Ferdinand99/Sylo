@@ -617,6 +617,8 @@ test('the welcome message fills {intro}, and leaves it empty when Introductions 
 
   await enable();
   sent.length = 0;
+  // the first welcome is on record, so the member has to have left for another one
+  await dispatch('guildMemberRemove', GID, member);
   await dispatch('guildMemberAdd', GID, member);
   assert.equal(sent[0].content, `Hi <@${U}>! Say hello in <#${INTRO_CH}>.`);
   assert.equal(sent[1].dm.content, `Welcome. <#${INTRO_CH}>`);

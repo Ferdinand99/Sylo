@@ -37,7 +37,7 @@ export const GROUPS = [
     name: 'Economy',
     commands: ['balance', 'daily', 'work', 'deposit', 'withdraw', 'pay', 'rob', 'economy-leaderboard', 'eco'],
   },
-  { name: 'Shop', commands: ['shop', 'buy', 'inventory'] },
+  { name: 'Shop', commands: ['shop', 'buy', 'inventory', 'collection'] },
   { name: 'Community', commands: ['afk', 'birthday', 'quote', 'intro', 'apply', 'application'] },
   { name: 'Roles', commands: ['temprole'] },
   {

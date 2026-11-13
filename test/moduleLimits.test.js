@@ -94,7 +94,7 @@ const cases = {
   welcome: {
     normalise: normaliseWelcomeConfig,
     base: { joinEnabled: true, leaveEnabled: true, dmEnabled: true },
-    value: { cardBackground: (n) => `https://${text(n - 8)}` },
+    value: { cardBackground: (n) => `https://${text(n - 8)}`, triggerRoleIds: (n) => items(n, roleId) },
   },
   sticky: {
     normalise: normaliseStickyConfig,

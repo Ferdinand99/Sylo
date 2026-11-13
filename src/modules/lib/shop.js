@@ -4,7 +4,8 @@
 // `after` hook (a generator, see db/driver.js transaction()):
 //
 //   purchase   debit the price (`purchase`), take one from the stock, check the member's limit,
-//              write the temp-role record for a temporary role, add the inventory row.
+//              write the temp-role record for a temporary role, add the inventory row. A custom item
+//              and a collectible are `active` at once: nothing on the platform has to happen first.
 //   endRow     refund (`refund`) or revoke (`revoke`): the row's status, the stock, the temp-role
 //              record, and the money back, in one transaction.
 //   grantItem  a free item (`grant`, amount 0): the inventory row and the temp-role record.
@@ -28,11 +29,17 @@
 // (`added_ms`): a refund or revoke takes off only that, so time staff gave by hand stays. When the
 // temp-role code drops a record (it ran out, was taken off) the rows become `expired`.
 //
+// A collectible is an item with a picture (and maybe a rarity) that gives no role: it is bought, owned, shown
+// (/collection) and refunded like any other, optionally announced in a channel when it is bought
+// (modules/lib/collectibles.js), and a collectible without a picture cannot be bought yet.
+//
 // Items are the staff's text; nothing a member types ever goes into an item, a ledger reason or a
 // fulfilment note.
 import { EmbedBuilder } from 'discord.js';
 import { abort, transact } from './economy.js';
-import { formatMoney } from './economyConfig.js';
+import { formatMoney, isRoleItemType } from './economyConfig.js';
+import { announcePurchase } from './collectibles.js';
+import { releaseImageTx } from '../../db/collectibleImages.js';
 import {
   activateRow,
   deferPendingLease,
@@ -62,9 +69,29 @@ import { every } from '../schedule.js';
 
 const INSERT_ROW = `
   INSERT INTO economy_inventory
-    (guild_id, user_id, item_id, item_name, item_type, role_id, price_paid, source, status, added_ms, lease_until, created_at, updated_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    (guild_id, user_id, item_id, item_name, item_type, role_id, price_paid, source, status, added_ms, lease_until, created_at, updated_at, image_id, rarity)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
+
+/**
+ * Inside a transaction: the picture and rarity a new copy of a collectible carries, read from the item as it is
+ * NOW. The item row is locked first (a no-op update, the lock a replaced picture also takes), so a picture
+ * that is replaced at the same moment either comes before this copy, which then carries the new one, or after
+ * it, and then its update moves this copy to the new picture too. `needPicture` (a purchase) refuses an item
+ * whose picture was taken off in the meantime. Anything that is not a collectible carries none.
+ */
+function* pictureOfCopy(tx, guildId, item, { needPicture }) {
+  if (item.type !== 'collectible') return { imageId: null, rarity: null };
+  yield tx.run('UPDATE economy_items SET sold = sold WHERE guild_id = ? AND id = ?', guildId, item.id);
+  const cur = yield tx.get(
+    'SELECT image_id, rarity FROM economy_items WHERE guild_id = ? AND id = ?',
+    guildId,
+    item.id
+  );
+  if (!cur) abort('item_gone');
+  if (needPicture && !cur.image_id) abort('no_image');
+  return { imageId: cur.image_id ?? null, rarity: cur.rarity ?? null };
+}
 
 /** A role grant that is not confirmed within this long after its purchase is mopped up by the sweep. */
 export const GRANT_LEASE_MS = 5 * 60_000;
@@ -117,7 +144,8 @@ const rolesOf = (member) => [...(member?.roles?.cache?.keys?.() ?? [])];
 
 /**
  * The reasons a member cannot buy an item right now, before any money is asked: gone, paused, sold out,
- * missing role, Sylo cannot hand out the role, or a permanent role the member already has.
+ * missing role, a collectible that has no picture yet, Sylo cannot hand out the role, or a permanent role
+ * the member already has.
  * @returns {{ reason: string, message?: string } | null}
  */
 export function buyProblem(guild, member, item) {
@@ -125,7 +153,8 @@ export function buyProblem(guild, member, item) {
   if (!item.enabled) return { reason: 'item_paused' };
   if (item.stock !== null && item.sold >= item.stock) return { reason: 'sold_out' };
   if (!requirementsMet(item, rolesOf(member))) return { reason: 'requirements', roles: item.requiredRoles };
-  if (item.type !== 'custom') {
+  if (item.type === 'collectible' && !item.imageId) return { reason: 'no_image' };
+  if (isRoleItemType(item.type)) {
     const role = guild.roles.cache.get(item.roleId) ?? null;
     const refusal = botRefusal(guild, role);
     if (refusal) return { reason: 'cannot_grant', message: refusal };
@@ -167,6 +196,8 @@ export function shopRefusalText(result, config) {
       return 'That item is no longer in the shop.';
     case 'item_paused':
       return 'That item is not for sale right now.';
+    case 'no_image':
+      return 'That item is not ready yet: staff have not added its picture.';
     case 'sold_out':
       return 'That item is sold out.';
     case 'item_changed':
@@ -218,7 +249,8 @@ export function shopRefusalText(result, config) {
  * exactly 5. Buying a temporary role again while it runs ADDS the new time to what is left.
  *
  * Then, for a role item, the role goes on in the platform; if that fails the purchase is refunded.
- * For a custom item, a notice goes to the shop channel when one is set.
+ * For a custom item, a notice goes to the shop channel when one is set. A collectible is the member's at
+ * once; when the item announces its purchases and a channel is set, the purchase is announced there.
  * `expectedPrice` and `expectedVersion` (the item's `updatedAt`) are what the member saw (the
  * confirmation, the web page). When the item costs something else now: `price_changed` with the
  * current price; when it was changed in any other way: `item_changed`. Nothing is charged either way.
@@ -325,6 +357,7 @@ export async function purchase({
             createdAt: now,
           });
         }
+        const picture = yield* pictureOfCopy(tx, guildId, item, { needPicture: true });
         box.rowId = yield tx.insertId(
           INSERT_ROW,
           guildId,
@@ -335,11 +368,13 @@ export async function purchase({
           item.roleId,
           item.price,
           'purchase',
-          item.type === 'custom' ? 'active' : 'pending',
+          isRoleItemType(item.type) ? 'pending' : 'active',
           box.added,
           now + GRANT_LEASE_MS,
           now,
-          now
+          now,
+          picture.imageId,
+          picture.rarity
         );
       },
     }
@@ -347,9 +382,10 @@ export async function purchase({
   if (!out.ok) return out;
 
   const account = out.accounts.get(userId);
-  if (item.type === 'custom') {
+  if (!isRoleItemType(item.type)) {
     const row = await getInventoryRow(guildId, box.rowId);
-    await notifyStaff({ guildId, config, item, member, row });
+    if (item.type === 'custom') await notifyStaff({ guildId, config, item, member, row });
+    else await announcePurchase({ guildId, config, item, userId });
     return { ok: true, row, item, account };
   }
   return trackGrant(box.rowId, async () => {
@@ -452,7 +488,7 @@ export async function grantItem({ guild, member, itemId, by = null, reason = '',
   const userId = member.id;
   const item = await getItem(guildId, itemId);
   if (!item) return { ok: false, reason: 'item_gone' };
-  if (item.type !== 'custom') {
+  if (isRoleItemType(item.type)) {
     const role = guild.roles.cache.get(item.roleId) ?? null;
     const refusal = botRefusal(guild, role);
     if (refusal) return { ok: false, reason: 'cannot_grant', message: refusal };
@@ -508,6 +544,7 @@ export async function grantItem({ guild, member, itemId, by = null, reason = '',
             createdAt: now,
           });
         }
+        const picture = yield* pictureOfCopy(tx, guildId, item, { needPicture: false });
         box.rowId = yield tx.insertId(
           INSERT_ROW,
           guildId,
@@ -518,18 +555,20 @@ export async function grantItem({ guild, member, itemId, by = null, reason = '',
           item.roleId,
           0,
           'grant',
-          item.type === 'custom' ? 'active' : 'pending',
+          isRoleItemType(item.type) ? 'pending' : 'active',
           box.added,
           now + GRANT_LEASE_MS,
           now,
-          now
+          now,
+          picture.imageId,
+          picture.rarity
         );
       },
     }
   );
   if (!out.ok) return out;
   const account = out.accounts.get(userId);
-  if (item.type === 'custom') {
+  if (!isRoleItemType(item.type)) {
     return { ok: true, row: await getInventoryRow(guildId, box.rowId), item, account };
   }
   return trackGrant(box.rowId, async () => {
@@ -599,6 +638,14 @@ async function endRowNow({
       now,
       config,
       after: function* (tx) {
+        // Lock order: the item first (a no-op update; nothing when the item is gone), then the row, then
+        // a picture (db/collectibleImages.js). The same order as an upload or an edit of the item, so a
+        // refund and an edit of the same item cannot deadlock.
+        yield tx.run(
+          'UPDATE economy_items SET sold = sold WHERE guild_id = ? AND id = ?',
+          guildId,
+          row.itemId
+        );
         const ended = yield tx.run(
           `UPDATE economy_inventory SET status = ?, updated_at = ?
            WHERE guild_id = ? AND id = ? AND status IN ('active', 'pending')`,
@@ -608,6 +655,15 @@ async function endRowNow({
           rowId
         );
         if (ended.changes !== 1) abort('not_active');
+        // A collectible copy that was the last one holding its picture takes the picture with it.
+        if (row.itemType === 'collectible') {
+          const held = yield tx.get(
+            'SELECT image_id FROM economy_inventory WHERE guild_id = ? AND id = ?',
+            guildId,
+            rowId
+          );
+          yield* releaseImageTx(tx, guildId, held?.image_id ?? null);
+        }
         if (refundable) {
           // The item may be gone already (deleted): then there is no stock to give back.
           yield tx.run(
@@ -728,7 +784,7 @@ export async function recoverPending(now = Date.now(), { config, limit = 50 } = 
           member = null;
         }
       }
-      if (member && row.itemType !== 'custom' && member.roles.cache.has(row.roleId)) {
+      if (member && isRoleItemType(row.itemType) && member.roles.cache.has(row.roleId)) {
         await activateRow(row.guildId, row.id, now);
       } else {
         await endRow({
