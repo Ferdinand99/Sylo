@@ -225,7 +225,7 @@ public struct ShopItem: Decodable, Sendable, Hashable, Identifiable {
             imagePath: try nonEmpty(.imagePath),
             purchases: try c.decode(forKey: .purchases, or: 0),
             revenue: try c.decode(forKey: .revenue, or: 0),
-            extras: try Passthrough.read(decoder, excluding: Self.knownKeys))
+            extras: UnknownKeys.read(from: decoder, excluding: Self.knownKeys))
     }
 }
 
@@ -424,9 +424,9 @@ public struct ShopItemBody: Encodable, Sendable, Equatable {
     }
 
     public func encode(to encoder: any Encoder) throws {
-        var extra = encoder.container(keyedBy: PassthroughKey.self)
+        var extra = encoder.container(keyedBy: AnyCodingKey.self)
         // An output-only key (`sold`, `imagePath` ...) never reaches here: it is a ShopItem key, not an extra.
-        try Passthrough.write(extras, excluding: Set(CodingKeys.allCases.map(\.rawValue)), to: &extra)
+        try UnknownKeys.write(extras, excluding: Set(CodingKeys.allCases.map(\.rawValue)), to: &extra)
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(name, forKey: .name)
         try c.encode(description, forKey: .description)

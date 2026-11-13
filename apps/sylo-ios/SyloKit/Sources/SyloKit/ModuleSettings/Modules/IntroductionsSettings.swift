@@ -319,8 +319,8 @@ public struct IntroductionsQuestion: Codable, Sendable, Equatable, Identifiable 
     private static let knownKeys = Set(CodingKeys.allCases.map(\.rawValue))
 
     public func encode(to encoder: any Encoder) throws {
-        var extra = encoder.container(keyedBy: PassthroughKey.self)
-        try Passthrough.write(extras, excluding: Self.knownKeys, to: &extra)
+        var extra = encoder.container(keyedBy: AnyCodingKey.self)
+        try UnknownKeys.write(extras, excluding: Self.knownKeys, to: &extra)
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id)
         try c.encode(label, forKey: .label)
@@ -339,7 +339,7 @@ public struct IntroductionsQuestion: Codable, Sendable, Equatable, Identifiable 
             required: try c.decode(forKey: .required, or: false),
             maxLength: try c.decode(forKey: .maxLength, or: 500),
             inline: try c.decode(forKey: .inline, or: false),
-            extras: try Passthrough.read(decoder, excluding: Self.knownKeys))
+            extras: UnknownKeys.read(from: decoder, excluding: Self.knownKeys))
     }
 }
 
@@ -391,12 +391,12 @@ public struct IntroductionsRoleGroup: Codable, Sendable, Equatable, Identifiable
             name: try c.decode(String.self, forKey: .name),
             roleIds: try c.decode(forKey: .roleIds, or: []),
             hideWhenEmpty: try c.decode(forKey: .hideWhenEmpty, or: false),
-            extras: try Passthrough.read(decoder, excluding: Self.knownKeys))
+            extras: UnknownKeys.read(from: decoder, excluding: Self.knownKeys))
     }
 
     public func encode(to encoder: any Encoder) throws {
-        var extra = encoder.container(keyedBy: PassthroughKey.self)
-        try Passthrough.write(extras, excluding: Self.knownKeys, to: &extra)
+        var extra = encoder.container(keyedBy: AnyCodingKey.self)
+        try UnknownKeys.write(extras, excluding: Self.knownKeys, to: &extra)
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(name, forKey: .name)
         try c.encode(roleIds, forKey: .roleIds)
