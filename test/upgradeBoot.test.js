@@ -19,6 +19,7 @@ import { MIGRATIONS } from '../src/db/index.js';
 
 const BOOT = fileURLToPath(new URL('./helpers/bootDb.mjs', import.meta.url));
 const RELEASE_5_0_MIGRATIONS = 63;
+const RELEASE_5_1_MIGRATIONS = 72;
 // The giveaways columns of the 5.0 release: after BACK_TO_5_0 the table must have exactly these, so a column
 // added later and forgotten in the drop list is caught here and not skipped silently.
 const GIVEAWAYS_5_0 = [
@@ -93,6 +94,40 @@ test('SQLite: a database from the 5.0 release boots with this code and gets the 
   }
 });
 
+test('SQLite: a database from the 5.1 release boots with this code and gets the welcome_sent table', () => {
+  assert.ok(MIGRATIONS.length > RELEASE_5_1_MIGRATIONS, 'there are migrations after 5.1');
+  const dir = mkdtempSync(join(tmpdir(), 'sylo-upgrade-'));
+  try {
+    const old = join(dir, 'old.db');
+    const db = new Database(old);
+    for (let v = 0; v < RELEASE_5_1_MIGRATIONS; v += 1) {
+      db.transaction(() => MIGRATIONS[v](db))();
+    }
+    db.pragma(`user_version = ${RELEASE_5_1_MIGRATIONS}`);
+    assert.equal(
+      db.prepare("SELECT name FROM sqlite_master WHERE name = 'welcome_sent'").get(),
+      undefined,
+      '5.1 has no welcome_sent table'
+    );
+    db.close();
+
+    boot({ DATABASE_PATH: old });
+    const fresh = join(dir, 'fresh.db');
+    boot({ DATABASE_PATH: fresh });
+    const upgraded = sqliteShape(old);
+    const clean = sqliteShape(fresh);
+    assert.equal(upgraded.version, MIGRATIONS.length);
+    assert.deepEqual(upgraded.shape['table welcome_sent'], [
+      'guild_id TEXT 1 null 1',
+      'sent_at INTEGER 1 null 0',
+      'user_id TEXT 1 null 2',
+    ]);
+    assert.deepEqual(upgraded.shape, clean.shape);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('SQLite: a database that already ran the branch up to migration 69 is backfilled by 70', () => {
   const dir = mkdtempSync(join(tmpdir(), 'sylo-upgrade-'));
   try {
@@ -141,7 +176,7 @@ test('SQLite: a database that already ran the branch up to migration 69 is backf
 const BACK_TO_5_0 = `
   DROP TABLE IF EXISTS economy_accounts, economy_transactions, economy_cooldowns, economy_items,
     economy_inventory, introductions, giveaway_prizes, applications_forms, applications_submissions,
-    applications_cooldowns;
+    applications_cooldowns, welcome_sent;
   -- An earlier shape of one new table (only its first columns), so the upgrade has to add the rest before
   -- the indexes that use them: a bootstrap that indexes a column the old table lacks would not boot.
   CREATE TABLE applications_submissions (
@@ -259,6 +294,69 @@ test(
           ['custom', 0],
         ]
       );
+    } finally {
+      await a.end({ timeout: 1 });
+      await b.end({ timeout: 1 });
+    }
+  }
+);
+
+test(
+  'Postgres: a database from the 5.1 release boots with this code and gets the welcome_sent table',
+  { skip: !url && 'DATABASE_URL not set (sqlite-only run)' },
+  async (t) => {
+    const postgres = (await import('postgres')).default;
+    const admin = postgres(url);
+    const name = (suffix) => `sylo_upgrade51_${suffix}_${process.pid}_${Date.now()}`;
+    const urlFor = (db) => {
+      const u = new URL(url);
+      u.pathname = `/${db}`;
+      return u.toString();
+    };
+    const made = [];
+    const create = async (suffix) => {
+      const db = name(suffix);
+      await admin.unsafe(`CREATE DATABASE "${db}"`);
+      made.push(db);
+      return db;
+    };
+    t.after(async () => {
+      for (const db of made) await admin.unsafe(`DROP DATABASE IF EXISTS "${db}" WITH (FORCE)`);
+      await admin.end({ timeout: 1 });
+    });
+    const sqliteFile = join(mkdtempSync(join(tmpdir(), 'sylo-upgrade51-pg-')), 'x.db');
+    const pgBoot = (db) => boot({ DATABASE_URL: urlFor(db), DATABASE_PATH: sqliteFile });
+
+    const freshDb = await create('fresh');
+    pgBoot(freshDb);
+    const oldDb = await create('old');
+    pgBoot(oldDb);
+
+    // take the second one back to 5.1: no welcome_sent table, the migration record at 72
+    const old = postgres(urlFor(oldDb));
+    await old.unsafe(`
+      DROP TABLE IF EXISTS welcome_sent;
+      DELETE FROM schema_migrations;
+      INSERT INTO schema_migrations (version) VALUES (${RELEASE_5_1_MIGRATIONS});
+    `);
+    const [gone] = await old`SELECT to_regclass('public.welcome_sent') AS t`;
+    assert.equal(gone.t, null, 'the 5.1 shape has no welcome_sent table');
+    await old.end({ timeout: 1 });
+
+    pgBoot(oldDb);
+
+    const a = postgres(urlFor(freshDb));
+    const b = postgres(urlFor(oldDb));
+    try {
+      assert.deepEqual(await pgShape(b), await pgShape(a));
+      const [exists] = await b`SELECT to_regclass('public.welcome_sent') AS t`;
+      assert.ok(exists.t, 'welcome_sent exists after the upgrade');
+      // it is usable: the primary key makes a second claim of the same member a no-op
+      const first =
+        await b`INSERT INTO welcome_sent (guild_id, user_id, sent_at) VALUES ('g', 'u', 1) ON CONFLICT (guild_id, user_id) DO NOTHING`;
+      const second =
+        await b`INSERT INTO welcome_sent (guild_id, user_id, sent_at) VALUES ('g', 'u', 2) ON CONFLICT (guild_id, user_id) DO NOTHING`;
+      assert.deepEqual([first.count, second.count], [1, 0]);
     } finally {
       await a.end({ timeout: 1 });
       await b.end({ timeout: 1 });

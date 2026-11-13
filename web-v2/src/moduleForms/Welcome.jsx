@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { welcomeCardPreviewUrl } from '../api.js';
 import ToggleSection from '../components/ToggleSection.jsx';
 import ChipPicker from '../components/ChipPicker.jsx';
+import Callout from '../components/Callout.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
@@ -21,6 +22,10 @@ export default function Welcome() {
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
   const tokens = tokensFor('welcome', data.placeholders);
   const joinChannelName = data.channels.find((c) => c.id === form.joinChannel)?.name;
+  // A config from before the setting existed has neither field: it welcomes on join.
+  const onRole = form.trigger === 'role';
+  const triggerRoleIds = form.triggerRoleIds ?? [];
+  const maxTriggerRoles = limitOf(limits, 'triggerRoleIds').maxItems;
 
   return (
     <>
@@ -31,8 +36,63 @@ export default function Welcome() {
       </p>
 
       <form onSubmit={save} data-savebar>
+        <div className="v2-group">
+          <h2 className="v2-group-title">When to welcome</h2>
+          <div className="v2-field">
+            <label className="v2-check">
+              <input
+                type="radio"
+                name="trigger"
+                checked={!onRole}
+                onChange={() => set({ trigger: 'join' })}
+              />
+              When a member joins
+            </label>
+            <label className="v2-check">
+              <input type="radio" name="trigger" checked={onRole} onChange={() => set({ trigger: 'role' })} />
+              When a member gets a role
+            </label>
+          </div>
+          {onRole ? (
+            <>
+              <div className="v2-field">
+                <label>Roles that start the welcome</label>
+                <ChipPicker
+                  kind="role"
+                  items={data.roles}
+                  value={triggerRoleIds}
+                  max={maxTriggerRoles}
+                  onChange={(ids) => set({ triggerRoleIds: ids })}
+                />
+                <p className="v2-field-hint">
+                  The welcome is sent the first time a member gets any of these roles, once per member (a
+                  member who leaves and comes back can be welcomed again). Joining sends nothing, unless the
+                  member already has one of the roles when they join. This suits servers where a member only
+                  counts after a step: roles from{' '}
+                  <Link to={`/guilds/${guildId}/m/verification`}>Verification</Link> or an accepted{' '}
+                  <Link to={`/guilds/${guildId}/m/applications`}>application</Link> are typical.
+                </p>
+                <p className="v2-field-hint">
+                  Switching from “When a member joins” does not welcome members who already have one of the
+                  roles: only roles given from then on count.
+                </p>
+              </div>
+              {triggerRoleIds.length === 0 ? (
+                <Callout tone="warning">
+                  No role is picked, so no welcome is sent. You can save, but pick at least one role for this
+                  to work.
+                </Callout>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+
         <ToggleSection
-          title="Send a message when a member joins the server"
+          title={
+            onRole
+              ? 'Send a welcome message when a member gets the role'
+              : 'Send a message when a member joins the server'
+          }
           on={form.joinEnabled}
           onToggle={() => set({ joinEnabled: !form.joinEnabled })}
         >
@@ -107,7 +167,9 @@ export default function Welcome() {
         </ToggleSection>
 
         <ToggleSection
-          title="Send a private message to new members"
+          title={
+            onRole ? 'Send a private message to welcomed members' : 'Send a private message to new members'
+          }
           on={form.dmEnabled}
           onToggle={() => set({ dmEnabled: !form.dmEnabled })}
         >

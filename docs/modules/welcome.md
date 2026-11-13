@@ -1,7 +1,8 @@
 # Welcome & leave
 
 Greet new members in a channel and/or by DM, announce departures, and optionally
-attach a generated **welcome image**.
+attach a generated **welcome image**. The welcome goes out when a member joins, or
+later, when they get a role.
 
 **Dashboard:** `/v2/guilds/<id>/m/welcome`.
 
@@ -13,6 +14,8 @@ attach a generated **welcome image**.
 
 ## Settings
 
+- **When to welcome** — **When a member joins** (the default) or **When a member
+  gets a role**. See [Welcome on a role](#welcome-on-a-role).
 - **Join message** — channel + text, optionally sent as an embed (uses the
   server's default embed colour, set under *General*).
 - **Welcome image** — a 1000×340 banner with the member's avatar, name and member
@@ -24,12 +27,48 @@ attach a generated **welcome image**.
   autoroles](roles.md) module.
 
 Placeholders: `{user}` `{user.tag}` `{user.name}` `{user.id}` `{server}`
-`{memberCount}` `{intro}`.
+`{memberCount}` `{intro}` `{role}`.
 
 `{intro}` is a mention of the introductions channel when the
 [Introductions](introductions.md) module is on and has a channel, for example
 "Say hello in {intro}!". When Introductions is off, or has no channel yet, it is
 empty text.
+
+`{role}` is the name of the role that started the welcome (see below). When
+members are welcomed on joining, it is empty text.
+
+## Welcome on a role
+
+Some servers only count a member after a step: passing [Verification](verification.md),
+or being accepted in [Applications](applications.md), which can both give a role. With
+**When a member gets a role**, the welcome waits for that role instead of going out when
+the member joins.
+
+- **Roles** — pick 1 to 10. The welcome is sent the first time the member gets **any**
+  of them. A role must exist, cannot be @everyone and cannot be a managed role (a bot's
+  or an integration's).
+- **What is sent** — everything the join welcome does: the join message (plain or embed),
+  the welcome image and the DM, if they are turned on. All placeholders work, and `{role}`
+  is the role that started it.
+- **Once per member** — a member is welcomed once per server, however many of the roles
+  they get. A member who leaves and comes back can be welcomed again, as when welcomed on
+  joining.
+- **Joining** — sends nothing, unless the member already has one of the roles when they
+  join (for example from an autorole). Then they are welcomed right away.
+- **The leave message** works the same in both modes.
+- **Switching on** — members who already have one of the roles are **not** welcomed when
+  you switch to **When a member gets a role**. Only roles given afterwards count.
+- **No usable role** — the settings save with a warning, and nothing is sent until you
+  pick one.
+
+Sylo notices a role change from the member update events, so it needs the **Server
+Members** intent, and it sees a member get a role only when it already has that member in
+memory: someone who joined while Sylo was running, or whose roles Sylo changed itself
+(Verification and Applications do). A role given by hand to a member Sylo has not seen
+since it started is not noticed, so that member gets no welcome.
+
+If a welcome cannot be sent (no permission in the channel, or DMs closed), it is not tried
+again: a missed welcome is better than a double one. The log notes it, without the message.
 
 ## Notes
 

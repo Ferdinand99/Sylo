@@ -10,6 +10,7 @@ import { fluxerReactionAdd } from '../platform/fluxerEvents.js';
 import { beginModeration } from '../modules/lib/messageModeration.js';
 import { log } from '../lib/log.js';
 import { syncAdminSnapshot, syncNewOwner } from './lib/adminSnapshot.js';
+import { restoreOldRoles } from '../platform/compat.js';
 
 const keyOf = (rawGuildId) => (rawGuildId ? makePlatformGuildId('fluxer', rawGuildId) : null);
 
@@ -50,6 +51,8 @@ export function registerFluxerModuleEvents(
     // The signed-in person's list of servers they run follows their rights (src/bot/lib/adminSnapshot.js).
     const key = keyOf(newMember.guild?.id ?? newMember.guildId);
     if (newMember.guild) void syncAdminSnapshot('fluxer', key, newMember.guild, newMember);
+    // A role Sylo gave the cached member is already in the SDK's "before" copy: put the old roles back.
+    restoreOldRoles(oldMember, newMember);
     return send('guildMemberUpdate', newMember.guild?.id ?? newMember.guildId, {
       old: oldMember ?? newMember,
       new: newMember,

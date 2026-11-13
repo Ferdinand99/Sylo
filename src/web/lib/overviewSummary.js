@@ -30,6 +30,7 @@ import { normaliseEconomyConfig } from '../../modules/lib/economyConfig.js';
 import { LOG_EVENTS } from '../../modules/logging.js';
 import { AUTOMOD_RULES } from '../../modules/automod.js';
 import { normaliseSuggestionsConfig } from '../../modules/suggestions.js';
+import { validTriggerRoleIds, welcomeTrigger } from '../../modules/welcome.js';
 import { moduleIcon } from './moduleIcons.js';
 
 // Permissions Sylo relies on for its core moderation / role / logging features.
@@ -279,7 +280,14 @@ async function moduleLines(id, guild, cfg) {
       const join = channelName(guild, cfg.joinChannel);
       const leave = channelName(guild, cfg.leaveChannel);
       const dm = String(cfg.dmMessage ?? '').trim() !== '';
+      const { trigger, roleIds } = welcomeTrigger(cfg);
+      const names = validTriggerRoleIds(guild, roleIds).map((id) => guild.roles.cache.get(id)?.name ?? id);
       return [
+        trigger === 'role'
+          ? names.length
+            ? on('Welcome when', `a member gets ${names.join(' or ')}`)
+            : off('Welcome when', 'a role is not picked yet')
+          : neutral('Welcome when', 'a member joins'),
         join ? on('Welcome message', `#${join}`) : off('Welcome message', 'off'),
         leave ? on('Leave message', `#${leave}`) : off('Leave message', 'off'),
         dm ? on('Welcome DM', 'on') : off('Welcome DM', 'off'),

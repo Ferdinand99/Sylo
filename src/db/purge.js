@@ -60,6 +60,7 @@ import './suggestions.js';
 import './tempRoles.js';
 import './quotes.js';
 import './introductions.js';
+import './welcomeSent.js';
 import './applications.js';
 import './economy.js';
 import './economyShop.js';
@@ -109,6 +110,7 @@ export const GUILD_TABLES = [
   'guild_quotes',
   'guild_quote_counters',
   'introductions',
+  'welcome_sent',
   'applications_forms',
   'applications_submissions',
   'applications_cooldowns',
@@ -214,6 +216,9 @@ const userStmts = {
   applicationsDecider: prepare(
     'UPDATE applications_submissions SET decided_by = NULL WHERE guild_id = ? AND decided_by = ?'
   ),
+  // The record that they were welcomed on a role gain (modules/welcome.js). Without it a role they gain
+  // later would welcome them again, which is what a member who asked to be forgotten expects.
+  welcomeSent: prepare('DELETE FROM welcome_sent WHERE guild_id = ? AND user_id = ?'),
   introductionsClear: prepare(
     "UPDATE introductions SET answers = '{}', updated_at = ? WHERE guild_id = ? AND user_id = ?"
   ),
@@ -249,7 +254,7 @@ const userStmts = {
  * honeypot catches and counting penalties. They exist to protect the server, so a member
  * cannot erase them (or reset their warning count) with /forget; staff can remove a case in
  * the dashboard. `keptCases` says how many cases stayed.
- * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, eventsHosted: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, introductions: number, applications: number, applicationsDecided: number, economyAccounts: number, economyTransactions: number, economyNames: number, economyInventory: number, economyFulfilled: number, invites: number, pollsCreated: number, giveawaysHosted: number, tempVoiceOwned: number, verificationKicks: number, ticketsClosed: number, appealsDecided: number }}
+ * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, eventsHosted: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, introductions: number, welcomeSent: number, applications: number, applicationsDecided: number, economyAccounts: number, economyTransactions: number, economyNames: number, economyInventory: number, economyFulfilled: number, invites: number, pollsCreated: number, giveawaysHosted: number, tempVoiceOwned: number, verificationKicks: number, ticketsClosed: number, appealsDecided: number }}
  */
 // `keepIntroduction`: leave the introduction row (the card message could not be deleted, so the row
 // is what lets it be removed later). `keepTempRoles`: role ids whose temporary-role record stays
@@ -294,6 +299,7 @@ export async function forgetUser(
   let introductions = 0;
   if (keepIntroduction) await userStmts.introductionsClear.run(Date.now(), guildId, userId);
   else introductions = (await userStmts.introductions.run(guildId, userId)).changes;
+  const welcomeSent = (await userStmts.welcomeSent.run(guildId, userId)).changes;
   const keepApps = keepApplicationIds.map(Number).filter(Number.isInteger);
   let applications;
   if (keepApps.length) {
@@ -343,6 +349,7 @@ export async function forgetUser(
     quotes,
     quotesSaved,
     introductions,
+    welcomeSent,
     applications,
     applicationsDecided,
     economyAccounts: economy.account,
@@ -609,6 +616,13 @@ const USER_DATA_SOURCES = [
     order: 'gu',
     countSql: 'SELECT COUNT(*) AS n FROM introductions WHERE guild_id = ? AND user_id = ?',
     rowsSql: 'SELECT * FROM introductions WHERE guild_id = ? AND user_id = ?',
+  },
+  {
+    key: 'welcomeSent',
+    label: 'Welcome record (that you were welcomed when you got a role)',
+    order: 'gu',
+    countSql: 'SELECT COUNT(*) AS n FROM welcome_sent WHERE guild_id = ? AND user_id = ?',
+    rowsSql: 'SELECT guild_id, user_id, sent_at FROM welcome_sent WHERE guild_id = ? AND user_id = ?',
   },
   {
     key: 'applications',
