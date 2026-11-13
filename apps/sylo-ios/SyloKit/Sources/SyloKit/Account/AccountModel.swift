@@ -16,6 +16,10 @@ public final class AccountModel {
     public private(set) var isDeleting = false
     /// Why deleting the account did not go through.
     public var deleteError: String?
+    /// The platform being disconnected or connected right now, so its row can show it.
+    public private(set) var changingPlatform: Platform?
+    /// Why the last disconnect or connect did not go through.
+    public var platformError: String?
 
     private var revoking: Set<String> = []
     private let session: AppSession
@@ -35,6 +39,13 @@ public final class AccountModel {
     /// Only connected platforms, in the server's order.
     public var connectedPlatforms: [PlatformConnection] {
         (account?.platforms ?? []).filter(\.isConnected)
+    }
+
+    /// The platforms that can be added through the app: not yet connected, with their login on, and
+    /// only when the server can start a connect for the app (``ServerFeature/appConnect``).
+    public func connectablePlatforms(serverInfo: ServerInfo?) -> [PlatformConnection] {
+        guard serverInfo?.supports(.appConnect) == true else { return [] }
+        return (account?.platforms ?? []).filter { !$0.isConnected && $0.connectPath != nil }
     }
 
     public func load() async {
@@ -95,6 +106,78 @@ public final class AccountModel {
         }
     }
 
+    /// Removes a platform login from the account (never the only sign-in). On success the account
+    /// is read again; on failure ``platformError`` says why and nothing changes.
+    /// - Returns: Whether the platform was disconnected.
+    @discardableResult
+    public func disconnect(_ connection: PlatformConnection) async -> Bool {
+        guard changingPlatform == nil, connection.isConnected, connection.canDisconnect else { return false }
+        changingPlatform = connection.platform
+        platformError = nil
+        defer { changingPlatform = nil }
+        do {
+            _ = try await session.send(Endpoints.DisconnectPlatform(platform: connection.platform))
+        } catch {
+            let error = NetworkError(error)
+            if error == .http(status: 409) {
+                platformError = "You can't disconnect your only sign-in."
+            } else if error != .cancelled, error != .unauthorized {
+                platformError = error.userMessage
+            }
+            return false
+        }
+        await load()
+        return true
+    }
+
+    /// Adds a platform to the account: asks the server for a one-time code, lets `authenticate`
+    /// open the connect page for it (the system sign-in sheet in the app) and report where the
+    /// sheet ended, then reads the account again. Cancelling is not an error.
+    /// - Parameter authenticate: Opens the URL and returns the `sylo://connected` callback; throws
+    ///   ``ConnectError/cancelled`` when the person closes the sheet.
+    /// - Returns: Whether the platform was connected.
+    @discardableResult
+    public func connect(
+        _ connection: PlatformConnection, authenticate: @MainActor (URL) async throws -> URL
+    ) async -> Bool {
+        guard changingPlatform == nil, !connection.isConnected, let server = session.server else { return false }
+        changingPlatform = connection.platform
+        platformError = nil
+        defer { changingPlatform = nil }
+        do {
+            let grant = try await session.send(Endpoints.StartConnect(platform: connection.platform))
+            let callback = try await authenticate(server.connectURL(code: grant.code))
+            _ = try ConnectCallback.platform(from: callback, expected: connection.platform)
+        } catch ConnectError.cancelled {
+            return false
+        } catch NetworkError.cancelled {
+            return false
+        } catch let error as ConnectError {
+            platformError = Self.message(for: error)
+            return false
+        } catch {
+            let error = NetworkError(error)
+            if error != .cancelled, error != .unauthorized { platformError = Self.connectMessage(for: error) }
+            return false
+        }
+        await load()
+        return true
+    }
+
+    private static func message(for error: ConnectError) -> String {
+        switch error {
+        case .cancelled: "Cancelled."
+        case .wrongCallback, .invalidServerURL: "Connecting didn't finish. Try again."
+        case .serverError: "The platform couldn't be connected. Try again."
+        }
+    }
+
+    private static func connectMessage(for error: NetworkError) -> String {
+        error == .notFound
+            ? "This Sylo server can't connect a platform from the app. Use its web dashboard."
+            : error.userMessage
+    }
+
     /// Puts a device back at its old position, unless a reload already brought it back.
     private func restore(_ device: SignedInDevice, at index: Int) {
         guard var devices = account?.devices, !devices.contains(where: { $0.id == device.id }) else { return }
@@ -104,6 +187,7 @@ public final class AccountModel {
 
     private func setDevices(_ devices: [SignedInDevice]) {
         guard let account else { return }
-        self.account = AccountInfo(isOpen: account.isOpen, platforms: account.platforms, devices: devices)
+        self.account = AccountInfo(
+            isOpen: account.isOpen, isOperator: account.isOperator, platforms: account.platforms, devices: devices)
     }
 }

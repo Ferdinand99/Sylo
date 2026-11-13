@@ -29,6 +29,7 @@ struct MainView: View {
     var body: some View {
         NavigationSplitView(preferredCompactColumn: $column) {
             ServerSidebar(servers: servers, selection: sidebarSelection)
+                .safeAreaInset(edge: .top) { AnnouncementBanner(server: server, session: session) }
                 .navigationTitle("Servers")
                 .toolbar {
                     // iPad: a hardware keyboard and room in the bar; iPhone pulls to refresh.
