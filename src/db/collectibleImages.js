@@ -77,6 +77,14 @@ const RELEASE_SQL = `DELETE FROM collectible_images
                     WHERE guild_id = ? AND image_id = ? AND status IN ('active', 'pending'))`;
 
 /**
+ * The ids in a list without repeats, empty ones left out, in sorted order. A transaction that lets go of several
+ * pictures releases them in this order, so two of them can never wait for each other's picture.
+ * @param {Array<string | null | undefined>} ids
+ * @returns {string[]}
+ */
+export const sortedDistinct = (ids) => [...new Set(ids.filter(Boolean))].sort();
+
+/**
  * Inside a transaction() body (`yield*` it, after the statement that dropped a reference): delete the
  * picture if nothing refers to it any more.
  * @returns {Generator<any, boolean, any>} whether it was deleted
@@ -130,7 +138,7 @@ export async function attachImage(guildId, itemId, { mime, data, now = Date.now(
       guildId,
       itemId
     );
-    const olds = [...new Set([item.image_id, ...held.map((r) => r.image_id)].filter(Boolean))];
+    const olds = sortedDistinct([item.image_id, ...held.map((r) => r.image_id)]);
     let freedCount = 0;
     let freedBytes = 0;
     for (const oldId of olds) {

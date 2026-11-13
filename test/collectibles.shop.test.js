@@ -23,6 +23,7 @@ import {
   detachImage,
   imageUsage,
   readImage,
+  sortedDistinct,
   MAX_IMAGES_PER_GUILD,
 } from '../src/db/collectibleImages.js';
 import { credit } from '../src/modules/lib/economy.js';
@@ -566,4 +567,27 @@ test('the quota counts every stored picture of the server, and a changed type or
   // an item that is not a collectible has no picture to attach
   const custom = await createItem(G, normaliseItem({ name: 'C', price: 1, type: 'custom' }));
   assert.equal((await attachImage(G, custom, { mime: 'image/webp', data: Buffer.alloc(10) })).reason, 'gone');
+});
+
+test('pictures are released in sorted order, each once', () => {
+  assert.deepEqual(sortedDistinct(['c', 'a', null, 'b', 'a', undefined, '', 'c']), ['a', 'b', 'c']);
+  assert.deepEqual(sortedDistinct([]), []);
+  assert.deepEqual(sortedDistinct([null]), []);
+  const ids = ['f'.repeat(32), '0'.repeat(32), 'a'.repeat(32), '0'.repeat(32)];
+  assert.deepEqual(sortedDistinct(ids), ['0'.repeat(32), 'a'.repeat(32), 'f'.repeat(32)]);
+});
+
+test('/forget counts the rows it deleted and releases several pictures in one go', async () => {
+  const m = await buyer(40);
+  const one = await collectible({ name: 'One' });
+  const two = await collectible({ name: 'Two' });
+  const three = await collectible({ name: 'Three' });
+  for (const id of [one, two, three]) await buy(m, id);
+  await buy(m, one);
+  for (const id of [one, two, three]) await deleteItem(G, id);
+  assert.equal((await imageIds()).length, 3);
+  const erased = await eraseInventory(G, m.id);
+  assert.equal(erased.rows, 4);
+  assert.deepEqual(await imageIds(), []);
+  assert.deepEqual(await eraseInventory(G, m.id), { rows: 0, fulfilled: 0 }, 'nothing left to erase');
 });

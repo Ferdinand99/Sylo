@@ -302,6 +302,59 @@ test(
       }
     });
 
+    await t.test('/forget racing an upload and an item delete leaves no picture behind', async () => {
+      for (let round = 0; round < 8; round += 1) {
+        const holder = await member(100 + round * 2);
+        const other = await member(101 + round * 2);
+        const id = await badge({ name: `Forget race ${round}`, price: 5 });
+        await buy(holder, id);
+        await buy(other, id);
+        // the upload moves both members' copies to a new picture, the item goes, and one member is forgotten
+        const results = await Promise.all([
+          shopDb.eraseInventory(G, holder.id),
+          images.attachImage(G, id, { mime: 'image/webp', data: randomBytes(160 + round) }),
+          shopDb.deleteItem(G, id),
+        ]);
+        assert.equal(results[0].rows, 1);
+        // the other member still holds a copy, so exactly one picture is left, and it is theirs
+        const left = await stored();
+        const theirs = await prepare(
+          'SELECT image_id FROM economy_inventory WHERE guild_id = ? AND user_id = ? AND status = ?'
+        ).all(G, other.id, 'active');
+        assert.equal(theirs.length, 1);
+        assert.deepEqual(left, [theirs[0].image_id], `round ${round}: the one left is the other member's`);
+        await shopDb.eraseInventory(G, other.id);
+        assert.deepEqual(await stored(), [], `round ${round}: no orphan`);
+      }
+      // a member forgotten while the last copy of an item that is already gone is moved by nobody
+      for (let round = 0; round < 4; round += 1) {
+        const m = await member(140 + round);
+        const id = await badge({ name: `Forget last ${round}`, price: 5 });
+        await buy(m, id);
+        await Promise.all([
+          shopDb.eraseInventory(G, m.id),
+          images.attachImage(G, id, { mime: 'image/webp', data: randomBytes(170 + round) }),
+          shopDb.deleteItem(G, id),
+        ]);
+        assert.deepEqual(await stored(), [], `last-copy round ${round}: no orphan`);
+      }
+    });
+
+    await t.test('two /forget runs that release several pictures each at once do not deadlock', async () => {
+      const a = await member(160);
+      const b = await member(161);
+      const ids = [];
+      for (let i = 0; i < 4; i += 1) ids.push(await badge({ name: `Both ${i}`, price: 5 }));
+      for (const id of ids) {
+        await buy(a, id);
+        await buy(b, id);
+      }
+      for (const id of ids) await shopDb.deleteItem(G, id);
+      assert.equal((await stored()).length, 4);
+      await Promise.all([shopDb.eraseInventory(G, a.id), shopDb.eraseInventory(G, b.id)]);
+      assert.deepEqual(await stored(), []);
+    });
+
     await t.test(
       'deleting an item (or changing its kind) while a picture is uploaded leaves no orphan',
       async () => {

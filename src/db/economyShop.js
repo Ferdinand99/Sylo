@@ -23,7 +23,7 @@
 // file holds the plain reads, the staff's editing of the item list, and the erasure of a member.
 // `guild_id` is the server key; the tables are created here for Postgres (SQLite: migration 68).
 import { prepare, registerPostgresBootstrap, registerPostgresMigration, transaction } from './driver.js';
-import { releaseImageTx } from './collectibleImages.js';
+import { releaseImageTx, sortedDistinct } from './collectibleImages.js';
 
 registerPostgresBootstrap(`
   CREATE TABLE IF NOT EXISTS economy_items (
@@ -510,16 +510,16 @@ export async function markUnfulfilled(guildId, id, now = Date.now()) {
 /**
  * /forget: delete the member's inventory; take the member's id off rows they fulfilled as staff. One
  * transaction: the pictures that only this member held go with the rows.
+ *
+ * The pictures to release come from the DELETE itself (RETURNING), not from an earlier read: the delete waits
+ * for a row that an upload is moving to a new picture at that moment and then returns the picture the row has
+ * NOW, so the picture an upload just put on these rows is released too. They are released in sorted order,
+ * after the rows are gone (rows, then pictures, never the item after a row: no cycle with the item-first paths).
  */
 export async function eraseInventory(guildId, userId) {
   return transaction(function* (tx) {
-    const held = yield tx.all(
-      'SELECT DISTINCT image_id FROM economy_inventory WHERE guild_id = ? AND user_id = ? AND image_id IS NOT NULL',
-      guildId,
-      userId
-    );
-    const rows = yield tx.run(
-      'DELETE FROM economy_inventory WHERE guild_id = ? AND user_id = ?',
+    const deleted = yield tx.all(
+      'DELETE FROM economy_inventory WHERE guild_id = ? AND user_id = ? RETURNING image_id',
       guildId,
       userId
     );
@@ -528,7 +528,9 @@ export async function eraseInventory(guildId, userId) {
       guildId,
       userId
     );
-    for (const r of held) yield* releaseImageTx(tx, guildId, r.image_id);
-    return { rows: rows.changes, fulfilled: fulfilled.changes };
+    for (const imageId of sortedDistinct(deleted.map((r) => r.image_id))) {
+      yield* releaseImageTx(tx, guildId, imageId);
+    }
+    return { rows: deleted.length, fulfilled: fulfilled.changes };
   });
 }
