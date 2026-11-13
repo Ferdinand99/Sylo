@@ -320,7 +320,7 @@ struct InventoryModelTests {
 @MainActor
 @Suite("Shop activity")
 struct ShopActivityTests {
-    static let pageJSON = #"""
+    nonisolated static let pageJSON = #"""
     {"page": 1, "pages": 3, "total": 61, "rows": [
       {"id": 9, "userId": "7", "member": {"id": "7", "name": "Alex", "inServer": true}, "itemId": 1, "itemName": "Badge",
        "itemType": "collectible", "itemRemoved": false, "imagePath": "/c/a.webp", "rarity": "rare", "pricePaid": 500,
