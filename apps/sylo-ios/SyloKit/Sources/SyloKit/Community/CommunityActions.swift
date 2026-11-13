@@ -4,24 +4,22 @@ import Foundation
 // worded, and the empty JSON body the dashboard posts for an action without parameters.
 
 extension NetworkError {
-    /// The sentence to show when an action was refused. A 400 carries the server's own words
-    /// ("The start time must be in the future."), which say more than the generic text; every
-    /// other failure reads like it does everywhere else in the app.
+    /// The sentence to show when an action was refused: the server's own words when it sent some
+    /// ("The start time must be in the future."), else the app's words for that failure. None of the
+    /// community routes answers with a machine code that needs wording here.
     public var communityMessage: String {
-        if case .badRequest(let message) = self, let message, !message.isEmpty, message != "invalid_grant" {
-            return message
-        }
-        return userMessage
+        serverMessage ?? userMessage
     }
 
-    /// Like ``communityMessage``, for a call that hands a role out. The server refuses a role the
-    /// person may not give with a 403 and its own sentence, which the app's error type does not
-    /// keep, so the reason (its rule for roles) is worded here instead of the generic "no access".
+    /// Like ``communityMessage``, for a call that hands a role out. The server explains a refused
+    /// role in its own sentence, which wins. Only when a 403 comes without one, the rule is worded
+    /// here instead of the generic "no access".
     public func communityMessage(grantingRole: Bool) -> String {
-        if grantingRole, self == .forbidden {
+        if let message = serverMessage { return message }
+        if grantingRole, case .forbidden = self {
             return "You can't hand out that role: it must rank below your highest role, and a role with elevated permissions needs Manage Roles. Pick another role, or none."
         }
-        return communityMessage
+        return userMessage
     }
 }
 

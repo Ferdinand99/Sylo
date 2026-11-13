@@ -11,7 +11,7 @@ struct SuggestionsSettingsView: View {
     @State private var list: SuggestionListModel
     /// The status change the reason alert is asking about.
     @State private var deciding: PendingDecision?
-    @State private var reason = ""
+    @State private var isAskingReason = false
     @State private var deleting: SuggestionSummary?
     @State private var isConfirmingMoveAll = false
 
@@ -47,15 +47,13 @@ struct SuggestionsSettingsView: View {
 
     private var dialogs: some View {
         form
-            .alert("Set the Status?", isPresented: isAskingReason, presenting: deciding) { pending in
-                TextField("Reason (optional)", text: $reason)
-                Button(pending.action.title) {
-                    let text = reason
-                    Task { await list.decide(pending.suggestion, pending.action, reason: text) }
+            .reasonPrompt(
+                "Set the Status?", message: decisionMessage, isPresented: $isAskingReason,
+                confirmTitle: LocalizedStringKey(deciding?.action.title ?? "Set")
+            ) { reason in
+                if let pending = deciding {
+                    Task { await list.decide(pending.suggestion, pending.action, reason: reason) }
                 }
-                Button("Cancel", role: .cancel) {}
-            } message: { pending in
-                Text("Suggestion #\(pending.suggestion.number) becomes \(pending.action.title). The reason is shown on the post and sent to the author.")
             }
             .confirmationDialog(
                 "Delete This Suggestion?", isPresented: isConfirmingDelete, titleVisibility: .visible, presenting: deleting
@@ -213,12 +211,14 @@ struct SuggestionsSettingsView: View {
     }
 
     private func ask(_ action: SuggestionAction, for suggestion: SuggestionSummary) {
-        reason = ""
         deciding = PendingDecision(suggestion: suggestion, action: action)
+        isAskingReason = true
     }
 
-    private var isAskingReason: Binding<Bool> {
-        Binding(get: { deciding != nil }, set: { if !$0 { deciding = nil } })
+    /// Which suggestion becomes what, and who sees the reason.
+    private var decisionMessage: LocalizedStringKey {
+        guard let deciding else { return "" }
+        return "Suggestion #\(deciding.suggestion.number) becomes \(deciding.action.title). The reason is shown on the post and sent to the author."
     }
 
     private var isConfirmingDelete: Binding<Bool> {
