@@ -32,10 +32,15 @@ public final class AppSession {
     public var notice: String?
 
     /// Bumped on every sign-in and sign-out, so an answer for an older token cannot sign out a
-    /// newer one.
-    private(set) var generation = 0
+    /// newer one. Views that keep what one account was shown (a picture cache) drop it when this
+    /// changes.
+    public private(set) var generation = 0
     private var client: (any APIClient)?
     private var cachedLimits: AllModuleLimits?
+    /// Files handed out by ``download(_:)`` in this sign-in; deleted at sign-out.
+    private var issuedFiles: [DownloadedFile] = []
+    /// Which member search this server has, learned by the first search and kept for the sign-in.
+    public var memberSearchRoute: MemberSearchRoute = .general
 
     private let tokens: any TokenStore
     private let preference: any ServerPreference
@@ -222,11 +227,21 @@ public final class AppSession {
     /// Sends a call and keeps its answer as a file (``APIClient/download(_:)``), with the token and
     /// the same 401 handling as ``send(_:)``. Use an endpoint whose `Response` is ``EmptyResponse``
     /// (see ``Endpoints/Resource``).
-    public func download<E: APIEndpoint>(_ endpoint: E) async throws -> DownloadedFile {
+    public func download<E: APIEndpoint>(_ endpoint: E) async throws -> DownloadedFile where E.Response == EmptyResponse {
         guard let client else { throw NetworkError.unauthorized }
         let generation = self.generation
         do {
-            return try await client.download(endpoint)
+            let file = try await client.download(endpoint)
+            // Exports can hold personal data: whatever is still on disk at sign-out is deleted then.
+            if generation == self.generation {
+                if issuedFiles.count >= 32 {
+                    issuedFiles.removeAll { !FileManager.default.fileExists(atPath: $0.fileURL.path) }
+                }
+                issuedFiles.append(file)
+            } else {
+                file.discard()
+            }
+            return file
         } catch NetworkError.unauthorized {
             handleUnauthorized(generation: generation)
             throw NetworkError.unauthorized
@@ -241,12 +256,22 @@ public final class AppSession {
     }
 
     /// The setting limits of every module, loaded once per sign-in and kept. An empty set when the
-    /// server has none (an older Sylo) or cannot be reached right now: callers fall back to the
-    /// fixed limits (``EmbedLimits/standard``) and the server still clamps what is saved.
+    /// server has none (an older Sylo, remembered for the sign-in) or cannot be reached right now
+    /// (asked again next time): callers fall back to the fixed limits (``EmbedLimits/standard``) and
+    /// the server still clamps what is saved.
     public func moduleLimits() async -> AllModuleLimits {
         if let cachedLimits { return cachedLimits }
         let generation = self.generation
-        guard let loaded = try? await send(Endpoints.LoadModuleLimits()) else { return .empty }
+        let loaded: AllModuleLimits
+        do {
+            loaded = try await send(Endpoints.LoadModuleLimits())
+        } catch NetworkError.notFound {
+            // No such endpoint: this server will not grow one during the sign-in.
+            if generation == self.generation { cachedLimits = .empty }
+            return .empty
+        } catch {
+            return .empty
+        }
         if generation == self.generation { cachedLimits = loaded }
         return loaded
     }
@@ -270,6 +295,7 @@ public final class AppSession {
         generation += 1
         client = makeClient(server, token)
         cachedLimits = nil
+        memberSearchRoute = .general
         phase = .signedIn(server)
     }
 
@@ -278,6 +304,9 @@ public final class AppSession {
         try? tokens.delete(for: key(server))
         client = nil
         cachedLimits = nil
+        memberSearchRoute = .general
+        for file in issuedFiles { file.discard() }
+        issuedFiles = []
         account = nil
         phase = .signIn(server)
     }

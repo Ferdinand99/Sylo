@@ -24,21 +24,25 @@ struct EmbedVariable: Hashable, Identifiable {
 /// ```
 ///
 /// There is no live preview of how the embed looks in chat. The limits come from
-/// ``AppSession/moduleLimits()`` unless `limits` is given.
+/// ``AppSession/moduleLimits()``, with `limits` applied on top where a module's embed is narrower.
+/// Counters and cut-offs count UTF-16 units, as the server does.
 struct EmbedEditorView: View {
     @Binding var draft: EmbedDraft
     var options = EmbedOptions()
     /// Tokens the person can insert at the end of the field they last edited. Empty: no insert row.
     var variables: [EmbedVariable] = []
-    /// A module's own limits, when its embed is narrower than the standard one. nil: the server's.
-    var limits: EmbedLimits?
+    /// A module's own limits for the paths where its embed is narrower than the standard one (a
+    /// poll's title), applied on top of the server's. nil: the server's alone.
+    var limits: ModuleFieldLimits?
 
     @Environment(AppSession.self) private var session
     @State private var loadedLimits = EmbedLimits.standard
     @FocusState private var focus: EmbedFocus?
     @State private var lastFocus: EmbedFocus?
 
-    private var activeLimits: EmbedLimits { limits ?? loadedLimits }
+    private var activeLimits: EmbedLimits {
+        limits.map { loadedLimits.overriding($0) } ?? loadedLimits
+    }
 
     var body: some View {
         Form {
@@ -126,7 +130,7 @@ struct EmbedEditorView: View {
             if let new { lastFocus = new }
         }
         .task {
-            if limits == nil { loadedLimits = await session.moduleLimits().embed }
+            loadedLimits = await session.moduleLimits().embed
         }
     }
 
@@ -199,7 +203,7 @@ struct EmbedEditorView: View {
     /// does not fit.
     private func appending(_ token: String, to text: String, limit: Int) -> String {
         let joined = (text.isEmpty ? token : text + " " + token).trimmingCharacters(in: .whitespaces)
-        return joined.count <= limit ? joined : text
+        return joined.utf16.count <= limit ? joined : text
     }
 }
 
@@ -220,6 +224,18 @@ private struct EmbedTextField: View {
     let target: EmbedFocus
     var focus: FocusState<EmbedFocus?>.Binding
 
+    /// The longest start of `text` that fits `limit` UTF-16 units, cut between characters.
+    static func truncated(_ text: String, toUTF16 limit: Int) -> String {
+        var units = 0
+        var result = ""
+        for character in text {
+            units += character.utf16.count
+            if units > limit { break }
+            result.append(character)
+        }
+        return result
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             if let lines {
@@ -230,14 +246,15 @@ private struct EmbedTextField: View {
                 TextField(title, text: $text)
                     .focused(focus, equals: target)
             }
-            if text.count > limit * 3 / 4 {
-                Text("\(text.count) of \(limit) characters")
+            // Counted in UTF-16 units, the way the server counts and cuts.
+            if text.utf16.count > limit * 3 / 4 {
+                Text("\(text.utf16.count) of \(limit) characters")
                     .font(.caption)
-                    .foregroundStyle(text.count > limit ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
+                    .foregroundStyle(text.utf16.count > limit ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
             }
         }
         .onChange(of: text) {
-            if text.count > limit { text = String(text.prefix(limit)) }
+            if text.utf16.count > limit { text = Self.truncated(text, toUTF16: limit) }
         }
     }
 }

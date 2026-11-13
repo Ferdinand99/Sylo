@@ -24,10 +24,20 @@ private struct PictureUpload: APIEndpoint {
 }
 
 extension APIClientTests {
-    private func rawClient(maxDownloadBytes: Int = URLSessionAPIClient.defaultMaxDownloadBytes) throws -> URLSessionAPIClient {
+    private func rawClient(
+        maxDownloadBytes: Int = URLSessionAPIClient.defaultMaxDownloadBytes, directory: URL? = nil
+    ) throws -> URLSessionAPIClient {
         URLSessionAPIClient(
             server: try ServerURL("https://example.com/sylo"), session: MockURLProtocol.session(), decoder: JSONDecoder(),
-            retryDelays: [.zero, .zero], maxDownloadBytes: maxDownloadBytes, token: { "sylo_secret" })
+            retryDelays: [.zero, .zero], maxDownloadBytes: maxDownloadBytes, downloadDirectory: directory,
+            token: { "sylo_secret" })
+    }
+
+    /// An empty folder of its own for one test, so leftovers can be told from other tests' files.
+    private func scratchDirectory() throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("sylo-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
     }
 
     private func csvReply(_ body: String, disposition: String? = #"attachment; filename="apps.csv""#) -> MockReply {
@@ -127,6 +137,59 @@ extension APIClientTests {
         let file = try await rawClient(maxDownloadBytes: 100).download(ExportProbe())
         defer { file.discard() }
         #expect(file.byteCount == 100)
+    }
+
+    @Test("An answer that grows past the limit mid-stream leaves no file behind")
+    func downloadLimitCleansUp() async throws {
+        let mock = MockURLProtocol.state
+        let directory = try scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        mock.reset([.response(status: 200, headers: ["Content-Type": "text/csv"], body: Data(repeating: 0x61, count: 500))])
+        await #expect(throws: NetworkError.tooLarge) {
+            try await rawClient(maxDownloadBytes: 100, directory: directory).download(ExportProbe())
+        }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path).isEmpty)
+
+        // One that is kept is written into the folder it was given, in a folder of its own.
+        mock.reset([csvReply("ok")])
+        let file = try await rawClient(directory: directory).download(ExportProbe())
+        #expect(file.fileURL.path.hasPrefix(directory.path))
+        file.discard()
+        #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path).isEmpty)
+    }
+
+    @Test("An answer that declares itself too long is refused before it is written")
+    func downloadDeclaredLimit() async throws {
+        let mock = MockURLProtocol.state
+        let directory = try scratchDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        mock.reset([.response(
+            status: 200, headers: ["Content-Type": "text/csv", "Content-Length": "500"],
+            body: Data(repeating: 0x61, count: 500))])
+        await #expect(throws: NetworkError.tooLarge) {
+            try await rawClient(maxDownloadBytes: 100, directory: directory).download(ExportProbe())
+        }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path).isEmpty)
+    }
+
+    @Test("A link's query reaches the server exactly as the server wrote it")
+    func downloadKeepsLinkQuery() async throws {
+        let mock = MockURLProtocol.state
+        mock.reset([csvReply("x")])
+        let server = try ServerURL("https://example.com/sylo")
+        let linked = try #require(URL(string: "https://example.com/sylo/c/a.csv?x=a+b&y=c%2Bd"))
+        let resource = try #require(Endpoints.Resource(url: linked, on: server))
+        let file = try await rawClient().download(resource)
+        defer { file.discard() }
+        #expect(mock.requests.first?.url.absoluteString == "https://example.com/sylo/c/a.csv?x=a+b&y=c%2Bd")
+    }
+
+    @Test("A + in a query value goes out as %2B on the wire")
+    func plusOnTheWire() async throws {
+        let mock = MockURLProtocol.state
+        mock.reset([.json(200, #"{"members":[]}"#)])
+        _ = try await rawClient().send(Endpoints.SearchMembers(server: "1", text: "a+b"))
+        #expect(mock.requests.first?.url.absoluteString == "https://example.com/sylo/api/v2/guilds/1/members?q=a%2Bb")
     }
 
     @Test("A big download is written in chunks and arrives whole")

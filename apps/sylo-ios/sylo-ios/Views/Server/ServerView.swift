@@ -51,6 +51,9 @@ struct ServerView: View {
         .navigationDestination(for: ModuleRoute.self) { route in
             ModuleScreens.screen(for: route.moduleID, server: summary.id, session: session)
         }
+        .navigationDestination(for: ServerPageRoute.self) { route in
+            ServerPages.screen(for: route.cardID, server: summary.id, session: session)
+        }
         .navigationDestination(for: TicketRoute.self) { route in
             TicketThreadView(server: summary.id, route: route, session: session)
         }

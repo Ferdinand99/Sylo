@@ -50,6 +50,10 @@ public struct EmbedOptions: Sendable, Equatable {
 
 /// An embed as the editor holds it. Every part is kept even when the options hide it, so switching
 /// an option never loses text; ``spec(_:)`` sends only what the options ask for.
+///
+/// What the editor does not model survives a round trip: ``kind`` (a stored `banner` stays a banner)
+/// and every other key of the stored object (``extra``), so a newer server's embed key is not
+/// stripped by an app that opens and saves the embed.
 public struct EmbedDraft: Sendable, Equatable {
     /// Message text above the embed; sent only with ``EmbedOptions/content``.
     public var content: String
@@ -66,6 +70,14 @@ public struct EmbedDraft: Sendable, Equatable {
     public var footerIcon: String
     public var timestamp: Bool
     public var fields: [Field]
+    /// The stored object's `kind`, `"embed"` for a new one. Sent back as read.
+    public var kind: String
+    /// Keys of the stored object that the editor does not know, sent back as read.
+    public var extra: [String: JSONValue]
+
+    /// Both footer spellings as stored, for ``reading(footerKey:)``.
+    private var storedFooter: String
+    private var storedFooterText: String
 
     /// One name/value field. A field with neither is not sent.
     public struct Field: Sendable, Equatable, Identifiable {
@@ -91,7 +103,8 @@ public struct EmbedDraft: Sendable, Equatable {
     public init(
         content: String = "", color: String = "", authorName: String = "", authorIcon: String = "",
         title: String = "", description: String = "", image: String = "", thumbnail: String = "",
-        footerText: String = "", footerIcon: String = "", timestamp: Bool = false, fields: [Field] = []
+        footerText: String = "", footerIcon: String = "", timestamp: Bool = false, fields: [Field] = [],
+        kind: String = "embed", extra: [String: JSONValue] = [:]
     ) {
         self.content = content
         self.color = color
@@ -105,6 +118,19 @@ public struct EmbedDraft: Sendable, Equatable {
         self.footerIcon = footerIcon
         self.timestamp = timestamp
         self.fields = fields
+        self.kind = kind
+        self.extra = extra
+        storedFooter = ""
+        storedFooterText = footerText
+    }
+
+    /// Equal when everything the editor shows or sends is equal.
+    public static func == (lhs: EmbedDraft, rhs: EmbedDraft) -> Bool {
+        lhs.content == rhs.content && lhs.color == rhs.color && lhs.authorName == rhs.authorName
+            && lhs.authorIcon == rhs.authorIcon && lhs.title == rhs.title && lhs.description == rhs.description
+            && lhs.image == rhs.image && lhs.thumbnail == rhs.thumbnail && lhs.footerText == rhs.footerText
+            && lhs.footerIcon == rhs.footerIcon && lhs.timestamp == rhs.timestamp && lhs.fields == rhs.fields
+            && lhs.kind == rhs.kind && lhs.extra == rhs.extra
     }
 
     /// Whether the embed has nothing in it that would be sent (ignoring the colour).
@@ -117,6 +143,18 @@ public struct EmbedDraft: Sendable, Equatable {
         if options.footerIcon { texts.append(footerIcon) }
         let hasField = options.fields && fields.contains { !$0.name.isEmpty || !$0.value.isEmpty }
         return !hasField && texts.allSatisfy(\.isEmpty)
+    }
+
+    /// This draft with the footer read the way the web editor reads it for a module that stores the
+    /// footer under `footerKey`: that key first, then the other spelling. A stored embed decodes with
+    /// `footerText` first; call this on a draft decoded for a module that uses `footer`.
+    public func reading(footerKey: EmbedOptions.FooterKey) -> EmbedDraft {
+        var copy = self
+        switch footerKey {
+        case .footerText: copy.footerText = storedFooterText.isEmpty ? storedFooter : storedFooterText
+        case .footer: copy.footerText = storedFooter.isEmpty ? storedFooterText : storedFooter
+        }
+        return copy
     }
 
     // MARK: - Colour
@@ -160,17 +198,31 @@ public struct EmbedDraft: Sendable, Equatable {
 }
 
 extension EmbedDraft: Decodable {
-    private enum CodingKeys: String, CodingKey {
-        case content, color, authorName, authorIcon, title, description, image, thumbnail
+    private enum CodingKeys: String, CodingKey, CaseIterable {
+        case kind, content, color, authorName, authorIcon, title, description, image, thumbnail
         case footerText, footer, footerIcon, timestamp, fields
     }
 
+    private struct AnyKey: CodingKey {
+        let stringValue: String
+        var intValue: Int? { nil }
+        init?(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { nil }
+    }
+
     /// Reads a stored embed (a spec from the server). Anything missing or of the wrong type is
-    /// empty, and `footer` is read when there is no `footerText`, like the web editor does.
+    /// empty, and `footer` is read when there is no `footerText` (use ``reading(footerKey:)`` for a
+    /// module that stores `footer`). `kind` and the keys the editor does not know are kept.
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let footerText = try c.decode(forKey: .footerText, or: "")
         let footer = try c.decode(forKey: .footer, or: "")
+        let known = Set(CodingKeys.allCases.map(\.stringValue))
+        let all = try decoder.container(keyedBy: AnyKey.self)
+        var extra: [String: JSONValue] = [:]
+        for key in all.allKeys where !known.contains(key.stringValue) {
+            if let value = try? all.decode(JSONValue.self, forKey: key) { extra[key.stringValue] = value }
+        }
         self.init(
             content: try c.decode(forKey: .content, or: ""),
             color: try c.decode(forKey: .color, or: ""),
@@ -183,7 +235,11 @@ extension EmbedDraft: Decodable {
             footerText: footerText.isEmpty ? footer : footerText,
             footerIcon: try c.decode(forKey: .footerIcon, or: ""),
             timestamp: try c.decode(forKey: .timestamp, or: false),
-            fields: try c.decodeLossyArray(of: Field.self, forKey: .fields))
+            fields: try c.decodeLossyArray(of: Field.self, forKey: .fields),
+            kind: try c.decode(forKey: .kind, or: "embed"),
+            extra: extra)
+        storedFooter = footer
+        storedFooterText = footerText
     }
 }
 
@@ -214,6 +270,12 @@ public struct EmbedSpec: Encodable, Sendable, Equatable {
         init?(intValue: Int) { nil }
     }
 
+    /// Every key the editor can write.
+    private static let ownKeys = [
+        "kind", "color", "title", "image", "content", "authorName", "authorIcon", "description", "thumbnail",
+        "footerText", "footer", "footerIcon", "timestamp", "fields",
+    ]
+
     private struct FieldSpec: Encodable {
         let name: String
         let value: String
@@ -222,7 +284,12 @@ public struct EmbedSpec: Encodable, Sendable, Equatable {
 
     public func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: Key.self)
-        try c.encode("embed", forKey: Key("kind"))
+        // Keys the editor does not know go first and never replace one it writes.
+        let own = Set(EmbedSpec.ownKeys)
+        for (name, value) in draft.extra.sorted(by: { $0.key < $1.key }) where !own.contains(name) {
+            try c.encode(value, forKey: Key(name))
+        }
+        try c.encode(draft.kind, forKey: Key("kind"))
         try c.encode(draft.resolvedColor(options), forKey: Key("color"))
         try c.encode(draft.title, forKey: Key("title"))
         try c.encode(draft.image, forKey: Key("image"))

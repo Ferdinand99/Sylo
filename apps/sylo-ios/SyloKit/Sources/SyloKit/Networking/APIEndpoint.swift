@@ -18,10 +18,13 @@ public protocol APIEndpoint: Sendable {
     var path: String { get }
     var method: HTTPMethod { get }
     var query: [URLQueryItem] { get }
+    /// The query exactly as it is to be sent, already percent-encoded; replaces ``query`` when set.
+    /// For a link the server wrote (``Endpoints/Resource``); nil for every other call.
+    var percentEncodedQuery: String? { get }
     /// Sent as JSON; nil sends no body and no `Content-Type`.
     var body: (any Encodable & Sendable)? { get }
-    /// Sent as it is with its own `Content-Type` (a multipart form), instead of ``body``. nil for
-    /// every JSON call.
+    /// Sent as it is with its own `Content-Type` (a multipart form), instead of ``body``: when both
+    /// are set, this one wins and ``body`` is ignored. nil for every JSON call.
     var rawBody: RawBody? { get }
     /// Whether the app token goes along. False only before sign-in (info, code exchange).
     var requiresAuth: Bool { get }
@@ -30,6 +33,7 @@ public protocol APIEndpoint: Sendable {
 extension APIEndpoint {
     public var method: HTTPMethod { .get }
     public var query: [URLQueryItem] { [] }
+    public var percentEncodedQuery: String? { nil }
     public var body: (any Encodable & Sendable)? { nil }
     public var rawBody: RawBody? { nil }
     public var requiresAuth: Bool { true }

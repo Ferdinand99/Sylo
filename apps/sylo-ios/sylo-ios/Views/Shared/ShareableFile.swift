@@ -2,10 +2,10 @@ import CoreTransferable
 import QuickLook
 import SwiftUI
 import SyloKit
-import UniformTypeIdentifiers
 
 /// A downloaded file as something the share sheet can send: the file itself, under its own name
-/// (``DownloadedFile/filename``), never a copy in memory.
+/// (``DownloadedFile/filename``), never a copy in memory. The file's extension sets its type, so
+/// the share sheet offers the right apps (Numbers for a CSV).
 nonisolated struct ShareableFile: Transferable, Sendable {
     let file: DownloadedFile
 
@@ -14,19 +14,18 @@ nonisolated struct ShareableFile: Transferable, Sendable {
     }
 
     static var transferRepresentation: some TransferRepresentation {
-        FileRepresentation(exportedContentType: .data) { item in
-            SentTransferredFile(item.file.fileURL)
-        }
+        ProxyRepresentation { item in item.file.fileURL }
     }
 }
 
-/// A share button for a downloaded file.
+/// A share button for a downloaded file. The share sheet has no completion hook here: whoever owns
+/// the file (usually a ``FileDownloadModel``) deletes it with `discard()` when its screen goes away.
 struct FileShareLink: View {
     let file: DownloadedFile
     var title: LocalizedStringKey = "Share"
 
     var body: some View {
-        ShareLink(item: ShareableFile(file), preview: SharePreview(file.filename)) {
+        ShareLink(item: file.fileURL, preview: SharePreview(file.filename)) {
             Label(title, systemImage: "square.and.arrow.up")
         }
     }
@@ -56,7 +55,7 @@ extension View {
 /// DownloadFileButton("Export Applications", systemImage: "square.and.arrow.down",
 ///                    endpoint: Endpoints.Resource(path: "..."), session: session)
 /// ```
-struct DownloadFileButton<Endpoint: APIEndpoint>: View {
+struct DownloadFileButton<Endpoint: APIEndpoint>: View where Endpoint.Response == EmptyResponse {
     let title: LocalizedStringKey
     let systemImage: String
     let endpoint: Endpoint

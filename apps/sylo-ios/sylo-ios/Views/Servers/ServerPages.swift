@@ -6,21 +6,58 @@ import SyloKit
 /// without one still opens its page in the web dashboard, so nothing disappears until its screen
 /// ships. Like ``ModuleScreens``, but for pages that belong to the server rather than to a module.
 ///
-/// To add a page: put the card's id (`card.id` from the overview, e.g. `"commands"`) in ``ids``
-/// and a `case` in ``screen(for:server:session:)``. That is the only edit outside your own files.
+/// Every package registers its pages in a file of its own, so two packages never edit the same
+/// file: `ServerPages+Moderation.swift` (commands), `ServerPages+Messages.swift` (embed messages)
+/// and `ServerPages+Closeout.swift` (the rest). Each holds one static list, already included in
+/// ``all``. To add a page, add a line to your list:
+///
+/// ```swift
+/// extension ServerPages {
+///     static let moderationPages: [ServerPage] = [
+///         ServerPage("commands") { server, session in CommandsView(server: server, session: session) },
+///     ]
+/// }
+/// ```
+///
+/// The card id is `card.id` from the overview. The destination is registered once in `ServerView`.
 enum ServerPages {
-    static func hasScreen(_ cardID: String) -> Bool { ids.contains(cardID) }
+    /// Every registered page: the lists of all packages, one per line. Do not edit.
+    static let all: [ServerPage] = [
+        moderationPages,
+        messagesPages,
+        closeoutPages,
+    ].flatMap { $0 }
 
-    private static let ids: Set<String> = []
+    static func hasScreen(_ cardID: String) -> Bool { page(for: cardID) != nil }
 
     @ViewBuilder
     static func screen(for cardID: String, server: ServerID, session: AppSession) -> some View {
-        switch cardID {
-        default:
+        if let page = page(for: cardID) {
+            page.screen(server, session)
+        } else {
             ContentUnavailableView(
                 "Not in the App Yet", systemImage: "square.grid.2x2",
-                description: Text("Open this page in the web dashboard for now."))
+                description: Text("This page isn't available in the app yet."))
         }
+    }
+
+    private static func page(for cardID: String) -> ServerPage? {
+        all.first { $0.cardID == cardID }
+    }
+}
+
+/// One server page: the overview card it opens from, and how to build it.
+struct ServerPage {
+    let cardID: String
+    private let make: (ServerID, AppSession) -> AnyView
+
+    init<Content: View>(_ cardID: String, @ViewBuilder screen: @escaping (ServerID, AppSession) -> Content) {
+        self.cardID = cardID
+        make = { server, session in AnyView(screen(server, session)) }
+    }
+
+    func screen(_ server: ServerID, _ session: AppSession) -> AnyView {
+        make(server, session)
     }
 }
 

@@ -175,6 +175,54 @@ struct MemberSearchTests {
         #expect(model.searchedText == "alexi")
     }
 
+    @Test("A pasted mention is searched as its id")
+    func mentionSearchedAsID() async {
+        let clients = StubClients { endpoint in
+            guard let search = endpoint as? Endpoints.SearchMembers else { throw NetworkError.notFound }
+            #expect(search.text == "111111111111111111")
+            return MemberSearchResult(members: [Self.alex])
+        }
+        let model = MemberSearchModel(server: "1", session: makeSignedInSession(clients: clients))
+        model.query = "<@!111111111111111111>"
+        await model.search()
+        #expect(model.results == [Self.alex])
+        #expect(model.searchedText == "<@!111111111111111111>")
+    }
+
+    @Test("What one search learned about the routes is kept for the sign-in, across pickers")
+    func routeKeptOnSession() async {
+        let clients = StubClients { endpoint in
+            if endpoint is Endpoints.SearchMembers { throw NetworkError.notFound }
+            return MemberSearchResult(members: [Self.alex])
+        }
+        let session = makeSignedInSession(clients: clients)
+        let first = MemberSearchModel(server: "1", session: session)
+        first.query = "al"
+        await first.search()
+        #expect(session.memberSearchRoute == .tempRoles)
+
+        let second = MemberSearchModel(server: "1", session: session)
+        second.query = "alex"
+        await second.search()
+        #expect(count(Endpoints.SearchMembers.self, in: clients) == 1)
+        #expect(count(Endpoints.SearchTempRoleMembers.self, in: clients) == 2)
+    }
+
+    @Test("An older search that ends does not switch the spinner off under a newer one")
+    func spinnerStaysForNewest() async {
+        let clients = StubClients { _ in MemberSearchResult(members: [Self.alex]) }
+        let session = makeSignedInSession(clients: clients)
+        let model = MemberSearchModel(server: "1", session: session)
+        // The newest search is the one that decides: after an empty one the spinner is off.
+        model.query = "al"
+        await model.search()
+        #expect(!model.isSearching)
+        model.query = ""
+        await model.search()
+        #expect(!model.isSearching)
+        #expect(model.results.isEmpty)
+    }
+
     @Test("A 401 signs the app out and shows no search error")
     func unauthorized() async {
         let clients = StubClients { _ in throw NetworkError.unauthorized }

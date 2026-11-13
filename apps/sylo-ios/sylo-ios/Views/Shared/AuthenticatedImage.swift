@@ -86,11 +86,16 @@ struct AuthenticatedImage: View {
         }
     }
 
+    private static let maxPictureBytes = 12 * 1024 * 1024
+
     private func load() async {
         guard let resource, let server = session.server else {
             phase = .failed
             return
         }
+        // What one account was shown is not kept for the next one (sign-out, another account).
+        let generation = session.generation
+        ImageCache.useGeneration(generation)
         let key = resource.cacheKey(on: server) as NSString
         if let cached = ImageCache.images.object(forKey: key) {
             phase = .loaded(cached)
@@ -99,12 +104,24 @@ struct AuthenticatedImage: View {
         phase = .loading
         do {
             let file = try await session.download(resource)
-            defer { file.discard() }
-            guard let image = UIImage(contentsOfFile: file.fileURL.path) else {
+            // Decoded from the bytes: the file is deleted at once, and an image that reads from a path
+            // would come back blank after a memory purge.
+            let data: Data
+            do {
+                // A picture of a few MB at most; anything bigger is not decoded.
+                guard file.byteCount <= Self.maxPictureBytes else { throw NetworkError.tooLarge }
+                data = try file.contents()
+            } catch {
+                file.discard()
                 phase = .failed
                 return
             }
-            ImageCache.images.setObject(image, forKey: key)
+            file.discard()
+            guard let image = UIImage(data: data) else {
+                phase = .failed
+                return
+            }
+            if session.generation == generation { ImageCache.images.setObject(image, forKey: key) }
             phase = .loaded(image)
         } catch {
             if NetworkError(error) != .cancelled { phase = .failed }
@@ -118,12 +135,22 @@ private enum ImageCache {
         cache.countLimit = 100
         return cache
     }()
+
+    private static var generation: Int?
+
+    /// Empties the cache when the session's sign-in is not the one the pictures were loaded for.
+    static func useGeneration(_ current: Int) {
+        if generation != current {
+            images.removeAllObjects()
+            generation = current
+        }
+    }
 }
 
 private extension Endpoints.Resource {
     /// One key per server and resource.
     func cacheKey(on server: ServerURL?) -> String {
-        let query = self.query.map { "\($0.name)=\($0.value ?? "")" }.joined(separator: "&")
+        let query = percentEncodedQuery ?? self.query.map { "\($0.name)=\($0.value ?? "")" }.joined(separator: "&")
         return (server?.description ?? "") + "|" + path + "?" + query
     }
 }

@@ -64,6 +64,14 @@ public struct MemberChoice: Sendable, Hashable, Identifiable {
     public var hasName: Bool { name != id }
 }
 
+/// Which member search a server has: the general one, the Temporary roles one (a server from before
+/// the general one), or neither. Learned by the first search and kept by the session.
+public enum MemberSearchRoute: Sendable, Equatable {
+    case general
+    case tempRoles
+    case unavailable
+}
+
 /// Reads a member id out of what a person pasted.
 public enum MemberReference {
     /// The id in `123456789012345678`, `<@123456789012345678>` or `<@!123456789012345678>` (spaces
@@ -115,7 +123,8 @@ extension Endpoints {
 }
 
 /// Searches a server's members as the person types. Call ``search()`` after a short pause in typing
-/// (the view's `.task(id: query)` does); a newer query cancels the older search.
+/// (the view's `.task(id: query)` does); a newer query cancels the older search. A pasted id or
+/// mention is searched as the id, so the member's name shows.
 @MainActor
 @Observable
 public final class MemberSearchModel {
@@ -130,10 +139,10 @@ public final class MemberSearchModel {
     public private(set) var isSearching = false
     /// Why the last search failed; the results shown are the ones from before.
     public private(set) var errorMessage: String?
-    /// False once neither search route exists on this server: only a pasted id or mention works.
-    public private(set) var isAvailable = true
 
-    private var usesFallback = false
+    /// The number of the newest search, so an older one that finishes (or is cancelled) later does
+    /// not switch the spinner off under the newer one.
+    private var newest = 0
     private let session: AppSession
 
     public init(server: ServerID, session: AppSession) {
@@ -141,28 +150,37 @@ public final class MemberSearchModel {
         self.session = session
     }
 
+    /// False once neither search route exists on this server: only a pasted id or mention works.
+    public var isAvailable: Bool { session.memberSearchRoute != .unavailable }
+
     /// The member id the typed text spells out, when it is an id or a mention.
     public var pastedID: String? { MemberReference.id(in: query) }
 
     /// Searches for the typed text: the server's `/members`, and on a 404 the Temporary roles
-    /// search (remembered, so later searches go straight there). Empty text clears the results.
+    /// search (remembered for the sign-in, so later searches go straight there). Empty text clears
+    /// the results.
     public func search() async {
-        let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else {
+        let typed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        newest += 1
+        let mine = newest
+        guard !typed.isEmpty else {
             results = []
             searchedText = nil
             errorMessage = nil
+            isSearching = false
             return
         }
         guard isAvailable else { return }
+        // A pasted mention means nothing to the server's name search; its id does.
+        let text = MemberReference.id(in: typed) ?? typed
         isSearching = true
-        defer { isSearching = false }
+        defer { if mine == newest { isSearching = false } }
         do {
             let found = try await load(text)
             // The person kept typing while this ran.
-            guard text == query.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
+            guard typed == query.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
             results = found.members
-            searchedText = text
+            searchedText = typed
             errorMessage = nil
         } catch {
             let error = NetworkError(error)
@@ -173,17 +191,17 @@ public final class MemberSearchModel {
     }
 
     private func load(_ text: String) async throws -> MemberSearchResult {
-        if !usesFallback {
+        if session.memberSearchRoute == .general {
             do {
                 return try await session.send(Endpoints.SearchMembers(server: server, text: text))
             } catch NetworkError.notFound {
-                usesFallback = true
+                session.memberSearchRoute = .tempRoles
             }
         }
         do {
             return try await session.send(Endpoints.SearchTempRoleMembers(server: server, text: text))
         } catch NetworkError.notFound {
-            isAvailable = false
+            session.memberSearchRoute = .unavailable
             throw NetworkError.notFound
         }
     }

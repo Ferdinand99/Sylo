@@ -107,9 +107,9 @@ struct RawTransferTests {
         let server = try ServerURL("https://example.com/sylo")
         let found = try #require(server.apiPath(of: try link("https://example.com/sylo/c/abc.webp?size=2&x=a%20b")))
         #expect(found.path == "/c/abc.webp")
-        #expect(found.query == [URLQueryItem(name: "size", value: "2"), URLQueryItem(name: "x", value: "a b")])
+        #expect(found.percentEncodedQuery == "size=2&x=a%20b")
 
-        #expect(server.apiPath(of: try link("https://example.com/sylo/c/abc.webp"))?.query == [])
+        #expect(server.apiPath(of: try link("https://example.com/sylo/c/abc.webp"))?.percentEncodedQuery == nil)
         #expect(server.apiPath(of: try link("HTTPS://EXAMPLE.COM/sylo/c/abc.webp"))?.path == "/c/abc.webp")
         // Another host, the same host outside the sub-path, a lookalike path and another scheme.
         #expect(server.apiPath(of: try link("https://evil.example.org/sylo/c/abc.webp")) == nil)
@@ -124,9 +124,29 @@ struct RawTransferTests {
         let server = try ServerURL("https://example.com")
         let resource = try #require(Endpoints.Resource(url: try link("https://example.com/api/v2/x?a=1"), on: server))
         #expect(resource.path == "/api/v2/x")
-        #expect(resource.query == [URLQueryItem(name: "a", value: "1")])
+        #expect(resource.percentEncodedQuery == "a=1")
         #expect(resource.method == .get)
         #expect(Endpoints.Resource(url: try link("https://example.org/api/v2/x"), on: server) == nil)
+    }
+
+    @Test("A + in a query value is sent as %2B, so the server does not read it as a space")
+    func plusInQuery() throws {
+        let server = try ServerURL("https://example.com/sylo")
+        let url = server.url(for: "/api/v2/x", query: [URLQueryItem(name: "q", value: "a+b c")])
+        #expect(url.absoluteString == "https://example.com/sylo/api/v2/x?q=a%2Bb%20c")
+        #expect(server.url(for: "/api/v2/x", query: [URLQueryItem(name: "q", value: "plain")]).absoluteString
+            == "https://example.com/sylo/api/v2/x?q=plain")
+        #expect(server.url(for: "/api/v2/x").absoluteString == "https://example.com/sylo/api/v2/x")
+    }
+
+    @Test("A link's query is kept byte for byte when it is sent again")
+    func linkQueryKept() throws {
+        let server = try ServerURL("https://example.com/sylo")
+        let original = try link("https://example.com/sylo/api/v2/x?x=a+b&y=c%2Bd&z=%20")
+        let resource = try #require(Endpoints.Resource(url: original, on: server))
+        #expect(resource.percentEncodedQuery == "x=a+b&y=c%2Bd&z=%20")
+        let again = server.url(for: resource.path, query: resource.query, percentEncodedQuery: resource.percentEncodedQuery)
+        #expect(again.absoluteString == "https://example.com/sylo/api/v2/x?x=a+b&y=c%2Bd&z=%20")
     }
 
     @Test("The network error for a too-large answer has words")

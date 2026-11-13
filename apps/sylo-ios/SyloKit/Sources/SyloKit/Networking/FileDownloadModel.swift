@@ -7,7 +7,8 @@ import Observation
 @MainActor
 @Observable
 public final class FileDownloadModel {
-    /// The last file downloaded, until ``clear()`` or the next download.
+    /// The last file downloaded, until ``clear()`` or the next download. It is also deleted when the
+    /// model goes away.
     public private(set) var file: DownloadedFile?
     public private(set) var isDownloading = false
     /// Why the last download failed, in words for the person; nil when it worked.
@@ -16,6 +17,7 @@ public final class FileDownloadModel {
     public private(set) var downloadCount = 0
 
     private let session: AppSession
+    private let holder = FileHolder()
 
     public init(session: AppSession) {
         self.session = session
@@ -24,7 +26,7 @@ public final class FileDownloadModel {
     /// Downloads the endpoint's answer into ``file``. Does nothing while another download runs.
     /// - Returns: Whether a file is ready.
     @discardableResult
-    public func download<E: APIEndpoint>(_ endpoint: E) async -> Bool {
+    public func download<E: APIEndpoint>(_ endpoint: E) async -> Bool where E.Response == EmptyResponse {
         guard !isDownloading else { return false }
         isDownloading = true
         defer { isDownloading = false }
@@ -33,6 +35,7 @@ public final class FileDownloadModel {
             let downloaded = try await session.download(endpoint)
             file?.discard()
             file = downloaded
+            holder.file = downloaded
             downloadCount += 1
             return true
         } catch {
@@ -46,5 +49,14 @@ public final class FileDownloadModel {
     public func clear() {
         file?.discard()
         file = nil
+        holder.file = nil
     }
+}
+
+/// Deletes the file it holds when it is released, so a model that goes away (its screen was closed
+/// while a download ran) cannot leave an export on disk. Only the model touches it, on the main actor.
+private final class FileHolder: @unchecked Sendable {
+    var file: DownloadedFile?
+
+    deinit { file?.discard() }
 }

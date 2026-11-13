@@ -207,6 +207,71 @@ struct EmbedDraftTests {
         #expect(try Self.keys(draft.spec()) == stickyKeys)
     }
 
+    // MARK: What the editor does not model
+
+    @Test("Unknown keys and a banner's kind survive a round trip")
+    func keepsUnknownKeysAndKind() throws {
+        let json = #"""
+        {"kind":"banner","image":"https://e.com/b.png","titleUrl":"https://e.com/t",
+         "flags":{"a":[1,2.5,null,true,"x"]},"color":"#ed4245","title":"T"}
+        """#
+        let draft = try JSONDecoder().decode(EmbedDraft.self, from: Data(json.utf8))
+        #expect(draft.kind == "banner")
+        #expect(draft.extra["titleUrl"] == .string("https://e.com/t"))
+        #expect(draft.extra["flags"] == .object(["a": .array([.int(1), .double(2.5), .null, .bool(true), .string("x")])]))
+        #expect(draft.extra["title"] == nil)
+
+        var edited = draft
+        edited.title = "Edited"
+        let sent = try Self.object(edited.spec())
+        #expect(sent["kind"] as? String == "banner")
+        #expect(sent["titleUrl"] as? String == "https://e.com/t")
+        #expect(sent["title"] as? String == "Edited")
+        #expect(sent["color"] as? String == "#ed4245")
+        let flags = try #require(sent["flags"] as? [String: Any])
+        let list = try #require(flags["a"] as? [Any])
+        #expect(list.count == 5)
+        #expect(Set(sent.keys).isSuperset(of: ["titleUrl", "flags", "kind", "color", "title", "image"]))
+
+        // Read back, nothing is lost.
+        let again = try JSONDecoder().decode(EmbedDraft.self, from: JSONEncoder().encode(edited.spec()))
+        #expect(again == edited)
+    }
+
+    @Test("A new embed is an embed, and an unknown key never replaces one the editor writes")
+    func kindDefaultAndPrecedence() throws {
+        #expect(EmbedDraft().kind == "embed")
+        #expect(try Self.object(EmbedDraft().spec())["kind"] as? String == "embed")
+        #expect(try JSONDecoder().decode(EmbedDraft.self, from: Data("{}".utf8)).kind == "embed")
+
+        var draft = EmbedDraft(title: "Real")
+        draft.extra = ["title": .string("Shadow"), "kind": .string("other"), "future": .int(7)]
+        let sent = try Self.object(draft.spec())
+        #expect(sent["title"] as? String == "Real")
+        #expect(sent["kind"] as? String == "embed")
+        #expect(sent["future"] as? Int == 7)
+    }
+
+    @Test("The footer is read the way the web editor reads it for each footer key")
+    func footerPrecedence() throws {
+        let both = try JSONDecoder().decode(
+            EmbedDraft.self, from: Data(#"{"footerText":"Text","footer":"Plain"}"#.utf8))
+        // By default footerText wins; a module that stores `footer` reads that first.
+        #expect(both.footerText == "Text")
+        #expect(both.reading(footerKey: .footerText).footerText == "Text")
+        #expect(both.reading(footerKey: .footer).footerText == "Plain")
+
+        let onlyFooter = try JSONDecoder().decode(EmbedDraft.self, from: Data(#"{"footer":"Plain"}"#.utf8))
+        #expect(onlyFooter.reading(footerKey: .footerText).footerText == "Plain")
+        #expect(onlyFooter.reading(footerKey: .footer).footerText == "Plain")
+
+        let onlyText = try JSONDecoder().decode(EmbedDraft.self, from: Data(#"{"footerText":"Text"}"#.utf8))
+        #expect(onlyText.reading(footerKey: .footer).footerText == "Text")
+
+        // The unknown-key list does not take either footer spelling.
+        #expect(both.extra.isEmpty)
+    }
+
     // MARK: Emptiness
 
     @Test("An embed with nothing in it is empty, whatever the colour")

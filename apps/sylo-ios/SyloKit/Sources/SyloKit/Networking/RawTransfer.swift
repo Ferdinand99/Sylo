@@ -61,7 +61,8 @@ public struct DownloadedFile: Sendable, Equatable {
         return DownloadedFile(fileURL: url, filename: name, mimeType: mimeType, byteCount: data.count)
     }
 
-    /// Deletes every file left behind by earlier downloads. Call it at launch.
+    /// Deletes every file left behind by earlier downloads. The app calls it at launch, when no
+    /// download can be running; exports can hold personal data, so nothing is kept between launches.
     public static func removeAllTemporary() {
         try? FileManager.default.removeItem(at: root)
     }
@@ -85,8 +86,8 @@ public struct DownloadedFile: Sendable, Equatable {
     }
 
     /// A new, empty folder for one file, and the path of the file in it.
-    static func makeDestination(filename: String) throws -> URL {
-        let folder = root.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    static func makeDestination(filename: String, in directory: URL? = nil) throws -> URL {
+        let folder = (directory ?? root).appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         return folder.appendingPathComponent(filename, isDirectory: false)
     }
@@ -195,13 +196,15 @@ extension ServerURL {
     /// The API path and query of a URL on this server (same scheme, host, port and sub-path), or nil
     /// for a URL anywhere else. Lets a link the server sent be fetched with the token, while a link
     /// to another host never gets it.
-    public func apiPath(of url: URL) -> (path: String, query: [URLQueryItem])? {
+    /// The query comes back percent-encoded exactly as the link spelled it, so a `+` or a `%2B` keeps
+    /// its meaning when it is sent again.
+    public func apiPath(of url: URL) -> (path: String, percentEncodedQuery: String?)? {
         let base = baseURL.absoluteString
         let text = url.absoluteString
         guard text.lowercased().hasPrefix(base.lowercased() + "/") else { return nil }
         let rest = String(text.dropFirst(base.count))
         guard let components = URLComponents(string: rest) else { return nil }
-        return (components.percentEncodedPath, components.queryItems ?? [])
+        return (components.percentEncodedPath, components.percentEncodedQuery)
     }
 }
 
@@ -212,16 +215,21 @@ extension Endpoints {
         /// Below the server address, percent-encoded, a leading slash optional.
         public let path: String
         public let query: [URLQueryItem]
+        /// The query of a link, as the server spelled it; used instead of ``query`` when set.
+        public let percentEncodedQuery: String?
 
         public init(path: String, query: [URLQueryItem] = []) {
             self.path = path
             self.query = query
+            self.percentEncodedQuery = nil
         }
 
         /// The resource a link on `server` points to; nil for a link to another host.
         public init?(url: URL, on server: ServerURL) {
             guard let found = server.apiPath(of: url) else { return nil }
-            self.init(path: found.path, query: found.query)
+            path = found.path
+            query = []
+            percentEncodedQuery = found.percentEncodedQuery
         }
     }
 }

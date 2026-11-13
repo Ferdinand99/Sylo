@@ -98,6 +98,35 @@ struct RawSessionTests {
         #expect(!FileManager.default.fileExists(atPath: second.fileURL.path))
     }
 
+    @Test("Files the session handed out are deleted when it signs out")
+    func signOutDeletesFiles() async throws {
+        let clients = StubClients { endpoint in
+            if endpoint is Endpoints.Resource {
+                return try DownloadedFile.write(Data("secret".utf8), filename: "export.csv", mimeType: "text/csv")
+            }
+            return EmptyResponse()
+        }
+        let session = makeSignedInSession(clients: clients)
+        let kept = try await session.download(Endpoints.Resource(path: "/x"))
+        #expect(FileManager.default.fileExists(atPath: kept.fileURL.path))
+        await session.signOut()
+        #expect(!FileManager.default.fileExists(atPath: kept.fileURL.path))
+    }
+
+    @Test("A file model that goes away takes its file with it")
+    func modelDeinitDeletes() async throws {
+        let clients = StubClients { _ in
+            try DownloadedFile.write(Data("secret".utf8), filename: "export.csv", mimeType: "text/csv")
+        }
+        let session = makeSignedInSession(clients: clients)
+        var model: FileDownloadModel? = FileDownloadModel(session: session)
+        #expect(await model?.download(Endpoints.Resource(path: "/x")) == true)
+        let url = try #require(model?.file?.fileURL)
+        #expect(FileManager.default.fileExists(atPath: url.path))
+        model = nil
+        #expect(!FileManager.default.fileExists(atPath: url.path))
+    }
+
     @Test("A failed download shows the server's message and keeps no file")
     func fileModelError() async {
         let clients = StubClients { _ in throw NetworkError.forbidden }

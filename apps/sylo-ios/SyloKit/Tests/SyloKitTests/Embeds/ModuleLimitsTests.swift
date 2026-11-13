@@ -105,12 +105,21 @@ struct SessionLimitsTests {
         #expect(loadedCount(clients) == 1)
     }
 
-    @Test("A server without limits gives none, and is asked again next time")
-    func missing() async throws {
+    @Test("A server without the endpoint gives none, and is not asked again this sign-in")
+    func missing() async {
         let clients = StubClients { _ in throw NetworkError.notFound }
         let session = makeSignedInSession(clients: clients)
         #expect(await session.moduleLimits() == .empty)
         #expect(await session.moduleLimits().embed == .standard)
+        #expect(loadedCount(clients) == 1)
+    }
+
+    @Test("A failure that may pass gives none now, and is asked again next time")
+    func transient() async throws {
+        let clients = StubClients { _ in throw NetworkError.offline }
+        let session = makeSignedInSession(clients: clients)
+        #expect(await session.moduleLimits() == .empty)
+        #expect(await session.moduleLimits() == .empty)
         #expect(loadedCount(clients) == 2)
 
         let all = try ModuleLimitsTests.decode()

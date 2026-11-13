@@ -63,9 +63,6 @@ struct OverviewView: View {
                 }
             }
             .tabBarClearance()
-            .navigationDestination(for: ServerPageRoute.self) { route in
-                ServerPages.screen(for: route.cardID, server: model.server, session: session)
-            }
             .searchable(text: $searchText, prompt: "Search modules")
             .overlay {
                 if isSearching, shownGroups(overview).isEmpty {

@@ -12,14 +12,17 @@ public protocol APIClient: Sendable {
     /// Sends the call and keeps its answer as a file, whatever it is (CSV, JSON, HTML, a picture):
     /// the answer is not checked for JSON and not decoded, and is written to disk as it arrives. An
     /// error status still throws the same ``NetworkError`` as ``send(_:)``; an answer over the
-    /// download limit throws ``NetworkError/tooLarge``. The endpoint's `Response` is ignored, so use
-    /// ``EmptyResponse`` for it. Throws ``NetworkError`` only.
-    func download<E: APIEndpoint>(_ endpoint: E) async throws -> DownloadedFile
+    /// download limit throws ``NetworkError/tooLarge``. The endpoint's `Response` is not read, so it
+    /// must be ``EmptyResponse`` (see ``Endpoints/Resource``). Throws ``NetworkError`` only.
+    ///
+    /// A client that downloads must implement this: the default answer is a 404, which is only right
+    /// for a client that has no files at all (a stub).
+    func download<E: APIEndpoint>(_ endpoint: E) async throws -> DownloadedFile where E.Response == EmptyResponse
 }
 
 extension APIClient {
     /// A client that cannot download answers like a server that has no such file.
-    public func download<E: APIEndpoint>(_ endpoint: E) async throws -> DownloadedFile {
+    public func download<E: APIEndpoint>(_ endpoint: E) async throws -> DownloadedFile where E.Response == EmptyResponse {
         throw NetworkError.notFound
     }
 }
@@ -43,6 +46,7 @@ public final class URLSessionAPIClient: APIClient {
     private let retryDelays: [Duration]
     private let maxResponseBytes: Int?
     private let maxDownloadBytes: Int
+    private let downloadDirectory: URL?
 
     /// - Parameters:
     ///   - session: nil for the default session (``defaultConfiguration()``, redirects refused).
@@ -50,20 +54,24 @@ public final class URLSessionAPIClient: APIClient {
     ///   - maxResponseBytes: refuse an answer longer than this (nil: no limit). The body is read
     ///     as it arrives and dropped at the limit, so a huge answer never sits in memory.
     ///   - maxDownloadBytes: refuse a ``download(_:)`` longer than this.
+    ///   - downloadDirectory: where downloads are written, each in a folder of its own (nil: the
+    ///     system's temporary folder).
     ///   - token: the current app token, asked for once per call; nil when signed out.
     public convenience init(
         server: ServerURL, session: URLSession? = nil, decoder: JSONDecoder = JSONDecoder(),
         retryDelays: [Duration]? = nil, maxResponseBytes: Int? = nil,
-        maxDownloadBytes: Int = URLSessionAPIClient.defaultMaxDownloadBytes,
+        maxDownloadBytes: Int = URLSessionAPIClient.defaultMaxDownloadBytes, downloadDirectory: URL? = nil,
         token: @escaping @Sendable () async -> String?
     ) {
         self.init(server: server, session: session, decoder: decoder, retryDelays: retryDelays ?? Self.defaultRetryDelays,
-                  maxResponseBytes: maxResponseBytes, maxDownloadBytes: maxDownloadBytes, token: token)
+                  maxResponseBytes: maxResponseBytes, maxDownloadBytes: maxDownloadBytes,
+                  downloadDirectory: downloadDirectory, token: token)
     }
 
     init(
         server: ServerURL, session: URLSession?, decoder: JSONDecoder, retryDelays: [Duration],
-        maxResponseBytes: Int?, maxDownloadBytes: Int, token: @escaping @Sendable () async -> String?
+        maxResponseBytes: Int?, maxDownloadBytes: Int, downloadDirectory: URL?,
+        token: @escaping @Sendable () async -> String?
     ) {
         self.server = server
         self.session = session ?? URLSession(
@@ -73,6 +81,7 @@ public final class URLSessionAPIClient: APIClient {
         self.retryDelays = retryDelays
         self.maxResponseBytes = maxResponseBytes
         self.maxDownloadBytes = maxDownloadBytes
+        self.downloadDirectory = downloadDirectory
         self.token = token
     }
 
@@ -114,7 +123,7 @@ public final class URLSessionAPIClient: APIClient {
         }
     }
 
-    public func download<E: APIEndpoint>(_ endpoint: E) async throws -> DownloadedFile {
+    public func download<E: APIEndpoint>(_ endpoint: E) async throws -> DownloadedFile where E.Response == EmptyResponse {
         let request = try await makeRequest(for: endpoint, accept: "*/*")
         var attempt = 0
         while true {
@@ -160,10 +169,14 @@ public final class URLSessionAPIClient: APIClient {
             }
             try Self.checkDownloadStatus(http, errorBody: body)
         }
-        guard response.expectedContentLength <= Int64(limit) else { throw NetworkError.tooLarge }
+        // Too long by its own account: stop the transfer before any byte is read or written.
+        guard response.expectedContentLength <= Int64(limit) else {
+            bytes.task.cancel()
+            throw NetworkError.tooLarge
+        }
 
         let (filename, mimeType) = Self.descriptor(of: http)
-        let destination = try DownloadedFile.makeDestination(filename: filename)
+        let destination = try DownloadedFile.makeDestination(filename: filename, in: downloadDirectory)
         let folder = destination.deletingLastPathComponent()
         do {
             guard FileManager.default.createFile(atPath: destination.path, contents: nil) else {
@@ -176,7 +189,10 @@ public final class URLSessionAPIClient: APIClient {
             do {
                 for try await byte in bytes {
                     total += 1
-                    guard total <= limit else { throw NetworkError.tooLarge }
+                    guard total <= limit else {
+                        bytes.task.cancel()
+                        throw NetworkError.tooLarge
+                    }
                     chunk.append(byte)
                     if chunk.count >= Self.writeChunkBytes {
                         try handle.write(contentsOf: chunk)
@@ -221,7 +237,7 @@ public final class URLSessionAPIClient: APIClient {
     private func makeRequest<E: APIEndpoint>(
         for endpoint: E, accept: String = "application/json"
     ) async throws(NetworkError) -> URLRequest {
-        var request = URLRequest(url: server.url(for: endpoint.path, query: endpoint.query))
+        var request = URLRequest(url: server.url(for: endpoint.path, query: endpoint.query, percentEncodedQuery: endpoint.percentEncodedQuery))
         request.httpMethod = endpoint.method.rawValue
         request.setValue(accept, forHTTPHeaderField: "Accept")
         if let raw = endpoint.rawBody {
