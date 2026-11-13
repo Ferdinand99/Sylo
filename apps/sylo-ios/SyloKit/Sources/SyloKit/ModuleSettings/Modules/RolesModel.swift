@@ -38,6 +38,9 @@ public final class RolesModel {
     private var hasLoadedFeatures = false
     /// A request ended without an answer and the list could not be read again to see what it did.
     private var needsRecheck = false
+    /// The new set whose create timed out, for the recheck: the ids that existed before it, what was
+    /// sent, and the set that was being moved.
+    private var pendingCreate: (known: Set<String>, body: ReactionRoleMessage, draftID: String)?
 
     public init(server: ServerID, session: AppSession) {
         self.server = server
@@ -214,16 +217,28 @@ public final class RolesModel {
     ///   then the old one is deleted first and saved again under its own id. That needs `confirmedMove`.
     public func save(_ draft: ReactionRoleMessage, confirmedMove: Bool = false) async -> SaveOutcome {
         guard !isSavingSet else { return .ignored }
+        // Set before the first await, so a second tap while the feature is being read is ignored.
+        isSavingSet = true
+        defer { isSavingSet = false }
         if !hasLoadedFeatures { await loadFeatures() }
         let moves = needsMoveConfirmation(for: draft)
         if moves, !confirmedMove { return .needsConfirmation }
-        isSavingSet = true
-        defer { isSavingSet = false }
         actionError = nil
 
         if needsRecheck {
+            let pending = pendingCreate
             let reloaded = await reloadList()
-            return .failed(reloaded ? Self.recheckedText : Self.cannotCheckText)
+            guard reloaded else { return .failed(Self.cannotCheckText) }
+            pendingCreate = nil
+            // The timed-out create may have landed: carry on from the copy instead of making another.
+            if let pending, pending.draftID == draft.id,
+               let found = copy(of: pending.body, among: reactionMessages.filter { !pending.known.contains($0.id) }) {
+                return await finishMove(
+                    draft: draft,
+                    created: ReactionRoleSaved(
+                        reactionMessage: found, error: found.isPublished ? nil : "The post did not go through."))
+            }
+            return .failed(Self.recheckedText)
         }
 
         let body = draft.resolvingShortcodes(among: customEmojis)
@@ -295,6 +310,7 @@ public final class RolesModel {
             // It may have been created: look before offering a retry, so a retry cannot make a copy.
             guard await reloadList() else {
                 needsRecheck = true
+                pendingCreate = (known, fresh, draft.id)
                 return .failed(Self.cannotCheckText)
             }
             guard let found = copy(of: fresh, among: reactionMessages.filter { !known.contains($0.id) }) else {
@@ -370,6 +386,7 @@ public final class RolesModel {
             }
             guard await reloadList() else {
                 needsRecheck = true
+                pendingCreate = nil
                 return .failed(Self.cannotCheckText)
             }
             if reactionMessages.contains(where: { $0.id == draft.id }) {
@@ -396,6 +413,7 @@ public final class RolesModel {
             if isUnknownOutcome(error) {
                 guard await reloadList() else {
                     needsRecheck = true
+                    pendingCreate = nil
                     return .failedAfterRemoval(Self.removedText + Self.cannotCheckText)
                 }
                 if let back = reactionMessages.first(where: { $0.id == draft.id }) {
