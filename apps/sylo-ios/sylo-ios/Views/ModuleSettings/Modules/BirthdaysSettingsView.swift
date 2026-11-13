@@ -22,8 +22,8 @@ struct BirthdaysSettingsView: View {
             }
 
             Section {
-                TextArea(title: "Message", text: $settings.message,
-                         limit: BirthdaysSettings.maxMessageLength, lines: 2...6)
+                LimitedTextField(title: "Message", text: $settings.message,
+                                 limit: BirthdaysSettings.maxMessageLength, lines: 2...6)
             } header: {
                 Text("Message")
             } footer: {

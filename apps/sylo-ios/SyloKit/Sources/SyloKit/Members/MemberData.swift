@@ -222,7 +222,7 @@ public enum MemberForget {
     /// The reason as it is sent: trimmed and cut at the server's limit. Empty when none was given,
     /// which is allowed.
     public static func cleanedReason(_ text: String) -> String {
-        let cut = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(reasonLength))
+        let cut = UTF16Limit.truncated(text.trimmingCharacters(in: .whitespacesAndNewlines), to: reasonLength)
         return cut.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

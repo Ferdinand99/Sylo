@@ -28,8 +28,8 @@ struct AutoThreadsSettingsView: View {
                 Section {
                     ChannelPicker(title: "Channel", selection: $rule.channelId, channels: page.channels,
                                   noneTitle: "Choose a channel")
-                    TextArea(title: "Thread name", text: $rule.nameTemplate,
-                             limit: AutoThreadsSettings.maxNameTemplateLength, lines: 1...3)
+                    LimitedTextField(title: "Thread name", text: $rule.nameTemplate,
+                                     limit: AutoThreadsSettings.maxNameTemplateLength, lines: 1...3)
                     Picker("Archive after", selection: $rule.archive) {
                         ForEach(AutoThreadsSettings.Archive.allCases, id: \.self) { archive in
                             Text(verbatim: archive.title).tag(archive)
@@ -42,8 +42,8 @@ struct AutoThreadsSettingsView: View {
                     if rule.skipStaff {
                         MultiPicker(title: "Staff roles", selection: $rule.staffRoleIds, options: page.roles, prefix: "@")
                     }
-                    TextArea(title: "First message in the thread (optional)", text: $rule.firstMessage,
-                             limit: AutoThreadsSettings.maxFirstMessageLength, lines: 2...6)
+                    LimitedTextField(title: "First message in the thread (optional)", text: $rule.firstMessage,
+                                     limit: AutoThreadsSettings.maxFirstMessageLength, lines: 2...6)
                     NumberField(title: "Slowmode", value: $rule.slowmodeSeconds,
                                 range: AutoThreadsSettings.slowmodeRange, unit: "seconds")
                     Button("Remove Rule", role: .destructive) {

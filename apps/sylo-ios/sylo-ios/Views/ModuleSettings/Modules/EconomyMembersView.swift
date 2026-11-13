@@ -164,12 +164,8 @@ struct EconomyMemberView: View {
                     if action.needsAmount {
                         NumberField(title: "Amount", value: $amount, range: action.amountRange)
                     }
-                    TextField("Reason (optional)", text: $reason)
-                        .onChange(of: reason) {
-                            if reason.count > EconomyMemberModel.maxReasonLength {
-                                reason = String(reason.prefix(EconomyMemberModel.maxReasonLength))
-                            }
-                        }
+                    LimitedTextField(title: "Reason (optional)", text: $reason,
+                                     limit: EconomyMemberModel.maxReasonLength)
                     Button("Apply…") { isConfirming = true }
                         .disabled(!canApply)
                 } header: {

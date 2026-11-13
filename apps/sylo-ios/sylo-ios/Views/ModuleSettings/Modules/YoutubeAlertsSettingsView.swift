@@ -39,10 +39,10 @@ struct YoutubeAlertsSettingsView: View {
                         }
                     }
                     RolePicker(title: "Ping role", selection: $alert.roleId, roles: page.roles)
-                    TextArea(title: "New-video message", text: $alert.videoMessage,
-                             limit: YoutubeAlertsSettings.maxMessageLength, lines: 2...6)
-                    TextArea(title: "Went-live message", text: $alert.liveMessage,
-                             limit: YoutubeAlertsSettings.maxMessageLength, lines: 2...6)
+                    LimitedTextField(title: "New-video message", text: $alert.videoMessage,
+                                     limit: YoutubeAlertsSettings.maxMessageLength, lines: 2...6)
+                    LimitedTextField(title: "Went-live message", text: $alert.liveMessage,
+                                     limit: YoutubeAlertsSettings.maxMessageLength, lines: 2...6)
                     Picker("When a livestream ends", selection: $alert.onEnd) {
                         ForEach(YoutubeAlertsEndAction.allCases, id: \.self) { mode in
                             Text(mode.title).tag(mode)

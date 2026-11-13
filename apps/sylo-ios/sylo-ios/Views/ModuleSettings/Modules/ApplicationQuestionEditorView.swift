@@ -22,10 +22,10 @@ struct ApplicationQuestionEditorView: View {
                         Text(verbatim: raw).tag(question.type)
                     }
                 }
-                TextArea(title: "Question", text: $question.label,
-                         limit: ApplicationQuestion.maxLabelLength, lines: 1...3)
-                TextArea(title: "Help text (optional)", text: $question.help,
-                         limit: ApplicationQuestion.maxHelpLength, lines: 1...3)
+                LimitedTextField(title: "Question", text: $question.label,
+                                 limit: ApplicationQuestion.maxLabelLength, lines: 1...3)
+                LimitedTextField(title: "Help text (optional)", text: $question.help,
+                                 limit: ApplicationQuestion.maxHelpLength, lines: 1...3)
                 Toggle("Required", isOn: $question.required)
             } footer: {
                 if question.isUnanswerable {

@@ -51,8 +51,8 @@ private struct PollsMessageSections: View {
 
     var body: some View {
         Section {
-            TextArea(title: "Text above the embed", text: $message.content,
-                     limit: PollsMessage.maxContentLength, lines: 2...6)
+            LimitedTextField(title: "Text above the embed", text: $message.content,
+                             limit: PollsMessage.maxContentLength, lines: 2...6)
             TextField("Title", text: $message.title)
             ColorPicker("Colour", selection: colour, supportsOpacity: false)
             TextField("Footer", text: $message.footer)

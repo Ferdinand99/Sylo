@@ -55,8 +55,8 @@ struct IntroductionsSettingsView: View {
             }
 
             Section {
-                TextArea(title: "Description", text: $settings.description,
-                         limit: IntroductionsSettings.maxDescriptionLength, lines: 2...8)
+                LimitedTextField(title: "Description", text: $settings.description,
+                                 limit: IntroductionsSettings.maxDescriptionLength, lines: 2...8)
             } header: {
                 Text("Description")
             } footer: {
@@ -64,8 +64,8 @@ struct IntroductionsSettingsView: View {
             }
 
             Section {
-                TextArea(title: "Footer", text: $settings.footer,
-                         limit: IntroductionsSettings.maxFooterLength, lines: 1...3)
+                LimitedTextField(title: "Footer", text: $settings.footer,
+                                 limit: IntroductionsSettings.maxFooterLength, lines: 1...3)
             } header: {
                 Text("Footer")
             } footer: {
@@ -163,8 +163,8 @@ struct IntroductionsSettingsView: View {
 
     private func promptSection(settings: Binding<IntroductionsSettings>, page: IntroductionsPage) -> some View {
         Section {
-            TextArea(title: "Prompt text", text: settings.promptText,
-                     limit: IntroductionsSettings.maxPromptTextLength, lines: 2...6)
+            LimitedTextField(title: "Prompt text", text: settings.promptText,
+                             limit: IntroductionsSettings.maxPromptTextLength, lines: 2...6)
             LabeledContent("Message") {
                 Text(page.settings.isPromptPublished ? "Published" : "Not published")
             }

@@ -33,8 +33,8 @@ struct TwitchAlertsSettingsView: View {
                     ChannelPicker(title: "Announce in", selection: $alert.channelId, channels: page.channels,
                                   noneTitle: "Choose a channel")
                     RolePicker(title: "Ping role", selection: $alert.roleId, roles: page.roles)
-                    TextArea(title: "Message", text: $alert.message,
-                             limit: TwitchAlertsSettings.maxMessageLength, lines: 2...6)
+                    LimitedTextField(title: "Message", text: $alert.message,
+                                     limit: TwitchAlertsSettings.maxMessageLength, lines: 2...6)
                     Picker("Post as", selection: $alert.plainText) {
                         Text("Embed").tag(false)
                         Text("Plain text (no embed)").tag(true)

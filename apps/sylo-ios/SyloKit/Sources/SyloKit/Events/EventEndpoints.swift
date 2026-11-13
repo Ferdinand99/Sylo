@@ -174,7 +174,7 @@ public struct EventDraft: Equatable, Sendable {
 
     /// An https address without spaces that the server keeps (it drops a longer one).
     static func isAcceptableImageURL(_ text: String) -> Bool {
-        text.count <= imageURLLimit
+        text.utf16.count <= imageURLLimit
             && text.lowercased().hasPrefix("https://")
             && !text.contains(where: \.isWhitespace)
             && URL(string: text) != nil

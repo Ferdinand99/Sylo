@@ -180,10 +180,10 @@ private struct SuggestionSheet: View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Title", text: $title)
+                    LimitedTextField(title: "Title", text: $title, limit: RoadmapModel.titleLimits.upperBound)
                         .submitLabel(.next)
                 } footer: {
-                    Text("\(title.trimmingCharacters(in: .whitespacesAndNewlines).count) of 100 characters. At least 3.")
+                    Text("\(title.trimmingCharacters(in: .whitespacesAndNewlines).utf16.count) of 100 characters. At least 3.")
                 }
                 Section {
                     TextEditor(text: $details)

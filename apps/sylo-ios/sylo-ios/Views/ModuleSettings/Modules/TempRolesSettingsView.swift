@@ -45,15 +45,11 @@ struct TempRolesSettingsView: View {
 
             Section {
                 LabeledContent("Default duration") {
-                    TextField("7d", text: $settings.defaultDuration)
+                    LimitedTextField(title: "7d", text: $settings.defaultDuration,
+                                     limit: TempRolesSettings.maxDurationLength)
                         .multilineTextAlignment(.trailing)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                        .onChange(of: settings.defaultDuration) {
-                            if settings.defaultDuration.count > TempRolesSettings.maxDurationLength {
-                                settings.defaultDuration = String(settings.defaultDuration.prefix(TempRolesSettings.maxDurationLength))
-                            }
-                        }
                 }
             } footer: {
                 if let problem = settings.durationProblem {
@@ -115,12 +111,8 @@ struct TempRolesSettingsView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
             }
-            TextField("Reason (optional, kept in the mod log)", text: $reason)
-                .onChange(of: reason) {
-                    if reason.count > MemberActionLimits.tempRoleReasonLength {
-                        reason = String(reason.prefix(MemberActionLimits.tempRoleReasonLength))
-                    }
-                }
+            LimitedTextField(title: "Reason (optional, kept in the mod log)", text: $reason,
+                             limit: MemberActionLimits.tempRoleReasonLength)
             Button("Give Role") { give(page: page, duration: duration) }
                 .disabled(problem != nil || tempRoles.isWorking)
             if let given = tempRoles.lastGiven {

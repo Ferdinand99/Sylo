@@ -149,13 +149,8 @@ private struct ForgetMemberSheet: View {
                 }
 
                 Section {
-                    TextField("Note to the member (optional)", text: $reason, axis: .vertical)
-                        .lineLimit(2...5)
-                        .onChange(of: reason) {
-                            if reason.count > MemberForget.reasonLength {
-                                reason = String(reason.prefix(MemberForget.reasonLength))
-                            }
-                        }
+                    LimitedTextField(title: "Note to the member (optional)", text: $reason,
+                                     limit: MemberForget.reasonLength, lines: 2...5)
                 } header: {
                     Text("Note")
                 } footer: {

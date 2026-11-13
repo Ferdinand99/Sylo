@@ -10,8 +10,8 @@ struct IntroQuestionEditorView: View {
     var body: some View {
         Form {
             Section {
-                TextArea(title: "Label on the card", text: $question.label,
-                         limit: IntroductionsQuestion.maxLabelLength, lines: 1...2)
+                LimitedTextField(title: "Label on the card", text: $question.label,
+                                 limit: IntroductionsQuestion.maxLabelLength, lines: 1...2)
             } footer: {
                 if question.label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text("A question without a label is not kept.")
@@ -21,8 +21,8 @@ struct IntroQuestionEditorView: View {
             }
 
             Section {
-                TextArea(title: "Question asked in the DM", text: $question.prompt,
-                         limit: IntroductionsQuestion.maxPromptLength, lines: 2...5)
+                LimitedTextField(title: "Question asked in the DM", text: $question.prompt,
+                                 limit: IntroductionsQuestion.maxPromptLength, lines: 2...5)
             } header: {
                 Text("Question")
             }

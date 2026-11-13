@@ -197,9 +197,9 @@ public final class RoadmapAdminModel {
     public static func problem(title: String, description: String) -> String? {
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let description = description.trimmingCharacters(in: .whitespacesAndNewlines)
-        if title.count < 3 || title.count > titleLimit { return "The title needs 3 to 100 characters." }
+        if title.utf16.count < 3 || title.utf16.count > titleLimit { return "The title needs 3 to 100 characters." }
         if description.isEmpty { return "Add a description." }
-        if description.count > descriptionLimit { return "The description can be 2,000 characters at most." }
+        if description.utf16.count > descriptionLimit { return "The description can be 2,000 characters at most." }
         return nil
     }
 
