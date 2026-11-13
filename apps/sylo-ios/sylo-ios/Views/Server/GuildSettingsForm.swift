@@ -76,7 +76,8 @@ struct GuildSettingsForm: View {
         .refreshable { await model.load() }
     }
 
-    /// What Sylo keeps about this server: its change history. Export and member data join it later.
+    /// What Sylo keeps about this server: its change history, its configuration as a file, and what
+    /// it stores about a member.
     private var serverDataSection: some View {
         Section {
             NavigationLink {
@@ -84,10 +85,18 @@ struct GuildSettingsForm: View {
             } label: {
                 Label("Audit Log", systemImage: "list.bullet.clipboard")
             }
+            NavigationLink {
+                MemberDataView(server: model.server, session: session)
+            } label: {
+                Label("Member Data", systemImage: "person.text.rectangle")
+            }
+            DownloadFileButton(
+                "Export Configuration", systemImage: "square.and.arrow.up",
+                endpoint: Endpoints.ExportGuildConfig(server: model.server), session: session)
         } header: {
             Text("Server data")
         } footer: {
-            Text("Who changed which settings of this server, and when.")
+            Text("The audit log shows who changed which settings, and when. Member data shows what Sylo stores about a member and deletes it on request. The export is this server's settings as a JSON file.")
         }
     }
 

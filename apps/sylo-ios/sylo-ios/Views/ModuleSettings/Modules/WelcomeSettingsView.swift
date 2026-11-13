@@ -6,9 +6,18 @@ import SyloKit
 /// web-v2/src/moduleForms/Welcome.jsx.
 struct WelcomeSettingsView: View {
     @State private var model: ModuleSettingsModel<WelcomePage>
+    @State private var test: ModuleTestModel
+    /// Goes up when the person asks for a new preview; a save also gets a new one.
+    @State private var previewRefreshes = 0
+    /// Starts the preview's version at a number no earlier visit used, so a picture cached for an
+    /// older background is never shown for this screen.
+    @State private var previewSeed = Int(Date.now.timeIntervalSince1970)
+    private let server: ServerID
 
     init(server: ServerID, session: AppSession) {
+        self.server = server
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
+        _test = State(initialValue: ModuleTestModel(server: server, module: "welcome", session: session))
     }
 
     /// `trigger` is nil on a server before Sylo 5.2; the picker is only shown when it is not.
@@ -105,11 +114,17 @@ struct WelcomeSettingsView: View {
                         .textContentType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+                    AuthenticatedImage(
+                        path: WelcomeCardPreview.path(server: server),
+                        query: WelcomeCardPreview.query(version: previewSeed + model.saveCount + previewRefreshes))
+                        .frame(maxWidth: .infinity, minHeight: 80, maxHeight: 220)
+                        .accessibilityLabel("Welcome image preview")
+                    Button("Refresh Preview", systemImage: "arrow.clockwise") { previewRefreshes += 1 }
                 }
             } header: {
                 Text("Welcome image")
             } footer: {
-                Text("A generated banner with the member's avatar, name and member number, posted with the join message. The join message must be on for it to show. The background must be an https link to a PNG or JPG.")
+                Text("A generated banner with the member's avatar, name and member number, posted with the join message. The join message must be on for it to show. The background must be an https link to a PNG or JPG. The preview uses a sample member and the saved background: save to see a new one.")
             }
 
             Section {
@@ -156,7 +171,22 @@ struct WelcomeSettingsView: View {
             } footer: {
                 Text("Captcha verification for new members has its own module.")
             }
+
+            SendTestButton(model: test, hasUnsavedChanges: model.hasChanges,
+                           sample: "a sample join message (not your own text)",
+                           channelName: page.channels.first { $0.id == settings.joinChannel }?.name)
         }
+        // The server saved the settings but says they will not do what was meant. An alert, so it is
+        // seen wherever the person was in the form when they saved.
+        .alert("Saved, with a Note", isPresented: isShowingWarning, presenting: model.saveWarning) { _ in
+            Button("OK") {}
+        } message: { warning in
+            Text(verbatim: warning)
+        }
+    }
+
+    private var isShowingWarning: Binding<Bool> {
+        Binding(get: { model.saveWarning != nil }, set: { if !$0 { model.saveWarning = nil } })
     }
 }
 

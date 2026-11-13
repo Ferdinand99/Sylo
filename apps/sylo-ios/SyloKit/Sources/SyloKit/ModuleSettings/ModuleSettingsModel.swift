@@ -19,6 +19,9 @@ public final class ModuleSettingsModel<Page: ModuleSettingsPage> {
     public var saveError: String?
     /// Goes up with every successful save, for a "saved" haptic.
     public private(set) var saveCount = 0
+    /// The server's note on the last save (it went through, but a setting will not work as meant),
+    /// or nil. Cleared at the start of the next save and when the person dismisses it.
+    public var saveWarning: String?
 
     private let session: AppSession
 
@@ -56,10 +59,12 @@ public final class ModuleSettingsModel<Page: ModuleSettingsPage> {
         isSaving = true
         defer { isSaving = false }
         saveError = nil
+        saveWarning = nil
         do {
             let result = try await session.send(Endpoints.SaveModuleSettings<Page>(server: server, settings: draft))
             saved = result.settings
             self.draft = result.settings
+            saveWarning = result.warning
             saveCount += 1
             return true
         } catch {

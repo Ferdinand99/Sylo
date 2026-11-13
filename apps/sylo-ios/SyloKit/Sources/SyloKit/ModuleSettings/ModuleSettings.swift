@@ -17,10 +17,26 @@ public protocol ModuleSettingsPage: Decodable, Sendable {
 /// The answer to a save: the settings as the server stored them (normalised and clamped).
 public struct SavedModuleSettings<Settings: Decodable & Sendable>: Decodable, Sendable {
     public let settings: Settings
+    /// A note the server adds when it saved, but the setting will not do what the person meant
+    /// (Welcome in role mode with no usable role). nil when there is none, as on every older
+    /// server and for every other module.
+    public let warning: String?
 
-    public init(settings: Settings) { self.settings = settings }
+    public init(settings: Settings, warning: String? = nil) {
+        self.settings = settings
+        self.warning = warning
+    }
 
-    private enum CodingKeys: String, CodingKey { case settings = "config" }
+    private enum CodingKeys: String, CodingKey { case settings = "config", warning }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        settings = try c.decode(Settings.self, forKey: .settings)
+        // `try?`: a warning of an odd shape must never fail a save that went through.
+        let text = (try? c.decodeIfPresent(String.self, forKey: .warning))?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        warning = (text?.isEmpty ?? true) ? nil : text
+    }
 }
 
 /// Something a setting can point at, such as a channel or a role.

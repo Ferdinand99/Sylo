@@ -178,3 +178,17 @@ public struct WelcomeSettings: Codable, Sendable, Equatable {
         try c.encode(autoroles, forKey: .autoroles)
     }
 }
+
+/// The welcome image preview (`GET /modules/welcome/card-preview`): a PNG of the image with a sample
+/// member and the *saved* background. The route needs the sign-in, so the picture is loaded with the
+/// session (the app's authenticated image), not from a plain link. The server caches the answer for
+/// a minute; `v` is any changing number that makes the app ask again.
+public enum WelcomeCardPreview {
+    public static func path(server: ServerID) -> String {
+        "/api/v2/guilds/\(server.pathComponent)/modules/welcome/card-preview"
+    }
+
+    public static func query(version: Int) -> [URLQueryItem] {
+        [URLQueryItem(name: "v", value: String(version))]
+    }
+}

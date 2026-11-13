@@ -6,9 +6,11 @@ import SyloKit
 /// stream ends. Mirrors web-v2/src/moduleForms/YoutubeAlerts.jsx.
 struct YoutubeAlertsSettingsView: View {
     @State private var model: ModuleSettingsModel<YoutubeAlertsPage>
+    @State private var test: ModuleTestModel
 
     init(server: ServerID, session: AppSession) {
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
+        _test = State(initialValue: ModuleTestModel(server: server, module: "youtube-alerts", session: session))
     }
 
     var body: some View {
@@ -65,6 +67,13 @@ struct YoutubeAlertsSettingsView: View {
             } footer: {
                 Text("A channel Sylo can't find, or one without a channel to announce in, is dropped when you save.")
             }
+
+            SendTestButton(model: test, hasUnsavedChanges: model.hasChanges,
+                           sample: "a sample alert",
+                           channelName: settings.alerts.first.flatMap { alert in
+                               page.channels.first { $0.id == alert.discordChannelId }?.name
+                           },
+                           note: settings.alerts.count > 1 ? "the first channel in the list" : "")
         }
     }
 }
