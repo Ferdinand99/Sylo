@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import SyloKit
 
-// GitHub alerts: the watch list page (a current one and an older one), the form's draft, what the
+// GitHub alerts: the watch list page (as Sylo 5.0 and 5.1.1 send it, and as a server before 5.0), the form's draft, what the
 // form sends, and the screen's model, in particular that a new secret replaces the one on screen.
 // The dashboard's form is web-v2/src/moduleForms/GithubAlerts.jsx.
 
@@ -15,7 +15,9 @@ private let feedChannel = "444444444444444444"
 private let devRole = "555555555555555555"
 
 enum GithubFixtures {
-    static let page = #"""
+    /// `GET .../modules/github/watches` as Sylo 5.0 and 5.1.1 send it (the same shape in both, checked
+    /// against the v5.0.0 and v5.1.1 tags).
+    static let page511 = #"""
     {
       "watches": [
         {"id": 3, "repo": "Ferdinand99/Sylo", "channelId": "444444444444444444", "roleId": "555555555555555555",
@@ -33,8 +35,8 @@ enum GithubFixtures {
     }
     """#
 
-    /// A server that sends neither the event list nor the public address flag.
-    static let olderPage = #"""
+    /// A server from before 5.0: it sends neither the event list nor the public address flag.
+    static let pagePre50 = #"""
     {
       "watches": [{"id": 1, "repo": "a/b", "channelId": "444444444444444444", "events": ["push"], "enabled": true,
                    "secret": "x", "webhookUrl": "https://sylo.example.com/webhooks/github/t"}],
@@ -52,7 +54,7 @@ enum GithubFixtures {
 struct GithubDecodingTests {
     @Test("a current page: watches with their secret and webhook address, the lists and the flag")
     func decodesPage() throws {
-        let page = try GithubFixtures.decode(GithubFixtures.page)
+        let page = try GithubFixtures.decode(GithubFixtures.page511)
 
         #expect(page.watches.map(\.id) == [3, 4])
         #expect(page.channels.map(\.name) == ["dev-feed"])
@@ -75,9 +77,9 @@ struct GithubDecodingTests {
         #expect(second.events == ["issues", "futureEvent"])
     }
 
-    @Test("an older page gets the standard event list and no warning about the address")
+    @Test("a page from before 5.0 gets the standard event list and no warning about the address")
     func decodesOlderPage() throws {
-        let page = try GithubFixtures.decode(GithubFixtures.olderPage)
+        let page = try GithubFixtures.decode(GithubFixtures.pagePre50)
 
         #expect(page.eventTypes == GithubEventType.standard)
         #expect(page.eventTypes.count == 6)
@@ -111,7 +113,7 @@ struct GithubDecodingTests {
 
     @Test("a watch prints without its secret")
     func secretIsNotPrinted() throws {
-        let watch = try #require(try GithubFixtures.decode(GithubFixtures.page).watches.first)
+        let watch = try #require(try GithubFixtures.decode(GithubFixtures.page511).watches.first)
         #expect(!watch.debugDescription.contains("s3cret-one"))
         #expect(watch.debugDescription.contains("Ferdinand99/Sylo"))
     }
@@ -185,7 +187,7 @@ struct GithubDraftTests {
 
     @Test("editing copies the stored watch, an event the app does not list included")
     func editing() throws {
-        let page = try GithubFixtures.decode(GithubFixtures.page)
+        let page = try GithubFixtures.decode(GithubFixtures.page511)
         let draft = GithubWatchDraft(editing: page.watches[1])
 
         #expect(draft.repo == "example/app")
@@ -265,6 +267,10 @@ final class FakeGithubServer: @unchecked Sendable {
             if let save = endpoint as? Endpoints.SaveGithubWatch {
                 record("save:\(save.id.map(String.init) ?? "new")")
                 if let error = lock.withLock({ _failure }) { throw error }
+                // The server answers 404 for a watch that is gone.
+                if let id = save.id, lock.withLock({ !_watches.contains { $0.id == id } }) {
+                    throw NetworkError.notFound(message: "No such watch")
+                }
                 return lock.withLock {
                     let id = save.id ?? nextID
                     if save.id == nil { nextID += 1 }
@@ -298,6 +304,10 @@ final class FakeGithubServer: @unchecked Sendable {
             if let regen = endpoint as? Endpoints.RegenerateGithubSecret {
                 record("regen:\(regen.id)")
                 if let error = lock.withLock({ _failure }) { throw error }
+                // The real answer for a watch that is gone is a 404, not a null watch.
+                if lock.withLock({ !_watches.contains { $0.id == regen.id } }) {
+                    throw NetworkError.notFound(message: "No such watch")
+                }
                 return lock.withLock {
                     guard let index = _watches.firstIndex(where: { $0.id == regen.id }) else {
                         return GithubWatchAnswer(watch: nil)
@@ -433,7 +443,7 @@ struct GithubAlertsModelTests {
         #expect(model.actionError == "You can't change watches.")
     }
 
-    @Test("a new secret for a watch that is gone removes it and says so")
+    @Test("a new secret for a watch that is gone (404 No such watch) removes the stale row and says why")
     func regenerateGone() async {
         let server = FakeGithubServer(watches: [Self.stored])
         let model = await make(server)
@@ -441,8 +451,21 @@ struct GithubAlertsModelTests {
 
         #expect(!(await model.regenerateSecret(3)))
 
+        #expect(server.calls == ["list", "regen:3"])
         #expect(model.watches.isEmpty)
-        #expect(model.actionError != nil)
+        #expect(model.actionError == "No such watch")
+    }
+
+    @Test("an edit of a watch that is gone (404) removes the stale row and says why")
+    func updateGone() async {
+        let server = FakeGithubServer(watches: [Self.stored])
+        let model = await make(server)
+        server.removeAll()
+
+        #expect(!(await model.save(GithubWatchDraft(editing: Self.stored), editing: 3)))
+
+        #expect(model.watches.isEmpty)
+        #expect(model.saveError == "No such watch")
     }
 
     @Test("pause and resume take the watch from the server's answer, a deleted one leaves the list")

@@ -385,6 +385,8 @@ public final class GithubAlertsModel {
             return true
         } catch {
             if let message = ListFailure.message(for: error) { saveError = message }
+            // Deleted elsewhere: the stale row goes, and the message says why.
+            if let id, ListFailure.isGone(error) { watches.removeAll { $0.id == id } }
             return false
         }
     }
@@ -449,6 +451,8 @@ public final class GithubAlertsModel {
             return true
         } catch {
             if let message = ListFailure.message(for: error) { actionError = message }
+            // The server answers 404 "No such watch" for a watch that is gone: the stale row goes too.
+            if ListFailure.isGone(error) { watches.removeAll { $0.id == id } }
             return false
         }
     }

@@ -17,6 +17,31 @@ struct GameStatsDecodingTests {
     }
     """#
 
+    /// What Sylo 5.0 and 5.1.1 send (the same shape in both): an operator's page.
+    static let page511 = operatorPage
+
+    @Test("identical rows still get their own id")
+    func uniqueIDs() throws {
+        let row = #"{"game": "bf4", "title": "Battlefield 4", "username": "same", "platform": "pc", "ago": "1m ago"}"#
+        let info = try JSONDecoder().decode(
+            GameStatsInfo.self, from: Data(#"{"operator": true, "recent": [\#(row), \#(row), \#(row)]}"#.utf8))
+
+        #expect(info.recent.count == 3)
+        #expect(Set(info.recent.map(\.id)).count == 3)
+        #expect(info.recent.map(\.id) == [0, 1, 2])
+
+        // Built in code, the rows are numbered too.
+        let built = GameStatsInfo(isOperator: true, recent: [GameLookup(game: "a"), GameLookup(game: "a")])
+        #expect(built.recent.map(\.id) == [0, 1])
+    }
+
+    @Test("a 5.1.1 page decodes as an operator's page")
+    func page511Decodes() throws {
+        let info = try JSONDecoder().decode(GameStatsInfo.self, from: Data(Self.page511.utf8))
+        #expect(info.isOperator)
+        #expect(info.recent.count == 2)
+    }
+
     @Test("an operator sees the cached lookups")
     func operatorPage() throws {
         let info = try JSONDecoder().decode(GameStatsInfo.self, from: Data(Self.operatorPage.utf8))

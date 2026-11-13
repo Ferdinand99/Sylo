@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import SyloKit
 
-// Channel cleanup: the schedule list page (a current one and an older one), the form's draft, what
+// Channel cleanup: the schedule list page (as Sylo 5.0 and 5.1.1 send it, and as a server before 5.0), the form's draft, what
 // the form sends, and the screen's model. The dashboard's form is
 // web-v2/src/moduleForms/ChannelCleanup.jsx.
 
@@ -14,7 +14,9 @@ private func jsonObject(of value: some Encodable) throws -> [String: Any] {
 private let channelID = "333333333333333333"
 
 enum CleanupFixtures {
-    static let page = #"""
+    /// `GET .../modules/channel-cleanup/schedules` as Sylo 5.0 and 5.1.1 send it (the same shape in
+    /// both, checked against the v5.0.0 and v5.1.1 tags): without `timeZone`.
+    static let page511 = #"""
     {
       "schedules": [
         {"id": 4, "channelId": "333333333333333333", "days": [0, 1, 2, 3, 4, 5, 6], "timeHhmm": "03:00",
@@ -28,14 +30,18 @@ enum CleanupFixtures {
     }
     """#
 
-    /// Only schedules and channels: no weekday list, no cap.
-    static let olderPage = #"""
+    /// A server from before 5.0: only schedules and channels, no weekday list, no cap.
+    static let pagePre50 = #"""
     {
       "schedules": [{"id": 1, "channelId": "333333333333333333", "days": [2], "timeHhmm": "04:15", "maxAgeHours": 48,
                      "skipPinned": true, "enabled": true}],
       "channels": [{"id": "333333333333333333", "name": "off-topic"}]
     }
     """#
+
+    /// The same page from a server that also says its zone.
+    static let pageWithZone = page511.replacingOccurrences(
+        of: "\"maxAgeHoursCap\": 2160", with: "\"maxAgeHoursCap\": 2160, \"timeZone\": \"Europe/Oslo\"")
 
     static func decode(_ json: String) throws -> CleanupPage {
         try JSONDecoder().decode(CleanupPage.self, from: Data(json.utf8))
@@ -46,7 +52,7 @@ enum CleanupFixtures {
 struct CleanupDecodingTests {
     @Test("a current page: schedules, channels, weekdays and the cap")
     func decodesPage() throws {
-        let page = try CleanupFixtures.decode(CleanupFixtures.page)
+        let page = try CleanupFixtures.decode(CleanupFixtures.page511)
 
         #expect(page.schedules.map(\.id) == [4, 5])
         #expect(page.channels.map(\.name) == ["off-topic"])
@@ -69,9 +75,16 @@ struct CleanupDecodingTests {
         #expect(paused.lastRunCount == nil)
     }
 
-    @Test("an older page gets the standard weekdays and the 90 day cap")
+    @Test("the server's zone is read when it sends one, and a 5.1.1 page has none")
+    func timeZone() throws {
+        #expect(try CleanupFixtures.decode(CleanupFixtures.page511).timeZone == nil)
+        #expect(try CleanupFixtures.decode(CleanupFixtures.pageWithZone).timeZone == "Europe/Oslo")
+        #expect(try CleanupFixtures.decode(CleanupFixtures.pagePre50).timeZone == nil)
+    }
+
+    @Test("a page from before 5.0 gets the standard weekdays and the 90 day cap")
     func decodesOlderPage() throws {
-        let page = try CleanupFixtures.decode(CleanupFixtures.olderPage)
+        let page = try CleanupFixtures.decode(CleanupFixtures.pagePre50)
 
         #expect(page.schedules.count == 1)
         #expect(page.weekdays == ScheduleWeekday.standard)
@@ -95,10 +108,23 @@ struct CleanupDecodingTests {
 
     @Test("a schedule reads as its days and time, its age and its last run")
     func summaries() throws {
-        let page = try CleanupFixtures.decode(CleanupFixtures.page)
+        let page = try CleanupFixtures.decode(CleanupFixtures.page511)
 
-        #expect(page.schedules[0].whenSummary() == "every day at 03:00")
-        #expect(page.schedules[1].whenSummary() == "Mon/Wed at 18:30")
+        // The time and days are on the server's clock; with its zone not known the summary says so.
+        #expect(page.schedules[0].whenSummary() == "every day at 03:00 (server time)")
+        #expect(page.schedules[1].whenSummary() == "Mon/Wed at 18:30 (server time)")
+
+        // The same zone as the phone: as stored, nothing to say.
+        let oslo = TimeZone(identifier: "Europe/Oslo")!
+        let tokyo = TimeZone(identifier: "Asia/Tokyo")!
+        let same = ServerClock(serverZone: "Europe/Oslo", phoneZone: oslo)
+        #expect(page.schedules[1].whenSummary(clock: same) == "Mon/Wed at 18:30")
+
+        // Another zone, known: moved to the phone's clock. 18:30 in Oslo is 02:30 the next day in Tokyo.
+        let apart = ServerClock(serverZone: "Europe/Oslo", phoneZone: tokyo)
+        let now = Date(timeIntervalSince1970: 1_794_000_000)
+        #expect(page.schedules[1].whenSummary(clock: apart, now: now) == "Tue/Thu at 02:30")
+        #expect(page.schedules[0].whenSummary(clock: apart, now: now) == "every day at 11:00")
         #expect(page.schedules[0].lastRunSummary == "last ran 2026-11-12 (14 deleted)")
         #expect(page.schedules[1].lastRunSummary == nil)
         #expect(CleanupSchedule(id: 1, lastRunDate: "2026-11-01", lastRunCount: 0).lastRunSummary == "last ran 2026-11-01")
@@ -168,8 +194,9 @@ struct CleanupDraftTests {
         var draft = Self.valid()
         #expect(draft.problem() == nil)
 
+        // No day is allowed: the server stores it as every day, as it does for the dashboard's form.
         draft.days = []
-        #expect(draft.problem() == "Pick at least one day.")
+        #expect(draft.problem() == nil)
         draft.days = [2]
 
         draft.timeHhmm = "25:00"
@@ -187,7 +214,7 @@ struct CleanupDraftTests {
 
     @Test("editing copies the stored schedule")
     func editing() throws {
-        let page = try CleanupFixtures.decode(CleanupFixtures.page)
+        let page = try CleanupFixtures.decode(CleanupFixtures.page511)
         let draft = CleanupDraft(editing: page.schedules[1])
 
         #expect(draft.channelId == channelID)
@@ -238,7 +265,12 @@ final class FakeCleanupServer: @unchecked Sendable {
     private var _failure: NetworkError?
     private var nextID = 30
 
-    init(schedules: [CleanupSchedule] = []) { _schedules = schedules }
+    private let timeZone: String?
+
+    init(schedules: [CleanupSchedule] = [], timeZone: String? = nil) {
+        _schedules = schedules
+        self.timeZone = timeZone
+    }
 
     var calls: [String] { lock.withLock { _calls } }
     var schedules: [CleanupSchedule] { lock.withLock { _schedules } }
@@ -252,11 +284,17 @@ final class FakeCleanupServer: @unchecked Sendable {
         StubClients { [self] endpoint in
             if endpoint is Endpoints.LoadCleanupSchedules {
                 record("list")
-                return CleanupPage(schedules: schedules, channels: [ChannelOption(id: channelID, name: "off-topic")])
+                return CleanupPage(
+                    schedules: schedules, channels: [ChannelOption(id: channelID, name: "off-topic")],
+                    timeZone: timeZone)
             }
             if let save = endpoint as? Endpoints.SaveCleanupSchedule {
                 record("save:\(save.id.map(String.init) ?? "new")")
                 if let error = lock.withLock({ _failure }) { throw error }
+                // The server answers 404 for a schedule that is gone.
+                if let id = save.id, lock.withLock({ !_schedules.contains { $0.id == id } }) {
+                    throw NetworkError.notFound(message: "No such schedule")
+                }
                 return lock.withLock {
                     let id = save.id ?? nextID
                     if save.id == nil { nextID += 1 }
@@ -340,17 +378,41 @@ struct ChannelCleanupModelTests {
         #expect(model.schedules.map(\.id) == [4, 30])
     }
 
-    @Test("a draft with no day is not sent")
+    @Test("a draft that is not ready is not sent, and one with no day is")
     func refusesBeforeSending() async {
         let server = FakeCleanupServer()
         let model = await make(server)
+
+        #expect(!(await model.save(CleanupDraft(), editing: nil)))
+        #expect(model.saveError == "Pick a channel.")
+        #expect(server.calls == ["list"])
+
         var draft = CleanupDraftTests.valid()
         draft.days = []
+        #expect(await model.save(draft, editing: nil))
+        #expect(server.calls == ["list", "save:new"])
+    }
 
-        #expect(!(await model.save(draft, editing: nil)))
+    @Test("an edit of a schedule that is gone (404) removes the stale row and says why")
+    func updateGone() async {
+        let server = FakeCleanupServer(schedules: [Self.stored])
+        let model = await make(server)
+        server.removeAll()
 
-        #expect(model.saveError == "Pick at least one day.")
-        #expect(server.calls == ["list"])
+        #expect(!(await model.save(CleanupDraft(editing: Self.stored), editing: 4)))
+
+        #expect(model.schedules.isEmpty)
+        #expect(model.saveError == "No such schedule")
+    }
+
+    @Test("the server's zone gives the clock the screen compares with the phone's")
+    func clock() async {
+        let unknown = await make(FakeCleanupServer(schedules: [Self.stored]))
+        #expect(unknown.clock.needsServerTimeLabel)
+
+        let model = await make(FakeCleanupServer(schedules: [Self.stored], timeZone: "Europe/Oslo"))
+        #expect(model.timeZone == "Europe/Oslo")
+        #expect(!model.clock.needsServerTimeLabel)
     }
 
     @Test("an edit replaces the schedule in the list")

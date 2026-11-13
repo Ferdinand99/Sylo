@@ -86,7 +86,7 @@ struct RemindersView: View {
                 } label: {
                     ReminderRow(
                         reminder: reminder, channelName: channelName(of: reminder), presets: model.schedulePresets,
-                        weekdays: model.weekdays)
+                        weekdays: model.weekdays, clock: model.clock)
                 }
                 .buttonStyle(.plain)
                 .disabled(model.busy.contains(reminder.id))
@@ -159,6 +159,7 @@ private struct ReminderRow: View {
     let channelName: String
     let presets: [ReminderPreset]
     let weekdays: [ScheduleWeekday]
+    let clock: ServerClock
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -167,7 +168,7 @@ private struct ReminderRow: View {
                     .lineLimit(2)
                 ActiveBadge(isActive: reminder.enabled)
             }
-            Text(verbatim: "#\(channelName) \u{00B7} " + reminder.scheduleSummary(presets: presets, weekdays: weekdays))
+            Text(verbatim: "#\(channelName) \u{00B7} " + reminder.scheduleSummary(presets: presets, weekdays: weekdays, clock: clock))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             if let last = reminder.lastRunAt {

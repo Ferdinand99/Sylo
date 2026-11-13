@@ -57,12 +57,7 @@ struct ModuleRow: View {
 /// The "Beta" tag for modules that are new and still settling in.
 struct BetaBadge: View {
     var body: some View {
-        Text("Beta")
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .foregroundStyle(.tint)
-            .background(.tint.opacity(0.15), in: Capsule())
+        StatusTag("Beta", tint: .accentColor, tintsText: true)
     }
 }
 
