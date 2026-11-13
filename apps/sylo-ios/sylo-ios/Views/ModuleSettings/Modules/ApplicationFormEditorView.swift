@@ -48,6 +48,7 @@ struct ApplicationFormEditorView: View {
         .navigationTitle(model.draft.name.isEmpty ? String(localized: "New Form") : model.draft.name)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(model.hasChanges)
+        .tracksUnsavedChanges(model.hasChanges)
         .toolbar {
             if model.hasChanges {
                 ToolbarItem(placement: .cancellationAction) {

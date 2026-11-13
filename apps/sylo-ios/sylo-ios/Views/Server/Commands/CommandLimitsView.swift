@@ -62,6 +62,7 @@ struct CommandLimitsView: View {
         .navigationTitle(model.displayName(name))
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(hasChanges)
+        .tracksUnsavedChanges(hasChanges)
         .toolbar {
             if hasChanges {
                 ToolbarItem(placement: .cancellationAction) {

@@ -56,6 +56,7 @@ private struct PersonalizerForm: View {
             announcementSection
         }
         .scrollDismissesKeyboard(.interactively)
+        .tracksUnsavedChanges(model.hasUnsavedChanges)
         .refreshable {
             // Reading the bot again would replace what was typed and not saved: ask first.
             if model.hasUnsavedChanges {

@@ -55,6 +55,7 @@ struct ModuleSettingsForm<Page: ModuleSettingsPage, Content: View>: View {
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(model.hasChanges)
+        .tracksUnsavedChanges(model.hasChanges)
         .toolbar {
             if model.hasChanges {
                 ToolbarItem(placement: .cancellationAction) {

@@ -432,6 +432,7 @@ private struct GithubWatchEditorView: View {
             }
         }
         .interactiveDismissDisabled(hasChanges || model.isSaving)
+        .tracksUnsavedChanges(hasChanges)
         .onAppear { model.saveError = nil }
         .task { limits = await session.moduleLimits()["github"] }
     }

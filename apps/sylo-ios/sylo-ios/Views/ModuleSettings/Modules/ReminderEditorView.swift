@@ -84,6 +84,7 @@ struct ReminderEditorView: View {
             }
         }
         .interactiveDismissDisabled(hasChanges || model.isSaving)
+        .tracksUnsavedChanges(hasChanges)
         .onAppear {
             model.saveError = nil
             model.clearTestOutcome()

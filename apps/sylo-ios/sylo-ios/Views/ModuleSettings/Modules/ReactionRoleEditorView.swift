@@ -129,6 +129,7 @@ struct ReactionRoleEditorView: View {
                 }
             }
             .interactiveDismissDisabled(isDirty || model.isSavingSet)
+            .tracksUnsavedChanges(isDirty)
             .confirmationDialog("Discard your changes?", isPresented: $isConfirmingDiscard, titleVisibility: .visible) {
                 Button("Discard Changes", role: .destructive) { dismiss() }
             } message: {
