@@ -409,7 +409,7 @@ describe('Health: module adoption uses the overview icons', () => {
   it('draws an icon from the icon set instead of the emoji', async () => {
     api.getHealth.mockResolvedValue({
       ready: true,
-      botTag: 'Sylo',
+      botTag: 'Sylo#0001',
       version: '5.2.0',
       guildCount: 1,
       memberReach: 10,
@@ -420,15 +420,10 @@ describe('Health: module adoption uses the overview icons', () => {
       modules: [{ name: 'Starboard', icon: '⭐', iconName: 'star', guilds: 2 }],
       lastError: null,
       errors: [],
-      db: {
-        size: '1 MB',
-        wal: null,
-        intervalHours: 0,
-        retention: 3,
-        postgres: false,
-        offsite: null,
-        backups: [],
-      },
+      botAudit: [],
+      db: { size: '1 MB', wal: null, postgres: false, intervalHours: 24, retention: 7, offsite: null },
+      backups: [],
+      devLogConfigured: false,
     });
     render(<Health />);
     const heading = await screen.findByRole('heading', { name: 'Starboard' });

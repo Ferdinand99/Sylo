@@ -43,6 +43,11 @@ const CHANNEL = '666666666666666661';
 beforeEach(() => {
   vi.resetAllMocks();
   resetModuleLimits();
+  try {
+    localStorage.clear(); // the overview's hint and folded categories are remembered there
+  } catch {
+    // storage is optional
+  }
   api.getModuleLimits.mockResolvedValue({ _embed: {} });
 });
 
@@ -116,7 +121,7 @@ describe('Overview', () => {
     });
     renderAtGuild(<Overview />, GUILD);
     expect(await screen.findByText('Channel: #general')).toBeTruthy();
-    expect(screen.getByText('On')).toBeTruthy();
+    expect(screen.getByText('On', { selector: '.v2-modrow-status' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'AFK' }).getAttribute('href')).toBe(`/guilds/${GUILD}/m/afk`);
   });
 
@@ -236,8 +241,8 @@ describe('Audit log', () => {
     expect(screen.queryByRole('heading', { name: /shown, newest first/ })).toBeNull();
     expect(screen.getByText('2 shown, newest first.')).toBeTruthy();
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' });
-    expect(within(crumbs).getByRole('link', { name: 'Settings' }).getAttribute('href')).toBe(
-      `/guilds/${GUILD}/settings`
+    expect(within(crumbs).getByRole('link', { name: 'Members & moderation' }).getAttribute('href')).toBe(
+      `/guilds/${GUILD}/moderation`
     );
     expect(within(crumbs).getByText('Audit log').getAttribute('aria-current')).toBe('page');
   });
