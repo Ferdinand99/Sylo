@@ -36,9 +36,8 @@ final class PushCoordinator: NSObject {
     let settings: NotificationSettingsModel
 
     private let session: AppSession
-    @ObservationIgnored private var deviceToken: Data?
-    /// The server and token last sent, so a token is sent once per sign-in.
-    @ObservationIgnored private var sentToken: String?
+    /// The device token and what was registered with it, kept apart from UIKit so the sign-out rules are tested.
+    @ObservationIgnored private var device = PushDeviceState()
     @ObservationIgnored private var isSending = false
 
     /// - Parameter pigeon: The Postal Pigeon handles for servers that send through it; nil (previews)
@@ -57,8 +56,9 @@ final class PushCoordinator: NSObject {
 
     // MARK: - Permission and device token
 
-    /// Reads the permission and, when it is given, asks iOS for the device token. Runs at every
-    /// launch and return to the front, since the token can change.
+    /// Reads the permission and, when it is given and the person is signed in, asks iOS for the device
+    /// token. Runs at every launch and return to the front, since the token can change. Signed out, the
+    /// app does not ask: a device that is signed out has no use for a token.
     func refresh() async {
         let status = await Self.authorizationStatus()
         switch status {
@@ -66,7 +66,7 @@ final class PushCoordinator: NSObject {
         case .denied: authorization = .denied
         default: authorization = .notDetermined
         }
-        if authorization == .authorized {
+        if authorization == .authorized, case .signedIn = session.phase {
             UIApplication.shared.registerForRemoteNotifications()
         }
     }
@@ -83,20 +83,35 @@ final class PushCoordinator: NSObject {
 
     /// The device token from iOS (``AppDelegate``).
     func didRegister(deviceToken: Data) {
-        self.deviceToken = deviceToken
+        device.received(deviceToken: deviceToken)
         Task { await sendToken() }
     }
 
-    /// A new sign-in starts without a device token on the server: send it again.
+    /// A new sign-in starts without a device token on the server: send it again. After a sign-out the app
+    /// gave up its token, so iOS is asked for one first; it arrives in ``didRegister(deviceToken:)``.
     func didSignIn() async {
-        sentToken = nil
-        await sendToken()
+        device.forgetRegistration()
+        if device.needsDeviceToken {
+            await refresh()
+        } else {
+            await sendToken()
+        }
     }
 
     /// The person signed in, out or to another server: a Pigeon handle for a server they are no
     /// longer signed in to is taken down, and a server they just signed in to is set up again.
+    ///
+    /// Signed out, notifications stop on this device whether or not the server could be told: the app
+    /// unregisters from iOS and forgets the token and what it registered, so nothing it sent stays in use
+    /// here and a later sign-in registers from scratch.
     func sessionChanged() async {
-        sentToken = nil
+        switch session.phase {
+        case .signIn, .choosingServer:
+            UIApplication.shared.unregisterForRemoteNotifications()
+            device.signedOut()
+        case .starting, .signedIn:
+            device.forgetRegistration()
+        }
         await settings.reconcileHandles()
         await sendToken()
     }
@@ -105,15 +120,13 @@ final class PushCoordinator: NSObject {
     /// the official relay: see ``NotificationSettingsModel/register(deviceToken:environment:)``),
     /// once per sign-in and token, unless notifications were turned off in the app for that server.
     func sendToken() async {
-        guard let deviceToken, !isSending, case .signedIn(let server) = session.phase,
-            !isTurnedOff(on: server)
+        guard let deviceToken = device.deviceToken, !isSending, case .signedIn(let server) = session.phase,
+            !isTurnedOff(on: server), !device.hasRegistered(at: server)
         else { return }
-        let key = "\(server.description) \(PushToken.hex(deviceToken))"
-        guard sentToken != key else { return }
         isSending = true
         defer { isSending = false }
         if await settings.register(deviceToken: deviceToken, environment: Self.environment) {
-            sentToken = key
+            device.registered(at: server, token: deviceToken)
         }
     }
 
@@ -124,15 +137,15 @@ final class PushCoordinator: NSObject {
         let key = Self.turnedOffKey(server)
         if isOn {
             UserDefaults.standard.removeObject(forKey: key)
-            sentToken = nil
-            if deviceToken == nil {
+            device.forgetRegistration()
+            if device.needsDeviceToken {
                 await refresh()
             } else {
                 await sendToken()
             }
         } else if await settings.unregister() {
             UserDefaults.standard.set(true, forKey: key)
-            sentToken = nil
+            device.forgetRegistration()
         }
     }
 
