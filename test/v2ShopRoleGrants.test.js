@@ -29,6 +29,11 @@ const fakeRole = (id, name, position, perms = []) => ({
 const LOW = fakeRole('700000000000000401', 'Regular', 1);
 const MOD = fakeRole('700000000000000402', 'Mod', 3, ['KickMembers']);
 const HIGH = fakeRole('700000000000000403', 'Legend', 20);
+const POWER = [
+  fakeRole('700000000000000404', 'Boss', 2, ['Administrator']),
+  fakeRole('700000000000000405', 'Manager', 2, ['ManageGuild']),
+  fakeRole('700000000000000406', 'Wrangler', 2, ['ManageRoles']),
+];
 
 const TARGET = '800000000000000401';
 
@@ -41,13 +46,19 @@ function fakeActor(id, top, perms = []) {
   };
 }
 
+// One sign-in for the file (the login is rate limited); each test picks who the person is by
+// changing the member the bot sees, which is what the role-grant check reads.
+let session;
 async function signedIn(top, perms = ['ManageGuild']) {
-  setProfiles({ discordId: uid('33333333333') });
-  const id = profiles.discord.id;
-  const b = browser();
-  await signIn(b, 'discord');
+  if (!session) {
+    setProfiles({ discordId: uid('33333333333') });
+    const b = browser();
+    await signIn(b, 'discord');
+    const token = (await (await b.get('/api/v2/csrf')).json()).token;
+    session = { id: profiles.discord.id, b, token };
+  }
+  const { id, b, token } = session;
   guild.members.cache.set(id, fakeActor(id, top, perms));
-  const token = (await (await b.get('/api/v2/csrf')).json()).token;
   const post = (path, body) =>
     b.get(`/api/v2/guilds/${D_GUILD}/modules/economy/${path}`, {
       method: 'POST',
@@ -62,7 +73,7 @@ const names = async () => (await listItems(D_GUILD)).map((i) => i.name);
 
 test.beforeEach(async () => {
   await purgeGuild(D_GUILD);
-  for (const r of [LOW, MOD, HIGH]) guild.roles.cache.set(r.id, r);
+  for (const r of [LOW, MOD, HIGH, ...POWER]) guild.roles.cache.set(r.id, r);
   guild.members.me = {
     id: 'bot',
     permissions: { has: () => true },
@@ -170,5 +181,62 @@ test('a refused shop save leaves no unhandled rejection behind', async () => {
     assert.deepEqual(rejections, []);
   } finally {
     process.off('unhandledRejection', onRejection);
+  }
+});
+
+const paused = (role) =>
+  createItem(
+    D_GUILD,
+    normaliseItem({ name: 'Perk', price: 10, type: 'role', roleId: role.id, enabled: false })
+  );
+
+test('resuming a paused item for a role above your own is refused and the item stays paused', async () => {
+  const id = await paused(HIGH);
+  const { post } = await signedIn(10);
+  const res = await post(`shop/items/${id}/enabled`, { enabled: true });
+  assert.equal(res.status, 403);
+  assert.match((await res.json()).error, /Legend is above/);
+  assert.equal((await getItem(D_GUILD, id)).enabled, false);
+});
+
+test('resuming an item for a role below you works, and pausing needs no check', async () => {
+  const low = await paused(LOW);
+  const high = await createItem(
+    D_GUILD,
+    normaliseItem({ name: 'Crown', price: 10, type: 'role', roleId: HIGH.id })
+  );
+  const { post } = await signedIn(10);
+  assert.equal((await post(`shop/items/${low}/enabled`, { enabled: true })).status, 200);
+  assert.equal((await getItem(D_GUILD, low)).enabled, true);
+  assert.equal((await post(`shop/items/${high}/enabled`, { enabled: false })).status, 200, 'pause');
+  assert.equal((await getItem(D_GUILD, high)).enabled, false);
+});
+
+test('a role with Administrator, Manage Server or Manage Roles is refused with a 400, even for the owner', async () => {
+  const { post, id } = await signedIn(100, ['Administrator']);
+  guild.ownerId = id;
+  try {
+    for (const role of POWER) {
+      const res = await post('shop/items', roleItem(role.id));
+      assert.equal(res.status, 400, role.name);
+      assert.match((await res.json()).error, new RegExp(`${role.name} has .*cannot be sold`));
+    }
+    assert.deepEqual(await names(), []);
+    const ok = await post('shop/items', roleItem(LOW.id));
+    assert.equal(ok.status, 200);
+    const itemId = (await listItems(D_GUILD))[0].id;
+    assert.equal((await post(`shop/items/${itemId}`, roleItem(POWER[0].id))).status, 400, 'edit');
+    assert.equal((await getItem(D_GUILD, itemId)).roleId, LOW.id, 'the item is unchanged');
+    const old = await paused(POWER[2]); // made before the check existed
+    const resume = await post(`shop/items/${old}/enabled`, { enabled: true });
+    assert.equal(resume.status, 400, 'resume');
+    assert.equal((await getItem(D_GUILD, old)).enabled, false);
+    const target = shopMember(TARGET);
+    guild.members.cache.set(TARGET, target);
+    const give = await post(`members/${TARGET}/inventory/grant`, { itemId: old });
+    assert.equal(give.status, 400, 'give');
+    assert.deepEqual(target.adds, []);
+  } finally {
+    guild.ownerId = 'x';
   }
 });
