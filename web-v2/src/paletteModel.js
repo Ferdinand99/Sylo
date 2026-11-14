@@ -62,6 +62,10 @@ const SETTINGS_ENTRY = {
   applications: { label: 'Application settings', tab: 'panel' },
 };
 
+// Words people still use for a page, that its name no longer says: the Tickets module used to be called
+// "Tickets (modmail)", and a person who knows it by that name types "modmail".
+const ALIASES = { tickets: 'modmail' };
+
 /**
  * Every place the palette can open for the picked server: the pages of the sidebar, every module page (also a
  * module that is switched off: the person may be looking for where to switch it on), and the other servers.
@@ -87,6 +91,7 @@ export function paletteItems({ guildId, data, operator, guilds = [] }) {
         icon: it.icon,
         href: it.href,
         hint: it.count ? `${it.count} waiting` : '',
+        keywords: ALIASES[it.key] ?? '',
       });
     }
   }
@@ -108,7 +113,7 @@ export function paletteItems({ guildId, data, operator, guilds = [] }) {
           icon: card.icon,
           href: entry.tab ? `${href}?tab=${entry.tab}` : href,
           hint,
-          keywords: `${grp.title} ${card.name}`,
+          keywords: `${grp.title} ${card.name} ${ALIASES[card.id] ?? ''}`.trim(),
         });
       } else if (href && !seen.has(pathOf(href))) {
         add({
@@ -118,7 +123,7 @@ export function paletteItems({ guildId, data, operator, guilds = [] }) {
           icon: card.icon,
           href,
           hint,
-          keywords: grp.title,
+          keywords: `${grp.title} ${ALIASES[card.id] ?? ''}`.trim(),
         });
       }
     }

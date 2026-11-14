@@ -42,6 +42,9 @@ export default function PlaceholderBar({ fields }) {
   const [targetId, setTargetId] = useState(fields[0]?.id);
   const lastSelection = useRef(new Map());
   const [noRoom, setNoRoom] = useState('');
+  // Which edges of the scrolling row (a phone) have more chips behind them, for the fades.
+  const chipsRef = useRef(null);
+  const [edges, setEdges] = useState({ start: false, end: false });
   // The row sticks just under the top bar, which is taller on a phone (it wraps to two rows).
   const [top, setTop] = useState(null);
 
@@ -81,6 +84,33 @@ export default function PlaceholderBar({ fields }) {
   }, []);
 
   const target = fields.find((f) => f.id === targetId) ?? fields[0];
+  const tokenCount = target?.tokens.length ?? 0;
+  const targetLabel = target?.label;
+
+  useEffect(() => {
+    const el = chipsRef.current;
+    if (!el) return undefined;
+    const measure = () => {
+      const start = el.scrollLeft > 1;
+      const end = el.scrollWidth - el.clientWidth - el.scrollLeft > 1;
+      setEdges((prev) => (prev.start === start && prev.end === end ? prev : { start, end }));
+    };
+    measure();
+    el.addEventListener('scroll', measure, { passive: true });
+    let observer;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(measure);
+      observer.observe(el);
+    }
+    window.addEventListener('resize', measure);
+    return () => {
+      el.removeEventListener('scroll', measure);
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+    // The row's content changes with the field the chips go into
+  }, [tokenCount, targetLabel]);
+
   if (!target) return null;
 
   function insert(token) {
@@ -93,7 +123,12 @@ export default function PlaceholderBar({ fields }) {
 
   return (
     <div className="v2-ph v2-ph-bar" style={top ? { top } : undefined}>
-      <div className="v2-ph-chips" role="group" aria-label="Insert a placeholder">
+      <div
+        className={`v2-ph-chips${edges.start ? ' has-more-start' : ''}${edges.end ? ' has-more-end' : ''}`}
+        role="group"
+        aria-label="Insert a placeholder"
+        ref={chipsRef}
+      >
         <span className="v2-ph-label">Insert into “{target.label}”:</span>
         {target.tokens.map((tk) => (
           <button

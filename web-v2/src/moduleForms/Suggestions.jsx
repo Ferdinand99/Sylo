@@ -43,13 +43,25 @@ const STATUS_TONE = {
 
 const TABS = ['queue', 'settings'];
 
+// The filter chips, with the number of suggestions each one shows (the server counts per status;
+// "Open" is the ones still waiting for a decision: open and considering).
 const FILTERS = [
-  ['all', 'All'],
-  ['open', 'Open and considering'],
+  ['open', 'Open'],
   ['approved', 'Approved'],
   ['denied', 'Denied'],
   ['implemented', 'Implemented'],
+  ['all', 'All'],
 ];
+
+/** How many suggestions a chip shows, or null when the server sent no counts (an older one). */
+export function filterCount(counts, key) {
+  if (!counts) return null;
+  if (key === 'open') return (counts.open ?? 0) + (counts.considering ?? 0);
+  return counts[key] ?? 0;
+}
+
+// Staff can decide these at once, from the row; a decided one is changed from "Set status".
+const AWAITING = new Set(['open', 'considering']);
 
 // The staff actions, in the order of the "Set status" list: [action, status it sets, label].
 const ACTIONS = [
@@ -60,28 +72,46 @@ const ACTIONS = [
 ];
 
 /** The page's data with a fresh answer of the list call. */
-const withList = (d, { suggestions, outside, openCount }) => ({ ...d, suggestions, outside, openCount });
+const withList = (d, { suggestions, outside, openCount, counts }) => ({
+  ...d,
+  suggestions,
+  outside,
+  openCount,
+  counts: counts ?? d.counts,
+});
 
 function Item({ item, busy, limits, onDecide, onMoveBack, onDelete }) {
   const [action, setAction] = useState(null);
-  const [pick, setPick] = useState('');
   const [reason, setReason] = useState('');
-  const pickRef = useRef(null);
+  const actionsRef = useRef(null);
+  // Which control opened the reason form: 'approve', 'deny' or 'menu' (the "Set status" button). The buttons
+  // are gone while the form is open, so it is the new one of the same kind that gets the focus back.
+  const opener = useRef(null);
   const returnFocus = useRef(false);
 
-  // The panel replaces the select; when it closes, focus goes back to the select.
   useEffect(() => {
     if (!action && returnFocus.current) {
       returnFocus.current = false;
-      pickRef.current?.focus();
+      const row = actionsRef.current;
+      const target =
+        opener.current === 'menu'
+          ? row?.querySelector('[aria-haspopup="menu"]')
+          : row?.querySelector(`[data-opener="${opener.current}"]`);
+      (target ?? row?.querySelector('button'))?.focus();
     }
   }, [action]);
+
+  function openPanel(next, from) {
+    opener.current = from;
+    setAction(next);
+  }
 
   function closePanel() {
     returnFocus.current = true;
     setAction(null);
-    setPick('');
   }
+
+  const awaiting = AWAITING.has(item.status);
 
   return (
     <div className="v2-row v2-row-stack">
@@ -138,31 +168,43 @@ function Item({ item, busy, limits, onDecide, onMoveBack, onDelete }) {
         ) : null}
       </div>
       {action ? null : (
-        <div className="v2-row-actions">
-          <select
-            ref={pickRef}
-            aria-label={`Set status of suggestion #${item.number}`}
-            value={pick}
+        <div className="v2-row-actions" ref={actionsRef}>
+          {/* A suggestion that still waits for a decision gets the two usual answers as buttons; both open the
+              reason form (optional), so a decision is never made by a single stray click. */}
+          {awaiting ? (
+            <>
+              <button
+                type="button"
+                className="v2-btn-ghost"
+                disabled={busy}
+                aria-label={`Approve suggestion #${item.number}`}
+                data-opener="approve"
+                onClick={() => openPanel('approve', 'approve')}
+              >
+                Approve
+              </button>
+              <button
+                type="button"
+                className="v2-btn-ghost"
+                disabled={busy}
+                aria-label={`Deny suggestion #${item.number}`}
+                data-opener="deny"
+                onClick={() => openPanel('deny', 'deny')}
+              >
+                Deny
+              </button>
+            </>
+          ) : null}
+          <OverflowMenu
+            text="Set status"
             disabled={busy}
-            onChange={(e) => setPick(e.target.value)}
-          >
-            {/* Choosing an option only picks it: an arrow key on a closed list changes it, so the reason
-                form opens from the button, never from the change itself. */}
-            <option value="">Choose status…</option>
-            {ACTIONS.filter(([, status]) => status !== item.status).map(([a, , label]) => (
-              <option key={a} value={a}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="v2-btn-ghost wp4-set-status"
-            disabled={busy || !pick}
-            onClick={() => setAction(pick)}
-          >
-            Set status
-          </button>
+            label={`Set status of suggestion #${item.number}`}
+            items={ACTIONS.filter(([, status]) => status !== item.status).map(([a, , label]) => ({
+              label,
+              onClick: () => openPanel(a, 'menu'),
+              disabled: busy,
+            }))}
+          />
           <OverflowMenu
             label={`More actions for suggestion #${item.number}`}
             items={[
@@ -510,18 +552,30 @@ export default function Suggestions() {
                 </button>
               </div>
             ) : null}
-            <div className="v2-field-row v2-sug-filters">
-              <div className="v2-field">
-                <label htmlFor="sug-filter">Show</label>
-                <select id="sug-filter" value={filter} onChange={(e) => setFilter(e.target.value)}>
-                  {FILTERS.map(([value, label]) => (
-                    <option key={value} value={value}>
+            <div className="v2-sug-filters">
+              <div className="v2-status-filter" role="group" aria-label="Show suggestions by status">
+                {FILTERS.map(([value, label]) => {
+                  const n = filterCount(data.counts, value);
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`v2-status-chip${filter === value ? ' is-active' : ''}`}
+                      aria-pressed={filter === value}
+                      onClick={() => setFilter(value)}
+                    >
                       {label}
-                    </option>
-                  ))}
-                </select>
+                      {n === null ? null : (
+                        <>
+                          {' '}
+                          <span className="v2-status-chip-count">{n}</span>
+                        </>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
-              <div className="v2-field">
+              <div className="v2-field v2-sug-order">
                 <label htmlFor="sug-sort">Order</label>
                 <select id="sug-sort" value={sort} onChange={(e) => setSort(e.target.value)}>
                   <option value="new">Newest first</option>

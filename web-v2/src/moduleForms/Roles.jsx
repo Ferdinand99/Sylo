@@ -13,7 +13,7 @@ import EmbedEditor from '../components/EmbedEditor.jsx';
 import EmojiPicker from '../components/EmojiPicker.jsx';
 import { newKey } from '../components/EmbedCard.jsx';
 import { notify } from '../notify.js';
-import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import { counter, limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import ListPageHead from '../components/ListPageHead.jsx';
 import RowActions from '../components/RowActions.jsx';
 import EmptyList from '../components/EmptyList.jsx';
@@ -265,6 +265,7 @@ function ReactionRoleForm({ initial, channels, roles, onSave, onCancel, saving }
 }
 
 export default function Roles() {
+  const limits = useModuleLimits('roles');
   const { guildId } = useParams();
   const [state, setState] = useState({ loading: true, data: null, error: null });
   // Autoroles are a plain settings form → SaveBar; the reaction-role sets
@@ -345,8 +346,9 @@ export default function Roles() {
     <>
       <ListPageHead
         title="Reaction roles & autoroles"
+        // With nothing in the list the empty state below carries the one accent button.
         action={
-          creating ? null : (
+          creating || d.reactionMessages.length === 0 ? null : (
             <button type="button" className="v2-btn-primary" onClick={() => setCreating(true)}>
               + New reaction role
             </button>
@@ -357,18 +359,16 @@ export default function Roles() {
       </ListPageHead>
 
       <div className="v2-group">
-        <h2 className="v2-group-title">Reaction roles ({d.reactionMessages.length})</h2>
+        <h2 className="v2-group-title">
+          Reaction roles ({counter(d.reactionMessages.length, limitOf(limits, 'reactionMessages').maxItems)})
+        </h2>
         {d.reactionMessages.length === 0 ? (
           <EmptyList
-            action={
-              creating ? null : (
-                <button type="button" className="v2-btn-ghost" onClick={() => setCreating(true)}>
-                  + New reaction role
-                </button>
-              )
+            start={
+              creating ? null : { label: 'Create your first reaction role', onClick: () => setCreating(true) }
             }
           >
-            None yet — create one to let members self-assign roles.
+            Let members pick their own roles with a reaction or a button.
           </EmptyList>
         ) : (
           <div className="v2-list">

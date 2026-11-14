@@ -2,6 +2,24 @@ import { useEffect, useRef, useState } from 'react';
 import { useUnsavedChangesGuard } from './useUnsavedChangesGuard.js';
 
 const SAVED_MS = 2000;
+
+/**
+ * Keep the field being edited above the bar. The bar is sticky at the bottom of the window, so a field near
+ * the bottom is covered by it the moment a first edit makes it appear. When the focused field sits inside a
+ * settings form and its box reaches the bar's, scroll it just clear; `scroll-margin-bottom` on the fields
+ * (styles/p1-polish.css) leaves the room. Exported for tests.
+ * @param {Element|null} active  document.activeElement
+ * @param {Element|null} bar  the bar's box
+ * @returns {boolean} whether it scrolled
+ */
+export function keepFieldAboveBar(active, bar) {
+  if (!active || !bar || !active.closest?.('form[data-savebar]')) return false;
+  const field = active.getBoundingClientRect();
+  const box = bar.getBoundingClientRect();
+  if (field.bottom <= box.top || field.top >= box.bottom) return false;
+  active.scrollIntoView?.({ block: 'nearest' });
+  return true;
+}
 const TEXT_LIKE = new Set([
   'text',
   'search',
@@ -51,6 +69,22 @@ export default function SaveBar({
     return () => clearTimeout(t);
   }, [justSaved, dirty]);
 
+  const barRef = useRef(null);
+  const visible = dirty || saving || justSaved;
+  // The bar fades in over whatever is at the bottom of the window: check the focused field when it appears,
+  // and again as the person types (an auto-growing field moves down as it grows).
+  useEffect(() => {
+    if (!visible) return undefined;
+    const check = () => keepFieldAboveBar(document.activeElement, barRef.current);
+    check();
+    document.addEventListener('input', check);
+    document.addEventListener('focusin', check);
+    return () => {
+      document.removeEventListener('input', check);
+      document.removeEventListener('focusin', check);
+    };
+  }, [visible]);
+
   const latest = useRef({ dirty, saving, onSave });
   latest.current = { dirty, saving, onSave };
   useEffect(() => {
@@ -89,6 +123,7 @@ export default function SaveBar({
     <>
       {guard ? <Guard dirty={dirty} /> : null}
       <SaveBarView
+        barRef={barRef}
         dirty={dirty}
         saving={saving}
         justSaved={justSaved}
@@ -105,11 +140,12 @@ function Guard({ dirty }) {
   return null;
 }
 
-function SaveBarView({ dirty, saving, justSaved, onSave, onReset, saveLabel }) {
+function SaveBarView({ barRef, dirty, saving, justSaved, onSave, onReset, saveLabel }) {
   const visible = dirty || saving || justSaved;
   const mode = dirty || saving ? 'dirty' : 'saved';
   return (
     <div
+      ref={barRef}
       className={`v2-savebar${visible ? ' is-visible' : ''}`}
       data-mode={mode}
       inert={visible ? undefined : true}

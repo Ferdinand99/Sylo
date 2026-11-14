@@ -49,7 +49,12 @@ function BetaTag() {
 
 // The panel at the top: what is waiting for a person and what is switched on but not set up. Each item
 // goes to the page where it is dealt with; with nothing to do the panel says so in one calm line.
+// On a phone the panel shows this many rows and a "Show all (n)" button for the rest (the CSS hides the
+// rows after it and the button on a wider screen).
+const PHONE_ROWS = 3;
+
 function NeedsAttention({ items }) {
+  const [all, setAll] = useState(false);
   if (!items.length) {
     return (
       <p className="v2-attention is-clear" role="status">
@@ -61,12 +66,13 @@ function NeedsAttention({ items }) {
   // The waiting work is one row of links; every other item gets its own row with what is wrong.
   const waiting = items.filter((i) => i.kind === 'waiting');
   const rest = items.filter((i) => i.kind !== 'waiting');
+  const rows = rest.length + (waiting.length ? 1 : 0);
   return (
     <section className="v2-attention" aria-labelledby="v2-attention-title">
       <h2 id="v2-attention-title" className="v2-attention-title">
         Needs attention <span className="v2-attention-count">{items.length}</span>
       </h2>
-      <ul className="v2-attention-list">
+      <ul className={`v2-attention-list${all ? ' is-all' : ''}`} id="v2-attention-rows">
         {waiting.length ? (
           <li className="v2-attention-item is-waiting">
             <span className="v2-attention-dot" aria-hidden="true" />
@@ -118,6 +124,17 @@ function NeedsAttention({ items }) {
           </li>
         ))}
       </ul>
+      {rows > PHONE_ROWS ? (
+        <button
+          type="button"
+          className="v2-btn-ghost v2-attention-more"
+          aria-expanded={all}
+          aria-controls="v2-attention-rows"
+          onClick={() => setAll((v) => !v)}
+        >
+          {all ? 'Show fewer' : `Show all (${items.length})`}
+        </button>
+      ) : null}
     </section>
   );
 }

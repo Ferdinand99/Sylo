@@ -66,3 +66,10 @@ export function useModuleLimits(moduleId) {
 export function limitOf(limits, path) {
   return limits?.[path] ?? NONE;
 }
+
+/**
+ * A count with its limit, "2 / 200", for a list that has one; just the count while the limit is not known
+ * (the limits are still loading, or an older server sends none).
+ */
+export const counter = (count, max) =>
+  Number.isFinite(max) && max > 0 ? `${count} / ${max}` : String(count);

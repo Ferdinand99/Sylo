@@ -1,0 +1,49 @@
+/* ---- Fixes and polish of the 5.2 review: room for the save bar, the Needs attention cap on a phone, the
+   start button of an empty list ----------------------------------------------------------------------- */
+
+/* The height of the floating save bar (components/SaveBar.jsx) with the gap under it. While the bar is up, a
+   field of a settings form scrolls into view clear of it: SaveBar calls scrollIntoView on the focused field
+   when the bar appears and as the person types, and this margin is the room that scroll leaves. No padding
+   on the form: the bar sits in the flow after the page, so the end of the page needs none, and padding that
+   comes and goes would move the content under the form. */
+:root {
+  --savebar-h: 72px;
+}
+@media (max-width: 640px) {
+  :root {
+    /* The phone bar runs edge to edge: its padding, a 40 px button and the home-indicator inset. */
+    --savebar-h: calc(60px + env(safe-area-inset-bottom, 0px));
+  }
+}
+.v2-page:has(.v2-savebar.is-visible) form[data-savebar] :is(input, select, textarea, button, [tabindex]) {
+  scroll-margin-bottom: calc(var(--savebar-h) + 24px);
+}
+
+/* ---- Needs attention: three rows on a phone, the rest behind "Show all (n)" ------------------------------ */
+.v2-attention-more {
+  display: none;
+}
+@media (max-width: 600px) {
+  .v2-attention-list:not(.is-all) > li:nth-child(n + 4) {
+    display: none;
+  }
+  .v2-attention-more {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 10px;
+    min-height: 40px;
+  }
+}
+
+/* ---- Empty list with a start button --------------------------------------------------------------------- */
+/* One sentence of what the list gives, and the page's one accent button. A calm panel, not a warning. */
+.v2-empty.has-start {
+  padding: 16px 18px;
+  border: 1px dashed var(--border-control);
+  border-radius: var(--radius);
+}
+@media (max-width: 600px) {
+  .v2-empty.has-start > .v2-btn-primary {
+    width: 100%;
+  }
+}

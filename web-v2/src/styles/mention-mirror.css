@@ -93,3 +93,27 @@
     display: none;
   }
 }
+
+/* ---- No chip row under a field that shows its names inside the text ------------------------------------- */
+/* The row stays in the page for a screen reader (the field's text holds the raw tokens); where the names are
+   not drawn at all (forced colours) it is shown as before. */
+.v2-mention-chips.is-quiet {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@media (forced-colors: active) {
+  .v2-mention-chips.is-quiet {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 8px 0 0;
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
+  }
+}

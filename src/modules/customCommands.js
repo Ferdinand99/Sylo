@@ -20,10 +20,17 @@ import { EmbedBuilder } from 'discord.js';
 import { buildEmbed } from './messageCreator.js';
 import { normaliseEmbedSpec } from './welcomeChannel.js';
 
+/**
+ * Discord accepts at most this many chat-input commands for one server, and a bulk overwrite with more is
+ * refused as a whole. A list longer than this is still stored; the sync registers the first ones in list order.
+ */
+export const DISCORD_COMMAND_LIMIT = 100;
+
 export const CC_PLACEHOLDERS = ['{user}', '{username}', '{server}', '{channel}', '{args}'];
 export const CC_ACTION_TYPES = ['reply', 'send', 'add-role', 'remove-role'];
 /** Setting limits, served to the dashboard (modules/limits.js). */
 export const LIMITS = {
+  // How many a server may keep. Discord registers only the first DISCORD_COMMAND_LIMIT of them.
   commands: { maxItems: 200 },
   'commands[].name': { maxLength: 32 },
   'commands[].description': { maxLength: 100 },

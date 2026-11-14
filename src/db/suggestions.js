@@ -97,6 +97,9 @@ const s = {
   countOpen: prepare(
     "SELECT COUNT(*) AS n FROM guild_suggestions WHERE guild_id = ? AND status IN ('open', 'considering')"
   ),
+  countByStatus: prepare(
+    'SELECT status, COUNT(*) AS n FROM guild_suggestions WHERE guild_id = ? GROUP BY status'
+  ),
   countOpenByAuthor: prepare(
     "SELECT COUNT(*) AS n FROM guild_suggestions WHERE guild_id = ? AND author_id = ? AND status IN ('open', 'considering')"
   ),
@@ -211,6 +214,17 @@ export async function getSuggestionInGuild(id, guildId) {
 export const suggestionCount = async (guildId) => Number((await s.countGuild.get(guildId))?.n) || 0;
 /** Suggestions still waiting for a decision (open or being considered). */
 export const openSuggestionCount = async (guildId) => Number((await s.countOpen.get(guildId))?.n) || 0;
+/**
+ * How many suggestions of a server are in each status, for the filter chips of the dashboard:
+ * `{ all, open, considering, approved, denied, implemented }` (every key is there, 0 when none).
+ */
+export async function suggestionCountsByStatus(guildId) {
+  const counts = Object.fromEntries(STATUSES.map((st) => [st, 0]));
+  for (const row of await s.countByStatus.all(guildId)) {
+    if (row.status in counts) counts[row.status] = Number(row.n) || 0;
+  }
+  return { all: STATUSES.reduce((sum, st) => sum + counts[st], 0), ...counts };
+}
 export const openSuggestionCountOf = async (guildId, authorId) =>
   Number((await s.countOpenByAuthor.get(guildId, authorId))?.n) || 0;
 /** When this member last made a suggestion (epoch ms), or 0. */

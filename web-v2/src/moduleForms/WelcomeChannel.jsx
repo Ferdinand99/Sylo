@@ -10,6 +10,7 @@ import {
 } from '../api.js';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
+import EmptyList from '../components/EmptyList.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { isDirty } from '../components/formEqual.js';
@@ -290,7 +291,15 @@ export default function WelcomeChannel() {
 
       <div className="v2-wc-stage">
         {form.items.length === 0 ? (
-          <p className="v2-note">No elements yet — pick one from "Add element" below.</p>
+          <EmptyList
+            start={
+              d.presets.length && !full
+                ? { label: 'Add your first element', onClick: () => addPreset(d.presets[0].id) }
+                : null
+            }
+          >
+            Build the message from embeds, cards with a title, text and fields, and banners, large pictures.
+          </EmptyList>
         ) : (
           form.items.map((item, i) => {
             const toolbar = {

@@ -7,6 +7,7 @@ import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import PreviewLayout from '../components/PreviewLayout.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
+import EmptyList from '../components/EmptyList.jsx';
 import SendTestButton from '../components/SendTestButton.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
@@ -99,7 +100,9 @@ export default function YoutubeAlerts() {
 
         <form onSubmit={save} data-savebar>
           {form.alerts.length === 0 ? (
-            <p className="v2-field-hint">No channels yet — add one below.</p>
+            <EmptyList start={{ label: 'Add your first channel', onClick: addRow }}>
+              Post in a channel when a YouTube channel uploads a video or goes live.
+            </EmptyList>
           ) : null}
           {form.alerts.map((a) => (
             <div className="v2-rule-card" key={a.key} {...focusProps(a.key)}>

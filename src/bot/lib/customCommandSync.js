@@ -6,7 +6,12 @@ import { guildKey, guildSupports } from '../../platform/platformOf.js';
 import { MessageFlags } from 'discord.js';
 import { config } from '../../config.js';
 import { getGuildModule } from '../../db/modules.js';
-import { usesArgs, pickMessage, buildActionPayload } from '../../modules/customCommands.js';
+import {
+  DISCORD_COMMAND_LIMIT,
+  usesArgs,
+  pickMessage,
+  buildActionPayload,
+} from '../../modules/customCommands.js';
 import { log } from '../../lib/log.js';
 import { sweepMap } from '../../lib/sweepMap.js';
 
@@ -42,6 +47,7 @@ export function collidingCommands(client, cfg) {
 }
 
 const warned = new Set(); // `${guild}:${name}`, so a sync logs each collision once
+const warnedOver = new Set(); // guild keys whose list is longer than Discord takes, warned once until it fits again
 
 /** Push the desired application-command set for one guild. */
 export async function syncGuildCustomCommands(guild) {
@@ -70,9 +76,22 @@ export async function syncGuildCustomCommands(guild) {
     : [];
   const builtinNames = reservedCommandNames(guild.client);
 
-  const customs = enabled
-    ? (cfg.commands ?? []).filter((c) => !builtinNames.has(c.name)).map(toSlashJSON)
-    : [];
+  const eligible = enabled ? (cfg.commands ?? []).filter((c) => !builtinNames.has(c.name)) : [];
+  // Discord refuses the whole overwrite past its limit, which would register nothing: keep the first ones in
+  // list order (the built-ins that are guild-scoped in dev mode use some of the room) and say so once.
+  const room = Math.max(0, DISCORD_COMMAND_LIMIT - builtins.filter((b) => (b.type ?? 1) === 1).length);
+  const customs = eligible.slice(0, room).map(toSlashJSON);
+  if (eligible.length > room) {
+    if (!warnedOver.has(key)) {
+      warnedOver.add(key);
+      log.warn(
+        'custom-commands',
+        `guild ${key}: ${eligible.length} custom commands, but Discord takes ${room}. Only the first ${room} are registered; the rest do not appear on Discord until some are deleted.`
+      );
+    }
+  } else {
+    warnedOver.delete(key);
+  }
 
   try {
     await guild.commands.set([...builtins, ...customs]);
