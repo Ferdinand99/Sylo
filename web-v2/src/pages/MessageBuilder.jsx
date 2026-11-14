@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { getComposedMessage, saveComposedMessage } from '../api.js';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
+import Breadcrumb from '../components/Breadcrumb.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { isDirty } from '../components/formEqual.js';
 import { useUnsavedChangesGuard, SKIP_UNSAVED_GUARD } from '../components/useUnsavedChangesGuard.js';
@@ -209,6 +210,10 @@ export default function MessageBuilder() {
 
   return (
     <form onSubmit={(e) => e.preventDefault()}>
+      <Breadcrumb
+        parents={[{ label: 'Embed messages', to: `/guilds/${guildId}/messages` }]}
+        current={name.trim() || (messageId ? 'Untitled embed' : 'New embed message')}
+      />
       <div className="v2-page-head">
         <input
           type="text"
@@ -222,9 +227,11 @@ export default function MessageBuilder() {
           <span className="v2-composer-status" aria-live="polite">
             {dirty ? 'Unsaved changes' : ''}
           </span>
-          <button type="button" className="v2-btn-ghost" onClick={onDiscard}>
-            {dirty ? 'Discard' : 'Back'}
-          </button>
+          {dirty ? (
+            <button type="button" className="v2-btn-ghost" onClick={onDiscard}>
+              Discard
+            </button>
+          ) : null}
           <button type="button" className="v2-btn-ghost" disabled={busy} onClick={() => submit('save')}>
             Save draft
           </button>

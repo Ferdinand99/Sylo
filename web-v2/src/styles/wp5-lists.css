@@ -1,0 +1,107 @@
+/* List rows and primary actions (WP5): the page header with its one "+ New" button, rows with Edit and a
+   "⋯" menu, the empty state, and the ChipPicker that shows only a select while nothing is picked. */
+
+/* ---- List page header: title and the page's one accent button, intro under them ----------------------- */
+/* On a wide screen the button sits at the right of the title; on a phone it goes under the intro and fills
+   the width, so it is easy to reach and never squeezes the title. */
+.v2-listhead {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'title action'
+    'intro intro';
+  align-items: center;
+  column-gap: 16px;
+}
+.v2-listhead > .v2-section-title {
+  grid-area: title;
+  min-width: 0;
+}
+.v2-listhead-action {
+  grid-area: action;
+  display: flex;
+  justify-content: flex-end;
+}
+.v2-listhead-intro {
+  grid-area: intro;
+  min-width: 0;
+}
+@media (max-width: 600px) {
+  .v2-listhead {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'title'
+      'intro'
+      'action';
+  }
+  .v2-listhead-action {
+    margin: 4px 0 8px;
+  }
+  .v2-listhead-action > .v2-btn-primary {
+    width: 100%;
+  }
+}
+
+/* ---- A row's actions: Edit and a "⋯" menu, always on one line ------------------------------------------ */
+.v2-row-actions.v2-row-actions-menu {
+  flex: none;
+  flex-wrap: nowrap;
+}
+
+/* ---- Empty state of a list ------------------------------------------------------------------------------ */
+.v2-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 0 0 12px;
+}
+.v2-empty > .v2-note,
+.v2-empty > .v2-field-hint {
+  margin: 0;
+}
+
+/* ---- ChipPicker: only the select while empty, the select inline after the last chip otherwise ----------- */
+/* Nothing picked: no well, just the select. */
+.v2-chip-picker > .v2-chip-row.is-bare {
+  min-height: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+}
+/* Chips picked: the select is the last item in the well, quiet until hovered or focused. */
+.v2-chip-picker > .v2-chip-row:not(.is-bare) > .v2-chip-add {
+  flex: 1 1 11rem;
+  width: auto;
+  min-width: 9rem;
+  max-width: 320px;
+  min-height: 26px;
+  padding-block: 2px;
+  background-color: transparent;
+  border-color: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.v2-chip-picker > .v2-chip-row:not(.is-bare) > .v2-chip-add:hover:not(:disabled),
+.v2-chip-picker > .v2-chip-row:not(.is-bare) > .v2-chip-add:focus-visible {
+  border-color: var(--border-strong);
+}
+
+/* ---- Time zone select (TimeZoneSelect.jsx) ---------------------------------------------------------------- */
+.v2-tz-select {
+  max-width: 360px;
+}
+
+/* ---- Link and copy pair for a printed address -------------------------------------------------------------- */
+.v2-linkrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---- A paragraph that sits right above a form: the standard gap before the first label ------------------ */
+.v2-note.v2-gap-after,
+.v2-field-hint.v2-gap-after {
+  margin-bottom: 16px;
+}

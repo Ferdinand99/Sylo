@@ -9,6 +9,8 @@ import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import HowItWorks from '../components/HowItWorks.jsx';
+import CopyButton from '../components/CopyButton.jsx';
+import RowActions from '../components/RowActions.jsx';
 import Meta from '../components/Meta.jsx';
 import { formatDay } from '../formatTime.js';
 
@@ -90,9 +92,19 @@ export default function QuoteBoard() {
             read are never shown there.
           </p>
           {baseline.publicPage ? (
-            <p className="v2-field-hint">
-              Link: <a href={publicUrl}>{publicUrl}</a>
-            </p>
+            <div className="v2-linkrow">
+              <span className="v2-field-hint">Public page:</span>
+              <a
+                className="v2-btn-ghost v2-btn-compact"
+                href={publicUrl}
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Open the public quote page"
+              >
+                Open
+              </a>
+              <CopyButton text={publicUrl} what="link" />
+            </div>
           ) : null}
         </div>
 
@@ -170,16 +182,10 @@ export default function QuoteBoard() {
                   />
                 </p>
               </div>
-              <div className="v2-row-actions">
-                <button
-                  type="button"
-                  className="v2-btn-danger-ghost"
-                  disabled={busy}
-                  onClick={() => onRemove(q)}
-                >
-                  Delete
-                </button>
-              </div>
+              <RowActions
+                menuLabel={`More actions for quote #${q.number}`}
+                items={[{ label: 'Delete', danger: true, disabled: busy, onClick: () => onRemove(q) }]}
+              />
             </div>
           ))}
         </div>

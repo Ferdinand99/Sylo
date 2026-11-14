@@ -7,6 +7,9 @@ import { notify } from '../notify.js';
 import Reveal from '../components/Reveal.jsx';
 import Badge from '../components/Badge.jsx';
 import Meta from '../components/Meta.jsx';
+import ListPageHead from '../components/ListPageHead.jsx';
+import RowActions from '../components/RowActions.jsx';
+import EmptyList from '../components/EmptyList.jsx';
 
 export default function Messages() {
   const { guildId } = useParams();
@@ -50,20 +53,31 @@ export default function Messages() {
 
   return (
     <Reveal>
-      <div className="v2-page-head">
-        <h1 className="v2-section-title">Embed messages</h1>
-        <Link className="v2-btn-primary" to={`/guilds/${guildId}/messages/new`}>
-          + New embed message
-        </Link>
-      </div>
-      <p className="v2-field-hint">
-        Build rich embed messages with a live editor, then publish them to a channel as Sylo — and re-publish
-        to edit the posted message in place.
-      </p>
+      <ListPageHead
+        title="Embed messages"
+        action={
+          <Link className="v2-btn-primary" to={`/guilds/${guildId}/messages/new`}>
+            + New embed message
+          </Link>
+        }
+      >
+        <p className="v2-field-hint">
+          Build rich embed messages with a live editor, then publish them to a channel as Sylo — and
+          re-publish to edit the posted message in place.
+        </p>
+      </ListPageHead>
 
       <h2 className="v2-group-title v2-section-gap">Your embed messages ({data.items.length} / 200)</h2>
       {data.items.length === 0 ? (
-        <p className="v2-field-hint">None yet — create one to post an embed to a channel.</p>
+        <EmptyList
+          action={
+            <Link className="v2-btn-ghost" to={`/guilds/${guildId}/messages/new`}>
+              + New embed message
+            </Link>
+          }
+        >
+          None yet — create one to post an embed to a channel.
+        </EmptyList>
       ) : (
         <div className="v2-list">
           {data.items.map((it) => (
@@ -81,19 +95,14 @@ export default function Messages() {
                   <Meta items={[`#${it.channel}`, `edited ${it.when}`]} />
                 </p>
               </div>
-              <div className="v2-row-actions">
-                <Link className="v2-btn-ghost" to={`/guilds/${guildId}/messages/${it.id}`}>
-                  Edit
-                </Link>
-                {it.published ? (
-                  <button type="button" className="v2-btn-ghost" onClick={() => onUnpublish(it.id)}>
-                    Unpublish
-                  </button>
-                ) : null}
-                <button type="button" className="v2-btn-danger-ghost" onClick={() => onDelete(it.id)}>
-                  Delete
-                </button>
-              </div>
+              <RowActions
+                edit={{ to: `/guilds/${guildId}/messages/${it.id}` }}
+                menuLabel={`More actions for ${it.name}`}
+                items={[
+                  it.published && { label: 'Unpublish', onClick: () => onUnpublish(it.id) },
+                  { label: 'Delete', danger: true, onClick: () => onDelete(it.id) },
+                ].filter(Boolean)}
+              />
             </div>
           ))}
         </div>
