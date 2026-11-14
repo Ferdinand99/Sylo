@@ -2,10 +2,11 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { useState } from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MentionTextarea from '../components/MentionTextarea.jsx';
+import { syncMirror } from '../components/MentionMirror.jsx';
 
 vi.mock('../api.js', () => ({ searchMembers: vi.fn() }));
 const { searchMembers } = await import('../api.js');
@@ -256,7 +257,7 @@ describe('mentions drawn as names inside the field', () => {
       field.scrollTop = 25;
       fireEvent.scroll(field);
       expect(namesOf().querySelector('.v2-mm-names-inner').style.transform).toBe(
-        `translateY(${-mirrorOf().scrollTop}px)`
+        `translate(${-mirrorOf().scrollLeft}px, ${-mirrorOf().scrollTop}px)`
       );
     } finally {
       clientRects.mockRestore();
@@ -277,9 +278,182 @@ describe('mentions drawn as names inside the field', () => {
     expect(mirrorOf().scrollTop).toBe(field.scrollTop);
   });
 
+  it('keeps the layer at the same horizontal scroll position as the field', () => {
+    render(<Harness start={`a ${token}`} />);
+    const field = screen.getByLabelText('Message');
+    field.scrollLeft = 17;
+    fireEvent.scroll(field);
+    expect(mirrorOf().scrollLeft).toBe(field.scrollLeft);
+    // (jsdom writes a zero as nothing, so only the horizontal part is pinned)
+    expect(namesOf().querySelector('.v2-mm-names-inner').style.transform).toMatch(/^translate\(-17px/);
+  });
+
+  it('lays a stored Windows line break out as the one line feed the field holds', () => {
+    render(<Harness start={`a ${token}\r\nb\rc`} />);
+    expect(mirrorOf().textContent).toBe(`a ${token}\nb\nc`);
+    expect(nameTexts()).toEqual(['#welcome']);
+  });
+
+  describe('when the theme switches', () => {
+    afterEach(() => {
+      document.documentElement.removeAttribute('data-theme');
+      delete window.matchMedia;
+    });
+
+    it('copies the field text colour again when the page changes its data-theme', async () => {
+      render(<Harness start={`a ${token}`} />);
+      const field = screen.getByLabelText('Message');
+      field.style.color = 'rgb(20, 20, 20)';
+      type(field, `a ${token} b`);
+      expect(mirrorOf().style.color).toBe('rgb(20, 20, 20)');
+      // The toggle sets the attribute and the stylesheet gives the field another colour; nothing re-renders.
+      field.style.color = 'rgb(235, 235, 235)';
+      document.documentElement.setAttribute('data-theme', 'dark');
+      await waitFor(() => expect(mirrorOf().style.color).toBe('rgb(235, 235, 235)'));
+    });
+
+    it('copies it again when the system switches between light and dark', () => {
+      const listeners = new Set();
+      window.matchMedia = vi.fn(() => ({
+        matches: false,
+        addEventListener: (_type, fn) => listeners.add(fn),
+        removeEventListener: (_type, fn) => listeners.delete(fn),
+      }));
+      render(<Harness start={`a ${token}`} />);
+      const field = screen.getByLabelText('Message');
+      field.style.color = 'rgb(20, 20, 20)';
+      type(field, `a ${token} b`);
+      expect(mirrorOf().style.color).toBe('rgb(20, 20, 20)');
+      expect(listeners.size).toBe(1);
+      field.style.color = 'rgb(235, 235, 235)';
+      act(() => listeners.forEach((fn) => fn()));
+      expect(mirrorOf().style.color).toBe('rgb(235, 235, 235)');
+    });
+  });
+
+  it('does not lay the layers out again for a render that changes nothing they show', () => {
+    const { rerender } = render(<Harness start={`a ${token}`} />);
+    const field = screen.getByLabelText('Message');
+    const read = vi.spyOn(window, 'getComputedStyle');
+    try {
+      rerender(<Harness start={`a ${token}`} />);
+      rerender(<Harness start={`a ${token}`} />);
+      expect(read.mock.calls.filter(([el]) => el === field)).toHaveLength(0);
+      // A change of the text does.
+      type(field, `a ${token} b`);
+      expect(read.mock.calls.filter(([el]) => el === field).length).toBeGreaterThan(0);
+    } finally {
+      read.mockRestore();
+    }
+  });
+
   it('adds a zero-width letter after a final line break, so the empty last line exists in the layer too', () => {
     render(<Harness start={`${token}\n`} />);
     expect(mirrorOf().textContent).toBe(`${token}\n\u200b`);
+  });
+
+  describe('alignment, as invariants jsdom can check without a layout engine', () => {
+    const values = [
+      `${token}`,
+      `Hi ${token} and <@&${ROLE}> and @everyone`,
+      `line one\n${token}\n\nline four ${token}`,
+      `${token}\n`,
+      `a ${token}\r\nb`,
+      `<#12`,
+    ];
+
+    it.each(values)('the layer holds the field letters, one for one, for %j', (value) => {
+      render(<Harness start={value} />);
+      const mirror = mirrorOf();
+      if (!mirror) {
+        // No stored token (`<#12` is not one): no layer, and the field draws its own text.
+        expect(screen.getByLabelText('Message').className).not.toContain('is-mirrored');
+        return;
+      }
+      const field = screen.getByLabelText('Message');
+      const expected = value.replace(/\r\n?/g, '\n');
+      // Same letters in the same order (the one zero-width letter after a final break is not a letter of
+      // the field); the tokens are inside spans and are never cut, replaced or reordered.
+      expect(mirror.textContent.replace(/\u200b$/, '')).toBe(expected);
+      expect(field.value.replace(/\r\n?/g, '\n')).toBe(expected);
+      const tokens = [...mirror.querySelectorAll('[data-token]')].map((t) => t.textContent);
+      expect(tokens).toEqual(expected.match(/<[#@]&?\d{17,20}>/g) ?? []);
+      // One name per token, in the same order.
+      expect(namesOf().querySelectorAll('.v2-mm-name')).toHaveLength(tokens.length);
+    });
+
+    it('syncMirror gives the layer the field box and every metric that decides where a letter lands', () => {
+      const field = document.createElement('textarea');
+      const mirror = document.createElement('div');
+      document.body.append(field, mirror);
+      Object.assign(field.style, {
+        fontFamily: 'Georgia, serif',
+        fontSize: '15px',
+        fontWeight: '500',
+        letterSpacing: '0.3px',
+        wordSpacing: '1px',
+        lineHeight: '22px',
+        textIndent: '4px',
+        textAlign: 'left',
+        whiteSpace: 'pre-wrap',
+        overflowWrap: 'anywhere',
+        wordBreak: 'normal',
+        padding: '9px 12px 7px 10px',
+        borderStyle: 'solid',
+        borderWidth: '1px 2px 3px 4px',
+        color: 'rgb(1, 2, 3)',
+      });
+      try {
+        syncMirror(field, mirror);
+        const cs = window.getComputedStyle(field);
+        for (const prop of [
+          'fontFamily',
+          'fontSize',
+          'fontWeight',
+          'letterSpacing',
+          'wordSpacing',
+          'lineHeight',
+          'textIndent',
+          'textAlign',
+          'whiteSpace',
+          'overflowWrap',
+          'wordBreak',
+          'paddingTop',
+          'paddingLeft',
+          'paddingBottom',
+          'borderTopWidth',
+          'borderLeftWidth',
+          'borderBottomWidth',
+          'color',
+        ]) {
+          expect(mirror.style[prop], prop).toBe(cs[prop]);
+        }
+        expect(mirror.style.width).toBe(`${field.offsetWidth}px`);
+        expect(mirror.style.height).toBe(`${field.offsetHeight}px`);
+        expect(mirror.style.left).toBe(`${field.offsetLeft}px`);
+        expect(mirror.style.top).toBe(`${field.offsetTop}px`);
+      } finally {
+        field.remove();
+        mirror.remove();
+      }
+    });
+
+    it('the layer of names has no padding and no border, so its origin is the mirror outer corner', () => {
+      const field = document.createElement('textarea');
+      const names = document.createElement('div');
+      document.body.append(field, names);
+      field.style.padding = '9px 12px';
+      field.style.border = '2px solid';
+      try {
+        syncMirror(field, names, { bare: true });
+        expect(names.style.paddingTop).toBe('0px');
+        expect(names.style.paddingLeft).toBe('0px');
+        expect(names.style.borderLeftWidth).toBe('0px');
+      } finally {
+        field.remove();
+        names.remove();
+      }
+    });
   });
 
   it('is not used for a single-line input', () => {
