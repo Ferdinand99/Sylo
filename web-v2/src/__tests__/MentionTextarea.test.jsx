@@ -195,7 +195,10 @@ describe('mentions drawn as names inside the field', () => {
       expect(layer.innerHTML).not.toContain('<img');
       expect(layer.innerHTML).not.toContain('<script');
     }
-    expect(nameTexts()).toEqual(['#</div><b>boom</b><img src=x onerror=alert(1)>', '@<script>alert(1)</script>']);
+    expect(nameTexts()).toEqual([
+      '#</div><b>boom</b><img src=x onerror=alert(1)>',
+      '@<script>alert(1)</script>',
+    ]);
   });
 
   it('takes its font, padding and wrapping from the field, so the lines break at the same letter', () => {
@@ -223,6 +226,46 @@ describe('mentions drawn as names inside the field', () => {
     expect(m.whiteSpace).toBe('pre-wrap');
     expect(m.overflowWrap).toBe('anywhere');
     expect(m.color).toBe(window.getComputedStyle(field).color);
+  });
+
+  it('places each name over its token from where the browser laid the token out, and slides it with the scroll', () => {
+    const rect = (left, top, width, height) => ({
+      left,
+      top,
+      width,
+      height,
+      right: left + width,
+      bottom: top + height,
+    });
+    const clientRects = vi.spyOn(Element.prototype, 'getClientRects').mockImplementation(function () {
+      return this.hasAttribute('data-token') ? [rect(40, 12, 150, 19)] : [];
+    });
+    const bounds = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+      return this.classList.contains('v2-mention-mirror') ? rect(10, 2, 300, 90) : rect(0, 0, 0, 0);
+    });
+    try {
+      render(<Harness start={`a ${token}`} />);
+      const name = namesOf().querySelector('.v2-mm-name');
+      expect(name.style.left).toBe('30px');
+      expect(name.style.top).toBe('10px');
+      expect(name.style.width).toBe('150px');
+      expect(name.style.height).toBe('19px');
+      expect(name.style.visibility).toBe('');
+      const field = screen.getByLabelText('Message');
+      field.scrollTop = 25;
+      fireEvent.scroll(field);
+      expect(namesOf().querySelector('.v2-mm-names-inner').style.transform).toBe(
+        `translateY(${-mirrorOf().scrollTop}px)`
+      );
+    } finally {
+      clientRects.mockRestore();
+      bounds.mockRestore();
+    }
+  });
+
+  it('keeps a name out of sight until the browser has laid its token out', () => {
+    render(<Harness start={`a ${token}`} />);
+    expect(namesOf().querySelector('.v2-mm-name').style.visibility).toBe('hidden');
   });
 
   it('keeps the layer at the same scroll position as the field', () => {
