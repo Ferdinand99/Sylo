@@ -21,6 +21,9 @@ struct ModuleSettingsForm<Page: ModuleSettingsPage, Content: View>: View {
     @ViewBuilder let content: (Binding<Page.Settings>, Page) -> Content
 
     @State private var isConfirmingDiscard = false
+    @Environment(\.dashboardAccess) private var access
+    /// Read again after a save: the server dropped its health copy then (Sylo 5.2).
+    @Environment(ServerHealthModel.self) private var health: ServerHealthModel?
 
     init(
         _ title: LocalizedStringKey, model: ModuleSettingsModel<Page>, problem: String? = nil,
@@ -69,7 +72,7 @@ struct ModuleSettingsForm<Page: ModuleSettingsPage, Content: View>: View {
                 } else {
                     Button("Save") { Task { await model.save() } }
                         .toolbarSaveStyle()
-                        .disabled(!model.hasChanges || problem != nil)
+                        .disabled(!model.hasChanges || problem != nil || !access.canEdit)
                 }
             }
         }
@@ -82,6 +85,9 @@ struct ModuleSettingsForm<Page: ModuleSettingsPage, Content: View>: View {
             Text(message)
         }
         .sensoryFeedback(.success, trigger: model.saveCount)
+        .onChange(of: model.saveCount) {
+            Task { await health?.refreshAfterSave() }
+        }
         .task {
             if model.page == nil { await model.load() }
         }

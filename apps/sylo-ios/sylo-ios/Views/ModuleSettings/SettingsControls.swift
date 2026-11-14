@@ -23,6 +23,8 @@ struct ChannelPicker: View {
             }
         }
         .pickerStyle(.navigationLink)
+        // Sylo 5.2's health check: a note when Sylo cannot post in the picked channel.
+        HealthNote(subject: .channel(selection))
     }
 }
 
@@ -44,6 +46,8 @@ struct RolePicker: View {
             }
         }
         .pickerStyle(.navigationLink)
+        // Sylo 5.2's health check: a note when Sylo cannot give the picked role.
+        HealthNote(subject: .role(selection))
     }
 }
 
@@ -66,6 +70,12 @@ struct MultiPicker<Option: NamedOption>: View {
                 Text(summary)
             }
         }
+        // Sylo 5.2's health check: each picked role or channel Sylo cannot use gets a note with its name.
+        HealthNote(subject: prefix == "#" ? .channels(selection, names: names) : .roles(selection, names: names))
+    }
+
+    private var names: [String: String] {
+        Dictionary(options.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
     }
 
     private var summary: String {

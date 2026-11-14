@@ -103,6 +103,7 @@ private struct ApplicationsExportSection: View {
     @State private var format: ApplicationExportFormat = .csv
     @State private var isConfirming = false
     @State private var previewed: DownloadedFile?
+    @Environment(\.dashboardAccess) private var access
     private let server: ServerID
     private let forms: [ApplicationForm]
 
@@ -145,7 +146,7 @@ private struct ApplicationsExportSection: View {
                     Label("Export Answers", systemImage: "square.and.arrow.down")
                 }
             }
-            .disabled(formID == nil || download.isDownloading)
+            .disabled(formID == nil || download.isDownloading || !access.seesInboxContent)
             .confirmationDialog("Export These Answers?", isPresented: $isConfirming, titleVisibility: .visible) {
                 Button("Export") { start() }
             } message: {
@@ -271,6 +272,8 @@ struct ApplicationSubmissionView: View {
             if model.wasDeleted { dismiss() }
         }
         .sensoryFeedback(.success, trigger: model.decisionCount)
+        // Sylo 5.2: an application's answers are for the Inbox level.
+        .inboxOnly()
     }
 
     @ViewBuilder

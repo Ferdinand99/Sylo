@@ -18,8 +18,27 @@ enum ModuleScreens {
         "reminders", "channel-cleanup", "github", "game-stats",
     ]
 
+    /// The modules whose screen also holds work for the Inbox level (the suggestions to decide on, the
+    /// applications to review): they switch their own settings off instead of the whole screen.
+    private static let inboxScreens: Set<String> = ["suggestions", "applications"]
+
+    /// A module's screen with Sylo 5.2's two additions: the health check's problems for the module at the
+    /// top, and the dashboard access level (a level below Edit gets the screen switched off, with the reason).
     @ViewBuilder
     static func screen(for moduleID: String, server: ServerID, session: AppSession) -> some View {
+        if inboxScreens.contains(moduleID) {
+            content(for: moduleID, server: server, session: session)
+                .accessNotice()
+                .moduleHealth(moduleID)
+        } else {
+            content(for: moduleID, server: server, session: session)
+                .lockedBelow()
+                .moduleHealth(moduleID)
+        }
+    }
+
+    @ViewBuilder
+    private static func content(for moduleID: String, server: ServerID, session: AppSession) -> some View {
         switch moduleID {
         // Moderation and safety
         case "moderation": ModerationSettingsView(server: server, session: session)
