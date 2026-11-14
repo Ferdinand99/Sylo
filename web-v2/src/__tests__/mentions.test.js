@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   filterChannels,
   filterRoles,
+  hasMentions,
   insertMention,
+  mirrorParts,
+  snapSelection,
+  tokenEndingAt,
+  tokenRanges,
+  tokenStartingAt,
   mentionLabel,
   mentionsIn,
   parseMentions,
@@ -162,5 +168,50 @@ describe('previewParts', () => {
   it('handles an empty template', () => {
     expect(previewParts('')).toEqual([]);
     expect(previewParts(undefined)).toEqual([]);
+  });
+});
+
+describe('tokens inside a field', () => {
+  const CH = '100000000000000021';
+  const ROLE = '200000000000000031';
+  const text = `hi <#${CH}> and <@&${ROLE}>!`;
+  const ch = { start: 3, end: 3 + `<#${CH}>`.length };
+
+  it('finds the stored tokens but not the plain @everyone', () => {
+    expect(tokenRanges(`@everyone <#${CH}>`).map((t) => t.id)).toEqual([CH]);
+    expect(hasMentions('@here')).toBe(true);
+    expect(hasMentions('no mention, a #hashtag and user@example.com')).toBe(false);
+    expect(hasMentions('')).toBe(false);
+    expect(hasMentions(undefined)).toBe(false);
+  });
+
+  it('finds the token that ends or starts at a position', () => {
+    expect(tokenEndingAt(text, ch.end)).toMatchObject({ start: ch.start, end: ch.end, type: 'channel' });
+    expect(tokenStartingAt(text, ch.start)).toMatchObject({ id: CH });
+    expect(tokenEndingAt(text, ch.end - 1)).toBeNull();
+    expect(tokenStartingAt(text, ch.start + 1)).toBeNull();
+  });
+
+  it('moves a caret inside a token to the nearer edge and a range out to the edges', () => {
+    expect(snapSelection(text, ch.start + 2, ch.start + 2)).toEqual([ch.start, ch.start]);
+    expect(snapSelection(text, ch.end - 2, ch.end - 2)).toEqual([ch.end, ch.end]);
+    expect(snapSelection(text, 0, 2)).toEqual([0, 2]);
+    expect(snapSelection(text, ch.start, ch.end)).toEqual([ch.start, ch.end]);
+    expect(snapSelection(text, ch.start + 4, ch.end + 2)).toEqual([ch.start, ch.end + 2]);
+    expect(snapSelection(text, 1, ch.start + 5)).toEqual([1, ch.end]);
+  });
+
+  it('describes the layer behind a field: raw token text kept, name as a label, deleted ones marked', () => {
+    const parts = mirrorParts(`a <#${CH}> <@&${ROLE}> <#999999999999999999> @everyone b`, {
+      channels: [{ id: CH, name: 'welcome' }],
+      roles: [{ id: ROLE, name: 'Verified' }],
+    });
+    expect(parts.map((p) => p.text).join('')).toBe(
+      `a <#${CH}> <@&${ROLE}> <#999999999999999999> @everyone b`
+    );
+    const mentions = parts.filter((p) => p.kind === 'mention');
+    expect(mentions.map((p) => p.label)).toEqual(['#welcome', '@Verified', '#deleted-channel']);
+    expect(mentions.map((p) => p.missing)).toEqual([false, false, true]);
+    expect(parts.filter((p) => p.kind === 'special').map((p) => p.text)).toEqual(['@everyone']);
   });
 });
