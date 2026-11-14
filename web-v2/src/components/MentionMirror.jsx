@@ -53,10 +53,22 @@ export function syncMirror(field, mirror) {
   if (!field || !mirror) return;
   const cs = window.getComputedStyle(field);
   for (const prop of COPIED) mirror.style[prop] = cs[prop];
-  mirror.style.left = `${field.offsetLeft}px`;
-  mirror.style.top = `${field.offsetTop}px`;
-  mirror.style.width = `${field.offsetWidth}px`;
-  mirror.style.height = `${field.offsetHeight}px`;
+  // The box to the pixel fraction (a field can sit at 46.4px and be 87.5px tall; whole numbers would shift
+  // the letters by a fraction of a pixel and blur them against the field's own).
+  const parent = field.offsetParent;
+  const box = field.getBoundingClientRect();
+  if (parent && box.width > 0) {
+    const origin = parent.getBoundingClientRect();
+    mirror.style.left = `${box.left - origin.left - parent.clientLeft}px`;
+    mirror.style.top = `${box.top - origin.top - parent.clientTop}px`;
+    mirror.style.width = `${box.width}px`;
+    mirror.style.height = `${box.height}px`;
+  } else {
+    mirror.style.left = `${field.offsetLeft}px`;
+    mirror.style.top = `${field.offsetTop}px`;
+    mirror.style.width = `${field.offsetWidth}px`;
+    mirror.style.height = `${field.offsetHeight}px`;
+  }
   const bars =
     field.offsetWidth -
     field.clientWidth -

@@ -28,31 +28,35 @@
   overflow-wrap: break-word;
 }
 
-/* The stored token stays in the layer with its real width but cannot be seen: the name is drawn over it. */
+/* The stored token stays in the layer with its real width, so every letter keeps its place: the pill is
+   that width, and the name is drawn over its start. */
 .v2-mm-token {
   position: relative;
   color: transparent;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 .v2-mm-token::after {
   content: attr(data-label);
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 0;
+  left: 4px;
   box-sizing: border-box;
-  max-width: 100%;
-  padding: 0 4px;
+  max-width: calc(100% - 8px);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   line-height: normal;
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--accent) 22%, transparent);
   color: var(--text);
   font-weight: 500;
 }
-.v2-mm-token.is-missing::after {
+.v2-mm-token.is-missing {
   background: color-mix(in srgb, var(--danger) 18%, transparent);
+}
+.v2-mm-token.is-missing::after {
   color: var(--danger);
 }
 
