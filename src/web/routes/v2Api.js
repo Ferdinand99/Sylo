@@ -47,6 +47,7 @@ import eventsRouter from './v2Events.js';
 import suggestionsRouter from './v2Suggestions.js';
 import tempRolesRouter from './v2TempRoles.js';
 import quotesRouter from './v2Quotes.js';
+import searchRouter from './v2Search.js';
 import introRouter from './v2Intro.js';
 import applicationsRouter from './v2Applications.js';
 import setupRouter from './v2Setup.js';
@@ -475,6 +476,8 @@ router.use('/guilds/:guildId', shopRouter);
 router.use('/guilds/:guildId', applicationsRouter);
 // Setup wizard: the proposal for the server and applying it (v2Setup.js).
 router.use('/guilds/:guildId', setupRouter);
+// The command palette's lookup of an inbox item by number (v2Search.js).
+router.use('/guilds/:guildId', searchRouter);
 
 // What the new dashboard needs to know about a server's platform: its capabilities (to hide
 // what the platform cannot do) and the per-module notes (what behaves differently there).
@@ -512,7 +515,14 @@ const MENTION_SHOWN = 8;
 const MENTION_MIN_QUERY = 2;
 const NAMES_MAX_IDS = 20;
 const NAMES_MAX_FETCH = 5;
-router.get('/guilds/:guildId/members/search', (req, res) => {
+// A scan of the member cache on every pause in typing (the @ suggestions, the member picker, the command
+// palette): a person never needs more than a couple a second, a script should not scan all day.
+const memberSearchLimit = rateLimit({
+  windowMs: 60_000,
+  max: 120,
+  message: 'Too many searches — wait a moment.',
+});
+router.get('/guilds/:guildId/members/search', memberSearchLimit, (req, res) => {
   const q = String(req.query.q ?? '')
     .trim()
     .toLowerCase()

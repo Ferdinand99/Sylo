@@ -1,5 +1,6 @@
 import { Link, useOutletContext } from 'react-router-dom';
 import PlatformBadge from '../components/PlatformBadge.jsx';
+import FreeLine from '../components/FreeLine.jsx';
 import LoadError from '../components/LoadError.jsx';
 import { getInvites } from '../api.js';
 import { useApiData } from '../useApiData.js';
@@ -66,6 +67,7 @@ export default function GuildPicker() {
           </a>
         ))}
       </div>
+      <FreeLine />
     </>
   );
 }
