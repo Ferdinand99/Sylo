@@ -4,6 +4,7 @@ import HowItWorks from '../components/HowItWorks.jsx';
 import MentionTextarea from '../components/MentionTextarea.jsx';
 import PlaceholderBar from '../components/PlaceholderBar.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
+import TemplatePicker, { textTemplates } from '../components/TemplatePicker.jsx';
 import PreviewLayout from '../components/PreviewLayout.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
@@ -192,6 +193,11 @@ export default function RssAlerts() {
                     tokens={tokensFor('rss')}
                     value={row.template}
                     onChange={(template) => updateRow(row.key, { template })}
+                  />
+                  <TemplatePicker
+                    templates={textTemplates('rss')}
+                    hasContent={(row.template ?? '').trim() !== ''}
+                    onPick={(t) => updateRow(row.key, { template: t.text })}
                   />
                 </div>
               </div>

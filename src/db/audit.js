@@ -86,6 +86,7 @@ async function keepCopiesInBudget(guildId) {
  * (`{ before, after }`, whole configs, not yet masked), or leave it out and the entry takes what the dashboard
  * request it is written in changed (auditCapture.js): a "module:<id>" entry the config of that module, a
  * "settings…" entry the server settings, any other entry the config of the one module the request wrote.
+ * `change: null` says the entry has none, whatever the request wrote (a summary row of several saves).
  * `revertsId` is the entry an undo undoes.
  * @param {string} guildId
  * @param {{ actor: string, action: string, detail?: string, change?: { before: object, after: object },
@@ -94,7 +95,7 @@ async function keepCopiesInBudget(guildId) {
 export async function recordAudit(guildId, { actor, action, detail = '', change, revertsId }) {
   const name = String(action).slice(0, 80);
   let picked = change;
-  if (!picked) {
+  if (picked === undefined) {
     if (name.startsWith('module:')) picked = takeModuleChange(guildId, name.slice('module:'.length));
     else if (name.startsWith('settings')) picked = takeSettingsChange(guildId);
     else picked = takeOnlyModuleChange(guildId);

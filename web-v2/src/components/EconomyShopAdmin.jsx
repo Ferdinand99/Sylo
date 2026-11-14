@@ -5,6 +5,7 @@ import {
   createShopItem,
   deleteShopItem,
   deleteShopItemImage,
+  duplicateShopItem,
   getShopItems,
   reorderShopItems,
   setShopItemEnabled,
@@ -161,6 +162,22 @@ export default function EconomyShopAdmin({ guildId, currency }) {
     if (out) set({ imagePath: null });
   }
 
+  // The copy is paused and has no picture; the list is read again to show it.
+  async function onDuplicate(item) {
+    const out = await run(async () => {
+      await duplicateShopItem(guildId, item.id);
+      return getShopItems(guildId);
+    });
+    if (out) {
+      notify(
+        item.type === 'collectible'
+          ? 'Created a paused copy. Upload a picture to put it on sale.'
+          : 'Created a paused copy. Resume it to put it on sale.',
+        'info'
+      );
+    }
+  }
+
   async function onMove(index, by) {
     const ids = items.map((i) => i.id);
     const to = index + by;
@@ -245,6 +262,11 @@ export default function EconomyShopAdmin({ guildId, currency }) {
                       label: item.enabled ? 'Pause' : 'Resume',
                       disabled: busy,
                       onClick: () => run(() => setShopItemEnabled(guildId, item.id, !item.enabled)),
+                    },
+                    {
+                      label: 'Duplicate',
+                      disabled: busy,
+                      onClick: () => onDuplicate(item),
                     },
                     { label: 'Delete', danger: true, disabled: busy, onClick: () => onDelete(item) },
                   ]}

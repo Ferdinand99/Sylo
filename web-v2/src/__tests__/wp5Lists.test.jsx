@@ -26,6 +26,7 @@ vi.mock('../api.js', () => ({
   searchMembers: vi.fn(),
   getReminders: vi.fn(),
   deleteReminder: vi.fn(),
+  duplicateReminder: vi.fn(),
   toggleReminder: vi.fn(),
   getCleanupSchedules: vi.fn(),
   deleteCleanupSchedule: vi.fn(),
@@ -35,12 +36,15 @@ vi.mock('../api.js', () => ({
   toggleGithubWatch: vi.fn(),
   getRoles: vi.fn(),
   deleteReactionRole: vi.fn(),
+  duplicateReactionRole: vi.fn(),
   getComposedMessages: vi.fn(),
   unpublishComposedMessage: vi.fn(),
   deleteComposedMessage: vi.fn(),
+  duplicateComposedMessage: vi.fn(),
   getCustomCommands: vi.fn(),
   saveCustomCommand: vi.fn(),
   deleteCustomCommand: vi.fn(),
+  duplicateCustomCommand: vi.fn(),
   getRoadmapAdmin: vi.fn(),
   deleteRoadmapPost: vi.fn(),
   getPersonalizer: vi.fn(),
@@ -172,9 +176,17 @@ describe('list rows: Edit plus a "⋯" menu, one accent button', () => {
     expect(accentButtons(container).map((b) => b.textContent)).toEqual(['+ New reminder']);
 
     openMenu('More actions for Stretch');
-    expect(menuLabels()).toEqual(['Pause', 'Delete']);
+    expect(menuLabels()).toEqual(['Pause', 'Duplicate', 'Delete']);
     fireEvent.click(screen.getByRole('menuitem', { name: 'Pause' }));
     await waitFor(() => expect(api.toggleReminder).toHaveBeenCalledWith(GUILD, 1));
+
+    // Duplicate asks the server for a copy and shows the list again; the copy is paused
+    api.duplicateReminder.mockResolvedValue({ ok: true, id: 2, name: 'Stretch (copy)' });
+    openMenu('More actions for Stretch');
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Duplicate' }));
+    await waitFor(() => expect(api.duplicateReminder).toHaveBeenCalledWith(GUILD, 1));
+    await waitFor(() => expect(api.getReminders.mock.calls.length).toBeGreaterThan(2));
+    expect(confirmDialog).not.toHaveBeenCalled();
 
     openMenu('More actions for Stretch');
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
@@ -270,6 +282,10 @@ describe('list rows: Edit plus a "⋯" menu, one accent button', () => {
     expect(accentButtons(container).map((b) => b.textContent)).toEqual(['+ New reaction role']);
     expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
     openMenu('More actions for Pick one');
+    api.duplicateReactionRole.mockResolvedValue({ ok: true, id: 'rm2' });
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Duplicate' }));
+    await waitFor(() => expect(api.duplicateReactionRole).toHaveBeenCalledWith(GUILD, 'rm1'));
+    openMenu('More actions for Pick one');
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
     await waitFor(() => expect(api.deleteReactionRole).toHaveBeenCalledWith(GUILD, 'rm1'));
     expect(confirmDialog).toHaveBeenCalledTimes(1);
@@ -291,11 +307,15 @@ describe('list rows: Edit plus a "⋯" menu, one accent button', () => {
     expect(accentButtons(container).map((b) => b.textContent)).toEqual(['+ New embed message']);
     expect(screen.getAllByRole('link', { name: 'Edit' })).toHaveLength(2);
     openMenu('More actions for Rules');
-    expect(menuLabels()).toEqual(['Unpublish', 'Delete']);
+    expect(menuLabels()).toEqual(['Duplicate', 'Unpublish', 'Delete']);
+    api.duplicateComposedMessage.mockResolvedValue({ ok: true, id: 3, name: 'Rules (copy)' });
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Duplicate' }));
+    await waitFor(() => expect(api.duplicateComposedMessage).toHaveBeenCalledWith(GUILD, 1));
+    openMenu('More actions for Rules');
     fireEvent.click(screen.getByRole('menuitem', { name: 'Unpublish' }));
     await waitFor(() => expect(api.unpublishComposedMessage).toHaveBeenCalledWith(GUILD, 1));
     openMenu('More actions for Draft');
-    expect(menuLabels()).toEqual(['Delete']);
+    expect(menuLabels()).toEqual(['Duplicate', 'Delete']);
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
     await waitFor(() => expect(api.deleteComposedMessage).toHaveBeenCalledWith(GUILD, 2));
   });
@@ -364,7 +384,11 @@ describe('Custom commands', () => {
     expect(accentButtons(container).map((b) => b.textContent)).toEqual(['+ New command']);
     expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
     openMenu('More actions for /hello');
-    expect(menuLabels()).toEqual(['Delete']);
+    expect(menuLabels()).toEqual(['Duplicate', 'Delete']);
+    api.duplicateCustomCommand.mockResolvedValue({ ok: true, id: 'c2', name: 'hello-copy' });
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Duplicate' }));
+    await waitFor(() => expect(api.duplicateCustomCommand).toHaveBeenCalledWith(GUILD, 'c1'));
+    openMenu('More actions for /hello');
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
     await waitFor(() => expect(api.deleteCustomCommand).toHaveBeenCalledWith(GUILD, 'c1'));
     expect(confirmDialog).toHaveBeenCalledTimes(1);

@@ -11,6 +11,8 @@ import AppTag from '../components/AppTag.jsx';
 import AutoGrowTextarea from '../components/AutoGrowTextarea.jsx';
 import MentionTextarea from '../components/MentionTextarea.jsx';
 import EmbedCard, { newKey } from '../components/EmbedCard.jsx';
+import TemplatePicker, { embedTemplates } from '../components/TemplatePicker.jsx';
+import EmbedJsonTools from '../components/EmbedJsonTools.jsx';
 
 const HEX_RE = /^#[0-9a-f]{6}$/i;
 const MAX_EMBEDS = 10;
@@ -160,6 +162,16 @@ export default function MessageBuilder() {
     setForm((f) => ({ ...f, links: f.links.map((l, idx) => (idx === i ? { ...l, ...patch } : l)) }));
   const removeLink = (i) => setForm((f) => ({ ...f, links: f.links.filter((_, idx) => idx !== i) }));
 
+  // A template replaces the text and the embeds (never the role rows); this page has no placeholders, so the
+  // templates are written out in words.
+  const hasMessage = form.content.trim() !== '' || form.embeds.length > 0;
+  const applyTemplate = (t) => {
+    setForm((f) => ({ ...f, content: t.message.content, embeds: t.message.embeds.map(normEmbed) }));
+    setName((n) => n.trim() || t.name);
+  };
+  // Imported JSON fills the page the same way; the role rows only Sylo can answer stay as they are.
+  const importSpec = (spec) => setForm((f) => ({ ...specToForm(spec), keepRows: f.keepRows }));
+
   async function submit(action) {
     setBusy(true);
     const sent = { name, form };
@@ -264,6 +276,13 @@ export default function MessageBuilder() {
         message text and pick it; mentions placed inside an embed don't notify anyone.
       </p>
 
+      <TemplatePicker
+        templates={embedTemplates({ tokens: false })}
+        what="message"
+        hasContent={hasMessage}
+        onPick={applyTemplate}
+      />
+
       <div className="v2-msg-preview">
         <div className="v2-msg-head">
           <div className="v2-msg-avatar">S</div>
@@ -348,6 +367,13 @@ export default function MessageBuilder() {
       >
         + Add link button
       </button>
+
+      <EmbedJsonTools
+        getSpec={() => formToSpec(form)}
+        onImport={importSpec}
+        hasContent={hasMessage}
+        fileName={name.trim() || 'embed-message'}
+      />
     </form>
   );
 }

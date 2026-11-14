@@ -1,7 +1,7 @@
 import { useContext, useEffect, useState } from 'react';
 import PickerHealth from '../components/PickerHealth.jsx';
 import { useParams } from 'react-router-dom';
-import { getCustomCommands, saveCustomCommand, deleteCustomCommand } from '../api.js';
+import { getCustomCommands, saveCustomCommand, deleteCustomCommand, duplicateCustomCommand } from '../api.js';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
@@ -497,6 +497,16 @@ export default function CustomCommands() {
     }
   }
 
+  async function onDuplicate(id) {
+    try {
+      const { name } = await duplicateCustomCommand(guildId, id);
+      await load();
+      notify(`Created /${name}.`, 'info');
+    } catch (err) {
+      notify(err.message);
+    }
+  }
+
   async function onDelete(id) {
     const ok = await confirmDialog({
       title: 'Delete this command?',
@@ -588,7 +598,10 @@ export default function CustomCommands() {
                 <RowActions
                   edit={{ onClick: () => setEditingId(c.id) }}
                   menuLabel={`More actions for /${c.name}`}
-                  items={[{ label: 'Delete', danger: true, onClick: () => onDelete(c.id) }]}
+                  items={[
+                    { label: 'Duplicate', onClick: () => onDuplicate(c.id) },
+                    { label: 'Delete', danger: true, onClick: () => onDelete(c.id) },
+                  ]}
                 />
               </div>
             ))}

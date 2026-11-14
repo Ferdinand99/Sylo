@@ -1,5 +1,10 @@
 import { Link, useParams } from 'react-router-dom';
-import { getComposedMessages, unpublishComposedMessage, deleteComposedMessage } from '../api.js';
+import {
+  getComposedMessages,
+  unpublishComposedMessage,
+  deleteComposedMessage,
+  duplicateComposedMessage,
+} from '../api.js';
 import LoadError from '../components/LoadError.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { useApiData } from '../useApiData.js';
@@ -31,6 +36,16 @@ export default function Messages() {
         ...d,
         items: d.items.map((it) => (it.id === id ? { ...it, published: false } : it)),
       }));
+    } catch (err) {
+      notify(err.message);
+    }
+  }
+
+  async function onDuplicate(id) {
+    try {
+      const { name } = await duplicateComposedMessage(guildId, id);
+      setData(await getComposedMessages(guildId));
+      notify(`Created the draft "${name}". Nothing was posted.`, 'info');
     } catch (err) {
       notify(err.message);
     }
@@ -99,6 +114,7 @@ export default function Messages() {
                 edit={{ to: `/guilds/${guildId}/messages/${it.id}` }}
                 menuLabel={`More actions for ${it.name}`}
                 items={[
+                  { label: 'Duplicate', onClick: () => onDuplicate(it.id) },
                   it.published && { label: 'Unpublish', onClick: () => onUnpublish(it.id) },
                   { label: 'Delete', danger: true, onClick: () => onDelete(it.id) },
                 ].filter(Boolean)}

@@ -4,6 +4,7 @@ import HowItWorks from '../components/HowItWorks.jsx';
 import MentionTextarea from '../components/MentionTextarea.jsx';
 import PlaceholderBar from '../components/PlaceholderBar.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
+import TemplatePicker, { textTemplates } from '../components/TemplatePicker.jsx';
 import PreviewLayout from '../components/PreviewLayout.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
@@ -199,6 +200,11 @@ export default function YoutubeAlerts() {
                   value={a.videoMessage}
                   onChange={(videoMessage) => updateRow(a.key, { videoMessage })}
                 />
+                <TemplatePicker
+                  templates={textTemplates('youtubeVideo')}
+                  hasContent={(a.videoMessage ?? '').trim() !== ''}
+                  onPick={(t) => updateRow(a.key, { videoMessage: t.text })}
+                />
               </div>
               <div className="v2-field">
                 <label htmlFor={`yt-live-${a.key}`}>Went-live message</label>
@@ -219,6 +225,11 @@ export default function YoutubeAlerts() {
                   tokens={tokensFor('youtube')}
                   value={a.liveMessage}
                   onChange={(liveMessage) => updateRow(a.key, { liveMessage })}
+                />
+                <TemplatePicker
+                  templates={textTemplates('youtubeLive')}
+                  hasContent={(a.liveMessage ?? '').trim() !== ''}
+                  onPick={(t) => updateRow(a.key, { liveMessage: t.text })}
                 />
               </div>
               <div className="v2-field">

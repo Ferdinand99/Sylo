@@ -6,6 +6,7 @@ import {
   createReminder,
   updateReminder,
   deleteReminder,
+  duplicateReminder,
   toggleReminder,
   testReminder,
   setReminderPings,
@@ -396,6 +397,16 @@ export default function Reminders() {
     }
   }
 
+  async function onDuplicate(id) {
+    try {
+      const { name } = await duplicateReminder(guildId, id);
+      await load();
+      notify(`Created "${name}". It is paused until you resume it.`, 'info');
+    } catch (err) {
+      notify(err.message);
+    }
+  }
+
   const formProps = {
     guildId,
     channels: d.channels,
@@ -489,6 +500,7 @@ export default function Reminders() {
                       menuLabel={`More actions for ${r.name}`}
                       items={[
                         { label: r.enabled ? 'Pause' : 'Resume', onClick: () => onToggle(r.id) },
+                        { label: 'Duplicate', onClick: () => onDuplicate(r.id) },
                         { label: 'Delete', danger: true, onClick: () => onDelete(r.id) },
                       ]}
                     />

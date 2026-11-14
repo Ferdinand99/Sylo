@@ -42,6 +42,8 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { changelogHandler } from '../lib/changelogFeed.js';
 import { ticketsRouter, staffRouter } from './v2Staff.js';
 import guildDataRouter from './v2GuildData.js';
+import configImportRouter from './v2ConfigImport.js';
+import duplicateRouter from './v2Duplicate.js';
 import healthRouter, { dropHealthOnWrite } from './v2Health.js';
 import { moduleIcon } from '../lib/moduleIcons.js';
 import eventsRouter from './v2Events.js';
@@ -472,6 +474,10 @@ router.use(
 router.use('/guilds/:guildId', staffRouter);
 // Audit log, config export and member data (v2GuildData.js).
 router.use('/guilds/:guildId', guildDataRouter);
+// Import of a configuration export: preview and apply (v2ConfigImport.js).
+router.use('/guilds/:guildId', configImportRouter);
+// "Duplicate" for reminders, embed messages, reaction-role sets, custom commands and shop items (v2Duplicate.js).
+router.use('/guilds/:guildId', duplicateRouter);
 // The permission and role-hierarchy health check (v2Health.js).
 router.use('/guilds/:guildId', healthRouter);
 // Events: settings, create, edit, cancel (v2Events.js).
