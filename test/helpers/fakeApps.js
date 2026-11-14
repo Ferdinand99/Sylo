@@ -92,6 +92,11 @@ export function appMember(
   member.roles.add = change('add');
   member.roles.remove = change('remove');
   member.permissions = { has: () => false };
+  // The top role by position, as a real member has it (the role-rank rule of who may hand out a role).
+  Object.defineProperty(member.roles, 'highest', {
+    configurable: true,
+    get: () => [...member.roles.cache.values()].reduce((a, r) => ((r?.position ?? 0) > a.position ? r : a), { position: 0 }),
+  });
   return member;
 }
 

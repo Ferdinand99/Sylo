@@ -462,3 +462,58 @@ test('the post pings only the ping roles, and never what an applicant wrote', as
   const stored = (await pendingSubmission(GID, formId, U)).answers.q_text;
   assert.equal(stored, 'look at me', 'what was written is cleaned of mentions before it is stored');
 });
+
+// --- the dashboard's decider rules, on every other path ---------------------------------------------------
+
+test('nobody decides their own application, by button, command or function', async () => {
+  const formId = await makeForm({ managerRoleIds: [APP_ROLE.manager] });
+  const out = await submitFor(env, staff, formId);
+  assert.equal(out.ok, true, out.error);
+
+  const { interaction, log } = pressAs(env, `apps:accept:${out.id}`, staff);
+  await routeComponent(interaction);
+  assert.match(log.followUps[0].content, /own application/);
+
+  const cmd = commandAs(env, staff, 'accept', { id: out.id });
+  await applicationCommand(cmd);
+  assert.match(cmd.replies.at(-1).content, /own application/);
+
+  assert.equal((await getSubmission(GID, out.id)).status, 'pending');
+  // The system (a member leaving) still ends their application.
+  const left = await decideSubmission({
+    guild: env.guild,
+    id: out.id,
+    action: 'deny',
+    by: staff.id,
+    actor: { system: true },
+    memberGone: true,
+  });
+  assert.equal(left.ok, true);
+});
+
+test('a decider may only give roles they could hand out themselves', async () => {
+  // The reviewer role has position 9; Mod (50) is above it, and below the bot's own role.
+  const MOD = '100000000000000899';
+  env.guild.roles.cache.set(MOD, { id: MOD, name: 'Mod', position: 50, color: 0, managed: false });
+  const formId = await makeForm({
+    managerRoleIds: [APP_ROLE.manager],
+    acceptAddRoleIds: [APP_ROLE.member, MOD],
+  });
+  const sub = await submit(formId);
+
+  const { interaction, log } = pressAs(env, `apps:accept:${sub.id}`, staff);
+  await routeComponent(interaction);
+  assert.match(log.followUps[0].content, /Mod is above or equal to your highest role/);
+  assert.equal((await getSubmission(GID, sub.id)).status, 'pending');
+  assert.equal(member.roleLog.length, 0, 'no role was given');
+
+  const cmd = commandAs(env, staff, 'accept', { id: sub.id });
+  await applicationCommand(cmd);
+  assert.match(cmd.replies.at(-1).content, /Mod is above/);
+  assert.equal((await getSubmission(GID, sub.id)).status, 'pending');
+
+  // Denying gives none of the accept roles, so it stays open to them.
+  const deny = commandAs(env, staff, 'deny', { id: sub.id, reason: 'no' });
+  await applicationCommand(deny);
+  assert.equal((await getSubmission(GID, sub.id)).status, 'denied');
+});

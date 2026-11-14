@@ -73,6 +73,7 @@ import { isMessageGone, isNotFound, isPermissionDenied } from '../platform/messa
 import { sweepMap } from '../lib/sweepMap.js';
 import { log } from '../lib/log.js';
 import { botRefusal } from './tempRoles.js';
+import { grantRefusal } from '../web/middleware/roleGrants.js';
 import { cleanAnswer, cut } from './introductions.js';
 import {
   DEFAULT_RETENTION_DAYS,
@@ -1011,6 +1012,21 @@ export async function decideSubmission({
     }
     if (sub.status !== 'pending') {
       return { ok: false, error: `Application #${id} was already ${sub.status}.`, code: 'already' };
+    }
+    if (actor?.system !== true) {
+      // Nobody decides on their own application, on any path.
+      if (by && String(by) === String(sub.userId)) {
+        return { ok: false, error: "You can't decide on your own application.", code: 'forbidden' };
+      }
+      // A member deciding in the chat may only give roles they could hand out themselves, as the
+      // dashboard route checks for the person deciding there (decisionGrantIds).
+      if (actor?.dashboard !== true) {
+        for (const rid of decisionGrantIds(form, sub, action)) {
+          const role = guild.roles?.cache?.get?.(rid);
+          const why = role ? grantRefusal(guild, actor?.member ?? null, role) : null;
+          if (why) return { ok: false, error: why, code: 'forbidden' };
+        }
+      }
     }
 
     const cleanReason = normaliseReason(reason);
