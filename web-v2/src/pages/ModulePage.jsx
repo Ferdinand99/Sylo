@@ -3,10 +3,12 @@ import { Link, useParams } from 'react-router-dom';
 import '../styles/wp4-inbox.css';
 import { setModuleEnabled } from '../api.js';
 import { useOverview } from '../OverviewContext.jsx';
+import { useHealth } from '../HealthContext.jsx';
 import { MODULE_FORMS } from '../moduleForms/index.js';
 import { notify } from '../notify.js';
 import { usePlatformInfo } from '../usePlatformInfo.js';
 import BlockedNote from '../components/BlockedNote.jsx';
+import ModuleHealth from '../components/ModuleHealth.jsx';
 import { PlatformContext } from '../platformContext.jsx';
 import NotFound from '../components/NotFound.jsx';
 import Reveal from '../components/Reveal.jsx';
@@ -60,6 +62,7 @@ export default function ModulePage() {
   const { info, loading } = usePlatformInfo(guildId);
   const { platform, notes } = info;
   const { data, dataGuildId, setData } = useOverview() ?? {};
+  const refreshHealth = useHealth()?.refresh;
   // Module ids with a save in flight, and the server the page is on now.
   const toggling = useRef(new Set());
   const currentGuild = useRef(guildId);
@@ -93,6 +96,8 @@ export default function ModulePage() {
     apply(enabled);
     try {
       await setModuleEnabled(guildId, id, enabled);
+      // A module that was off is checked from now on, and one that went off is not.
+      refreshHealth?.();
     } catch (err) {
       // Not if the user has switched server since: the same card id there is another server's.
       if (currentGuild.current === guildId) apply(!enabled);
@@ -110,6 +115,7 @@ export default function ModulePage() {
         </p>
       ) : null}
       {card?.hasToggle ? <ModuleStatusBar card={card} onToggle={onToggle} /> : null}
+      <ModuleHealth moduleId={moduleId} />
       {note ? (
         <p className="v2-note v2-platform-note">
           <span className="v2-platform-note-tag">{platform === 'fluxer' ? 'Fluxer' : 'Discord'}</span> {note}

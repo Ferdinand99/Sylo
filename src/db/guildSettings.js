@@ -3,6 +3,7 @@
 import { prepare, registerPostgresBootstrap } from './driver.js';
 import { splitPlatformGuildId } from '../lib/platformId.js';
 import { noteSettingWrite } from './auditCapture.js';
+import { invalidateHealth } from '../lib/healthCache.js';
 
 /**
  * A role id list without @everyone, whose id is the server's own id: as a bot-master or staff
@@ -89,6 +90,7 @@ async function put(guildId, col, value) {
 /** Set (or clear, with null) the mod-log channel for a guild. */
 export async function setModlogChannel(guildId, channelId) {
   await put(guildId, 'modlog_channel_id', channelId);
+  invalidateHealth(guildId);
 }
 
 /** Roles (besides Discord admins) allowed to manage this guild in the dashboard. */
