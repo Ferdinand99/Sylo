@@ -138,7 +138,9 @@ public struct ServerURL: Hashable, Sendable, CustomStringConvertible {
         guard parts.count == 4 else { return false }
         var octets: [Int] = []
         for part in parts {
-            guard !part.isEmpty, part.count <= 3, part.allSatisfy(\.isASCIIDigit),
+            // No leading zeros: some resolvers read `010` as octal 8, so `010.0.0.1` would not be the 10.x
+            // network it looks like (and `172.016.x` would be 172.14.x). Such a host is refused, not guessed at.
+            guard !part.isEmpty, part.count <= 3, part.allSatisfy(\.isASCIIDigit), part.count == 1 || part.first != "0",
                   let value = Int(part), value <= 255 else { return false }
             octets.append(value)
         }
