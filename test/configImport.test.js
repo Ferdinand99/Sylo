@@ -316,3 +316,104 @@ test('a secret-looking field is masked in the preview', () => {
   assert.equal(changes.find((c) => c.path === 'apiKey').after, '••••••');
   assert.equal(changes.find((c) => c.path === 'note').after, 'hello');
 });
+
+test('the preview says what applying does besides saving: posting a message, syncing AutoMod', async () => {
+  const doc = file({
+    modules: [
+      {
+        moduleId: 'verification',
+        enabled: true,
+        config: { mode: 'button', verifiedRoleId: ROLE.member, channelId: CH.general },
+      },
+      {
+        moduleId: 'honeypot',
+        enabled: true,
+        config: { messages: [{ channelId: CH.bots, bait: 'free nitro' }] },
+      },
+      { moduleId: 'automod', enabled: true, config: { native: { enabled: true } } },
+    ],
+  });
+  const { body } = await preview(doc);
+  assert.match(
+    item(body, 'module:verification').notes.join(' '),
+    /posts or updates the verification message in #general/
+  );
+  assert.match(
+    item(body, 'module:honeypot').notes.join(' '),
+    /posts or updates the bait message in 1 channel/
+  );
+  assert.match(item(body, 'module:automod').notes.join(' '), /native AutoMod rules/);
+});
+
+test('the importers match their settings routes: automod keeps deleteMessage on, auto-threads drops rules for non-text channels, welcome keeps its stored trigger', async () => {
+  await setGuildModule(GID, 'welcome', {
+    enabled: true,
+    config: {
+      trigger: 'role',
+      triggerRoleIds: [ROLE.member],
+      joinEnabled: true,
+      joinChannel: CH.general,
+      joinMessage: 'a',
+    },
+  });
+  const rules = [
+    { channelId: CH.voice, nameTemplate: '{words}' },
+    { channelId: CH.general, nameTemplate: '{words}' },
+  ];
+  const doc = file({
+    modules: [
+      // the form cannot turn deleteMessage off, so a file cannot either
+      { moduleId: 'automod', enabled: true, config: { deleteMessage: false, timeoutMinutes: 5 } },
+      // a rule for a voice channel could never work
+      { moduleId: 'auto-threads', enabled: true, config: { rules } },
+      // a file from before the trigger fields keeps the stored trigger
+      {
+        moduleId: 'welcome',
+        enabled: true,
+        config: { joinEnabled: true, joinChannel: CH.general, joinMessage: 'b' },
+      },
+    ],
+  });
+  const { body } = await apply(doc, ['module:automod', 'module:auto-threads', 'module:welcome']);
+  for (const r of body.results) assert.equal(r.ok, true, `${r.key}: ${r.error}`);
+  assert.equal((await getGuildModule(GID, 'automod')).config.deleteMessage, true);
+  assert.deepEqual(
+    (await getGuildModule(GID, 'auto-threads')).config.rules.map((r) => r.channelId),
+    [CH.general]
+  );
+  const welcome = (await getGuildModule(GID, 'welcome')).config;
+  assert.equal(welcome.joinMessage, 'b');
+  assert.equal(welcome.trigger, 'role');
+  assert.deepEqual(welcome.triggerRoleIds, [ROLE.member]);
+});
+
+test('a list that is empty only because its ids were cleared is called out', async () => {
+  const doc = file({
+    commandOverrides: [{ command: 'ping', enabled: true, allowedChannels: [], allowedRoles: [FOREIGN_ROLE] }],
+  });
+  const { body } = await preview(doc);
+  assert.match(
+    item(body, 'command:ping').notes.join(' '),
+    /became empty. An empty list can mean no restriction/
+  );
+});
+
+test('the preview does not claim the export lacks what it carries', async () => {
+  const { body } = await preview(file());
+  assert.match(
+    body.notCarried,
+    /In the file but not imported yet: reminders, reaction-role sets and custom commands/
+  );
+  assert.doesNotMatch(body.notCarried, /Not in the file, so not imported: reminders/);
+});
+
+test('apply shares the limit of the other actions that call the platform', async () => {
+  const doc = file({ modules: [{ moduleId: 'afk', enabled: true, config: {} }] });
+  let limited = null;
+  for (let i = 0; i < 12 && !limited; i += 1) {
+    const res = await api.post('/import/apply', { export: doc, items: ['module:afk'], confirm: 'IMPORT' });
+    if (res.status === 429) limited = res;
+  }
+  assert.ok(limited, 'the apply is rate limited');
+  assert.match((await limited.json()).error, /Too many/);
+});

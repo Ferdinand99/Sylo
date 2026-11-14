@@ -183,6 +183,37 @@ describe('message JSON', () => {
     expect(w).toMatch(/1 button or menu that need a bot to answer was skipped/);
   });
 
+  it('names the Discohook fields a posted message cannot use', () => {
+    const out = discordJsonToSpec({
+      content: 'x',
+      username: 'Custom bot',
+      avatar_url: 'https://example.com/a.png',
+      attachments: [{ id: 1 }],
+      thread_name: 'A post',
+      flags: 4,
+    });
+    expect(out.ok).toBe(true);
+    const w = out.warnings.join(' ');
+    expect(w).toMatch(/custom name and avatar/);
+    expect(w).toMatch(/Attached files are not imported/);
+    expect(w).toMatch(/thread name/);
+    expect(w).toMatch(/message flags/);
+  });
+
+  it('lists link buttons as not imported for a page that has no buttons', () => {
+    const json = {
+      content: 'x',
+      components: [
+        { type: 1, components: [{ type: 2, style: 5, label: 'Site', url: 'https://example.com' }] },
+      ],
+    };
+    const without = discordJsonToSpec(json, messageLimits(), { links: false });
+    expect(without.ok).toBe(true);
+    expect(without.spec.rows).toEqual([]);
+    expect(without.warnings.join(' ')).toMatch(/1 link button was not imported: this page has no buttons/);
+    expect(discordJsonToSpec(json).spec.rows).toHaveLength(1);
+  });
+
   it('refuses text that is not JSON, not a message, or empty', () => {
     expect(parseMessageJson('{nope').errors[0]).toMatch(/not valid JSON/);
     expect(discordJsonToSpec('text').ok).toBe(false);
@@ -302,6 +333,17 @@ describe('TemplatePicker', () => {
 });
 
 describe('EmbedJsonTools', () => {
+  it('says buttons are not imported on a page without them', async () => {
+    render(
+      <EmbedJsonTools getSpec={() => ({ content: 'Hi', embeds: [] })} onImport={() => {}} links={false} />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Message JSON' }));
+    expect(
+      await screen.findByText(/This message has no buttons, so buttons in the JSON are not imported/)
+    ).toBeTruthy();
+    expect(screen.queryByText(/Link buttons are included/)).toBeNull();
+  });
+
   it('shows the page as JSON, and loads pasted JSON into the page after the limits check', async () => {
     const onImport = vi.fn();
     render(

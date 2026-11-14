@@ -221,3 +221,27 @@ test('a shop copy is refused at the ceiling', async () => {
   assert.equal(over.status, 400);
   assert.match((await over.json()).error, /maximum of 100 shop items/);
 });
+
+test('copying a command does not switch the module on, and two copies at once both land', async () => {
+  await setGuildModule(GID, 'custom-commands', {
+    enabled: false,
+    config: (await getGuildModule(GID, 'custom-commands')).config,
+  });
+  const { commands } = (await getGuildModule(GID, 'custom-commands')).config;
+  const src = commands.find((c) => c.name === 'hello');
+  const [a, b] = await Promise.all([
+    api.post(`/modules/custom-commands/cmd/${src.id}/duplicate`),
+    api.post(`/modules/custom-commands/cmd/${src.id}/duplicate`),
+  ]);
+  assert.equal(a.status, 200);
+  assert.equal(b.status, 200);
+  const names = [(await a.json()).name, (await b.json()).name];
+  assert.equal(new Set(names).size, 2, 'two different names');
+  const stored = await getGuildModule(GID, 'custom-commands');
+  assert.equal(stored.enabled, false, 'the module is still off');
+  for (const n of names)
+    assert.ok(
+      stored.config.commands.some((c) => c.name === n),
+      n
+    );
+});

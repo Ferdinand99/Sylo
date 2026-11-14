@@ -16,10 +16,18 @@ const MAX_FILE_KB = 256;
  * page is saved. Anything the JSON holds that this page cannot carry over is listed, not dropped silently.
  *
 /**
+ * `links` is false for a page without link buttons (the Welcome channel): the hint says so, and link buttons
+ * in imported JSON are listed as not imported.
  * @param {{ getSpec: () => object, onImport: (spec: object) => void, hasContent?: boolean,
- *   fileName?: string }} props
+ *   fileName?: string, links?: boolean }} props
  */
-export default function EmbedJsonTools({ getSpec, onImport, hasContent = false, fileName = 'message' }) {
+export default function EmbedJsonTools({
+  getSpec,
+  onImport,
+  hasContent = false,
+  fileName = 'message',
+  links = true,
+}) {
   const [open, setOpen] = useState(false);
   return (
     <div className="v2-json-tools v2-section-gap">
@@ -34,14 +42,20 @@ export default function EmbedJsonTools({ getSpec, onImport, hasContent = false, 
         </button>
       </div>
       {open ? (
-        <JsonPanel getSpec={getSpec} onImport={onImport} hasContent={hasContent} fileName={fileName} />
+        <JsonPanel
+          getSpec={getSpec}
+          onImport={onImport}
+          hasContent={hasContent}
+          fileName={fileName}
+          links={links}
+        />
       ) : null}
     </div>
   );
 }
 
 // Mounted only while open, so the limits are fetched when someone uses the tools.
-function JsonPanel({ getSpec, onImport, hasContent, fileName }) {
+function JsonPanel({ getSpec, onImport, hasContent, fileName, links }) {
   const embedLimits = useModuleLimits('_embed');
   const messageLimitsOf = useModuleLimits('welcome-channel');
   const limits = messageLimits(embedLimits, messageLimitsOf);
@@ -81,7 +95,7 @@ function JsonPanel({ getSpec, onImport, hasContent, fileName }) {
   }
 
   async function useJson() {
-    const parsed = parseMessageJson(text, limits);
+    const parsed = parseMessageJson(text, limits, { links });
     if (!parsed.ok) {
       setResult({ errors: parsed.errors });
       return;
@@ -104,8 +118,10 @@ function JsonPanel({ getSpec, onImport, hasContent, fileName }) {
       <label htmlFor={areaId}>Message JSON</label>
       <p className="v2-field-hint">
         The same shape as a Discord message, so it works with tools such as Discohook. Copy it to keep or
-        share the message, or paste JSON here and use it. Link buttons are included; role buttons and menus
-        are not.
+        share the message, or paste JSON here and use it.{' '}
+        {links
+          ? 'Link buttons are included; role buttons and menus are not.'
+          : 'This message has no buttons, so buttons in the JSON are not imported.'}
       </p>
       <textarea
         id={areaId}

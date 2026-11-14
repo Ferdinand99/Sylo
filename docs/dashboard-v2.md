@@ -57,9 +57,11 @@ you type `IMPORT` to confirm. Every module goes through the same checks as
 saving its own page, so a role you may not hand out is refused. Channels, roles
 and custom emoji that this server does not have are cleared (with a warning),
 and the ids of messages the other server posted are never carried over.
-Reminders, reaction-role sets, custom commands, embed messages, the shop and
-member data are not in the export and are not imported. Each import is written
-to the audit log.
+Reminders, reaction-role sets and custom commands are in the file but are not
+imported yet; embed messages, the shop and member data are not in the file at
+all. A step that posts a message (verification, honeypot) or updates AutoMod is
+named in the preview before you confirm. Each import is written to the audit
+log.
 
 ## Duplicate and templates
 

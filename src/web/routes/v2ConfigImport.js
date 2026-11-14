@@ -6,7 +6,7 @@
 // manages this server, the CSRF check has passed and the role-grant guard knows who is saving.
 import { Router } from 'express';
 import { currentUser } from '../middleware/auth.js';
-import { rateLimit } from '../middleware/rateLimit.js';
+import { platformActionLimit, rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import {
   IMPORT_CONFIRM_WORD,
@@ -16,6 +16,7 @@ import {
   publicPlan,
 } from '../lib/configImport.js';
 
+// One line to change when this router moves to the access levels: `Router(...)` becomes `accessRouter(...)`.
 const router = Router({ mergeParams: true });
 
 // Planning reads a few tables per module: a person importing does not need more than this.
@@ -26,6 +27,19 @@ const importLimit = rateLimit({
 });
 
 const MAX_ITEMS = 500;
+
+/**
+ * An apply can post messages (verification, honeypot), sync AutoMod and edit event posts, so it shares the
+ * stricter limit of the other actions that call the platform. Checked after the request is validated, so a
+ * refused request does not use it up.
+ */
+function withinPlatformLimit(req, res) {
+  let allowed = false;
+  platformActionLimit(req, res, () => {
+    allowed = true;
+  });
+  return allowed;
+}
 
 const actor = (req) => (currentUser(req)?.open ? 'Dashboard' : `${currentUser(req).name} (dashboard)`);
 const fail = (res, message, status = 400) => res.status(status).json({ error: message });
@@ -63,6 +77,7 @@ router.post(
       return fail(res, 'Pick what to import.');
     }
     const keys = items.filter((k) => typeof k === 'string' && k.length <= 100);
+    if (!withinPlatformLimit(req, res)) return undefined;
     res.json(await applyImport(req.guild, req.body?.export, keys, { actor: actor(req) }));
   })
 );

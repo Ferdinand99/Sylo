@@ -354,6 +354,7 @@ export default function WelcomeChannel() {
         onImport={(spec) => setForm(specToForm(spec))}
         hasContent={form.content.trim() !== '' || form.items.length > 0}
         fileName="welcome-channel"
+        links={false}
       />
 
       <p className="v2-field-hint v2-section-gap">

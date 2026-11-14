@@ -27,6 +27,7 @@ import { recordAudit } from '../../db/audit.js';
 import { platformOfGuild, primaryClient } from '../../platform/platformOf.js';
 import { commandPrefixError } from '../../lib/commandPrefix.js';
 import { canPostInChannel } from './modlogChannel.js';
+import { guildTextChannels } from './discord.js';
 import { log } from '../../lib/log.js';
 import { normaliseAfkConfig } from '../../modules/afk.js';
 import { normaliseAppealsConfig } from '../../modules/appeals.js';
@@ -38,7 +39,7 @@ import { normaliseAutoresponder } from '../../modules/autoresponder.js';
 import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
 import { normaliseCountingConfig } from '../../modules/counting.js';
 import { normaliseEconomyConfig } from '../../modules/lib/economyConfig.js';
-import { normaliseEventsConfig, refreshPagePosts } from '../../modules/events.js';
+import { normaliseEventsConfig, refreshEventPosts, refreshPagePosts } from '../../modules/events.js';
 import { normaliseGiveawaysConfig } from '../../modules/giveaways.js';
 import { normaliseHoneypotConfig, ensureHoneypotMessages } from '../../modules/honeypot.js';
 import { normaliseIntroductionsConfig, cancelIntroductionSessions } from '../../modules/introductions.js';
@@ -52,7 +53,7 @@ import { normaliseQuoteBoardConfig } from '../../modules/quoteBoard.js';
 import { normaliseRssConfig } from '../../modules/rss.js';
 import { normaliseAutoroles } from '../../modules/roles.js';
 import { normaliseServerStats } from '../../modules/serverStats.js';
-import { normaliseStarboard } from '../../modules/starboard.js';
+import { boardsToRescan, normaliseStarboard, scheduleRescan } from '../../modules/starboard.js';
 import { normaliseStickyConfig } from '../../modules/sticky.js';
 import { normaliseSuggestionsConfig } from '../../modules/suggestions.js';
 import { normaliseTempRolesConfig } from '../../modules/tempRoles.js';
@@ -120,11 +121,14 @@ const DROP = Symbol('drop');
  * walk is bounded.
  * @param {object} guild  the platform guild
  * @param {unknown} value
- * @returns {{ value: unknown, cleared: Record<string, number>, paths: string[] }}
+ * `emptied` counts the lists that became empty only because every id in them was cleared: an empty list of
+ * allowed channels or roles can mean "no restriction".
+ * @returns {{ value: unknown, cleared: Record<string, number>, paths: string[], emptied: number }}
  */
 export function clearForeignIds(guild, value) {
   const cleared = { channel: 0, role: 0, message: 0, emoji: 0, mention: 0 };
   const paths = [];
+  let emptied = 0;
   let nodes = 0;
   const owns = {
     channel: (id) => guild.channels?.cache?.has?.(id) ?? true,
@@ -148,6 +152,7 @@ export function clearForeignIds(guild, value) {
         const r = walk(item, key, `${path}[${i}]`, depth + 1, true);
         if (r !== DROP) out.push(r);
       });
+      if (v.length > 0 && out.length === 0 && ['channel', 'role'].includes(idKind(key))) emptied += 1;
       return out;
     }
     if (isPlain(v)) {
@@ -176,11 +181,11 @@ export function clearForeignIds(guild, value) {
     });
   };
 
-  return { value: walk(value, '', '', 0, false), cleared, paths };
+  return { value: walk(value, '', '', 0, false), cleared, paths, emptied };
 }
 
 /** The warning for what was cleared, or null when nothing was. */
-function clearedWarning(cleared) {
+function clearedWarning(cleared, emptied = 0) {
   const count = (n, one, many) => (n ? `${n} ${n === 1 ? one : many}` : null);
   const missing = [
     count(cleared.channel, 'channel', 'channels'),
@@ -199,6 +204,11 @@ function clearedWarning(cleared) {
     const one = cleared.message === 1;
     out.push(
       `${one ? 'A posted message' : `${cleared.message} posted messages`} of the other server ${one ? 'is' : 'are'} not carried over; post ${one ? 'it' : 'them'} again here.`
+    );
+  }
+  if (emptied) {
+    out.push(
+      `${emptied === 1 ? 'A list' : `${emptied} lists`} of channels or roles became empty. An empty list can mean no restriction, so check ${emptied === 1 ? 'it' : 'them'} after the import.`
     );
   }
   return out.length ? out.join(' ') : null;
@@ -281,10 +291,17 @@ export function diffConfig(before, after) {
  * How each importable module turns a config from the file into the config to store, through the
  * normaliser of its settings route:
  *   prepare(cfg, prev, guild) -> the config to store (`prev` is what is stored now);
- *   after(guild, { config, enabled, previous }) -> work the settings route does after saving.
+ *   after(guild, { config, enabled, previous, wasEnabled }) -> work the settings route does after saving;
+ *   notes(guild, config) -> what applying does besides saving (posting a message, syncing AutoMod), for the
+ *     preview, so it is known before the confirmation.
  * Fields the bot keeps itself (the ids of its own posts, trigger counters) come from `prev`, never the file.
  * A module that is not listed here is shown in the preview as "not imported" with the reason in SKIPPED.
  */
+const channelName = (guild, id) => {
+  const name = guild.channels?.cache?.get?.(id)?.name;
+  return name ? `#${name}` : 'its channel';
+};
+
 const background = (what, p) =>
   p.catch((err) => log.warn('config-import', `${what} after import failed:`, err.message));
 
@@ -293,7 +310,16 @@ const IMPORTERS = {
   birthdays: { prepare: (c) => normaliseBirthdaysConfig(c) },
   counting: { prepare: (c) => normaliseCountingConfig(c) },
   moderation: { prepare: (c) => normaliseModerationConfig(c) },
-  'auto-threads': { prepare: (c) => normaliseAutoThreadsConfig(c) },
+  'auto-threads': {
+    // Like the route: a rule for a channel that is not a text or announcement channel of this server could
+    // never work, so it is left out.
+    prepare: (c, _prev, guild) => {
+      const allowed = new Set(guildTextChannels(guild).map((ch) => ch.id));
+      const config = normaliseAutoThreadsConfig(c);
+      config.rules = config.rules.filter((r) => allowed.has(r.channelId));
+      return config;
+    },
+  },
   autoresponder: { prepare: (c) => normaliseAutoresponder(c) },
   'twitch-alerts': { prepare: (c) => normaliseTwitchConfig(c) },
   'kick-alerts': { prepare: (c) => normaliseKickConfig(c) },
@@ -335,10 +361,14 @@ const IMPORTERS = {
   economy: { prepare: (c) => normaliseEconomyConfig(c) },
   events: {
     prepare: (c) => normaliseEventsConfig(c),
-    after: (guild, { previous, config }) =>
-      previous.publicPages !== config.publicPages
-        ? background('event posts', refreshPagePosts(guild.id))
-        : undefined,
+    // What the settings route and the toggle do: the posts gain or lose their page link when the pages are
+    // switched, and every post is refreshed when the module is switched on or off.
+    after: (guild, { previous, config, enabled, wasEnabled }) => {
+      if (previous.publicPages !== config.publicPages) {
+        background('event posts', refreshEventPosts(guild.id));
+      }
+      if (enabled !== wasEnabled) background('event posts', refreshPagePosts(guild.id));
+    },
   },
   introductions: {
     prepare: (c, prev) =>
@@ -356,11 +386,33 @@ const IMPORTERS = {
         panelMessageId: prev.panelMessageId,
       }),
   },
-  starboard: { prepare: (c) => normaliseStarboard(c) },
+  starboard: {
+    prepare: (c) => normaliseStarboard(c),
+    // Catch up on messages that already clear a new or lowered bar, like the settings route.
+    after: (guild, { config, previous }) => {
+      for (const board of boardsToRescan(normaliseStarboard(previous).boards, config.boards)) {
+        scheduleRescan(guild, board);
+      }
+    },
+    notes: (_guild, config, previous) =>
+      boardsToRescan(normaliseStarboard(previous).boards, config.boards).length
+        ? ['Applying this also checks existing messages for the new or lowered star counts.']
+        : [],
+  },
   sticky: { prepare: (c, prev) => normaliseStickyConfig(c, prev) },
   'auto-react': { prepare: (c) => normaliseAutoReact(c) },
   automod: {
-    prepare: (c) => normaliseAutomodConfig(c),
+    // The fields the settings form sends, with deleteMessage on, as the route does.
+    prepare: (c) =>
+      normaliseAutomodConfig({
+        deleteMessage: true,
+        timeoutMinutes: c.timeoutMinutes,
+        exemptChannels: c.exemptChannels,
+        exemptRoles: c.exemptRoles,
+        native: c.native,
+        rules: c.rules,
+      }),
+    notes: () => ["Applying this also updates Discord's native AutoMod rules."],
     after: (guild, { config, enabled }) =>
       background(
         'native automod sync',
@@ -372,6 +424,12 @@ const IMPORTERS = {
   },
   verification: {
     prepare: (c, prev) => normaliseVerificationConfig({ ...c, messageId: prev.messageId }),
+    notes: (guild, config) =>
+      config.channelId
+        ? [
+            `Applying this posts or updates the verification message in ${channelName(guild, config.channelId)}.`,
+          ]
+        : [],
     after: (guild, { config }) => background('verification message', ensureVerifyMessage(guild, config)),
   },
   honeypot: {
@@ -391,6 +449,12 @@ const IMPORTERS = {
         })),
       });
     },
+    notes: (_guild, config) =>
+      config.messages.length
+        ? [
+            `Applying this posts or updates the bait ${config.messages.length === 1 ? 'message' : 'messages'} in ${config.messages.length} ${config.messages.length === 1 ? 'channel' : 'channels'}.`,
+          ]
+        : [],
     after: (guild, { config }) => background('honeypot messages', ensureHoneypotMessages(guild, config)),
   },
   logging: {
@@ -410,7 +474,18 @@ const IMPORTERS = {
     prepare: (c, prev) => normaliseWelcomeChannelConfig({ ...c, messageId: prev.messageId }),
   },
   welcome: {
-    prepare: (c, prev, guild) => normaliseWelcomeConfig(c, guild, { prev }),
+    // Like the route: an export from before the "when to welcome" fields keeps what is stored, instead of
+    // switching the server back to welcoming on join.
+    prepare: (c, prev, guild) =>
+      normaliseWelcomeConfig(
+        {
+          ...c,
+          trigger: c.trigger === undefined ? prev.trigger : c.trigger,
+          triggerRoleIds: c.triggerRoleIds === undefined ? prev.triggerRoleIds : c.triggerRoleIds,
+        },
+        guild,
+        { prev }
+      ),
   },
   roles: {
     // Only the roles given to new members: a reaction-role set is a posted message with its own buttons.
@@ -420,18 +495,20 @@ const IMPORTERS = {
 
 /** Why a module of the file is not imported, by module id; the rest is "not available here". */
 const SKIPPED = {
-  'custom-commands': 'Custom commands are registered with the platform one by one; build them in the module.',
-  reminders: 'Reminders live in their own list, which this export does not carry.',
+  'custom-commands':
+    'Custom commands are registered with the platform one by one, so they are in the file but not imported; build them in the module.',
+  reminders: 'Reminders are in the file but not imported yet; create them in the module.',
   'youtube-alerts': 'YouTube channels are looked up when you add them; add them in the module.',
   insights: 'Server insights has nothing to configure.',
   'game-stats': 'Game stats has nothing to configure.',
-  'channel-cleanup': 'Cleanup schedules live in their own list, which this export does not carry.',
+  'channel-cleanup':
+    'Cleanup schedules live in their own list, which is not imported; add them in the module.',
   github: 'GitHub watches hold secrets and live in their own list; add them in the module.',
 };
 
 /** The part of the roles module the export carries and this import leaves alone, for a note. */
 const ROLES_NOTE =
-  'Reaction-role sets are posted messages and are not imported; only the roles for new members are.';
+  'Reaction-role sets are in the file but not imported, because each is a posted message; only the roles for new members are.';
 
 // --- Reading the file ------------------------------------------------------------------------------------
 
@@ -462,7 +539,14 @@ export function readExport(doc) {
     if (seen.has(m.moduleId)) throw new ImportError(`The module ${m.moduleId.slice(0, 40)} is listed twice.`);
     seen.add(m.moduleId);
     const config = isPlain(m.config) ? m.config : {};
-    if (JSON.stringify(config).length > MAX_MODULE_BYTES) {
+    // A file nested deeper than the JSON writer can follow throws a RangeError: that is a bad file too.
+    let size;
+    try {
+      size = JSON.stringify(config).length;
+    } catch {
+      throw new ImportError('The file is nested too deeply to import.');
+    }
+    if (size > MAX_MODULE_BYTES) {
       throw new ImportError(`The settings of ${m.moduleId.slice(0, 40)} are too large to import.`);
     }
     cleanModules.push({
@@ -563,7 +647,7 @@ async function planModule(guild, entry) {
 
   const current = await getGuildModule(guild.id, moduleId);
   const stored = isPlain(current.config) ? current.config : {};
-  const { value: cleaned, cleared, paths } = clearForeignIds(guild, entry.config);
+  const { value: cleaned, cleared, paths, emptied } = clearForeignIds(guild, entry.config);
   let config;
   try {
     config = importer.prepare(cleaned, stored, guild);
@@ -582,9 +666,11 @@ async function planModule(guild, entry) {
   const after = { enabled, ...flatConfig(moduleId, config) };
   const { changes, more } = diffConfig(before, after);
   const notes = [];
-  const warning = clearedWarning(cleared);
+  const warning = clearedWarning(cleared, emptied);
   if (warning) notes.push(warning);
   if (moduleId === 'roles') notes.push(ROLES_NOTE);
+  // What applying does besides saving, shown before the confirmation.
+  if (changes.length) notes.push(...(importer.notes?.(guild, config, stored) ?? []));
   return toItem(key, 'module', label, {
     status: changes.length ? 'change' : 'same',
     notes,
@@ -609,7 +695,7 @@ async function planOverride(guild, entry, current) {
   if (!primaryClient()?.commands?.has(name)) {
     return toItem(key, 'command', label, { status: 'skip', notes: ['This Sylo has no such command.'] });
   }
-  const { value, cleared, paths } = clearForeignIds(guild, {
+  const { value, cleared, paths, emptied } = clearForeignIds(guild, {
     allowedChannels: Array.isArray(entry.allowedChannels) ? entry.allowedChannels : [],
     allowedRoles: Array.isArray(entry.allowedRoles) ? entry.allowedRoles : [],
   });
@@ -625,7 +711,7 @@ async function planOverride(guild, entry, current) {
     next
   );
   const notes = [];
-  const warning = clearedWarning(cleared);
+  const warning = clearedWarning(cleared, emptied);
   if (warning) notes.push(warning);
   return toItem(key, 'command', label, {
     status: changes.length ? 'change' : 'same',
@@ -658,7 +744,7 @@ export async function planImport(guild, doc) {
       sameServer: file.sourceGuildId === guild.id,
     },
     notCarried:
-      'Not in the file, so not imported: reminders, reaction-role sets, custom commands, embed messages, the shop and any member data.',
+      'In the file but not imported yet: reminders, reaction-role sets and custom commands. Not in the file at all: embed messages, the shop and member data.',
     items,
   };
 }
@@ -706,7 +792,7 @@ async function applyItem(guild, item, actor) {
   // What a toggle does besides the flag.
   if (!t.enabled && moduleId === 'introductions') cancelIntroductionSessions(guild.id);
   if (!t.enabled && moduleId === 'applications') cancelApplicationSessions(guild.id);
-  await t.importer.after?.(guild, { config: t.config, enabled: t.enabled, previous: t.previous });
+  await t.importer.after?.(guild, { config: t.config, enabled: t.enabled, previous: t.previous, wasEnabled });
 }
 
 /**

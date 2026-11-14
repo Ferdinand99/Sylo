@@ -153,9 +153,11 @@ function emojiFromJson(e) {
  * Message JSON as a spec for the form, checked against `limits` (see messageLimits).
  * @param {unknown} json  the parsed JSON
  * @param {ReturnType<typeof messageLimits>} [limits]
+ * @param {{ links?: boolean }} [opts]  `links: false` for a page that has no buttons (the Welcome channel): the
+ *   link buttons in the JSON are then listed as not carried over, not imported.
  * @returns {{ ok: true, spec: object, warnings: string[] } | { ok: false, errors: string[] }}
  */
-export function discordJsonToSpec(json, limits = messageLimits()) {
+export function discordJsonToSpec(json, limits = messageLimits(), { links = true } = {}) {
   const warnings = [];
   const errors = [];
   const err = (m) => {
@@ -247,11 +249,23 @@ export function discordJsonToSpec(json, limits = messageLimits()) {
     err(`The embeds hold ${total} characters in all; Discord allows ${DISCORD.totalChars} in one message.`);
   }
   if (sawTimestamp) warnings.push('Timestamps are not imported.');
+  // What a Discohook file adds to a message and a posted message of Sylo cannot use.
+  if (msg.username || msg.avatar_url)
+    warnings.push('The custom name and avatar (a webhook feature) are not imported.');
+  if (
+    (Array.isArray(msg.attachments) && msg.attachments.length) ||
+    (Array.isArray(msg.files) && msg.files.length)
+  ) {
+    warnings.push('Attached files are not imported.');
+  }
+  if (msg.thread_name) warnings.push('The thread name (a forum post feature) is not imported.');
+  if (msg.flags) warnings.push('The message flags are not imported.');
   if (sawTitleUrl) warnings.push('Links on embed titles are not imported.');
 
   // Link buttons only: the rest need Sylo to answer them.
   const rows = [];
   let skipped = 0;
+  let linkSkipped = 0;
   const rawRows = msg.components === undefined || msg.components === null ? [] : msg.components;
   if (!Array.isArray(rawRows)) err('"components" must be a list.');
   else {
@@ -269,8 +283,14 @@ export function discordJsonToSpec(json, limits = messageLimits()) {
           skipped += 1;
         }
       }
-      if (buttons.length && rows.length < DISCORD.rows) rows.push({ type: 'buttons', buttons });
+      if (!links) linkSkipped += buttons.length;
+      else if (buttons.length && rows.length < DISCORD.rows) rows.push({ type: 'buttons', buttons });
     }
+  }
+  if (linkSkipped) {
+    warnings.push(
+      `${linkSkipped} link ${linkSkipped === 1 ? 'button was' : 'buttons were'} not imported: this page has no buttons.`
+    );
   }
   if (skipped) {
     warnings.push(
@@ -289,12 +309,12 @@ export function discordJsonToSpec(json, limits = messageLimits()) {
  * Parse pasted or uploaded text as message JSON. Returns the same result as discordJsonToSpec, with a plain
  * error for text that is not JSON at all.
  */
-export function parseMessageJson(text, limits) {
+export function parseMessageJson(text, limits, opts) {
   let json;
   try {
     json = JSON.parse(text);
   } catch (e) {
     return { ok: false, errors: [`This is not valid JSON (${String(e.message).slice(0, 80)}).`] };
   }
-  return discordJsonToSpec(json, limits);
+  return discordJsonToSpec(json, limits, opts);
 }

@@ -20,7 +20,7 @@ import { log } from '../../lib/log.js';
 import { LIMITS as CEILINGS, checkLimit } from '../../lib/limits.js';
 import { recordAudit } from '../../db/audit.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
-import { createReminder, getScheduled, setScheduledEnabled } from '../../db/scheduledMessages.js';
+import { createReminder, getScheduled } from '../../db/scheduledMessages.js';
 import { createComposed, getComposed } from '../../db/composedMessages.js';
 import { createItem, getItem, itemCount } from '../../db/economyShop.js';
 import { LIMITS as ECONOMY_LIMITS, itemProblem, normaliseItem } from '../../modules/economy.js';
@@ -28,6 +28,7 @@ import { reactionMessagesFull, LIMITS as ROLES_LIMITS } from '../../modules/role
 import { LIMITS as CC_LIMITS, NAME_RE, normaliseCustomCommands } from '../../modules/customCommands.js';
 import { reservedCommandNames, syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
 
+// One line to change when this router moves to the access levels: `Router(...)` becomes `accessRouter(...)`.
 const router = Router({ mergeParams: true });
 
 // A copy is one write, but a script should not be able to fill a server with them in a loop.
@@ -70,8 +71,11 @@ router.post(
     const src = Number.isInteger(id) ? await getScheduled(req.guild.id, id) : null;
     if (!src) return fail(res, 'No such reminder', 404);
     const name = copyName(src.name || 'Reminder');
-    // createReminder checks the server's ceiling and throws the LimitError that answers 400.
+    // createReminder checks the server's ceiling and throws the LimitError that answers 400. The copy is
+    // inserted paused, in the one write: a one-time reminder whose time has passed would otherwise be sent at
+    // once if the scheduler ran between an insert and a pause.
     const copyId = await createReminder(req.guild.id, {
+      enabled: false,
       name,
       channelId: src.channel_id,
       spec: src.spec,
@@ -82,8 +86,6 @@ router.post(
       endAt: src.end_at == null ? null : Number(src.end_at),
       runAt: src.run_at == null ? null : Number(src.run_at),
     });
-    // Paused: a one-time reminder whose time has passed would otherwise be sent at once.
-    await setScheduledEnabled(req.guild.id, copyId, false);
     await recordAudit(req.guild.id, {
       actor: actor(req),
       action: 'module:reminders',
@@ -154,30 +156,57 @@ router.post(
 
 // --- custom commands ---------------------------------------------------------------------------
 
+// The commands of a server are one JSON row, so a copy is a read, change and write of the whole list. Copies on
+// this server run one after the other, and the write is read back: if the copy is not in the list (another
+// save landed in between) the name is chosen again from what is stored now and the copy is retried.
+const commandLocks = new Map();
+function withCommandLock(guildId, fn) {
+  const run = (commandLocks.get(guildId) ?? Promise.resolve()).then(fn, fn);
+  const tail = run.catch(() => {});
+  commandLocks.set(guildId, tail);
+  tail.then(() => {
+    if (commandLocks.get(guildId) === tail) commandLocks.delete(guildId);
+  });
+  return run;
+}
+const COPY_ATTEMPTS = 4;
+
 router.post(
   '/modules/custom-commands/cmd/:id/duplicate',
   duplicateLimit,
   asyncHandler(async (req, res) => {
     const guild = req.guild;
-    const stored = await getGuildModule(guild.id, 'custom-commands');
-    const prev = normaliseCustomCommands(stored.config);
-    const src = prev.commands.find((c) => c.id === String(req.params.id));
-    if (!src) return fail(res, 'No such command', 404);
     const reserved = reservedCommandNames(clientOfGuild(guild));
-    const name = freeCopyName(src.name, (n) => reserved.has(n) || prev.commands.some((c) => c.name === n));
-    if (!name) return fail(res, 'Could not find a free name for the copy.');
-    let id = String(Date.now());
-    while (prev.commands.some((c) => c.id === id)) id = String(Number(id) + 1);
-    const config = normaliseCustomCommands({
-      commands: [...prev.commands, { ...structuredClone(src), id, name }],
+    const result = await withCommandLock(guild.id, async () => {
+      for (let attempt = 0; attempt < COPY_ATTEMPTS; attempt += 1) {
+        const prev = normaliseCustomCommands((await getGuildModule(guild.id, 'custom-commands')).config);
+        const src = prev.commands.find((c) => c.id === String(req.params.id));
+        if (!src) return { status: 404, error: 'No such command' };
+        const name = freeCopyName(
+          src.name,
+          (n) => reserved.has(n) || prev.commands.some((c) => c.name === n)
+        );
+        if (!name) return { status: 400, error: 'Could not find a free name for the copy.' };
+        let id = String(Date.now());
+        while (prev.commands.some((c) => c.id === id)) id = String(Number(id) + 1);
+        const config = normaliseCustomCommands({
+          commands: [...prev.commands, { ...structuredClone(src), id, name }],
+        });
+        if (!config.commands.some((c) => c.id === id)) {
+          return {
+            status: 400,
+            error: `This server already has the maximum of ${CC_LIMITS.commands.maxItems} custom commands.`,
+          };
+        }
+        // Only the commands: a copy never switches the module on (or off).
+        await setGuildModule(guild.id, 'custom-commands', { config });
+        const stored = normaliseCustomCommands((await getGuildModule(guild.id, 'custom-commands')).config);
+        if (stored.commands.some((c) => c.id === id && c.name === name)) return { src, id, name };
+      }
+      return { status: 409, error: 'The commands changed while copying. Try again.' };
     });
-    if (!config.commands.some((c) => c.id === id)) {
-      return fail(
-        res,
-        `This server already has the maximum of ${CC_LIMITS.commands.maxItems} custom commands.`
-      );
-    }
-    await setGuildModule(guild.id, 'custom-commands', { enabled: true, config });
+    if (result.error) return fail(res, result.error, result.status);
+    const { src, id, name } = result;
     await recordAudit(guild.id, {
       actor: actor(req),
       action: 'module:custom-commands',
@@ -223,7 +252,8 @@ router.post(
       if (!assignableRoles(guild).some((r) => r.id === item.roleId)) {
         return fail(res, 'The role of this item is no longer one Sylo can hand out.');
       }
-      checkRoleGrants([item.roleId]); // throws a RoleGrantError (403) for a role the person may not hand out
+      // Rejects with a RoleGrantError (403) for a role the person may not hand out.
+      await checkRoleGrants([item.roleId]);
     }
     checkLimit(await itemCount(guild.id), CEILINGS.shopItems, 'shop items');
     const id = await createItem(guild.id, item);
