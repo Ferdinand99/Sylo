@@ -15,6 +15,7 @@ vi.mock('../api.js', async (importOriginal) => ({
   getCsrfToken: vi.fn().mockResolvedValue('t'),
   getPlatformInfo: vi.fn().mockResolvedValue({ platform: 'discord', capabilities: {} }),
   getMemberData: vi.fn().mockResolvedValue({ lookup: null }),
+  getGuildAccess: vi.fn().mockResolvedValue({ level: 'edit' }),
 }));
 
 // The same wiring as components/Shell.jsx: a <ScrollRestoration /> beside the layout of a data router.

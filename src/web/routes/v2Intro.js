@@ -4,7 +4,7 @@
 //
 // Mounted at /guilds/:guildId AFTER the admin guard in v2Api.js, so req.guild is set, the caller
 // manages this server and the state-changing calls have passed the CSRF check.
-import { Router } from 'express';
+import { accessRouter } from '../middleware/access.js';
 import { currentUser } from '../middleware/auth.js';
 import { platformActionLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -20,7 +20,7 @@ import {
   unpublishPrompt,
 } from '../../modules/introductions.js';
 
-const router = Router({ mergeParams: true });
+const router = accessRouter('/guilds/:guildId', { mergeParams: true });
 
 const actor = (req) => (currentUser(req)?.open ? 'Dashboard' : `${currentUser(req).name} (dashboard)`);
 

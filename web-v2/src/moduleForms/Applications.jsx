@@ -16,6 +16,7 @@ import HowItWorks from '../components/HowItWorks.jsx';
 import LoadError from '../components/LoadError.jsx';
 import Meta from '../components/Meta.jsx';
 import TabRow from '../components/TabRow.jsx';
+import { AccessLock } from '../access.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
@@ -214,73 +215,77 @@ export default function Applications() {
       </TabRow>
 
       {tab === 'forms' ? (
-        editing ? (
-          <ApplicationsFormEditor
-            key={editing.id ?? 'new'}
-            guildId={guildId}
-            initial={editing}
-            data={data}
-            limits={limits}
-            onSaved={(form) => {
-              upsert(form);
-              setEditing(toDraft(form));
-            }}
-            onDeleted={(id) => {
-              setData((d) => ({ ...d, forms: d.forms.filter((f) => f.id !== id) }));
-              setEditing(null);
-            }}
-            onCancel={() => setEditing(null)}
-          />
-        ) : (
-          <div className="v2-section-gap">
-            {data.forms.length === 0 ? <p className="v2-note">No forms yet.</p> : null}
-            <div className="v2-list">
-              {data.forms.map((f) => (
-                <div className="v2-row" key={f.id}>
-                  <div className="v2-row-main">
-                    <h3>
-                      {f.name}{' '}
-                      <Badge tone={f.enabled ? 'success' : 'neutral'} inline>
-                        {f.enabled ? 'Open' : 'Closed'}
-                      </Badge>
-                    </h3>
-                    <p className="v2-field-hint">
-                      <Meta
-                        items={[
-                          MODE_TEXT[f.fillMode],
-                          `${f.questions.length} question${f.questions.length === 1 ? '' : 's'}`,
-                          f.problems.setup && `Not ready: ${f.problems.setup}`,
-                          f.problems.roles && `Roles: ${f.problems.roles}`,
-                        ]}
-                      />
-                    </p>
+        <AccessLock need="edit" note>
+          {editing ? (
+            <ApplicationsFormEditor
+              key={editing.id ?? 'new'}
+              guildId={guildId}
+              initial={editing}
+              data={data}
+              limits={limits}
+              onSaved={(form) => {
+                upsert(form);
+                setEditing(toDraft(form));
+              }}
+              onDeleted={(id) => {
+                setData((d) => ({ ...d, forms: d.forms.filter((f) => f.id !== id) }));
+                setEditing(null);
+              }}
+              onCancel={() => setEditing(null)}
+            />
+          ) : (
+            <div className="v2-section-gap">
+              {data.forms.length === 0 ? <p className="v2-note">No forms yet.</p> : null}
+              <div className="v2-list">
+                {data.forms.map((f) => (
+                  <div className="v2-row" key={f.id}>
+                    <div className="v2-row-main">
+                      <h3>
+                        {f.name}{' '}
+                        <Badge tone={f.enabled ? 'success' : 'neutral'} inline>
+                          {f.enabled ? 'Open' : 'Closed'}
+                        </Badge>
+                      </h3>
+                      <p className="v2-field-hint">
+                        <Meta
+                          items={[
+                            MODE_TEXT[f.fillMode],
+                            `${f.questions.length} question${f.questions.length === 1 ? '' : 's'}`,
+                            f.problems.setup && `Not ready: ${f.problems.setup}`,
+                            f.problems.roles && `Roles: ${f.problems.roles}`,
+                          ]}
+                        />
+                      </p>
+                    </div>
+                    <div className="v2-row-actions">
+                      <button type="button" className="v2-btn-ghost" onClick={() => setEditing(toDraft(f))}>
+                        Edit
+                      </button>
+                    </div>
                   </div>
-                  <div className="v2-row-actions">
-                    <button type="button" className="v2-btn-ghost" onClick={() => setEditing(toDraft(f))}>
-                      Edit
-                    </button>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
+              <button
+                type="button"
+                className="v2-btn-primary"
+                disabled={data.forms.length >= data.maxForms}
+                onClick={() => setEditing(newDraft(data))}
+              >
+                New form
+              </button>
+              {data.forms.length >= data.maxForms ? (
+                <p className="v2-field-hint">A server can have at most {data.maxForms} forms.</p>
+              ) : null}
             </div>
-            <button
-              type="button"
-              className="v2-btn-primary"
-              disabled={data.forms.length >= data.maxForms}
-              onClick={() => setEditing(newDraft(data))}
-            >
-              New form
-            </button>
-            {data.forms.length >= data.maxForms ? (
-              <p className="v2-field-hint">A server can have at most {data.maxForms} forms.</p>
-            ) : null}
-          </div>
-        )
+          )}
+        </AccessLock>
       ) : null}
 
       {tab === 'submissions' ? <ApplicationsSubmissions guildId={guildId} forms={data.forms} /> : null}
       {tab === 'panel' ? (
-        <PanelAndSettings guildId={guildId} data={data} setData={setData} limits={limits} />
+        <AccessLock need="edit" note>
+          <PanelAndSettings guildId={guildId} data={data} setData={setData} limits={limits} />
+        </AccessLock>
       ) : null}
     </>
   );

@@ -1487,6 +1487,17 @@ export const MIGRATIONS = [
       CREATE INDEX idx_collectible_images_guild ON collectible_images (guild_id);
     `);
   },
+
+  // Dashboard access levels (src/db/guildSettings.js, which adds the same columns on Postgres with
+  // ADD COLUMN IF NOT EXISTS): the roles that may use the dashboard with Inbox or View access. The
+  // Edit roles are the bot-master roles (bot_master_roles). Planned as migration 80 in the 5.2
+  // dashboard work: it goes after the change-history (78) and import (79) migrations.
+  (database) => {
+    database.exec(`
+      ALTER TABLE guild_settings ADD COLUMN dashboard_inbox_roles TEXT NOT NULL DEFAULT '[]';
+      ALTER TABLE guild_settings ADD COLUMN dashboard_view_roles TEXT NOT NULL DEFAULT '[]';
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

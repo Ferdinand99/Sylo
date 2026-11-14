@@ -31,6 +31,7 @@ import {
   toggled,
   writeCollapsed,
 } from '../collapsedGroups.js';
+import { useAccess } from '../access.jsx';
 
 // Settings and Commands have their own place in the sidebar; the overview lists the modules.
 const IN_SIDEBAR = new Set(['general', 'commands']);
@@ -171,6 +172,8 @@ function ModuleRow({ card, guildId, tone, onToggle, selecting, picked, onPick })
 
 export default function Overview() {
   const { guildId } = useParams();
+  // Creating and switching modules in bulk need Edit access (access.jsx).
+  const canEdit = useAccess().can('edit');
   const [query, setQuery] = useState('');
   // Module ids with a save in flight — a second click on the same switch
   // waits for the first to land instead of racing it.
@@ -357,9 +360,11 @@ export default function Overview() {
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search modules"
         />
-        <button type="button" className="v2-btn-ghost" onClick={toggleSelecting}>
-          {selecting ? 'Cancel' : 'Bulk edit'}
-        </button>
+        {canEdit ? (
+          <button type="button" className="v2-btn-ghost" onClick={toggleSelecting}>
+            {selecting ? 'Cancel' : 'Bulk edit'}
+          </button>
+        ) : null}
       </div>
       <div className="v2-status-filter" role="group" aria-label="Show modules by status">
         {STATUS_FILTERS.map(([key, label]) => (

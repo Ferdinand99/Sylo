@@ -1,0 +1,31 @@
+/* Dashboard access levels (access.jsx): the "View only" / "Inbox only" badge in the top bar, and the
+   fieldset that disables the controls a lower level may not use. */
+
+/* A wrapper only: no box of its own, so the layout inside is the same locked or not. A disabled
+   fieldset still disables every control inside it. */
+.v2-access-lock {
+  display: contents;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.v2-access-badge {
+  flex: none;
+}
+/* Below the drawer breakpoint the top bar is tight: the badge keeps to its label. */
+@media (max-width: 600px) {
+  .v2-access-badge {
+    padding: 2px 8px;
+  }
+}
+
+.v2-access-note {
+  margin-bottom: 16px;
+}
+
+/* The access settings on the Server settings page: one row per level. */
+.v2-access-levels .v2-field-hint strong {
+  color: var(--text);
+}

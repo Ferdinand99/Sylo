@@ -151,7 +151,16 @@ export function adminGuildIds(req) {
  * @returns {Array<{ id: string, name: string, icon: string|null, platform: 'discord'|'fluxer' }>}
  */
 export function manageableGuilds(req) {
-  return [...adminGuildIds(req)]
+  return guildEntries(adminGuildIds(req));
+}
+
+/**
+ * Guild keys as server-switcher entries, sorted by name; keys the bot is not in are left out.
+ * @param {Iterable<string>} keys
+ * @returns {Array<{ id: string, name: string, icon: string|null, platform: 'discord'|'fluxer' }>}
+ */
+export function guildEntries(keys) {
+  return [...keys]
     .map((key) => guildByKey(key))
     .filter(Boolean)
     .map((g) => ({
@@ -187,17 +196,6 @@ export function requireAuth(req, res, next) {
   redirectToLogin(req, res);
 }
 
-/** A "bot master" — holds one of the guild's designated dashboard-admin roles. */
-async function isBotMaster(key, userId) {
-  if (!userId) return false;
-  const roles = await getBotMasterRoles(key);
-  if (!roles.length) return false;
-  const guild = guildByKey(key);
-  if (!guild) return false;
-  const member = guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
-  return Boolean(member && member.roles.cache.hasAny(...roles));
-}
-
 /** How a live check looks up a member the bot has not cached: one platform API call. */
 export const fetchMemberFromGuild = async (guild, userId) => guild.members.fetch(userId);
 
@@ -218,9 +216,11 @@ export async function managesGuildLive(key, userId, { fetchMember = fetchMemberF
 
 /**
  * The live part of managesGuildLive without bot masters: is this person the guild's owner, or a
- * member with Manage Server or Administrator? Returns null when they are not in the guild.
+ * member with Manage Server or Administrator? Returns null when they are not in the guild. Also
+ * the live check of the dashboard access levels (src/web/middleware/access.js).
+ * @returns {Promise<{ right: boolean, member: object | null } | null>}
  */
-async function serverRightsLive(key, userId, fetchMember) {
+export async function serverRightsLive(key, userId, fetchMember) {
   if (!userId) return null;
   const guild = guildByKey(key);
   if (!guild) return null;
@@ -233,7 +233,7 @@ async function serverRightsLive(key, userId, fetchMember) {
 
 /**
  * Does this person own the guild or hold Manage Server (or Administrator) in it right now? The
- * live check requireGuildAdmin relies on, minus the bot-master role: for what only real server
+ * live check the dashboard access levels rely on, minus the bot-master role: for what only real server
  * managers may do, such as choosing the bot masters.
  */
 export async function holdsManageServerLive(key, userId, { fetchMember = fetchMemberFromGuild } = {}) {
@@ -269,44 +269,6 @@ export function snapshotIsFresh(account, key, now = Date.now()) {
   const platform = splitPlatformGuildId(key)?.platform ?? 'discord';
   const identity = identityFor(account, platform);
   return Boolean(identity) && now - identity.guildsFetchedAt <= GUILDS_TTL_MS;
-}
-
-function forbidGuild(req, res) {
-  if (wantsJson(req)) return res.status(403).json({ error: 'You do not manage this server.' });
-  res.status(403).render('error', {
-    title: 'Forbidden',
-    heading: 'Not an admin',
-    message:
-      'You need Manage Server (or a bot-master role) in this server to manage it here, and Sylo has to be in it.',
-  });
-}
-
-/** Require the signed-in user to be an admin (or bot master) of req.params.guildId. */
-export function requireGuildAdmin(req, res, next) {
-  if (!config.authEnabled) return next();
-  if (!req.account) {
-    if (wantsJson(req)) return notSignedIn(res);
-    req.session.returnTo = req.originalUrl;
-    return redirectToLogin(req, res);
-  }
-  const key = req.params.guildId;
-  if (req.viaToken) {
-    return tokenManagesGuild(req, key)
-      .then((ok) => (ok ? next() : forbidGuild(req, res)))
-      .catch(() => forbidGuild(req, res));
-  }
-  // The sign-in snapshot is only refreshed on GET / and /guilds pages, so V2 requests and form
-  // posts would trust it for the whole session. Past the refresh window, check live instead,
-  // like a token: someone who lost Manage Server is refused within minutes.
-  if (!snapshotIsFresh(req.account, key)) {
-    return accountManagesGuildLive(req.account, key)
-      .then((ok) => (ok ? next() : forbidGuild(req, res)))
-      .catch(() => forbidGuild(req, res));
-  }
-  if (adminGuildIds(req).has(key)) return next();
-  isBotMaster(key, userIdForGuild(req, key))
-    .then((ok) => (ok ? next() : forbidGuild(req, res)))
-    .catch(() => forbidGuild(req, res));
 }
 
 /** Kept for backwards compatibility with earlier route code. */
@@ -475,7 +437,7 @@ export function mountAuth(app) {
 
   // The guild list from sign-in is not refreshed by sending the browser through the platform's
   // login again: the bot keeps it current from its own events (src/bot/lib/adminSnapshot.js),
-  // and once it is older than GUILDS_TTL_MS access is checked live (requireGuildAdmin).
+  // and once it is older than GUILDS_TTL_MS access is checked live (requireGuildAccess, access.js).
   // Rate-limited because the view setup below runs ahead of every other limiter in the chain.
   app.use(rateLimit({ windowMs: 60_000, max: 120 }));
 

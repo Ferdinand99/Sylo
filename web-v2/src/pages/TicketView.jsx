@@ -12,6 +12,7 @@ import Breadcrumb from '../components/Breadcrumb.jsx';
 import { copyText } from '../components/CopyButton.jsx';
 import OverflowMenu from '../components/OverflowMenu.jsx';
 import Time from '../components/Time.jsx';
+import { AccessLock } from '../access.jsx';
 
 const POLL_MS = 6000;
 // Within this many px of the bottom counts as "reading the latest" — new
@@ -219,36 +220,39 @@ export default function TicketView() {
       </div>
 
       {status === 'open' ? (
-        <div className="v2-field">
-          <label htmlFor="ticket-reply">Reply as staff</label>
-          <textarea
-            id="ticket-reply"
-            rows={3}
-            maxLength={2000}
-            placeholder="Write a reply…"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                e.preventDefault();
-                if (canSend) send();
-              }
-            }}
-            aria-describedby="ticket-reply-hint"
-          />
-          <div className="v2-field-row v2-wrap-row v2-section-gap-sm">
-            <button type="button" className="v2-btn-primary" disabled={!canSend} onClick={send}>
-              Send reply
-            </button>
-            <button type="button" className="v2-btn-ghost" disabled={busy} onClick={close}>
-              Close ticket
-            </button>
+        // Replying and closing are inbox work: someone with View access reads only (access.jsx).
+        <AccessLock need="inbox">
+          <div className="v2-field">
+            <label htmlFor="ticket-reply">Reply as staff</label>
+            <textarea
+              id="ticket-reply"
+              rows={3}
+              maxLength={2000}
+              placeholder="Write a reply…"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  if (canSend) send();
+                }
+              }}
+              aria-describedby="ticket-reply-hint"
+            />
+            <div className="v2-field-row v2-wrap-row v2-section-gap-sm">
+              <button type="button" className="v2-btn-primary" disabled={!canSend} onClick={send}>
+                Send reply
+              </button>
+              <button type="button" className="v2-btn-ghost" disabled={busy} onClick={close}>
+                Close ticket
+              </button>
+            </div>
+            <p className="v2-field-hint" id="ticket-reply-hint">
+              Ctrl+Enter (⌘+Enter on a Mac) sends. Close ticket sends your text as the last reply, or the
+              standard closing notice if the box is empty.
+            </p>
           </div>
-          <p className="v2-field-hint" id="ticket-reply-hint">
-            Ctrl+Enter (⌘+Enter on a Mac) sends. Close ticket sends your text as the last reply, or the
-            standard closing notice if the box is empty.
-          </p>
-        </div>
+        </AccessLock>
       ) : (
         <p className="v2-field-hint">
           This ticket is closed. The member can open a new one by sending the bot a DM again.

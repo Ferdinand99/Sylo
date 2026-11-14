@@ -11,7 +11,7 @@ import { randomBytes } from 'node:crypto';
 await startOAuthApp();
 const { pkceChallenge } = await import('../src/db/apiTokens.js');
 const { createApp } = await import('../src/web/server.js');
-const { forbidOwner, requireGuildAdmin } = await import('../src/web/middleware/auth.js');
+const { forbidOwner } = await import('../src/web/middleware/auth.js');
 const { requireTicketAccess } = await import('../src/web/middleware/ticketAccess.js');
 const { LimitError } = await import('../src/lib/limits.js');
 const { RoleGrantError } = await import('../src/web/middleware/roleGrants.js');
@@ -124,19 +124,8 @@ test('the error page from the public leaderboard (leaderboard.js) is plain', asy
   assertPlain(text, 'leaderboard 404');
 });
 
-test('the error page from the guild-admin and operator guards (auth.js) is plain', async () => {
-  const account = { id: 'acc-1', identities: [] };
-  const guard = await capture(app, (res) =>
-    requireGuildAdmin(
-      { account, params: { guildId: D_GUILD }, originalUrl: `/guilds/${D_GUILD}/x`, headers: {} },
-      res,
-      () => assert.fail('must not pass')
-    )
-  );
-  assert.equal(guard.status, 403);
-  assert.match(guard.html, /Not an admin/);
-  assertPlain(guard.html, 'forbidGuild');
-
+// The per-server guard (access.js) answers only JSON: it guards /api/v2 alone.
+test('the error page from the operator guard (auth.js) is plain', async () => {
   const owner = await capture(app, (res) => forbidOwner(res));
   assert.equal(owner.status, 403);
   assert.match(owner.html, /Not an operator/);

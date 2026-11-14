@@ -1,12 +1,14 @@
 import { useId } from 'react';
+import { useAccess } from '../access.jsx';
 
 // A feature toggle whose settings only show once it's on — used
 // across most module pages (welcome, birthdays, …), shared here rather than
 // reinvented per module. The whole header row (knob + title) is one
 // role="switch" button, so the title is a click target too and screen
-// readers hear "<title>, switch, on/off".
+// readers hear "<title>, switch, on/off". Disabled below Edit access (access.jsx).
 export default function ToggleSection({ title, description, on, onToggle, disabled, children }) {
   const descId = useId();
+  const { can } = useAccess();
   return (
     <div className={`v2-toggle-section${on ? ' is-on' : ''}`}>
       <button
@@ -15,7 +17,7 @@ export default function ToggleSection({ title, description, on, onToggle, disabl
         aria-checked={Boolean(on)}
         aria-describedby={description ? descId : undefined}
         className="v2-toggle-section-head v2-ts-head"
-        disabled={disabled}
+        disabled={disabled || !can('edit')}
         onClick={onToggle}
       >
         <span className={`v2-toggle${on ? ' is-on' : ''}`} aria-hidden="true" />

@@ -160,7 +160,7 @@ in there:
 | `login` | Whether sign-in is available (false in open mode) |
 | `loginProviders` | The configured logins, for example `["discord", "fluxer"]`; empty when `login` is false |
 | `platforms` | The platforms the bot runs on, for example `["discord"]` |
-| `features` | What this version's app API supports, for example `["app-login", "live-access", "changelog"]`, so the app can hide what an older Sylo lacks; `changelog` means `GET /api/v2/changelog` is there |
+| `features` | What this version's app API supports, for example `["app-login", "live-access", "changelog", "access-levels"]`, so the app can hide what an older Sylo lacks; `changelog` means `GET /api/v2/changelog` is there, `access-levels` means the dashboard access levels below |
 
 An older Sylo without this endpoint answers `404`, and the app says the server
 is too old for it.
@@ -172,6 +172,7 @@ redirect or an HTML page:
 | --- | --- |
 | `401` | `{ "error": "Not signed in, or the token is no longer valid." }` |
 | `403` | `{ "error": "You do not manage this server." }` |
+| `403` | `{ "error": "Your dashboard access in this server is View only, so you can't do this.", "access": "view", "required": "edit" }` |
 | `403` | `{ "error": "Restricted to Sylo's operators." }` |
 
 The usual per-IP rate limits apply. On top of them, per minute: 60 calls to
@@ -227,14 +228,34 @@ difference is how server access is checked:
   live through the bot, like the app.
 - For app requests Sylo checks **live, through the bot, on every request**:
   the person must own the server, have Manage Server or Administrator there, or
-  hold one of its bot-master roles. Someone who loses those rights loses access
-  from the app at once. The bot has to be in the server. The live check only
-  runs for a server that was in the stored list at sign-in, or that has
-  bot-master roles set, so a token cannot make the bot look people up in every
+  hold one of its dashboard access roles (below). Someone who loses those rights
+  loses access from the app at once. The bot has to be in the server. The live
+  check only runs for a server that was in the stored list at sign-in, or that
+  has access roles set, so a token cannot make the bot look people up in every
   server it is in. This covers the ticket pages too.
 - The server list (`GET /api/v2/guilds`) is the stored list filtered by the same
-  live check. A server where you newly gained rights shows up after the next
-  sign-in.
+  live check, plus the servers where the bot sees you holding an access role.
+  Each entry carries `access`: `"edit"`, `"inbox"` or `"view"`. A server where
+  you newly gained Manage Server shows up after the next sign-in.
+
+### Access levels
+
+Every per-server route needs one of three levels (`access-levels` in `features`):
+
+| Level | Who | May |
+| --- | --- | --- |
+| `edit` | The owner, Manage Server, Administrator, the bot-master roles | Everything, as before |
+| `inbox` | The server's Inbox roles | Read everything; reply to and close tickets, decide appeals, applications and suggestions |
+| `view` | The server's View roles | Read everything; change nothing |
+
+A request above the person's level gets `403` with `access` (their level) and
+`required` (the level the route needs). `GET /api/v2/guilds/:id/access` answers
+`{ level, editRoleIds, inboxRoleIds, viewRoleIds, canChangeEditRoles }`.
+`POST` to the same path with any of `editRoleIds`, `inboxRoleIds` and
+`viewRoleIds` changes them; it needs `edit`, and changing `editRoleIds` (the
+bot-master roles) also needs Manage Server, as on the settings page. Ticket
+staff roles still let their members handle tickets, and ticket notifications go
+to `inbox` and `edit` only.
 - Owner-only modules and bot-wide pages stay limited to `OWNER_IDS` /
   `FLUXER_OWNER_IDS`, the same as in the browser.
 

@@ -1,5 +1,5 @@
-// Per-guild settings: mod-log channel, dashboard "bot master" roles, and a
-// default embed colour.
+// Per-guild settings: mod-log channel, dashboard "bot master" roles (and the Inbox and View access
+// roles), and a default embed colour.
 import { prepare, registerPostgresBootstrap } from './driver.js';
 import { splitPlatformGuildId } from '../lib/platformId.js';
 
@@ -28,6 +28,8 @@ registerPostgresBootstrap(`
     embed_color       INTEGER
   );
   ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS command_prefix TEXT;
+  ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS dashboard_inbox_roles TEXT NOT NULL DEFAULT '[]';
+  ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS dashboard_view_roles TEXT NOT NULL DEFAULT '[]';
 `);
 
 const selectStmt = prepare('SELECT * FROM guild_settings WHERE guild_id = ?');
@@ -46,7 +48,20 @@ const setCol = {
   command_prefix: prepare(
     'UPDATE guild_settings SET command_prefix = @v, updated_at = @t WHERE guild_id = @g'
   ),
+  dashboard_inbox_roles: prepare(
+    'UPDATE guild_settings SET dashboard_inbox_roles = @v, updated_at = @t WHERE guild_id = @g'
+  ),
+  dashboard_view_roles: prepare(
+    'UPDATE guild_settings SET dashboard_view_roles = @v, updated_at = @t WHERE guild_id = @g'
+  ),
 };
+
+// Servers that give someone dashboard access through a role: a bot-master, Inbox or View role. For
+// the server list, so a person who gets in through a role finds the server without a link.
+const withAccessRolesStmt = prepare(
+  `SELECT guild_id, bot_master_roles, dashboard_inbox_roles, dashboard_view_roles FROM guild_settings
+   WHERE bot_master_roles <> '[]' OR dashboard_inbox_roles <> '[]' OR dashboard_view_roles <> '[]'`
+);
 
 /**
  * @param {string} guildId
@@ -67,10 +82,10 @@ export async function setModlogChannel(guildId, channelId) {
   await put(guildId, 'modlog_channel_id', channelId);
 }
 
-/** Roles (besides Discord admins) allowed to manage this guild in the dashboard. */
-export async function getBotMasterRoles(guildId) {
+/** A stored role list (JSON text) as role ids: valid ids only, never @everyone. */
+function parseRoleList(guildId, text) {
   try {
-    const v = JSON.parse((await getGuildSettings(guildId))?.bot_master_roles ?? '[]');
+    const v = JSON.parse(text ?? '[]');
     return Array.isArray(v)
       ? withoutEveryone(
           guildId,
@@ -81,7 +96,56 @@ export async function getBotMasterRoles(guildId) {
     return [];
   }
 }
-/** The bot-master role list as setBotMasterRoles would store it. */
+
+/** Roles (besides Discord admins) allowed to manage this guild in the dashboard. */
+export async function getBotMasterRoles(guildId) {
+  return parseRoleList(guildId, (await getGuildSettings(guildId))?.bot_master_roles);
+}
+
+/**
+ * Who may use the dashboard through a role, per access level (src/web/middleware/access.js):
+ * `edit` are the bot-master roles, `inbox` may also act on tickets, appeals, applications and
+ * suggestions, `view` may only read. One read for all three.
+ * @returns {Promise<{ edit: string[], inbox: string[], view: string[] }>}
+ */
+export async function getDashboardAccessRoles(guildId) {
+  const row = await getGuildSettings(guildId);
+  return {
+    edit: parseRoleList(guildId, row?.bot_master_roles),
+    inbox: parseRoleList(guildId, row?.dashboard_inbox_roles),
+    view: parseRoleList(guildId, row?.dashboard_view_roles),
+  };
+}
+
+/** Set the Inbox and View role lists; returns them as stored. The bot-master roles are set apart. */
+export async function setDashboardAccessRoles(guildId, { inbox, view }) {
+  const clean = {
+    inbox: normaliseBotMasterRoles(guildId, inbox),
+    view: normaliseBotMasterRoles(guildId, view),
+  };
+  await put(guildId, 'dashboard_inbox_roles', JSON.stringify(clean.inbox));
+  await put(guildId, 'dashboard_view_roles', JSON.stringify(clean.view));
+  return clean;
+}
+
+/**
+ * Every server with at least one access role (bot-master, Inbox or View), with all its access roles
+ * together: the roles that let someone in at all.
+ * @returns {Promise<Map<string, string[]>>} guild key -> role ids
+ */
+export async function guildsWithAccessRoles() {
+  const out = new Map();
+  for (const row of await withAccessRolesStmt.all()) {
+    const roles = [
+      ...parseRoleList(row.guild_id, row.bot_master_roles),
+      ...parseRoleList(row.guild_id, row.dashboard_inbox_roles),
+      ...parseRoleList(row.guild_id, row.dashboard_view_roles),
+    ];
+    if (roles.length) out.set(row.guild_id, roles);
+  }
+  return out;
+}
+/** The bot-master role list as setBotMasterRoles would store it (also the Inbox and View lists). */
 export function normaliseBotMasterRoles(guildId, roleIds) {
   const valid = (Array.isArray(roleIds) ? roleIds : []).filter((r) => /^\d{17,20}$/.test(r));
   return [...new Set(withoutEveryone(guildId, valid))].slice(0, 25);

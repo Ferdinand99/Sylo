@@ -181,10 +181,11 @@ mobileAuthRouter.post('/confirm', async (req, res, next) => {
 export const mobileApiRouter = Router();
 
 // What this server's app API supports, so a newer app can tell what an older Sylo lacks
-// (`changelog`: GET /api/v2/changelog). `push` is added when this instance can send
-// notifications the older way (APNs keys, or a relay) to signed-in apps, `push-pigeon` when it
-// can through Postal Pigeon. An app that knows Pigeon uses it when it is the official one.
-const FEATURES = Object.freeze(['app-login', 'live-access', 'changelog']);
+// (`changelog`: GET /api/v2/changelog, `access-levels`: View / Inbox / Edit dashboard access, with
+// `access` on each GET /api/v2/guilds entry and GET/POST /api/v2/guilds/:id/access). `push` is added
+// when this instance can send notifications the older way (APNs keys, or a relay) to signed-in apps,
+// `push-pigeon` when it can through Postal Pigeon. An app that knows Pigeon uses it when it is the official one.
+const FEATURES = Object.freeze(['app-login', 'live-access', 'changelog', 'access-levels']);
 
 // Public and ahead of the open-mode guard: the app calls it before anyone signs in, and an open-mode
 // server must still say it is a Sylo, just one the app cannot sign in to. Its own rate-limit bucket,

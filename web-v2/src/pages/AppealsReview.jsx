@@ -8,6 +8,7 @@ import LoadError from '../components/LoadError.jsx';
 import Meta from '../components/Meta.jsx';
 import { formatCount } from '../util.js';
 import Time from '../components/Time.jsx';
+import { AccessLock } from '../access.jsx';
 
 const STATUS_LABEL = { open: 'Open', accepted: 'Accepted', denied: 'Denied' };
 
@@ -58,30 +59,37 @@ function AppealCard({ appeal, onDecide }) {
         ))}
       </dl>
       {appeal.status === 'open' ? (
-        <div className="v2-field">
-          <label htmlFor={`appeal-reason-${appeal.id}`}>Reason or note to the member</label>
-          <textarea
-            id={`appeal-reason-${appeal.id}`}
-            rows={2}
-            maxLength={1000}
-            placeholder="Explain the decision. The member sees this."
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-          />
-          <div className="v2-field-row v2-wrap-row v2-section-gap-sm">
-            <button type="button" className="v2-btn-primary" disabled={busy} onClick={() => decide('accept')}>
-              Accept and unban
-            </button>
-            <button
-              type="button"
-              className="v2-btn-danger-ghost"
-              disabled={busy}
-              onClick={() => decide('deny')}
-            >
-              Deny
-            </button>
+        <AccessLock need="inbox">
+          <div className="v2-field">
+            <label htmlFor={`appeal-reason-${appeal.id}`}>Reason or note to the member</label>
+            <textarea
+              id={`appeal-reason-${appeal.id}`}
+              rows={2}
+              maxLength={1000}
+              placeholder="Explain the decision. The member sees this."
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+            <div className="v2-field-row v2-wrap-row v2-section-gap-sm">
+              <button
+                type="button"
+                className="v2-btn-primary"
+                disabled={busy}
+                onClick={() => decide('accept')}
+              >
+                Accept and unban
+              </button>
+              <button
+                type="button"
+                className="v2-btn-danger-ghost"
+                disabled={busy}
+                onClick={() => decide('deny')}
+              >
+                Deny
+              </button>
+            </div>
           </div>
-        </div>
+        </AccessLock>
       ) : appeal.decisionReason ? (
         <p className="v2-field-hint v2-break">Note to the member: {appeal.decisionReason}</p>
       ) : null}

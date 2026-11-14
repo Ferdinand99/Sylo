@@ -270,6 +270,9 @@ export const setLeaderboardVanity = (guildId, slug) =>
 
 export const getGuildSettings = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/settings`);
 export const saveGuildSettings = (guildId, body) => postJson(`/api/v2/guilds/${gid(guildId)}/settings`, body);
+// Dashboard access: the signed-in person's level in the server, and the roles for each level.
+export const getGuildAccess = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/access`);
+export const saveGuildAccess = (guildId, body) => postJson(`/api/v2/guilds/${gid(guildId)}/access`, body);
 
 export const getPersonalizer = () => apiFetch('/api/v2/personalizer');
 export const getPersonalizerPresence = () => apiFetch('/api/v2/personalizer/presence');

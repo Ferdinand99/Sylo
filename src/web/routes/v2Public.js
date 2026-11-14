@@ -3,7 +3,7 @@
 // /api/v2 sits behind it), with its own rate limit. Each answer
 // carries only what the public pages show (see lib/roadmapView.js and
 // lib/commandReference.js); nothing here may return user ids, guilds or settings.
-import { Router } from 'express';
+import { accessRouter } from '../middleware/access.js';
 import { config } from '../../config.js';
 import { primaryClient } from '../../platform/platformOf.js';
 import { isOwner, sessionUserId } from '../middleware/auth.js';
@@ -11,7 +11,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { describeCommands } from '../lib/commandReference.js';
 import { roadmapView } from '../lib/roadmapView.js';
 
-const router = Router();
+const router = accessRouter('/public');
 
 // Whether this visitor has a session, so the page can choose between the signed-in dashboard
 // and the public layout without calling an endpoint that would answer 401.

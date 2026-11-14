@@ -173,9 +173,11 @@ To require a login:
 With `DISCORD_CLIENT_SECRET` set, every page except the `/health` JSON and the
 `/metrics` scrape endpoint requires "Log in with Discord". Per-server pages
 require **Manage Server** (or Administrator / owner) in that server, or one of the
-**bot-master roles** set on that server's *Settings* page. Only the owner or
-someone with Manage Server can change the bot-master roles; a bot master can save
-the rest of that page.
+roles set under *Dashboard access* on that server's *Settings* page: **Edit**
+(the bot-master roles: everything), **Inbox** (tickets, ban appeals, applications
+and suggestions, and reading the rest) or **View** (read only). Only the owner or
+someone with Manage Server can change the Edit roles; anyone with Edit can change
+the Inbox and View roles and save the rest of that page.
 
 `/health` (JSON) and `/metrics` stay unauthenticated so a monitor or Prometheus
 can reach them — keep them on your LAN, or restrict them at the reverse proxy if

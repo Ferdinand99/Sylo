@@ -4,6 +4,7 @@ import { getGuilds, getPublicSession } from '../api.js';
 import { readLastGuildId, writeLastGuildId } from '../util.js';
 import { isPublicPath } from '../publicRoutes.js';
 import { OverviewProvider } from '../OverviewContext.jsx';
+import { AccessBadge, AccessProvider } from '../access.jsx';
 import Announcement from './Announcement.jsx';
 import ServerSwitcher from './ServerSwitcher.jsx';
 import Sidebar from './Sidebar.jsx';
@@ -92,67 +93,70 @@ function SignedInShell() {
   const { guilds, loading, error } = state;
 
   return (
-    <div className="v2-shell">
-      <header ref={topbarRef} className="v2-topbar">
-        <button
-          ref={navToggleRef}
-          type="button"
-          className="v2-nav-toggle"
-          aria-label="Menu"
-          aria-expanded={mobileNavOpen}
-          aria-controls="v2-sidebar"
-          onClick={() => setMobileNavOpen((v) => !v)}
-        >
-          <span />
-          <span />
-          <span />
-        </button>
-        <Link className="v2-brand" to="/">
-          <img className="v2-brand-mark" src="/favicon.svg" alt="" width="28" height="28" />
-          <span>Sylo</span>
-        </Link>
-        <ServerSwitcher guilds={guilds} activeGuildId={lastGuildId} onSelectGuild={selectGuild} />
-        <button
-          type="button"
-          className="v2-palette-trigger"
-          aria-label="Search the dashboard"
-          aria-keyshortcuts="Control+K Meta+K"
-          aria-haspopup="dialog"
-          onClick={() => setPaletteOpen(true)}
-        >
-          <Icon name="search" className="v2-palette-trigger-icon" />
-          <span className="v2-palette-trigger-text">Search</span>
-          <kbd className="v2-palette-trigger-key" aria-hidden="true">
-            {isApplePlatform() ? '⌘K' : 'Ctrl K'}
-          </kbd>
-        </button>
-        <ThemeToggle theme={theme} onToggle={toggleTheme} />
-        <AccountMenu />
-      </header>
-      <OverviewProvider guildId={lastGuildId}>
-        <div className="v2-body">
-          <Sidebar
-            activeGuildId={lastGuildId}
-            open={mobileNavOpen}
-            onClose={() => setMobileNavOpen(false)}
-            returnFocusRef={navToggleRef}
+    <AccessProvider guildId={lastGuildId}>
+      <div className="v2-shell">
+        <header ref={topbarRef} className="v2-topbar">
+          <button
+            ref={navToggleRef}
+            type="button"
+            className="v2-nav-toggle"
+            aria-label="Menu"
+            aria-expanded={mobileNavOpen}
+            aria-controls="v2-sidebar"
+            onClick={() => setMobileNavOpen((v) => !v)}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+          <Link className="v2-brand" to="/">
+            <img className="v2-brand-mark" src="/favicon.svg" alt="" width="28" height="28" />
+            <span>Sylo</span>
+          </Link>
+          <ServerSwitcher guilds={guilds} activeGuildId={lastGuildId} onSelectGuild={selectGuild} />
+          <AccessBadge />
+          <button
+            type="button"
+            className="v2-palette-trigger"
+            aria-label="Search the dashboard"
+            aria-keyshortcuts="Control+K Meta+K"
+            aria-haspopup="dialog"
+            onClick={() => setPaletteOpen(true)}
+          >
+            <Icon name="search" className="v2-palette-trigger-icon" />
+            <span className="v2-palette-trigger-text">Search</span>
+            <kbd className="v2-palette-trigger-key" aria-hidden="true">
+              {isApplePlatform() ? '⌘K' : 'Ctrl K'}
+            </kbd>
+          </button>
+          <ThemeToggle theme={theme} onToggle={toggleTheme} />
+          <AccountMenu />
+        </header>
+        <OverviewProvider guildId={lastGuildId}>
+          <div className="v2-body">
+            <Sidebar
+              activeGuildId={lastGuildId}
+              open={mobileNavOpen}
+              onClose={() => setMobileNavOpen(false)}
+              returnFocusRef={navToggleRef}
+            />
+            <main className="v2-page">
+              <Announcement />
+              <Suspense fallback={<p className="v2-state">Loading…</p>}>
+                <Outlet context={{ guilds, guildsLoading: loading, guildsError: error }} />
+              </Suspense>
+            </main>
+          </div>
+          <CommandPalette
+            open={paletteOpen}
+            onClose={() => setPaletteOpen(false)}
+            guildId={lastGuildId}
+            guilds={guilds}
           />
-          <main className="v2-page">
-            <Announcement />
-            <Suspense fallback={<p className="v2-state">Loading…</p>}>
-              <Outlet context={{ guilds, guildsLoading: loading, guildsError: error }} />
-            </Suspense>
-          </main>
-        </div>
-        <CommandPalette
-          open={paletteOpen}
-          onClose={() => setPaletteOpen(false)}
-          guildId={lastGuildId}
-          guilds={guilds}
-        />
-      </OverviewProvider>
-      <Toasts />
-    </div>
+        </OverviewProvider>
+        <Toasts />
+      </div>
+    </AccessProvider>
   );
 }
 

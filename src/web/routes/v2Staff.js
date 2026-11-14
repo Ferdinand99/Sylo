@@ -2,17 +2,18 @@
 // the moderation hub (cases, bans, channel locks, warnings).
 //
 // Two routers, because they sit behind different guards:
-//   ticketsRouter  mounted at /guilds/:guildId/tickets BEFORE the admin guard in
-//                  v2Api.js — staff-role holders may use tickets without being
-//                  server admins (see ticketAccess.js).
-//   staffRouter    mounted at /guilds/:guildId AFTER the admin guard.
+//   ticketsRouter  mounted at /guilds/:guildId/tickets BEFORE the access guard in
+//                  v2Api.js — staff-role holders may use tickets without other
+//                  dashboard access (see ticketAccess.js).
+//   staffRouter    mounted at /guilds/:guildId AFTER the access guard.
+// Both are access routers: each route needs the level src/web/lib/routeAccess.js gives it.
 import { clientOfGuild, primaryClient, rawGuildId } from '../../platform/platformOf.js';
-import { Router } from 'express';
 import { PermissionFlagsBits, EmbedBuilder, ChannelType } from 'discord.js';
 import { currentUser, actingUserId } from '../middleware/auth.js';
 import { platformActionLimit } from '../middleware/rateLimit.js';
 import { config } from '../../config.js';
-import { ticketAccessState } from '../middleware/ticketAccess.js';
+import { ticketAccessLevel } from '../middleware/ticketAccess.js';
+import { accessRouter, requestCan } from '../middleware/access.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getGuild } from '../lib/guildContext.js';
 import { guildTextChannels, resolveUserTags } from '../lib/discord.js';
@@ -73,14 +74,17 @@ function loadGuildJson(req, res, next) {
 
 // --- Tickets -----------------------------------------------------------------
 
-export const ticketsRouter = Router({ mergeParams: true });
+export const ticketsRouter = accessRouter('/guilds/:guildId/tickets', { mergeParams: true });
 
 // Access first: a 404 for a server Sylo is not in would otherwise tell anyone which servers it is in.
+// Sets req.access, which each route's guard checks against its level (src/web/lib/routeAccess.js).
 ticketsRouter.use(async (req, res, next) => {
-  const state = await ticketAccessState(req);
-  if (state === 'ok') return next();
-  if (state === 'login') return fail(res, 'Not signed in', 401);
-  fail(res, 'You need Manage Server, or a configured staff role, to view tickets here.', 403);
+  const level = await ticketAccessLevel(req);
+  if (level === 'login') return fail(res, 'Not signed in', 401);
+  if (!level)
+    return fail(res, 'You need Manage Server, or a configured staff role, to view tickets here.', 403);
+  req.access = level;
+  next();
 });
 ticketsRouter.use(loadGuildJson);
 
@@ -129,7 +133,8 @@ ticketsRouter.get(
   asyncHandler(async (req, res) => {
     const ticket = await ticketInGuild(req);
     if (!ticket) return fail(res, 'Ticket not found', 404);
-    await markStaffSeen(ticket.id);
+    // Someone with View access only reads: the ticket stays unread for the people who handle it.
+    if (requestCan(req, 'inbox')) await markStaffSeen(ticket.id);
     const rows = await ticketMessages(ticket.id);
     const tags = await resolveUserTags(clientOfGuild(req.guild), [
       ticket.user_id,
@@ -158,7 +163,7 @@ ticketsRouter.get(
     const ticket = await ticketInGuild(req);
     if (!ticket) return fail(res, 'Ticket not found', 404);
     const rows = await ticketMessages(ticket.id, Number(req.query.after) || 0);
-    await markStaffSeen(ticket.id);
+    if (requestCan(req, 'inbox')) await markStaffSeen(ticket.id);
     res.json({ status: ticket.status, messages: rows.map((m) => shapeTicketMessage(m, 'User')) });
   })
 );
@@ -206,7 +211,7 @@ ticketsRouter.post(
 
 // --- Everything else: behind the server-admin guard -----------------------------
 
-export const staffRouter = Router({ mergeParams: true });
+export const staffRouter = accessRouter('/guilds/:guildId', { mergeParams: true });
 
 // Ban appeals ---------------------------------------------------------------------
 
