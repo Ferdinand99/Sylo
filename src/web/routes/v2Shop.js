@@ -6,7 +6,7 @@
 // Mounted at /guilds/:guildId AFTER the admin guard in v2Api.js, so req.guild is set, the caller
 // manages this server and the state-changing calls have passed the CSRF check. A role an item hands
 // out must be one the caller could hand out themselves (checkRoleGrants).
-import { Router } from 'express';
+import { accessRouter } from '../middleware/access.js';
 import { actingUserId, currentUser } from '../middleware/auth.js';
 import { checkRoleGrants } from '../middleware/roleGrants.js';
 import { clientKey, platformActionLimit, rateLimit } from '../middleware/rateLimit.js';
@@ -44,7 +44,7 @@ import { LIMITS as CEILINGS, checkLimit } from '../../lib/limits.js';
 import { economySettings, itemProblem, normaliseItem, normaliseReason } from '../../modules/economy.js';
 import { endRow, grantItem, shopRefusalText } from '../../modules/lib/shop.js';
 
-const router = Router({ mergeParams: true });
+const router = accessRouter('/guilds/:guildId', { mergeParams: true });
 
 const ACTIVITY_PAGE = 25;
 const actor = (req) => (currentUser(req)?.open ? 'Dashboard' : `${currentUser(req).name} (dashboard)`);

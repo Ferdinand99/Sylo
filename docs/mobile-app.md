@@ -245,7 +245,7 @@ in there:
 | `login` | Whether sign-in is available (false in open mode) |
 | `loginProviders` | The configured logins, for example `["discord", "fluxer"]`; empty when `login` is false |
 | `platforms` | The platforms the bot runs on, for example `["discord"]` |
-| `features` | What this version's app API supports, so the app can hide what an older Sylo lacks. Today: `app-login`, `live-access`, `changelog`, `collectibles`, `welcome-trigger`, `member-search`, `health` and `app-connect`, plus `push` and `push-pigeon` when this instance can send notifications. See the list below |
+| `features` | What this version's app API supports, so the app can hide what an older Sylo lacks. Today: `app-login`, `live-access`, `changelog`, `collectibles`, `welcome-trigger`, `member-search`, `access-levels`, `health` and `app-connect`, plus `push` and `push-pigeon` when this instance can send notifications. See the list below |
 
 The feature strings:
 
@@ -255,6 +255,7 @@ The feature strings:
 - `collectibles`: the Economy shop's collectible items, their picture upload and the inventory.
 - `welcome-trigger`: the Welcome module's `trigger` setting (a member joins, or first gets a role).
 - `member-search`: `GET /api/v2/guilds/:id/members?q=`.
+- `access-levels`: the dashboard [access levels](#access-levels) (View, Inbox, Edit).
 - `health`: `GET /api/v2/guilds/:id/health`, the [health check](#health-check).
 - `app-connect`: [adding the other login](#adding-the-other-login). Only where sign-in is on and both Discord and Fluxer logins are set up.
 - `push`, `push-pigeon`: this instance can send notifications to signed-in apps.
@@ -301,6 +302,7 @@ redirect or an HTML page:
 | --- | --- |
 | `401` | `{ "error": "Not signed in, or the token is no longer valid." }` |
 | `403` | `{ "error": "You do not manage this server." }` |
+| `403` | `{ "error": "Your dashboard access in this server is View only, so you can't do this.", "access": "view", "required": "edit" }` |
 | `403` | `{ "error": "Restricted to Sylo's operators." }` |
 
 The usual per-IP rate limits apply. On top of them, per minute: 60 calls to
@@ -357,16 +359,51 @@ difference is how server access is checked:
   live through the bot, like the app.
 - For app requests Sylo checks **live, through the bot, on every request**:
   the person must own the server, have Manage Server or Administrator there, or
-  hold one of its bot-master roles. Someone who loses those rights loses access
-  from the app at once. The bot has to be in the server. The live check only
-  runs for a server that was in the stored list at sign-in, or that has
-  bot-master roles set, so a token cannot make the bot look people up in every
+  hold one of its dashboard access roles (below). Someone who loses those rights
+  loses access from the app at once. The bot has to be in the server. The live
+  check only runs for a server that was in the stored list at sign-in, or that
+  has access roles set, so a token cannot make the bot look people up in every
   server it is in. This covers the ticket pages too.
 - The server list (`GET /api/v2/guilds`) is the stored list filtered by the same
-  live check. A server where you newly gained rights shows up after the next
-  sign-in.
+  live check, plus the servers where the bot sees you holding an access role.
+  Each entry carries `access`: `"edit"`, `"inbox"` or `"view"`. A server where
+  you newly gained Manage Server shows up after the next sign-in.
 - Owner-only modules and bot-wide pages stay limited to `OWNER_IDS` /
   `FLUXER_OWNER_IDS`, the same as in the browser.
+
+### Access levels
+
+Every per-server route needs one of three levels (`access-levels` in `features`):
+
+| Level | Who | May |
+| --- | --- | --- |
+| `edit` | The owner, Manage Server, Administrator, the bot-master roles | Everything, as before |
+| `inbox` | The server's Inbox roles, and ticket staff roles for tickets | Read everything, including what the inboxes contain; reply to and close tickets, decide appeals, applications and suggestions |
+| `view` | The server's View roles | Read the pages, lists and settings; change nothing |
+
+A request above the person's level gets `403` with `access` (their level) and
+`required` (the level the route needs).
+
+- What the inboxes contain needs `inbox`: `GET .../tickets/:id` (and its
+  `/messages` and `/transcript`), `GET .../applications/submissions/:id` and
+  `GET .../applications/export`. With `view`, the lists still answer, but
+  without that content, and with `contentHidden: true`: the tickets' `preview`
+  and `previewKind`, the appeals' `answers` and `decisionReason`, the
+  applications' `reason`, and the author of an anonymous suggestion are empty.
+- Settings that hold a secret show it only with `edit`: GitHub webhook secrets
+  and addresses are `null`, and RSS feed URLs show only their origin. The
+  configuration download (`GET .../export`) and the insights refresh need `edit`.
+- Deciding an application checks the person deciding: they must be able to hand
+  out every role the decision gives (as when saving the form), no such role may
+  give more dashboard access than their own, and nobody decides their own
+  application. With `inbox`, accepting an appeal (which lifts the ban) also needs
+  Ban Members.
+- `GET /api/v2/guilds/:id/access` answers
+  `{ level, editRoleIds, inboxRoleIds, viewRoleIds, canChangeEditRoles }`.
+  `POST` to the same path with any of `editRoleIds`, `inboxRoleIds` and
+  `viewRoleIds` changes them; it needs `edit`, and changing `editRoleIds` (the
+  bot-master roles) also needs Manage Server, as on the settings page.
+- Ticket notifications go to `inbox` and `edit` (and ticket staff) only.
 
 ---
 

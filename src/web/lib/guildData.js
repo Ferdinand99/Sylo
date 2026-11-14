@@ -103,6 +103,7 @@ export async function forgetMember(guild, userId, { reason = '', actor }) {
         inline: true,
       },
       { name: 'Invite records', value: String(r.invites), inline: true },
+      { name: 'Settings history entries', value: String(r.configHistory), inline: true },
       { name: 'Not affected', value: MEMBER_DATA_UNAFFECTED }
     )
     .setTimestamp(Date.now());
