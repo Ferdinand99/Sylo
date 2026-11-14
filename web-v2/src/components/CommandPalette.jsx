@@ -22,9 +22,21 @@ const KIND_LABEL = {
 // opens the same page there.
 const GUILD_PAGE = /^\/guilds\/[^/]+(\/.*)?$/;
 
-/** Whether the keyboard event is the shortcut that opens the palette (Ctrl+K, or ⌘K on a Mac). */
+/** Whether this is an Apple device (a Mac, an iPad with a keyboard): its primary modifier is Command. */
+export function isApplePlatform() {
+  return (
+    typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
+  );
+}
+
+/**
+ * Whether the keyboard event is the shortcut for the palette: the platform's primary modifier and K, so
+ * Command+K on Apple devices and Ctrl+K elsewhere. The other modifier is never taken: Ctrl+K on a Mac is
+ * "delete to the end of the line" in a text field.
+ */
 export function isPaletteShortcut(e) {
-  return Boolean(e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && String(e.key).toLowerCase() === 'k';
+  const primary = isApplePlatform() ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+  return Boolean(primary) && !e.altKey && !e.shiftKey && String(e.key).toLowerCase() === 'k';
 }
 
 const memberItem = (guildId, id, label, hint = '') => ({
@@ -171,7 +183,24 @@ function PaletteDialog({ onClose, guildId, guilds }) {
     finish();
   }
 
+  // The shortcut that opened the palette closes it again, through the same animated path as Esc, so the
+  // focus goes back to where it was. (Shell.jsx only opens.)
+  useEffect(() => {
+    function onShortcut(e) {
+      if (!isPaletteShortcut(e)) return;
+      e.preventDefault();
+      finish();
+    }
+    document.addEventListener('keydown', onShortcut);
+    return () => document.removeEventListener('keydown', onShortcut);
+    // finish only reads refs and the stable onClose of the opening
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function onKeyDown(e) {
+    // A key that belongs to an input method (picking or confirming a candidate of a CJK keyboard) is not
+    // for the list. Safari reports the Enter that ends a composition as keyCode 229 after the compositionend.
+    if (e.nativeEvent?.isComposing || e.keyCode === 229) return;
     if (e.key === 'Escape') {
       e.preventDefault();
       finish();

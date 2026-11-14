@@ -53,6 +53,15 @@ const NAV_GROUPS = [
   ['bot', 'Bot owner'],
 ];
 
+// The modules whose queue is a page of the sidebar's Inbox, and where their settings are: on a tab of that
+// page, or (tickets, appeals) on the module's own page.
+const SETTINGS_ENTRY = {
+  tickets: { label: 'Ticket settings' },
+  appeals: { label: 'Appeal settings' },
+  suggestions: { label: 'Suggestion settings', tab: 'settings' },
+  applications: { label: 'Application settings', tab: 'panel' },
+};
+
 /**
  * Every place the palette can open for the picked server: the pages of the sidebar, every module page (also a
  * module that is switched off: the person may be looking for where to switch it on), and the other servers.
@@ -88,26 +97,26 @@ export function paletteItems({ guildId, data, operator, guilds = [] }) {
       const href = guildId ? v2Href(card, guildId) : null;
       const tone = cardTone(card, problems);
       const hint = [grp.title, tone === 'link' ? '' : TONE_LABEL[tone]].filter(Boolean).join(' · ');
-      if (href && !seen.has(pathOf(href))) {
-        add({
-          key: `module:${card.id}`,
-          group: 'Modules',
-          // The ticket and appeal queues are pages of their own; the module card is their settings.
-          label: NAMED_SETTINGS.has(card.id) ? `${card.name} settings` : card.name,
-          icon: card.icon,
-          href,
-          hint,
-          keywords: grp.title,
-        });
-      } else if (href && SETTINGS_TAB[card.id]) {
-        // The page is in the sidebar already (Suggestions, Applications): its settings are the part with
-        // no sidebar entry of their own.
+      const entry = SETTINGS_ENTRY[card.id];
+      if (href && entry) {
+        // The queue of these four is a page of the sidebar; the module's settings are the part with no
+        // sidebar entry. The label is written here, not built from the module's name, which may change.
         add({
           key: `module:${card.id}:settings`,
           group: 'Modules',
-          label: `${card.name} settings`,
+          label: entry.label,
           icon: card.icon,
-          href: `${href}?tab=${SETTINGS_TAB[card.id]}`,
+          href: entry.tab ? `${href}?tab=${entry.tab}` : href,
+          hint,
+          keywords: `${grp.title} ${card.name}`,
+        });
+      } else if (href && !seen.has(pathOf(href))) {
+        add({
+          key: `module:${card.id}`,
+          group: 'Modules',
+          label: card.name,
+          icon: card.icon,
+          href,
           hint,
           keywords: grp.title,
         });
@@ -128,10 +137,6 @@ export function paletteItems({ guildId, data, operator, guilds = [] }) {
   }
   return items;
 }
-
-// The tab that holds a module's settings when its main page is an inbox queue.
-const SETTINGS_TAB = { suggestions: 'settings', applications: 'panel' };
-const NAMED_SETTINGS = new Set(['tickets', 'appeals']);
 
 const fold = (s) =>
   String(s ?? '')

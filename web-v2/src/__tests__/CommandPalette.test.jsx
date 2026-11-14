@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import CommandPalette, { isPaletteShortcut } from '../components/CommandPalette.jsx';
+import CommandPalette, { isApplePlatform, isPaletteShortcut } from '../components/CommandPalette.jsx';
 
 vi.mock('../OverviewContext.jsx', () => ({ useOverview: vi.fn() }));
 vi.mock('../useOperator.js', () => ({ useOperator: vi.fn() }));
@@ -64,12 +64,26 @@ afterEach(() => {
 });
 
 describe('isPaletteShortcut', () => {
-  it('is Ctrl+K or Cmd+K, and nothing with Alt or Shift', () => {
+  const platform = (value) => vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue(value);
+  afterEach(() => vi.restoreAllMocks());
+
+  it('is Ctrl+K elsewhere, and nothing with Alt, Shift or the Command key', () => {
+    platform('Win32');
     expect(isPaletteShortcut({ key: 'k', ctrlKey: true })).toBe(true);
-    expect(isPaletteShortcut({ key: 'K', metaKey: true })).toBe(true);
+    expect(isPaletteShortcut({ key: 'K', ctrlKey: true })).toBe(true);
     expect(isPaletteShortcut({ key: 'k' })).toBe(false);
+    expect(isPaletteShortcut({ key: 'k', metaKey: true })).toBe(false);
     expect(isPaletteShortcut({ key: 'k', ctrlKey: true, shiftKey: true })).toBe(false);
+    expect(isPaletteShortcut({ key: 'k', ctrlKey: true, altKey: true })).toBe(false);
     expect(isPaletteShortcut({ key: 'j', ctrlKey: true })).toBe(false);
+  });
+
+  it('is only Command+K on a Mac: Ctrl+K stays "delete to the end of the line" in a text field', () => {
+    platform('MacIntel');
+    expect(isApplePlatform()).toBe(true);
+    expect(isPaletteShortcut({ key: 'k', metaKey: true })).toBe(true);
+    expect(isPaletteShortcut({ key: 'k', ctrlKey: true })).toBe(false);
+    expect(isPaletteShortcut({ key: 'k', ctrlKey: true, metaKey: true })).toBe(false);
   });
 });
 
@@ -190,6 +204,30 @@ describe('CommandPalette', () => {
     expect(searchMembers).not.toHaveBeenCalled();
     fireEvent.click(option);
     expect(screen.getByTestId('where').textContent).toBe(`/guilds/${G}/tickets/12`);
+    // An inbox item is not a place to come back to: it stays out of the recent list, like a member.
+    expect(localStorage.getItem('sylo:v2:paletteRecent')).toBeNull();
+  });
+
+  it('leaves the keys to the input method while a composition is on (Enter, arrows and Esc)', () => {
+    vi.useFakeTimers();
+    const onClose = setup();
+    const options = () => screen.getAllByRole('option');
+    // Enter that confirms a composition: it neither opens the item nor leaves the page.
+    fireEvent.keyDown(field(), { key: 'Enter', isComposing: true });
+    fireEvent.keyDown(field(), { key: 'Enter', keyCode: 229 });
+    expect(screen.getByTestId('where').textContent).toBe(`/guilds/${G}/audit`);
+    // The arrows pick a candidate of the input method, not an option.
+    fireEvent.keyDown(field(), { key: 'ArrowDown', isComposing: true });
+    expect(options()[0].getAttribute('aria-selected')).toBe('true');
+    // Esc cancels the composition, not the palette.
+    fireEvent.keyDown(field(), { key: 'Escape', isComposing: true });
+    act(() => vi.runAllTimers());
+    expect(onClose).not.toHaveBeenCalled();
+    // After the composition the same keys work again.
+    fireEvent.keyDown(field(), { key: 'ArrowDown' });
+    expect(options()[1].getAttribute('aria-selected')).toBe('true');
+    fireEvent.keyDown(field(), { key: 'Enter' });
+    expect(screen.getByTestId('where').textContent).not.toBe(`/guilds/${G}/audit`);
   });
 
   it('asks nothing for one letter, and survives a failing search', async () => {

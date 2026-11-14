@@ -49,7 +49,7 @@ describe('the command palette in the Shell', () => {
     return router;
   }
 
-  it('opens with Ctrl+K, and closes with Ctrl+K again', async () => {
+  it('opens with Ctrl+K and closes with Ctrl+K again, through the animated close', async () => {
     await setup();
     expect(screen.queryByRole('combobox')).toBeNull();
     await act(async () => {
@@ -59,21 +59,40 @@ describe('the command palette in the Shell', () => {
     await act(async () => {
       fireEvent.keyDown(document, { key: 'k', ctrlKey: true });
     });
+    // Closing goes through finish(): the dialog is still there for the length of the close animation.
+    expect(screen.queryByRole('combobox')).toBeTruthy();
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 250));
+    });
     expect(screen.queryByRole('combobox')).toBeNull();
   });
 
-  it('opens with Cmd+K and from the search button of the top bar', async () => {
+  it('does not take Cmd+K away from a platform that is not Apple, and opens from the search button', async () => {
     await setup();
     await act(async () => {
       fireEvent.keyDown(document, { key: 'k', metaKey: true });
     });
+    expect(screen.queryByRole('combobox')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Search the dashboard' }));
     expect(screen.getByRole('combobox')).toBeTruthy();
     await act(async () => {
       fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Escape' });
       await new Promise((r) => setTimeout(r, 250));
     });
     expect(screen.queryByRole('combobox')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Search the dashboard' }));
+  });
+
+  it('takes Cmd+K, and not Ctrl+K, on a Mac', async () => {
+    vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel');
+    await setup();
+    expect(screen.getByRole('button', { name: 'Search the dashboard' }).textContent).toContain('⌘K');
+    await act(async () => {
+      fireEvent.keyDown(document, { key: 'k', ctrlKey: true });
+    });
+    expect(screen.queryByRole('combobox')).toBeNull();
+    await act(async () => {
+      fireEvent.keyDown(document, { key: 'k', metaKey: true });
+    });
     expect(screen.getByRole('combobox')).toBeTruthy();
   });
 

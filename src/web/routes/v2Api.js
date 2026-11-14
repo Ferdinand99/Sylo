@@ -512,7 +512,14 @@ const MENTION_SHOWN = 8;
 const MENTION_MIN_QUERY = 2;
 const NAMES_MAX_IDS = 20;
 const NAMES_MAX_FETCH = 5;
-router.get('/guilds/:guildId/members/search', (req, res) => {
+// A scan of the member cache on every pause in typing (the @ suggestions, the member picker, the command
+// palette): a person never needs more than a couple a second, a script should not scan all day.
+const memberSearchLimit = rateLimit({
+  windowMs: 60_000,
+  max: 120,
+  message: 'Too many searches — wait a moment.',
+});
+router.get('/guilds/:guildId/members/search', memberSearchLimit, (req, res) => {
   const q = String(req.query.q ?? '')
     .trim()
     .toLowerCase()

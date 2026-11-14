@@ -11,6 +11,7 @@ const { parseInboxQuery } = await import('../src/web/routes/v2Search.js');
 const { createTicket } = await import('../src/db/tickets.js');
 const { createSuggestion } = await import('../src/db/suggestions.js');
 const { createAppeal } = await import('../src/db/appeals.js');
+const { insertForm, insertSubmission } = await import('../src/db/applications.js');
 
 const search = (who, guildId, q) => who.get(`/guilds/${guildId}/search/inbox?q=${encodeURIComponent(q)}`);
 
@@ -73,20 +74,62 @@ test('the admin finds the items of the server by number, and only those', async 
   assert.deepEqual(await (await search(admin, D_GUILD, 'banana')).json(), { items: [] });
 });
 
-test('a number of another server is not found', async () => {
+test('a number of another server is not found, whatever the kind', async () => {
   const admin = await session();
-  const foreign = await createTicket(OTHER_D_GUILD, '800000000000000077');
-  const foreignSuggestion = await createSuggestion({
-    guildId: OTHER_D_GUILD,
-    channelId: '1',
-    authorId: 'a',
-    body: 'Not yours',
+  // The other server gets items the home server does not have: suggestion numbers count per server, so the
+  // third one exists only there; ticket, appeal and application ids are global, so any of them is foreign.
+  const foreignTicket = await createTicket(OTHER_D_GUILD, '800000000000000077');
+  let foreignSuggestion;
+  for (let i = 0; i < 3; i += 1)
+    foreignSuggestion = await createSuggestion({
+      guildId: OTHER_D_GUILD,
+      channelId: '1',
+      authorId: 'a',
+      body: 'Not yours',
+    });
+  const foreignAppeal = await createAppeal(OTHER_D_GUILD, {
+    userId: '800000000000000078',
+    answers: [{ q: 'Why', a: 'Sorry' }],
   });
-  assert.deepEqual(await (await search(admin, D_GUILD, `ticket ${foreign.id}`)).json(), { items: [] });
-  const bare = await (await search(admin, D_GUILD, `suggestion ${foreignSuggestion.number}`)).json();
-  assert.ok(bare.items.every((i) => i.href.startsWith(`/guilds/${D_GUILD}/`)));
-  const own = await (await search(admin, D_GUILD, `ticket ${foreign.id}`)).json();
-  assert.equal(JSON.stringify(own).includes(OTHER_D_GUILD), false);
+  const formId = await insertForm({
+    guildId: OTHER_D_GUILD,
+    name: 'Staff',
+    enabled: true,
+    fillMode: 'both',
+    config: {},
+  });
+  const foreignApplication = await insertSubmission({
+    guildId: OTHER_D_GUILD,
+    formId,
+    formName: 'Staff',
+    userId: '800000000000000079',
+    source: 'web',
+    questions: [],
+    answers: {},
+  });
+  assert.ok(foreignSuggestion.number >= 3);
+
+  // The same numbers are found when the server that owns them asks (so the lookups work at all)...
+  const owner = await session({ guilds: [{ id: OTHER_D_GUILD, owner: true, permissions: '0' }] });
+  const found = async (who, guildId, q) => (await (await search(who, guildId, q)).json()).items;
+  assert.equal((await found(owner, OTHER_D_GUILD, `ticket ${foreignTicket.id}`)).length, 1);
+  assert.equal((await found(owner, OTHER_D_GUILD, `suggestion ${foreignSuggestion.number}`)).length, 1);
+  assert.equal((await found(owner, OTHER_D_GUILD, `appeal ${foreignAppeal}`)).length, 1);
+  assert.equal((await found(owner, OTHER_D_GUILD, `application ${foreignApplication}`)).length, 1);
+
+  // ...and nothing when the home server asks.
+  assert.deepEqual(await found(admin, D_GUILD, `ticket ${foreignTicket.id}`), []);
+  assert.deepEqual(await found(admin, D_GUILD, `suggestion ${foreignSuggestion.number}`), []);
+  assert.deepEqual(await found(admin, D_GUILD, `appeal ${foreignAppeal}`), []);
+  assert.deepEqual(await found(admin, D_GUILD, `application ${foreignApplication}`), []);
+  // A bare number asks every kind and still finds nothing foreign.
+  for (const n of [foreignTicket.id, foreignAppeal, foreignApplication]) {
+    const items = await found(admin, D_GUILD, String(n));
+    assert.ok(
+      items.every((i) => i.href.startsWith(`/guilds/${D_GUILD}/`)),
+      `#${n}`
+    );
+  }
 });
 
 test('someone who does not manage the server, the admin of another server and a signed-out caller are refused', async () => {
@@ -108,4 +151,12 @@ test('a flood of searches is limited', async () => {
   let limited = 0;
   for (let i = 0; i < 70; i += 1) if ((await search(admin, D_GUILD, 'ticket 1')).status === 429) limited += 1;
   assert.ok(limited > 0, 'the 61st search in a minute is refused');
+});
+
+test('a flood of member searches is limited too', async () => {
+  const admin = await session();
+  let limited = 0;
+  for (let i = 0; i < 130; i += 1)
+    if ((await admin.get(`/guilds/${D_GUILD}/members/search?q=al`)).status === 429) limited += 1;
+  assert.ok(limited > 0, 'the 121st member search in a minute is refused');
 });

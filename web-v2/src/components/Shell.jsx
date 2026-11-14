@@ -9,19 +9,13 @@ import ServerSwitcher from './ServerSwitcher.jsx';
 import Sidebar from './Sidebar.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
 import AccountMenu from './AccountMenu.jsx';
-import CommandPalette, { isPaletteShortcut } from './CommandPalette.jsx';
+import CommandPalette, { isApplePlatform, isPaletteShortcut } from './CommandPalette.jsx';
 import { Icon } from './icons.jsx';
 import PublicShell from './PublicShell.jsx';
 import Toasts from './Toasts.jsx';
 import useLabelLinks from './useLabelLinks.js';
 import useTheme from './useTheme.js';
 import useTopbarScrolled from './useTopbarScrolled.js';
-
-// The key combination shown on the search button: ⌘K on Apple devices, Ctrl K elsewhere.
-const SHORTCUT_LABEL =
-  typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
-    ? '⌘K'
-    : 'Ctrl K';
 
 // Top-level layout for every V2 page: topbar (brand, server switcher — kept
 // out of the sidebar per request, it's app-wide not tied to one guild page —
@@ -55,14 +49,14 @@ function SignedInShell() {
   const { pathname } = useLocation();
   const [paletteOpen, setPaletteOpen] = useState(false);
 
-  // Ctrl+K (⌘K) opens the command palette from anywhere, and closes it again. It stays out of the way of
-  // another dialog that is already open (a confirmation).
+  // Ctrl+K (⌘K on Apple devices) opens the command palette from anywhere. The palette closes itself on the
+  // same keys (CommandPalette.jsx). It stays out of the way of another dialog that is already open (a
+  // confirmation).
   useEffect(() => {
     function onKeyDown(e) {
-      if (!isPaletteShortcut(e)) return;
-      if (!paletteOpen && document.querySelector('dialog[open]')) return;
+      if (!isPaletteShortcut(e) || paletteOpen || document.querySelector('dialog[open]')) return;
       e.preventDefault();
-      setPaletteOpen((v) => !v);
+      setPaletteOpen(true);
     }
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
@@ -129,7 +123,7 @@ function SignedInShell() {
           <Icon name="search" className="v2-palette-trigger-icon" />
           <span className="v2-palette-trigger-text">Search</span>
           <kbd className="v2-palette-trigger-key" aria-hidden="true">
-            {SHORTCUT_LABEL}
+            {isApplePlatform() ? '⌘K' : 'Ctrl K'}
           </kbd>
         </button>
         <ThemeToggle theme={theme} onToggle={toggleTheme} />

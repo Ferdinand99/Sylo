@@ -250,6 +250,15 @@
   border: 1px solid var(--border-subtle);
   border-radius: 5px;
 }
+/* A touch target is at least 44 px tall. */
+@media (pointer: coarse) {
+  .v2-palette-option {
+    min-height: 44px;
+  }
+  .v2-palette-close {
+    min-height: 36px;
+  }
+}
 /* The hints name keys: nothing to say on a touch screen. */
 @media (pointer: coarse) {
   .v2-palette-foot {

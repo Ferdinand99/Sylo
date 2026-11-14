@@ -73,11 +73,25 @@ describe('paletteItems', () => {
 
   it('gives the ticket module its settings label and the inbox modules a settings entry', () => {
     const items = build();
-    expect(items.find((i) => i.key === 'module:tickets').label).toBe('Tickets settings');
+    expect(items.find((i) => i.key === 'module:tickets:settings').label).toBe('Ticket settings');
     expect(items.find((i) => i.key === 'module:suggestions:settings').href).toBe(
       `/guilds/${G}/m/suggestions?tab=settings`
     );
     expect(items.find((i) => i.key === 'page:tickets').hint).toBe('2 waiting');
+  });
+
+  it('writes the settings labels itself: a renamed module does not change them', () => {
+    const renamed = {
+      ...data,
+      groups: data.groups.map((g) => ({
+        ...g,
+        cards: g.cards.map((c) => (c.id === 'tickets' ? { ...c, name: 'Tickets (modmail)' } : c)),
+      })),
+    };
+    const items = build({ data: renamed });
+    expect(items.find((i) => i.key === 'module:tickets:settings').label).toBe('Ticket settings');
+    // The module's name still finds it.
+    expect(rankItems(items, 'modmail')[0].key).toBe('module:tickets:settings');
   });
 
   it('shows the bot pages only to the operator', () => {
@@ -112,9 +126,9 @@ describe('rankItems', () => {
 
   it('puts a recent item ahead of an equal match', () => {
     const plain = rankItems(items, 'set');
-    const withRecent = rankItems(items, 'set', ['module:tickets']);
-    expect(plain[0].key).not.toBe('module:tickets');
-    expect(withRecent[0].key).toBe('module:tickets');
+    const withRecent = rankItems(items, 'set', ['module:tickets:settings']);
+    expect(plain[0].key).not.toBe('module:tickets:settings');
+    expect(withRecent[0].key).toBe('module:tickets:settings');
   });
 
   it('puts the items found on the server first', () => {
