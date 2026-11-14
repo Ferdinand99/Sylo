@@ -13,8 +13,33 @@ import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import UnitInput from '../components/UnitInput.jsx';
-import Meta from '../components/Meta.jsx';
+import Meta, { plural } from '../components/Meta.jsx';
+import MemberPicker from '../components/MemberPicker.jsx';
+import SectionIndex from '../components/SectionIndex.jsx';
 import { tokensFor } from '../placeholders.js';
+import '../styles/wp1-members.css';
+
+const SECTIONS = [
+  ['lvl-up', 'Leveling up'],
+  ['lvl-rewards', 'Role rewards'],
+  ['lvl-rate', 'XP rate'],
+  ['lvl-voice', 'Voice'],
+  ['lvl-multipliers', 'Multipliers'],
+  ['lvl-by-role', 'XP by role'],
+  ['lvl-by-channel', 'XP by channel'],
+  ['lvl-board', 'Leaderboard'],
+  ['lvl-set-xp', 'Set XP'],
+  ['lvl-danger', 'Danger zone'],
+];
+
+/** "2h 30m", "45m", "3h": minutes as the other dashboard pages write a duration. */
+export function shortMinutes(minutes) {
+  const n = Math.max(0, Math.round(Number(minutes) || 0));
+  const h = Math.floor(n / 60);
+  const m = n % 60;
+  if (!h) return `${m}m`;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -141,9 +166,11 @@ export default function Leveling() {
           <p>The public leaderboard on/off switch is on the Leaderboard page.</p>
         </HowItWorks>
 
+        <SectionIndex sections={SECTIONS} />
+
         <form onSubmit={save} data-savebar>
           <div className="v2-group">
-            <h2 className="v2-group-title">Leveling up</h2>
+            <h2 className="v2-group-title" id="lvl-up">Leveling up</h2>
             <div className="v2-field">
               <label>Level-up announcement</label>
               <select value={form.announce} onChange={(e) => set({ announce: e.target.value })}>
@@ -200,7 +227,7 @@ export default function Leveling() {
           </div>
 
           <div className="v2-group">
-            <h2 className="v2-group-title">Role rewards</h2>
+            <h2 className="v2-group-title" id="lvl-rewards">Role rewards</h2>
             <div className="v2-field">
               <label className="v2-check">
                 <input
@@ -278,7 +305,7 @@ export default function Leveling() {
           </div>
 
           <div className="v2-group">
-            <h2 className="v2-group-title">XP rate</h2>
+            <h2 className="v2-group-title" id="lvl-rate">XP rate</h2>
             <div className="v2-field">
               <label htmlFor="xpRate">Speed everyone levels up at</label>
               <select
@@ -297,7 +324,7 @@ export default function Leveling() {
           </div>
 
           <div className="v2-group">
-            <h2 className="v2-group-title">Voice XP</h2>
+            <h2 className="v2-group-title" id="lvl-voice">Voice XP</h2>
             <div className="v2-field">
               <label className="v2-check">
                 <input
@@ -333,7 +360,7 @@ export default function Leveling() {
           </div>
 
           <div className="v2-group">
-            <h2 className="v2-group-title">XP multipliers</h2>
+            <h2 className="v2-group-title" id="lvl-multipliers">XP multipliers</h2>
             <p className="v2-field-hint">
               The highest matching role factor is multiplied by the channel factor; both default to 1×, result
               capped at 10×.
@@ -393,7 +420,7 @@ export default function Leveling() {
           </div>
 
           <div className="v2-group">
-            <h2 className="v2-group-title">XP by role</h2>
+            <h2 className="v2-group-title" id="lvl-by-role">XP by role</h2>
             <div className="v2-field">
               <label className="v2-check">
                 <input
@@ -423,7 +450,7 @@ export default function Leveling() {
           </div>
 
           <div className="v2-group">
-            <h2 className="v2-group-title">XP by channel</h2>
+            <h2 className="v2-group-title" id="lvl-by-channel">XP by channel</h2>
             <div className="v2-field">
               <label className="v2-check">
                 <input
@@ -454,7 +481,9 @@ export default function Leveling() {
         </form>
 
         <div className="v2-group">
-          <h2 className="v2-group-title">Leaderboard preview ({data.board.total} tracked)</h2>
+          <h2 className="v2-group-title" id="lvl-board">
+            Leaderboard preview ({data.board.total} tracked)
+          </h2>
           {data.board.rows.length === 0 ? (
             <p className="v2-note">No XP earned yet.</p>
           ) : (
@@ -470,8 +499,8 @@ export default function Leveling() {
                         items={[
                           `Level ${r.level}`,
                           `${r.xp} XP`,
-                          r.voiceXp ? `${r.voiceXp} voice XP (${r.voiceMinutes} min)` : false,
-                          `${r.messages} messages`,
+                          r.voiceXp ? `${r.voiceXp} voice XP (${shortMinutes(r.voiceMinutes)})` : false,
+                          plural(r.messages, 'message'),
                         ]}
                       />
                     </p>
@@ -488,14 +517,15 @@ export default function Leveling() {
         </div>
 
         <div className="v2-group">
-          <h2 className="v2-group-title">Set XP for a user</h2>
+          <h2 className="v2-group-title" id="lvl-set-xp">Set XP for a user</h2>
           <form onSubmit={onSetXp} className="v2-field-row">
-            <input
-              type="text"
-              aria-label="User ID or @mention"
-              placeholder="user ID or @mention"
+            <MemberPicker
+              id="xp-member"
+              label="Member"
               value={xpUserId}
-              onChange={(e) => setXpUserId(e.target.value)}
+              onChange={setXpUserId}
+              placeholder="Search by name, or paste an ID"
+              clearLabel="Choose another member"
             />
             <input
               type="number"
@@ -507,13 +537,17 @@ export default function Leveling() {
               value={xpValue}
               onChange={(e) => setXpValue(e.target.value)}
             />
-            <button type="submit" className="v2-btn-ghost" disabled={xpBusy}>
+            <button
+              type="submit"
+              className="v2-btn-ghost"
+              disabled={xpBusy || !xpUserId || xpValue === ''}
+            >
               Update
             </button>
           </form>
         </div>
 
-        <div className="v2-danger-zone">
+        <div className="v2-danger-zone" id="lvl-danger">
           <p className="v2-danger-zone-text">
             <strong>Reset all leveling data</strong>
             <span>Wipes every member's XP, level and message count on this server.</span>

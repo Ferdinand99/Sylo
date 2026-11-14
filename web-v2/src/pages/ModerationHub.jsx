@@ -26,6 +26,9 @@ import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { formatCount } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
 import Time from '../components/Time.jsx';
+import MemberPicker from '../components/MemberPicker.jsx';
+import OverflowMenu from '../components/OverflowMenu.jsx';
+import '../styles/wp1-members.css';
 import { PlatformContext } from '../platformContext.jsx';
 import { usePlatformInfo } from '../usePlatformInfo.js';
 
@@ -69,7 +72,7 @@ function WarnPanel({ guildId, run, busy }) {
     if (r) setReason('');
   }
   async function clear() {
-    if (!userId.trim()) return notify('Enter a user ID or mention first.');
+    if (!userId) return;
     const ok = await confirmDialog({
       title: 'Clear their warnings?',
       body: 'Every warning on record for this member is removed, so they count from zero again.',
@@ -88,16 +91,12 @@ function WarnPanel({ guildId, run, busy }) {
       <div className="v2-field-row v2-wrap-row v2-warn-fields">
         <div className="v2-field">
           <label htmlFor="warn-member">Member</label>
-          <input
+          <MemberPicker
             id="warn-member"
-            type="text"
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            placeholder="User ID or @mention"
             value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            required
+            onChange={setUserId}
+            placeholder="Search by name, or paste an ID"
+            clearLabel="Choose another member"
           />
         </div>
         <div className="v2-field">
@@ -115,12 +114,14 @@ function WarnPanel({ guildId, run, busy }) {
         </div>
       </div>
       <div className="v2-field-row v2-wrap-row v2-section-gap-sm">
-        <button type="submit" className="v2-btn-primary" disabled={busy || !reason.trim()}>
+        <button type="submit" className="v2-btn-primary" disabled={busy || !userId || !reason.trim()}>
           Warn
         </button>
-        <button type="button" className="v2-btn-danger-ghost v2-btn-apart" disabled={busy} onClick={clear}>
-          Clear their warnings
-        </button>
+        {userId ? (
+          <button type="button" className="v2-link-danger v2-btn-apart" disabled={busy} onClick={clear}>
+            Clear their warnings
+          </button>
+        ) : null}
       </div>
       <p className="v2-field-hint">
         A warning is saved as a case, sent to the member by DM, and counted toward the warning thresholds in
@@ -190,19 +191,21 @@ function CaseRow({ c, guildId, run, busy }) {
           <button type="button" className="v2-btn-ghost" disabled={busy} onClick={() => setEditing(true)}>
             Edit reason
           </button>
-          <button
-            type="button"
-            className={c.active ? 'v2-btn-danger-ghost' : 'v2-btn-ghost'}
-            disabled={busy}
-            onClick={() =>
-              run(
-                () => setCaseDeleted(guildId, c.caseNumber, c.active),
-                c.active ? `Case #${c.caseNumber} deleted.` : `Case #${c.caseNumber} restored.`
-              )
-            }
-          >
-            {c.active ? 'Delete' : 'Restore'}
-          </button>
+          <OverflowMenu
+            label={`More actions for case #${c.caseNumber}`}
+            items={[
+              {
+                label: c.active ? 'Delete' : 'Restore',
+                danger: c.active,
+                disabled: busy,
+                onClick: () =>
+                  run(
+                    () => setCaseDeleted(guildId, c.caseNumber, c.active),
+                    c.active ? `Case #${c.caseNumber} deleted.` : `Case #${c.caseNumber} restored.`
+                  ),
+              },
+            ]}
+          />
         </div>
       ) : null}
     </div>
@@ -420,7 +423,7 @@ export default function ModerationHub() {
   return (
     <PlatformContext.Provider value={info}>
       <h1 className="v2-section-title">Moderation</h1>
-      <TabRow className="v2-hub-tabs" role="tablist" activeKey={active} panelId="moderation-panel">
+      <TabRow className="v2-hub-tabs v2-hub-tabs-wrap" role="tablist" activeKey={active} panelId="moderation-panel">
         {TABS.map(([key, label, moduleId]) => (
           <button
             key={key}

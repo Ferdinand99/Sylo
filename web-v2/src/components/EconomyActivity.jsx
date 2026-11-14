@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { getShopActivity, getShopItems } from '../api.js';
 import LoadError from './LoadError.jsx';
+import MemberPicker from './MemberPicker.jsx';
 import Meta from './Meta.jsx';
 import Time from './Time.jsx';
+import { useCmd } from '../platformContext.jsx';
 
 const STATUS = {
   pending: 'being set up',
@@ -14,6 +16,7 @@ const STATUS = {
 
 /** The Activity tab: the recent purchases of the shop, filterable by member and by item. */
 export default function EconomyActivity({ guildId, currency }) {
+  const cmd = useCmd();
   const [userId, setUserId] = useState('');
   const [itemId, setItemId] = useState('');
   const [page, setPage] = useState(1);
@@ -33,21 +36,15 @@ export default function EconomyActivity({ guildId, currency }) {
 
   useEffect(() => {
     let live = true;
-    const timer = setTimeout(
-      () => {
-        getShopActivity(guildId, { userId: userId.trim(), itemId, page })
-          .then((d) => {
-            if (!live) return;
-            setData(d);
-            setError(null);
-          })
-          .catch((e) => live && setError(e));
-      },
-      userId ? 250 : 0
-    );
+    getShopActivity(guildId, { userId, itemId, page })
+      .then((d) => {
+        if (!live) return;
+        setData(d);
+        setError(null);
+      })
+      .catch((e) => live && setError(e));
     return () => {
       live = false;
-      clearTimeout(timer);
     };
   }, [guildId, userId, itemId, page]);
 
@@ -59,14 +56,12 @@ export default function EconomyActivity({ guildId, currency }) {
       <h2 className="v2-group-title">Purchases ({data.total.toLocaleString('en-US')})</h2>
       <div className="v2-field-row">
         <div className="v2-field">
-          <label htmlFor="act-member">Member ID</label>
-          <input
+          <label htmlFor="act-member">Member</label>
+          <MemberPicker
             id="act-member"
-            type="text"
-            placeholder="Paste a member ID to filter"
             value={userId}
-            onChange={(e) => {
-              setUserId(e.target.value);
+            onChange={(id) => {
+              setUserId(id);
               setPage(1);
             }}
           />
@@ -90,7 +85,13 @@ export default function EconomyActivity({ guildId, currency }) {
           </select>
         </div>
       </div>
-      {data.rows.length === 0 ? <p className="v2-note">No purchases match.</p> : null}
+      {data.rows.length === 0 ? (
+        <p className="v2-note">
+          {userId || itemId
+            ? 'No purchases match.'
+            : `No purchases yet. Purchases made with ${cmd('/buy')} or in the web shop appear here.`}
+        </p>
+      ) : null}
       <div className="v2-list">
         {data.rows.map((row) => (
           <div className="v2-row" key={row.id}>

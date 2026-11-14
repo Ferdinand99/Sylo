@@ -1,0 +1,71 @@
+/* Member picking (WP1): the multi-select picker, the pages that use it, and the tab row of the Moderation hub. */
+
+/* ---- MemberPicker, several members: chips in front of the field -------------------------------------------- */
+.v2-member-multi {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.v2-member-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* In a row of fields the picker takes the free width, like the text inputs it replaced. */
+.v2-field-row > .v2-mention-wrap,
+.v2-field-row > .v2-member-picked,
+.v2-field-row > .v2-member-multi {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+.v2-member-multi .v2-mention-pop {
+  max-width: 340px;
+}
+
+/* ---- Member data: the lookup is a picker of its own width ------------------------------------------------- */
+.v2-member-data-picker {
+  max-width: 28rem;
+}
+
+/* ---- Moderation: a quiet danger action that stays a text link ---------------------------------------------- */
+.v2-link-danger {
+  align-self: center;
+  min-height: 36px;
+  padding: 4px 2px;
+  background: none;
+  border: 0;
+  color: var(--danger);
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.v2-link-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+@media (pointer: coarse) {
+  .v2-link-danger {
+    min-height: 44px;
+  }
+}
+
+/* ---- Moderation hub: below 600 px the tabs wrap onto a second line instead of running off the screen ------ */
+@media (max-width: 600px) {
+  .v2-tabs.v2-hub-tabs-wrap {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
+
+/* ---- Leveling: a jump target that is not a heading --------------------------------------------------------- */
+.v2-danger-zone[id] {
+  scroll-margin-top: calc(var(--topbar-h) + 16px);
+}

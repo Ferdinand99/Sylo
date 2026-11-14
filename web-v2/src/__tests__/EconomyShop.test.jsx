@@ -637,7 +637,8 @@ describe('Economy: the Activity tab', () => {
     await waitFor(() =>
       expect(api.getShopActivity).toHaveBeenLastCalledWith(GUILD, { userId: '', itemId: '1', page: 1 })
     );
-    fireEvent.change(screen.getByLabelText('Member ID'), { target: { value: ALICE } });
+    fireEvent.change(screen.getByLabelText('Member'), { target: { value: ALICE } });
+    fireEvent.mouseDown(await screen.findByRole('option', { name: `Use the member id ${ALICE}` }));
     await waitFor(() =>
       expect(api.getShopActivity).toHaveBeenLastCalledWith(GUILD, { userId: ALICE, itemId: '1', page: 1 })
     );
@@ -646,13 +647,19 @@ describe('Economy: the Activity tab', () => {
   it('pages and says when nothing matches', async () => {
     api.getShopActivity.mockResolvedValue(activity([], { total: 0 }));
     await openTab('Activity');
-    expect(await screen.findByText('No purchases match.')).toBeTruthy();
+    // no filter set: the page is empty, not "no match"
+    expect(await screen.findByText(/No purchases yet\. Purchases made with \/buy or in the web shop/)).toBeTruthy();
     api.getShopActivity.mockResolvedValue(activity([invRow()], { pages: 3, total: 60 }));
-    fireEvent.change(screen.getByLabelText('Member ID'), { target: { value: 'x' } });
+    fireEvent.change(screen.getByLabelText('Member'), { target: { value: ALICE } });
+    fireEvent.mouseDown(await screen.findByRole('option', { name: `Use the member id ${ALICE}` }));
     expect(await screen.findByText('Page 1 of 3')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     await waitFor(() =>
-      expect(api.getShopActivity).toHaveBeenLastCalledWith(GUILD, { userId: 'x', itemId: '', page: 2 })
+      expect(api.getShopActivity).toHaveBeenLastCalledWith(GUILD, { userId: ALICE, itemId: '', page: 2 })
     );
+    api.getShopActivity.mockResolvedValue(activity([], { total: 0 }));
+    fireEvent.click(screen.getByRole('button', { name: /Clear the member filter/ }));
+    fireEvent.change(screen.getByLabelText('Item'), { target: { value: '1' } });
+    expect(await screen.findByText('No purchases match.')).toBeTruthy();
   });
 });
