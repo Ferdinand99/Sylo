@@ -95,3 +95,34 @@ describe('contrast of the colours added by the dashboard UX pass', () => {
     });
   }
 });
+
+describe('contrast of the public pages (public.css)', () => {
+  const publicCss = readFileSync(
+    join(here, '..', '..', '..', 'src', 'web', 'public', 'public.css'),
+    'utf8'
+  ).replace(/\r\n/g, '\n');
+  const block = (selector) => {
+    const out = {};
+    const re = new RegExp(`^${escapeRe(selector)} \\{([^}]*)\\}`, 'gm');
+    for (const [, body] of publicCss.matchAll(re)) {
+      for (const m of body.matchAll(/(--[a-z0-9-]+):\s*(#[0-9a-fA-F]{6})\b/g)) out[m[1]] = m[2];
+    }
+    return out;
+  };
+  const pubDark = block(':root');
+  const pubLight = { ...pubDark, ...block(":root[data-theme='light']") };
+
+  for (const [name, t] of [
+    ['dark', pubDark],
+    ['light', pubLight],
+  ]) {
+    it(`${name}: the label of the accent button (--on-accent on --accent)`, () => {
+      expect(t['--on-accent'], '--on-accent').toMatch(/^#[0-9a-fA-F]{6}$/);
+      expect(ratio(t['--on-accent'], t['--accent'])).toBeGreaterThanOrEqual(4.5);
+    });
+  }
+
+  it('the primary button of the public pages is the accent, not black or white', () => {
+    expect(publicCss).toMatch(/\.btn \{[^}]*background: var\(--accent\);[^}]*color: var\(--on-accent\);/);
+  });
+});

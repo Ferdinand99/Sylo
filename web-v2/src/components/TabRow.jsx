@@ -26,8 +26,10 @@ export function nextTabIndex(key, tabs, current) {
 }
 
 /**
- * A row of tabs on a single line. When they don't fit (a phone) the row scrolls sideways, the
- * edge that has more tabs behind it fades out, and the active tab is scrolled into view. Put the
+ * A row of tabs on a single line. Below 600 px the row wraps onto a second line (the `v2-tabs-wrap`
+ * class), so no tab is hidden on a phone. Where it still does not fit (a narrow window above that
+ * width) the row scrolls sideways, the edge that has more tabs behind it fades out, and the active tab
+ * is scrolled into view. Put the
  * `.v2-tab` buttons inside as children and mark the current one with `is-active`; pass
  * `activeKey` (any value that changes with the selection) so the row follows it. Tabs are
  * keyboard-operable as a tab list: only the active one is a Tab stop, the arrow keys / Home / End
@@ -92,7 +94,7 @@ export default function TabRow({ activeKey, panelId, className = '', children, o
     <div
       {...rest}
       ref={ref}
-      className={`v2-tabs${className ? ` ${className}` : ''}${fade}`}
+      className={`v2-tabs v2-tabs-wrap${className ? ` ${className}` : ''}${fade}`}
       onScroll={measure}
       onKeyDown={(e) => {
         onKeyDown?.(e);

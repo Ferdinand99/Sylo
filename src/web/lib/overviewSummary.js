@@ -32,7 +32,7 @@ import { AUTOMOD_RULES } from '../../modules/automod.js';
 import { normaliseSuggestionsConfig } from '../../modules/suggestions.js';
 import { validTriggerRoleIds, welcomeTrigger } from '../../modules/welcome.js';
 import { moduleIcon } from './moduleIcons.js';
-import { summaryParts } from './cardSummary.js';
+import { summaryInfo } from './cardSummary.js';
 import { listGithubWatches } from '../../db/githubWatches.js';
 import { listCleanupSchedules } from '../../db/channelCleanup.js';
 
@@ -99,6 +99,19 @@ const LAYOUT = [
   },
 ];
 
+// The modules that cannot post until the bot owner adds API keys, and the plain name of those keys.
+const OWNER_KEYS = {
+  'twitch-alerts': { ready: () => config.twitchEnabled, keys: 'Twitch API keys' },
+  'kick-alerts': { ready: () => config.kickEnabled, keys: 'Kick API keys' },
+  'apple-connect': { ready: () => config.appleEnabled, keys: 'App Store Connect API keys' },
+};
+
+/** The name of the API keys the bot owner still has to add for this module, or null when none are missing. */
+export function missingOwnerKeys(id) {
+  const entry = OWNER_KEYS[id];
+  return entry && !entry.ready() ? entry.keys : null;
+}
+
 const line = (label, value, state) => ({ label, value, state });
 const on = (label, value) => line(label, value, 'on');
 const off = (label, value) => line(label, value, 'off');
@@ -154,8 +167,8 @@ export function v2CardHref(id, guildId) {
 /** A card with its plain-words summary (see cardSummary.js) next to its lines. */
 function withSummary(card) {
   if (!card) return card;
-  const parts = summaryParts(card.id, card.lines);
-  return { ...card, summaryParts: parts, summary: parts.join(' · ') };
+  const { parts, waitingForOwner, empty } = summaryInfo(card.id, card.lines);
+  return { ...card, summaryParts: parts, summary: parts.join(' · '), waitingForOwner, empty };
 }
 
 /** The key permissions Sylo does not have in this server, by name (all of them when it is not a member). */
@@ -483,6 +496,10 @@ async function moduleLines(id, guild, cfg) {
             )
           : neutral('Vote restriction', 'everyone'),
       ];
+    }
+    case 'auto-react': {
+      const n = Array.isArray(cfg.rules) ? cfg.rules.length : 0;
+      return [n ? on('Rules', String(n)) : off('Rules', 'none')];
     }
     case 'autoresponder': {
       const n = Array.isArray(cfg.responders) ? cfg.responders.length : 0;

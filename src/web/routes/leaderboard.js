@@ -79,7 +79,9 @@ export function notFound(res) {
     title: 'Leaderboard unavailable',
     heading: 'No leaderboard here',
     message: NOT_FOUND,
-    backHref: null,
+    // Not the dashboard (the visitor may have no account): the Sylo home page is the way forward.
+    backHref: 'https://sylobot.com',
+    backLabel: 'Go to the Sylo home page',
     publicPage: true,
   });
 }

@@ -42,6 +42,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { changelogHandler } from '../lib/changelogFeed.js';
 import { ticketsRouter, staffRouter } from './v2Staff.js';
 import guildDataRouter from './v2GuildData.js';
+import { moduleIcon } from '../lib/moduleIcons.js';
 import eventsRouter from './v2Events.js';
 import suggestionsRouter from './v2Suggestions.js';
 import tempRolesRouter from './v2TempRoles.js';
@@ -2577,7 +2578,12 @@ router.get(
     const gatewayPing = client?.ws?.ping;
 
     const usage = await moduleUsage();
-    const modules = MODULES.map((m) => ({ name: m.name, icon: m.icon, guilds: usage.get(m.id) ?? 0 }))
+    const modules = MODULES.map((m) => ({
+      name: m.name,
+      icon: m.icon,
+      iconName: moduleIcon(m.id),
+      guilds: usage.get(m.id) ?? 0,
+    }))
       .filter((m) => m.guilds > 0)
       .sort((a, b) => b.guilds - a.guilds);
 

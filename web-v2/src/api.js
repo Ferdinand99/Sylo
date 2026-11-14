@@ -426,7 +426,16 @@ export const sendModuleTest = (guildId, moduleId) =>
   postJson(`${g(guildId)}/modules/${encodeURIComponent(moduleId)}/test`, {});
 
 // Server data: audit log, config export, member data (see src/web/routes/v2GuildData.js).
-export const getAuditLog = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/audit`);
+// One page of the audit log (newest first): `action` limits it to one kind of change, `before` is the id of
+// the last entry already shown.
+export const getAuditLog = (guildId, { action, before, limit } = {}) => {
+  const q = new URLSearchParams();
+  if (action) q.set('action', action);
+  if (before) q.set('before', String(before));
+  if (limit) q.set('limit', String(limit));
+  const qs = q.toString();
+  return apiFetch(`/api/v2/guilds/${gid(guildId)}/audit${qs ? `?${qs}` : ''}`);
+};
 export const exportGuildConfig = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/export`);
 export const getMemberData = (guildId, user) =>
   apiFetch(`/api/v2/guilds/${gid(guildId)}/member-data?user=${encodeURIComponent(user ?? '')}`);

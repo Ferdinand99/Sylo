@@ -13,6 +13,8 @@ import Meta from '../components/Meta.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import TabRow from '../components/TabRow.jsx';
 import SectionIndex from '../components/SectionIndex.jsx';
+import CopyButton from '../components/CopyButton.jsx';
+import { useOperator } from '../useOperator.js';
 import EmojiPicker from '../components/EmojiPicker.jsx';
 import Time from '../components/Time.jsx';
 import UnitInput from '../components/UnitInput.jsx';
@@ -84,7 +86,19 @@ function Num({ id, label, hint, field, unit, limits, form, set }) {
   );
 }
 
-function Check({ id, label, hint, field, form, set }) {
+// A public address shown as a "Copy link" and "Open" pair, not as a long printed URL.
+function PageLink({ url, what }) {
+  return (
+    <p className="v2-page-link">
+      <CopyButton text={url} what={what} />
+      <a className="v2-btn-ghost v2-btn-compact" href={url} target="_blank" rel="noopener noreferrer">
+        Open <span className="v2-sr-only">{what} in a new tab</span>
+      </a>
+    </p>
+  );
+}
+
+function Check({ id, label, hint, field, form, set, link, linkWhat }) {
   return (
     <div className="v2-field">
       <label className="v2-check" htmlFor={id}>
@@ -97,6 +111,7 @@ function Check({ id, label, hint, field, form, set }) {
         {label}
       </label>
       {hint ? <p className="v2-field-hint">{hint}</p> : null}
+      {link ? <PageLink url={link} what={linkWhat} /> : null}
     </div>
   );
 }
@@ -104,6 +119,7 @@ function Check({ id, label, hint, field, form, set }) {
 function Settings({ guildId, m, limits }) {
   const { data, form, set } = m;
   const cmd = useCmd();
+  const operator = useOperator();
   const props = { limits, form, set };
 
   async function onReset() {
@@ -427,7 +443,9 @@ function Settings({ guildId, m, limits }) {
             id="webShop"
             label="Web shop page"
             field="webShop"
-            hint={`Signed-in members of this server can browse and buy at ${window.location.origin}/shop/${guildId}. Nobody else can see it. Off by default.`}
+            hint="Signed-in members of this server can browse and buy on a web page. Nobody else can see it. Off by default."
+            link={`${window.location.origin}/shop/${guildId}`}
+            linkWhat="shop link"
             form={form}
             set={set}
           />
@@ -470,8 +488,15 @@ function Settings({ guildId, m, limits }) {
             </select>
             <p className="v2-field-hint">
               A collectible with &quot;Announce purchases&quot; switched on is announced here when someone
-              buys it, with its picture. Only the buyer is mentioned. The picture shows when the DASHBOARD_URL
-              setting is a public address.
+              buys it, with its picture. Only the buyer is mentioned. The picture shows when the dashboard has
+              a public address
+              {operator ? (
+                <>
+                  {' '}
+                  (the bot owner sets <code>DASHBOARD_URL</code>)
+                </>
+              ) : null}
+              .
             </p>
           </div>
           <Check
@@ -492,7 +517,9 @@ function Settings({ guildId, m, limits }) {
             id="publicLeaderboard"
             label="Public leaderboard page"
             field="publicLeaderboard"
-            hint={`Anyone with the link can see the richest members (name and total only, not the cash): ${window.location.origin}/economy/${guildId}`}
+            hint="Anyone with the link can see the richest members (name and total only, not the cash)."
+            link={`${window.location.origin}/economy/${guildId}`}
+            linkWhat="leaderboard link"
             form={form}
             set={set}
           />

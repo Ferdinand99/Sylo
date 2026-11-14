@@ -19,7 +19,10 @@ export function cardSummaryParts(card) {
   const parts = card.summaryParts;
   if (!card.hasToggle) return parts.length ? parts : [card.description ?? ''];
   if (card.status === 'blocked') return ['Blocked: the bot needs a permission first'];
-  if (!card.enabled) return parts.length && parts[0] !== 'Not set up yet' ? ['Off', parts[0]] : ['Off'];
+  if (!card.enabled) {
+    const nothing = card.empty || card.waitingForOwner || parts[0] === 'Not set up yet';
+    return parts.length && !nothing ? ['Off', parts[0]] : ['Off'];
+  }
   return parts.length ? parts : ['On'];
 }
 
@@ -51,7 +54,7 @@ function legacySummary(card) {
 export function cardTone(card, problemIds = new Set()) {
   if (!card.hasToggle) return 'link';
   if (!card.enabled) return 'off';
-  if (card.status === 'blocked' || problemIds.has(card.id)) return 'warn';
+  if (card.status === 'blocked' || problemIds.has(card.id) || card.waitingForOwner) return 'warn';
   const lines = card.lines ?? [];
   if (lines.length > 0 && lines.every((l) => l.state === 'off')) return 'warn';
   return 'ok';
@@ -61,11 +64,44 @@ export function cardTone(card, problemIds = new Set()) {
 export const TONE_LABEL = { ok: 'On', warn: 'Needs setup', off: 'Off', link: '' };
 
 /**
+ * The word next to the dot of one module row: the generic one for its colour, except for a module that
+ * waits for API keys only the bot owner can add (nothing an admin can do about it).
+ */
+export function toneLabel(card, tone) {
+  return tone === 'warn' && card.waitingForOwner ? 'Waiting for the bot owner' : TONE_LABEL[tone];
+}
+
+/** The filter chips of the overview: [key, label]. */
+export const STATUS_FILTERS = [
+  ['all', 'All'],
+  ['setup', 'Needs setup'],
+  ['on', 'On'],
+  ['off', 'Off'],
+];
+
+/** Whether a card shows under a status filter ('all', 'setup' = amber, 'on' = green, 'off' = grey). */
+export function matchesStatus(filter, tone) {
+  if (filter === 'setup') return tone === 'warn';
+  if (filter === 'on') return tone === 'ok';
+  if (filter === 'off') return tone === 'off';
+  return true;
+}
+
+/**
+ * Whether a phone should open a category folded: when every module in it is switched on and fine, there
+ * is nothing to look at. A category with a module that needs setup, is off, or is a plain link stays open.
+ */
+export function startsFolded(cards, problemIds = new Set()) {
+  const switches = cards.filter((c) => c.hasToggle);
+  return switches.length > 0 && cards.every((c) => c.hasToggle && cardTone(c, problemIds) === 'ok');
+}
+
+/**
  * The "Needs attention" list: waiting work first (open tickets, appeals, applications, suggestions),
  * then modules that are on but not set up, then modules the bot cannot run, then missing permissions.
  * Each item has the page where it is fixed (`href`, relative to the dashboard base), except missing
  * permissions, which are given to the bot's role in Discord itself.
- * @returns {Array<{ key: string, kind: 'waiting'|'setup'|'blocked'|'permissions', title: string, detail: string, href: string|null }>}
+ * @returns {Array<{ key: string, kind: 'waiting'|'setup'|'info'|'blocked'|'permissions', title: string, detail: string, href: string|null }>}
  */
 export function attentionItems(data, guildId) {
   if (!data) return [];
@@ -104,6 +140,17 @@ export function attentionItems(data, guildId) {
       title: `${p.name} is on but not set up`,
       detail: p.issues.join('. '),
       href: hrefOf(p.id, guildId),
+    });
+  }
+  // Modules that wait for API keys only the bot owner can add: for information, no "Fix" link.
+  for (const w of a.waitingForOwner ?? []) {
+    if (byId.get(w.id) && byId.get(w.id).enabled === false) continue;
+    items.push({
+      key: `owner-${w.id}`,
+      kind: 'info',
+      title: `${w.name} is waiting for the bot owner`,
+      detail: `The bot owner has not added the ${w.keys} yet, so nothing is posted. There is nothing to fix here.`,
+      href: null,
     });
   }
   for (const c of cards) {

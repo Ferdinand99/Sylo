@@ -418,6 +418,13 @@
 .v2-page:has(.v2-with-preview) {
   max-width: 1280px;
 }
+/* The bar above the form (the module's On/Off row and its notes) keeps the width it has on every other
+   page, so moving between modules in the sidebar does not make it jump. */
+.v2-page:has(.v2-with-preview) > .v2-module-status,
+.v2-page:has(.v2-with-preview) > .v2-note,
+.v2-page:has(.v2-with-preview) > [aria-live] {
+  max-width: 852px;
+}
 .v2-with-preview {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;
@@ -553,26 +560,46 @@
 
 /* ---- Jump list on long pages, shared placeholder row ---------------------------------------------------- */
 .v2-section-index {
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 16;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 10px;
-  margin: 4px 0 18px;
+  gap: 10px;
+  margin: 4px 0 14px;
+  padding: 8px 0;
+  background: var(--bg-main);
+  border-bottom: 1px solid var(--border-subtle);
 }
 .v2-section-index-label {
   color: var(--text-muted);
   font-size: var(--fs-sm);
   font-weight: 600;
 }
+.v2-section-index-label {
+  flex: none;
+}
 .v2-section-index ul {
+  position: relative;
   display: flex;
-  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: nowrap;
   gap: 6px;
   margin: 0;
   padding: 0;
   list-style: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.v2-section-index ul::-webkit-scrollbar {
+  display: none;
+}
+.v2-section-index li {
+  flex: none;
 }
 .v2-section-index-pill {
+  white-space: nowrap;
   padding: 4px 12px;
   background: none;
   border: 1px solid var(--border-control);
@@ -588,6 +615,11 @@
     color: var(--accent);
   }
 }
+.v2-section-index-pill.is-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--text);
+}
 @media (pointer: coarse) {
   .v2-section-index-pill {
     min-height: 44px;
@@ -595,7 +627,7 @@
   }
 }
 .v2-group-title[id] {
-  scroll-margin-top: calc(var(--topbar-h) + 16px);
+  scroll-margin-top: calc(var(--topbar-h) + var(--sticky-index-h, 0px) + 16px);
 }
 .v2-group-title[id]:focus {
   outline: none;
@@ -666,7 +698,7 @@ fieldset.v2-field > legend {
 }
 .v2-ph-bar {
   position: sticky;
-  top: var(--topbar-h);
+  top: calc(var(--topbar-h) + var(--sticky-index-h, 0px));
   z-index: 15;
 }
 @media (max-width: 860px) {
@@ -677,7 +709,12 @@ fieldset.v2-field > legend {
     flex-wrap: nowrap;
     overflow-x: auto;
     padding-bottom: 2px;
+    /* The right edge fades out as a hint that more placeholders are off screen; the padding lets the last
+       one scroll clear of the fade. */
+    padding-right: 24px;
     scrollbar-width: thin;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
   }
   .v2-ph-bar .v2-ph-chips > * {
     flex: none;
@@ -858,4 +895,143 @@ fieldset.v2-field > legend {
 .v2-member-clear {
   min-height: 30px;
   padding: 2px 12px;
+}
+
+/* ---- Review polish: sticky jump list offsets, phone tab rows, grouped form pieces ---------------------- */
+/* Anchors and focused fields scroll clear of the sticky top bar and the sticky jump list under it. */
+html {
+  scroll-padding-top: calc(var(--topbar-h) + var(--sticky-index-h, 0px) + 8px);
+}
+
+/* A row of tabs wraps onto a second line on a phone instead of hiding the last ones behind a scroll. */
+@media (max-width: 599px) {
+  .v2-tabs.v2-tabs-wrap {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
+
+/* A small heading inside a form card (an <h3 class="v2-field-hint"> such as "Owner permissions") reads as a
+   heading, not as a hint. */
+h3.v2-field-hint {
+  color: var(--text);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  line-height: 1.3;
+}
+h3.v2-field-hint.u-mt-2 {
+  margin-top: 20px;
+  margin-bottom: 10px;
+}
+/* A label, field or radio group that follows a paragraph keeps the standard gap from it. */
+.v2-field-hint + .v2-field,
+.v2-field-hint + .v2-field-row,
+p + fieldset.v2-field {
+  margin-top: 14px;
+}
+/* The caption of a radio group is a label, whichever class it carries. */
+fieldset.v2-field > legend {
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+/* A named group of fields inside a card: <fieldset class="v2-fieldset"><legend>Role rewards</legend>…. */
+fieldset.v2-fieldset {
+  min-width: 0;
+  margin: 0 0 22px;
+  padding: 0;
+  border: 0;
+}
+fieldset.v2-fieldset > legend {
+  margin-bottom: 10px;
+  padding: 0;
+  color: var(--text);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+/* ---- Overview: the status filter under the search field, and the information item in Needs attention --- */
+.v2-status-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: -4px 0 14px;
+}
+.v2-status-chip {
+  padding: 4px 12px;
+  background: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  cursor: pointer;
+}
+.v2-status-chip.is-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--text);
+}
+@media (hover: hover) and (pointer: fine) {
+  .v2-status-chip:not(.is-active):hover {
+    border-color: var(--border-control);
+    color: var(--text);
+  }
+}
+.v2-status-chip-count {
+  margin-left: 2px;
+  font-size: var(--fs-xs);
+  opacity: 0.8;
+}
+@media (pointer: coarse) {
+  .v2-status-chip {
+    min-height: 44px;
+    padding: 0 16px;
+  }
+}
+.v2-attention-item.is-info .v2-attention-dot {
+  background: var(--text-faint);
+}
+
+/* ---- Audit log: the filter and the "Show 50 more" row -------------------------------------------------- */
+.v2-audit-filter {
+  max-width: 320px;
+  margin-top: 14px;
+}
+.v2-audit-more {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 14px 0 0;
+}
+
+/* A public address as "Copy link" and "Open" buttons under the setting that makes it public. */
+.v2-page-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+.v2-page-link a.v2-btn-ghost {
+  text-decoration: none;
+}
+
+/* Health: the module name with its icon, the same icon set as the overview. */
+.v2-health-module {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.v2-health-module-icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: var(--text-muted);
 }

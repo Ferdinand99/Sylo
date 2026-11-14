@@ -108,10 +108,7 @@ const FORMAT = {
     ...count(l, 'Channels', 'channel'),
     ...(isOn(l, 'Live alerts') ? ['live alerts'] : []),
   ],
-  'apple-connect': (l) => [
-    ...(isOn(l, 'Channel') ? [value(l, 'Channel')] : ['No channel yet']),
-    ...(find(l, 'API')?.state === 'off' ? ['API keys missing'] : []),
-  ],
+  'apple-connect': (l) => [...(isOn(l, 'Channel') ? [value(l, 'Channel')] : ['No channel yet'])],
   rss: (l) => count(l, 'Feeds', 'feed'),
   github: (l) => count(l, 'Repositories', 'repository', 'repositories'),
   'channel-cleanup': (l) => count(l, 'Schedules', 'schedule'),
@@ -136,6 +133,7 @@ const FORMAT = {
   ],
   polls: (l) => (num(l, 'Open polls') ? [`${num(l, 'Open polls')} open`] : []),
   autoresponder: (l) => count(l, 'Responders', 'responder'),
+  'auto-react': (l) => count(l, 'Rules', 'rule'),
   afk: (l) => [
     ...(isOn(l, 'Nickname tag') ? ['nickname tag'] : []),
     ...(isOn(l, 'Mention reply') ? ['mention reply'] : []),
@@ -178,20 +176,66 @@ const FORMAT = {
 };
 
 function alerts(l, label, one) {
-  return [...count(l, label, one), ...(find(l, 'API')?.state === 'off' ? ['API keys missing'] : [])];
+  return count(l, label, one);
+}
+
+/** Modules that cannot post anything until the bot owner has added API keys (their "API" line is off). */
+const NEEDS_OWNER_KEYS = new Set(['twitch-alerts', 'kick-alerts', 'apple-connect']);
+
+/** What an empty module says it is missing, instead of the general "Not set up yet". */
+const EMPTY = {
+  sticky: 'No sticky messages yet',
+  'auto-threads': 'No channels yet',
+  'auto-react': 'No rules yet',
+  'custom-commands': 'No commands yet',
+  autoresponder: 'No responders yet',
+  rss: 'No feeds yet',
+  github: 'No repositories yet',
+  'channel-cleanup': 'No schedules yet',
+  honeypot: 'No traps yet',
+  'server-stats': 'No stat channels yet',
+  'temp-voice': 'No hub channels yet',
+  starboard: 'No boards yet',
+  'youtube-alerts': 'No channels yet',
+  'twitch-alerts': 'No streamers yet',
+  'kick-alerts': 'No streamers yet',
+};
+
+/** The text of the amber status of a module whose bot-owner keys are missing. */
+export const WAITING_FOR_OWNER = 'Waiting for the bot owner';
+
+/** True when the module needs API keys that only the bot owner can add, and they are missing. */
+export function waitsForOwnerKeys(id, lines) {
+  return NEEDS_OWNER_KEYS.has(id) && find(Array.isArray(lines) ? lines : [], 'API')?.state === 'off';
+}
+
+/**
+ * The summary of one card: its parts, whether it is waiting for the bot owner's keys, and whether it
+ * is empty (nothing set up yet). A module that waits for keys leads with "Waiting for the bot owner",
+ * then what is set up; an empty one says what is missing ("No rules yet").
+ * @returns {{ parts: string[], waitingForOwner: boolean, empty: boolean }}
+ */
+export function summaryInfo(id, lines) {
+  const list = Array.isArray(lines) ? lines : [];
+  const waitingForOwner = waitsForOwnerKeys(id, list);
+  const make = FORMAT[id];
+  const own = make ? make(list).filter(Boolean) : [];
+  const allOff = list.length > 0 && list.every((l) => l.state === 'off');
+  const empty = allOff || (own.length === 0 && Boolean(EMPTY[id]));
+  if (waitingForOwner) return { parts: [WAITING_FOR_OWNER, ...own], waitingForOwner, empty: false };
+  if (empty) return { parts: [EMPTY[id] ?? 'Not set up yet'], waitingForOwner, empty: true };
+  return { parts: own, waitingForOwner, empty: false };
 }
 
 /**
  * The summary of one card as a list of short parts (the dashboard joins them with " · ", and a phone may
- * show only the first). A module with nothing set yet says "Not set up yet"; one with nothing to say
- * returns an empty list (the dashboard then says "On").
+ * show only the first). A module with nothing set yet says what is missing ("No rules yet", otherwise
+ * "Not set up yet"); one whose API keys the bot owner has not added says "Waiting for the bot owner"; one
+ * with nothing to say returns an empty list (the dashboard then says "On").
  * @param {string} id  module id or synthetic card id
  * @param {Array<{ label: string, value: string, state: string }>} lines  the card's lines
  * @returns {string[]}
  */
 export function summaryParts(id, lines) {
-  const list = Array.isArray(lines) ? lines : [];
-  if (list.length > 0 && list.every((l) => l.state === 'off')) return ['Not set up yet'];
-  const make = FORMAT[id];
-  return make ? make(list).filter(Boolean) : [];
+  return summaryInfo(id, lines).parts;
 }

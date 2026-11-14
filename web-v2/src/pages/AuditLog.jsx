@@ -1,8 +1,8 @@
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { getAuditLog } from '../api.js';
-import { useApiData } from '../useApiData.js';
+import { getAuditLog, getMemberNames } from '../api.js';
 import { useOverview } from '../OverviewContext.jsx';
-import Breadcrumb from '../components/Breadcrumb.jsx';
+import Breadcrumb, { peopleCrumb } from '../components/Breadcrumb.jsx';
 import LoadError from '../components/LoadError.jsx';
 import { formatCount } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
@@ -55,41 +55,165 @@ export function auditActionLabel(action, moduleNames = new Map()) {
   return words(key) || key;
 }
 
-// The server's config-change history.
+const ID = /\b\d{17,20}\b/g;
+const ID_CHUNK = 20;
+
+/** A member id with no name to show for it: the end of the id, so two of them can still be told apart. */
+const unnamed = (id) => `member …${id.slice(-4)}`;
+
+/**
+ * An audit line with the member ids in it turned into names: `names` is a Map of id -> name (an id that
+ * is not in it reads "member …1234").
+ */
+export function withNames(text, names) {
+  return String(text ?? '').replace(ID, (id) => names.get(id) ?? unnamed(id));
+}
+
+/** The member ids that appear in the entries' text (new entries store the name, older ones the id). */
+export function idsInEntries(entries) {
+  const ids = new Set();
+  for (const e of entries) {
+    for (const text of [e.detail, e.actor]) for (const id of String(text ?? '').match(ID) ?? []) ids.add(id);
+  }
+  return [...ids];
+}
+
+// The names behind the ids in the loaded entries, asked for once per id and kept while the page is open.
+function useEntryNames(guildId, entries) {
+  const known = useRef({ guildId, map: new Map() }); // id -> name | null (asked, not found)
+  if (known.current.guildId !== guildId) known.current = { guildId, map: new Map() };
+  const [, bump] = useState(0);
+  const ids = idsInEntries(entries);
+  const key = ids.join(',');
+  useEffect(() => {
+    const cache = known.current.map;
+    const missing = ids.filter((id) => !cache.has(id));
+    if (!missing.length) return undefined;
+    let live = true;
+    (async () => {
+      for (let i = 0; i < missing.length; i += ID_CHUNK) {
+        const chunk = missing.slice(i, i + ID_CHUNK);
+        try {
+          const res = await getMemberNames(guildId, chunk);
+          for (const id of chunk) cache.set(id, res?.names?.[id] ?? null);
+        } catch {
+          // Not remembered: the lines read "member …1234" and the next load asks again.
+        }
+      }
+      if (live) bump((n) => n + 1);
+    })();
+    return () => {
+      live = false;
+    };
+    // `key` is the content of `ids`
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guildId, key]);
+  const names = new Map();
+  for (const [id, name] of known.current.map) if (name) names.set(id, name);
+  return names;
+}
+
+// The server's config-change history: a filter by kind of change, and 50 entries at a time.
 export default function AuditLog() {
   const { guildId } = useParams();
-  const { data, error } = useApiData(() => getAuditLog(guildId), [guildId]);
   const overview = useOverview();
+  const [action, setAction] = useState('');
+  const [page, setPage] = useState({ entries: [], hasMore: false, actions: [], kept: 0, loaded: false });
+  const [error, setError] = useState(null);
+  const [more, setMore] = useState({ busy: false, error: '' });
+  const seq = useRef(0);
+
+  // The first page, again whenever the server or the filter changes. An answer that arrives after a newer
+  // request was made is dropped.
+  useEffect(() => {
+    const mine = ++seq.current;
+    setError(null);
+    getAuditLog(guildId, { action })
+      .then((res) => {
+        if (seq.current !== mine) return;
+        setPage({
+          entries: res.entries ?? [],
+          hasMore: Boolean(res.hasMore),
+          actions: res.actions ?? [],
+          kept: res.kept ?? 0,
+          loaded: true,
+        });
+        setMore({ busy: false, error: '' });
+      })
+      .catch((err) => {
+        if (seq.current === mine) setError(err);
+      });
+  }, [guildId, action]);
+
+  async function showMore() {
+    const last = page.entries[page.entries.length - 1];
+    if (!last || more.busy) return;
+    const mine = seq.current;
+    setMore({ busy: true, error: '' });
+    try {
+      const res = await getAuditLog(guildId, { action, before: last.id });
+      if (seq.current !== mine) return;
+      setPage((p) => ({
+        ...p,
+        entries: [...p.entries, ...(res.entries ?? [])],
+        hasMore: Boolean(res.hasMore),
+      }));
+      setMore({ busy: false, error: '' });
+    } catch (err) {
+      if (seq.current === mine) setMore({ busy: false, error: err.message || 'Could not load more.' });
+    }
+  }
+
+  const names = useEntryNames(guildId, page.entries);
 
   if (error) return <LoadError error={error} what="the audit log" />;
-  if (!data) return <p className="v2-state">Loading…</p>;
+  if (!page.loaded) return <p className="v2-state">Loading…</p>;
 
   const moduleNames = new Map(
     (overview?.data?.groups ?? []).flatMap((g) => g.cards).map((c) => [c.id, c.name])
   );
+  const total = page.actions.reduce((sum, a) => sum + a.count, 0);
+  const showFilter = page.actions.length > 1 || action !== '';
 
   return (
     <Reveal>
-      <Breadcrumb parents={[{ label: 'Settings', to: `/guilds/${guildId}/settings` }]} current="Audit log" />
+      <Breadcrumb parents={[peopleCrumb(guildId)]} current="Audit log" />
       <h1 className="v2-section-title">Audit log</h1>
       <p className="v2-field-hint">
-        Configuration changes made from the dashboard. Keeps the most recent {formatCount(data.kept)} per
+        Configuration changes made from the dashboard. Keeps the most recent {formatCount(page.kept)} per
         server.
       </p>
 
-      {data.entries.length ? (
+      {showFilter ? (
+        <div className="v2-field v2-audit-filter">
+          <label htmlFor="audit-action">Show</label>
+          <select id="audit-action" value={action} onChange={(e) => setAction(e.target.value)}>
+            <option value="">All changes{total ? ` (${formatCount(total)})` : ''}</option>
+            {page.actions.map((a) => (
+              <option key={a.action} value={a.action}>
+                {auditActionLabel(a.action, moduleNames)} ({formatCount(a.count)})
+              </option>
+            ))}
+            {action && !page.actions.some((a) => a.action === action) ? (
+              <option value={action}>{auditActionLabel(action, moduleNames)}</option>
+            ) : null}
+          </select>
+        </div>
+      ) : null}
+
+      {page.entries.length ? (
         <div className="v2-group v2-section-gap">
-          <p className="v2-field-hint">{formatCount(data.entries.length)} shown, newest first.</p>
+          <p className="v2-field-hint">{formatCount(page.entries.length)} shown, newest first.</p>
           <div className="v2-list">
-            {data.entries.map((a) => (
+            {page.entries.map((a) => (
               <div className="v2-row v2-row-stack" key={a.id}>
                 <div className="v2-row-main">
                   <h3 className="v2-audit-action v2-break" title={a.action}>
                     {auditActionLabel(a.action, moduleNames)}
                   </h3>
                   <p className="is-wrap v2-break">
-                    {a.actor}
-                    {a.detail ? ` — ${a.detail}` : ''}
+                    {withNames(a.actor, names)}
+                    {a.detail ? ` — ${withNames(a.detail, names)}` : ''}
                     <span className="v2-audit-ago-inline">
                       {' · '}
                       <Time value={a.at} relative fallback={a.ago} />
@@ -100,9 +224,23 @@ export default function AuditLog() {
               </div>
             ))}
           </div>
+          {page.hasMore ? (
+            <p className="v2-audit-more">
+              <button type="button" className="v2-btn-ghost" disabled={more.busy} onClick={showMore}>
+                {more.busy ? 'Loading…' : 'Show 50 more'}
+              </button>
+              {more.error ? (
+                <span className="v2-field-error" role="alert">
+                  {more.error}
+                </span>
+              ) : null}
+            </p>
+          ) : null}
         </div>
       ) : (
-        <p className="v2-state">Nothing recorded yet.</p>
+        <p className="v2-state">
+          {action ? 'Nothing recorded for this kind of change.' : 'Nothing recorded yet.'}
+        </p>
       )}
     </Reveal>
   );

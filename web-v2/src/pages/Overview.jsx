@@ -12,8 +12,29 @@ import Reveal from '../components/Reveal.jsx';
 import BlockedNote from '../components/BlockedNote.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { Icon } from '../components/icons.jsx';
-import { attentionItems, cardSummaryParts, cardTone, problemIdsOf, TONE_LABEL } from '../overviewModel.js';
-import { readCollapsed, toggled, writeCollapsed } from '../collapsedGroups.js';
+import {
+  attentionItems,
+  cardSummaryParts,
+  cardTone,
+  matchesStatus,
+  problemIdsOf,
+  startsFolded,
+  STATUS_FILTERS,
+  toneLabel,
+} from '../overviewModel.js';
+import {
+  hasStoredCollapse,
+  hintSeen,
+  markHintSeen,
+  readCollapsed,
+  toggled,
+  writeCollapsed,
+} from '../collapsedGroups.js';
+
+// Settings and Commands have their own place in the sidebar; the overview lists the modules.
+const IN_SIDEBAR = new Set(['general', 'commands']);
+
+const isNarrow = () => Boolean(globalThis.matchMedia?.('(max-width: 600px)')?.matches);
 
 // A newly-added module gets this next to its name until it's had enough
 // real-world use to drop registry.js's `beta` flag.
@@ -117,7 +138,7 @@ function ModuleRow({ card, guildId, tone, onToggle, selecting, picked, onPick })
         <>
           <span className={`v2-modrow-status is-${tone}`}>
             <span className="v2-modrow-dot" aria-hidden="true" />
-            {TONE_LABEL[tone]}
+            {toneLabel(card, tone)}
           </span>
           {selecting ? (
             <input
@@ -159,25 +180,47 @@ export default function Overview() {
   const [picked, setPicked] = useState(() => new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  // Until the person folds or opens a category, a phone starts with the categories that are all green folded.
+  const [foldChosen, setFoldChosen] = useState(hasStoredCollapse);
+  const [narrow] = useState(isNarrow);
+  const [status, setStatus] = useState('all');
+  const [hintShown, setHintShown] = useState(() => !hintSeen());
   const { data: shared, dataGuildId, error, setData } = useOverview();
   // Not the previous server's modules while this one's load.
   const data = dataGuildId === guildId ? shared : null;
 
+  const attention = useMemo(() => attentionItems(data, guildId), [data, guildId]);
+  const problemIds = useMemo(() => problemIdsOf(data), [data]);
+  const shownGroups = useMemo(
+    () =>
+      (data?.groups ?? [])
+        .map((g) => ({ ...g, cards: g.cards.filter((c) => c.hasToggle || !IN_SIDEBAR.has(c.id)) }))
+        .filter((g) => g.cards.length),
+    [data]
+  );
   const filteredGroups = useMemo(() => {
-    if (!data) return [];
     const q = query.trim().toLowerCase();
-    if (!q) return data.groups;
-    return data.groups
+    return shownGroups
       .map((g) => ({
         ...g,
         cards: g.cards.filter(
-          (c) => c.name.toLowerCase().includes(q) || c.description.toLowerCase().includes(q)
+          (c) =>
+            matchesStatus(status, cardTone(c, problemIds)) &&
+            (!q || c.name.toLowerCase().includes(q) || c.description.toLowerCase().includes(q))
         ),
       }))
       .filter((g) => g.cards.length);
-  }, [data, query]);
-  const attention = useMemo(() => attentionItems(data, guildId), [data, guildId]);
-  const problemIds = useMemo(() => problemIdsOf(data), [data]);
+  }, [shownGroups, query, status, problemIds]);
+  // How many modules each status chip would show.
+  const statusCounts = useMemo(() => {
+    const out = { all: 0, setup: 0, on: 0, off: 0 };
+    for (const c of shownGroups.flatMap((g) => g.cards)) {
+      const tone = cardTone(c, problemIds);
+      out.all += 1;
+      for (const [key] of STATUS_FILTERS) if (key !== 'all' && matchesStatus(key, tone)) out[key] += 1;
+    }
+    return out;
+  }, [shownGroups, problemIds]);
 
   if (error) return <LoadError error={error} what="this server" />;
   if (!data) return <p className="v2-state">Loading…</p>;
@@ -199,6 +242,8 @@ export default function Overview() {
       if (!ok) return;
     }
     toggling.current.add(moduleId);
+    markHintSeen();
+    setHintShown(false);
     const apply = (on) =>
       setData((d) => ({
         ...d,
@@ -231,12 +276,16 @@ export default function Overview() {
       return next;
     });
   }
+  // The titles of the categories that are folded now: the person's own choice, or on a phone the default.
+  function foldedTitles() {
+    if (foldChosen || !narrow) return collapsed;
+    return new Set(shownGroups.filter((g) => startsFolded(g.cards, problemIds)).map((g) => g.title));
+  }
   function toggleGroup(title) {
-    setCollapsed((prev) => {
-      const next = toggled(prev, title);
-      writeCollapsed(next);
-      return next;
-    });
+    const next = toggled(foldedTitles(), title);
+    setFoldChosen(true);
+    setCollapsed(next);
+    writeCollapsed(next);
   }
   async function applyBulk(enabled) {
     if (!picked.size || bulkBusy) return;
@@ -273,7 +322,9 @@ export default function Overview() {
   const { guild, groups } = data;
   const toggleCards = groups.flatMap((g) => g.cards).filter((c) => c.hasToggle);
   const enabledCount = toggleCards.filter((c) => c.enabled).length;
-  const searching = query.trim() !== '';
+  // A search or a status filter shows every match, so a folded category opens while one is active.
+  const searching = query.trim() !== '' || status !== 'all';
+  const folds = foldedTitles();
 
   return (
     <Reveal>
@@ -309,9 +360,24 @@ export default function Overview() {
           {selecting ? 'Cancel' : 'Bulk edit'}
         </button>
       </div>
-      <p className="v2-field-hint v2-overview-hint">
-        Switch a module on or off here, or open it to change its settings.
-      </p>
+      <div className="v2-status-filter" role="group" aria-label="Show modules by status">
+        {STATUS_FILTERS.map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            className={`v2-status-chip${status === key ? ' is-active' : ''}`}
+            aria-pressed={status === key}
+            onClick={() => setStatus(key)}
+          >
+            {label} <span className="v2-status-chip-count">{statusCounts[key]}</span>
+          </button>
+        ))}
+      </div>
+      {hintShown ? (
+        <p className="v2-field-hint v2-overview-hint">
+          Switch a module on or off here, or open it to change its settings.
+        </p>
+      ) : null}
 
       {selecting ? (
         <div className="v2-bulk-bar">
@@ -336,8 +402,7 @@ export default function Overview() {
       ) : null}
 
       {filteredGroups.map((g) => {
-        // A search shows every match, so a folded category opens while one is typed.
-        const folded = collapsed.has(g.title) && !searching;
+        const folded = folds.has(g.title) && !searching;
         const switches = g.cards.filter((c) => c.hasToggle);
         const listId = `v2-group-${g.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`;
         return (
@@ -376,8 +441,10 @@ export default function Overview() {
           </section>
         );
       })}
-      {query && !filteredGroups.length ? (
-        <p className="v2-state is-instant">No modules match "{query}".</p>
+      {searching && !filteredGroups.length ? (
+        <p className="v2-state is-instant">
+          {query.trim() ? `No modules match "${query}".` : 'No modules with this status.'}
+        </p>
       ) : null}
     </Reveal>
   );

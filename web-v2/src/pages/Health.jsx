@@ -15,6 +15,7 @@ import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { plural } from '../components/Meta.jsx';
 import { formatCount } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
+import { Icon } from '../components/icons.jsx';
 
 // Plain names for the error sources that are not a module (a module's own name comes from the server).
 const SOURCE_LABELS = {
@@ -387,8 +388,9 @@ export default function Health() {
             {d.modules.map((m) => (
               <div className="v2-row" key={m.name}>
                 <div className="v2-row-main">
-                  <h3>
-                    {m.icon} {m.name}
+                  <h3 className="v2-health-module">
+                    {m.iconName ? <Icon name={m.iconName} className="v2-health-module-icon" /> : m.icon}
+                    {m.name}
                   </h3>
                 </div>
                 <span className="v2-row-time">{plural(m.guilds, 'server')}</span>
