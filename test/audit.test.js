@@ -72,6 +72,28 @@ test('listAuditPage pages newest first by the id of the last row, and is scoped 
   assert.deepEqual(await listAuditActions('900000000000000099'), []);
 });
 
+test('listAuditPage orders by the id, the same thing its cursor compares, so a skewed clock cannot skip or repeat a row', async () => {
+  const S = '900000000000000013';
+  // created_at runs against the id (a clock that stepped back, or imported rows)
+  const times = [5000, 1000, 4000, 2000, 3000];
+  for (let i = 0; i < times.length; i += 1) {
+    await db
+      .prepare(
+        'INSERT INTO config_audit (guild_id, actor, action, detail, created_at) VALUES (?, ?, ?, ?, ?)'
+      )
+      .run(S, 'x', 'module:polls', String(i + 1), times[i]);
+  }
+  const seen = [];
+  let before = 0;
+  for (let guard = 0; guard < 10; guard += 1) {
+    const page = await listAuditPage(S, { limit: 2, before });
+    if (!page.rows.length) break;
+    seen.push(...page.rows.map((r) => r.detail));
+    before = page.rows.at(-1).id;
+  }
+  assert.deepEqual(seen, ['5', '4', '3', '2', '1'], 'every row once, newest id first');
+});
+
 test('listAuditPage caps the page size and survives odd input', async () => {
   const C = '900000000000000012';
   for (let i = 0; i < 130; i += 1)

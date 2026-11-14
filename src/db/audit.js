@@ -19,12 +19,11 @@ const insertStmt = prepare(
 const listStmt = prepare(
   'SELECT * FROM config_audit WHERE guild_id = ? ORDER BY created_at DESC, id DESC LIMIT ?'
 );
-// One page, newest first: `before` is the id of the last row of the previous page (0 = from the top).
-const pageStmt = prepare(
-  'SELECT * FROM config_audit WHERE guild_id = ? AND id < ? ORDER BY created_at DESC, id DESC LIMIT ?'
-);
+// One page, newest first: `before` is the id of the last row of the previous page (0 = from the top). The
+// order is the id's too, the same thing the cursor compares, so a page never skips or repeats a row.
+const pageStmt = prepare('SELECT * FROM config_audit WHERE guild_id = ? AND id < ? ORDER BY id DESC LIMIT ?');
 const pageByActionStmt = prepare(
-  'SELECT * FROM config_audit WHERE guild_id = ? AND action = ? AND id < ? ORDER BY created_at DESC, id DESC LIMIT ?'
+  'SELECT * FROM config_audit WHERE guild_id = ? AND action = ? AND id < ? ORDER BY id DESC LIMIT ?'
 );
 const actionsStmt = prepare(
   'SELECT action, COUNT(*) AS n FROM config_audit WHERE guild_id = ? GROUP BY action ORDER BY n DESC, action'
