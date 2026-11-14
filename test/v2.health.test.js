@@ -59,7 +59,8 @@ test('the admin of the server gets the checks and the picker data', async () => 
     assert.equal(c.href, `/v2/guilds/${D_GUILD}/m/verification`);
   }
   assert.deepEqual(body.targets.roles.blocked, { [ROLE_HIGH]: 'above' });
-  assert.deepEqual(body.targets.channels.blocked, { [CH]: ['Embed Links'] });
+  assert.deepEqual(body.targets.channels.blocked, {});
+  assert.deepEqual(body.targets.channels.noEmbed, [CH]);
 });
 
 test('someone who does not manage the server is refused, and so is a signed-out caller', async () => {

@@ -179,7 +179,7 @@ export default function Starboard() {
                       </option>
                     ))}
                   </select>
-                  <PickerHealth kind="channel" value={b.channelId} />
+                  <PickerHealth kind="channel" value={b.channelId} embed />
                 </div>
               </div>
 

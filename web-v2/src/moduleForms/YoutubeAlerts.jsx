@@ -137,7 +137,7 @@ export default function YoutubeAlerts() {
                       </option>
                     ))}
                   </select>
-                  <PickerHealth kind="channel" value={a.discordChannelId} />
+                  <PickerHealth kind="channel" value={a.discordChannelId} embed />
                 </div>
               </div>
 

@@ -9,7 +9,7 @@
 // ping). `fix` is a plain instruction for a server admin; `href` is the module's page in the dashboard.
 //
 // The check is read-only and answers only what the platform can tell: a permission the platform does not
-// have (Fluxer has no timeouts or thread permissions) is skipped, never reported as missing. The report
+// have (Fluxer has no thread permissions) is skipped, never reported as missing. The report
 // is cached per server for a minute and dropped when settings are saved (src/lib/healthCache.js).
 import { MODULES, getModule } from '../../modules/registry.js';
 import { getGuildModules } from '../../db/modules.js';
@@ -27,8 +27,10 @@ import { log } from '../../lib/log.js';
 const ERROR = 'error';
 const WARNING = 'warning';
 
+/** What a module needs in a channel it posts in: to see it and to send. */
+export const POST_TEXT = ['ViewChannel', 'SendMessages'];
 /** What a module needs in a channel it posts an embed in. */
-export const POST = ['ViewChannel', 'SendMessages', 'EmbedLinks'];
+export const POST = [...POST_TEXT, 'EmbedLinks'];
 
 const LABELS = {
   ViewChannel: 'View Channel',
@@ -66,11 +68,19 @@ const ids = (v) => [...new Set(arr(v).map(String).filter(isId))];
 //                                                           ('remove') or pings ('ping')
 
 const guildPerm = (perm, why, severity = ERROR) => ({ type: 'guild', perm, why, severity });
-const inChannel = (id, label, perms, { severity = ERROR, field } = {}) =>
-  isId(id) ? { type: 'channel', id: String(id), label, perms, severity, field } : null;
-/** A channel Sylo posts embeds in; `optional` makes a failure a warning (a log channel, an extra copy). */
-const post = (id, label, { optional = false, extra = [], field } = {}) =>
-  inChannel(id, label, [...POST, ...extra], { severity: optional ? WARNING : ERROR, field });
+// `part` keeps two needs on the same channel apart when they must not merge (an image that may be
+// skipped next to a message that must go out); `voice` lists what a voice channel needs on top.
+const inChannel = (id, label, perms, { severity = ERROR, field, part = '', voice = [] } = {}) =>
+  isId(id) ? { type: 'channel', id: String(id), label, perms, severity, field, part, voice } : null;
+/**
+ * A channel Sylo posts in. `optional` makes a failure a warning (a log channel, an extra copy).
+ * `embed` is whether the module sends an embed there: a plain-text message works without Embed Links.
+ */
+const post = (id, label, { optional = false, embed = true, extra = [], field } = {}) =>
+  inChannel(id, label, [...(embed ? POST : POST_TEXT), ...extra], {
+    severity: optional ? WARNING : ERROR,
+    field,
+  });
 const give = (id, label, field) =>
   isId(id) ? { type: 'role', id: String(id), label, action: 'give', field } : null;
 const take = (id, label, field) =>
@@ -79,9 +89,9 @@ const ping = (id, label, channelId, field) =>
   isId(id) ? { type: 'role', id: String(id), label, action: 'ping', channelId, field } : null;
 
 /** One alert list (streamers, feeds ...): a channel to post in and an optional role to ping. */
-const alertNeeds = (rows, { channelKey, nameOf }) =>
+const alertNeeds = (rows, { channelKey, nameOf, embedOf = () => true }) =>
   arr(rows).flatMap((a) => [
-    post(a?.[channelKey], `The channel for ${nameOf(a)}`, { field: channelKey }),
+    post(a?.[channelKey], `The channel for ${nameOf(a)}`, { embed: embedOf(a), field: channelKey }),
     ping(a?.roleId, `The ping role for ${nameOf(a)}`, a?.[channelKey], 'roleId'),
   ]);
 
@@ -128,23 +138,39 @@ export const NEEDS = {
       : []),
   ],
   welcome: (cfg) => [
+    // Plain text unless the embed option is on. The card image is skipped, not the message, without Attach Files.
     cfg.joinEnabled
-      ? post(cfg.joinChannel, 'The welcome channel', {
-          extra: cfg.card ? ['AttachFiles'] : [],
+      ? post(cfg.joinChannel, 'The welcome channel', { embed: Boolean(cfg.useEmbed), field: 'joinChannel' })
+      : null,
+    cfg.joinEnabled && cfg.card
+      ? inChannel(cfg.joinChannel, 'The welcome channel (card image)', ['AttachFiles'], {
+          severity: WARNING,
+          part: 'card',
           field: 'joinChannel',
         })
       : null,
-    cfg.leaveEnabled ? post(cfg.leaveChannel, 'The leave channel', { field: 'leaveChannel' }) : null,
+    cfg.leaveEnabled
+      ? post(cfg.leaveChannel, 'The leave channel', { embed: Boolean(cfg.useEmbed), field: 'leaveChannel' })
+      : null,
   ],
   birthdays: (cfg) => [
     post(cfg.channel, 'The birthday channel', { field: 'channel' }),
     give(cfg.roleId, 'The birthday role', 'roleId'),
   ],
-  'welcome-channel': (cfg) => [post(cfg.channelId, 'The welcome channel', { field: 'channelId' })],
+  'welcome-channel': (cfg) => [
+    post(cfg.channelId, 'The welcome channel', {
+      embed: arr(cfg.spec?.embeds).length > 0,
+      field: 'channelId',
+    }),
+  ],
   'custom-commands': (cfg) =>
     arr(cfg.commands).flatMap((c) =>
       arr(c?.actions).map((a) => {
-        if (a?.type === 'send') return post(a.channelId, `The channel of /${c.name}`, { field: 'channelId' });
+        if (a?.type === 'send')
+          return post(a.channelId, `The channel of /${c.name}`, {
+            embed: arr(a.messages).some((m) => m?.embed),
+            field: 'channelId',
+          });
         if (a?.type === 'add-role') return give(a.roleId, `The role of /${c.name}`, 'roleId');
         if (a?.type === 'remove-role') return take(a.roleId, `The role of /${c.name}`, 'roleId');
         return null;
@@ -183,14 +209,18 @@ export const NEEDS = {
       : [],
   counting: (cfg) => [
     post(cfg.channelId, 'The counting channel', {
+      embed: false,
       extra: cfg.react ? ['AddReactions'] : [],
       field: 'channelId',
     }),
-    give(cfg.penaltyRoleId, 'The penalty role', 'penaltyRoleId'),
+    // The role is only touched when a penalty time is set (a config saved before the setting has none).
+    cfg.penaltyMinutes === undefined || Number(cfg.penaltyMinutes) > 0
+      ? give(cfg.penaltyRoleId, 'The penalty role', 'penaltyRoleId')
+      : null,
   ],
   leveling: (cfg) => [
     cfg.announce === 'channel' && cfg.announceChannel
-      ? post(cfg.announceChannel, 'The level-up channel', { field: 'announceChannel' })
+      ? post(cfg.announceChannel, 'The level-up channel', { embed: false, field: 'announceChannel' })
       : null,
     ...arr(cfg.rewards).map((r) => give(r?.roleId, 'A reward role', 'roleId')),
   ],
@@ -260,8 +290,11 @@ export const NEEDS = {
   events: (cfg) => [post(cfg.channel, 'The events channel', { optional: true, field: 'channel' })],
   'server-stats': (cfg) =>
     arr(cfg.channels).map((c) =>
+      // Sylo renames the channel, which discord.js only allows when it is manageable: on a voice channel
+      // that takes Connect as well as View Channel and Manage Channels.
       inChannel(c?.channelId, 'A statistics channel', ['ViewChannel', 'ManageChannels'], {
         field: 'channelId',
+        voice: ['Connect'],
       })
     ),
   'temp-voice': (cfg, _x, guild) => [
@@ -270,7 +303,13 @@ export const NEEDS = {
       ? [guildPerm('MoveMembers', 'move members into their new channel')]
       : []),
     ...arr(cfg.hubs).flatMap((h) => [
-      inChannel(h?.hubChannelId, 'A hub channel', ['ViewChannel', 'Connect'], { field: 'hubChannelId' }),
+      // Sylo only watches the hub and moves people out of it: it never connects to it.
+      inChannel(
+        h?.hubChannelId,
+        'A hub channel',
+        ['ViewChannel', ...(guildSupports(guild, 'moveMembers') ? ['MoveMembers'] : [])],
+        { field: 'hubChannelId' }
+      ),
       inChannel(h?.categoryId, 'A temporary-channel category', ['ViewChannel', 'ManageChannels'], {
         field: 'categoryId',
       }),
@@ -308,7 +347,11 @@ export const NEEDS = {
   reminders: (_cfg, x) =>
     arr(x.reminders)
       .filter((r) => r.enabled === 1 || r.enabled === true)
-      .map((r) => post(r.channel_id ?? r.channelId, `The channel of the reminder "${r.name}"`)),
+      .map((r) =>
+        post(r.channel_id ?? r.channelId, `The channel of the reminder "${r.name}"`, {
+          embed: arr(r.spec?.embeds).length > 0,
+        })
+      ),
   automod: (cfg) => {
     const rules = Object.values(cfg.rules && typeof cfg.rules === 'object' ? cfg.rules : {}).filter(
       (r) => r?.enabled
@@ -333,9 +376,17 @@ export const NEEDS = {
     ping(cfg.roleId, 'The ping role', cfg.channelId, 'roleId'),
   ],
   'twitch-alerts': (cfg) =>
-    alertNeeds(cfg.alerts, { channelKey: 'channelId', nameOf: (a) => a?.login || 'a streamer' }),
+    alertNeeds(cfg.alerts, {
+      channelKey: 'channelId',
+      nameOf: (a) => a?.login || 'a streamer',
+      embedOf: (a) => !a?.plainText,
+    }),
   'kick-alerts': (cfg) =>
-    alertNeeds(cfg.alerts, { channelKey: 'channelId', nameOf: (a) => a?.slug || 'a streamer' }),
+    alertNeeds(cfg.alerts, {
+      channelKey: 'channelId',
+      nameOf: (a) => a?.slug || 'a streamer',
+      embedOf: (a) => !a?.plainText,
+    }),
   'youtube-alerts': (cfg) =>
     alertNeeds(cfg.alerts, { channelKey: 'discordChannelId', nameOf: (a) => a?.name || 'a YouTube channel' }),
   rss: (cfg) =>
@@ -408,6 +459,7 @@ function guildCheck(base, need, me) {
     kind: 'guild-permission',
     code: 'missing-guild-permission',
     permission: need.perm,
+    permissionLabel: labelOf(need.perm),
     message: `Sylo is missing ${labelOf(need.perm)}, which ${base.moduleName} needs to ${need.why}.`,
     fix: `Give Sylo's role ${labelOf(need.perm)} in the server's role settings.`,
   };
@@ -418,7 +470,9 @@ function channelCheck(base, need, guild, me) {
   // A channel that no longer exists is reported by the "needs attention" setup check, not here.
   if (!channel) return null;
   const perms = typeof channel.permissionsFor === 'function' ? channel.permissionsFor(me) : null;
-  const missing = lacking(perms, need.perms);
+  // A voice channel may need more than a text one (see `voice` on the need).
+  const wanted = channel.isVoiceBased?.() ? [...new Set([...need.perms, ...need.voice])] : need.perms;
+  const missing = lacking(perms, wanted);
   if (!missing.length) return null;
   const where = channelName(channel);
   return {
@@ -491,6 +545,32 @@ function roleCheck(base, need, guild, me) {
   };
 }
 
+/**
+ * One need per place: the same channel, role or permission listed twice by a module (an optional log
+ * channel that is also a rule channel) is checked once, with every permission either listing asked for
+ * and the stronger severity. `part` keeps two deliberately separate needs apart.
+ */
+export function mergeNeeds(needs) {
+  const merged = new Map();
+  for (const need of needs) {
+    const key = `${need.type}|${need.id ?? need.perm}|${need.action ?? ''}|${need.part ?? ''}`;
+    const had = merged.get(key);
+    if (!had) {
+      merged.set(key, { ...need });
+      continue;
+    }
+    if (need.severity === ERROR && had.severity !== ERROR) {
+      had.severity = ERROR;
+      had.label = need.label ?? had.label;
+      had.why = need.why ?? had.why;
+    }
+    if (need.perms) had.perms = [...new Set([...had.perms, ...need.perms])];
+    if (need.voice) had.voice = [...new Set([...(had.voice ?? []), ...need.voice])];
+    had.field ??= need.field;
+  }
+  return [...merged.values()];
+}
+
 // --- the report -------------------------------------------------------------------------------
 
 const SEVERITY_ORDER = { error: 0, warning: 1 };
@@ -508,11 +588,15 @@ export function pickerTargets(guild, me) {
     const block = roleBlock(guild, me, role);
     if (block && block !== 'everyone') roles.blocked[role.id] = block;
   }
-  const channels = { blocked: {} };
+  // `blocked`: Sylo cannot send there at all. `noEmbed`: it can send, but not embeds, which only matters to a
+  // module that sends one (a plain-text message goes out without Embed Links).
+  const channels = { blocked: {}, noEmbed: [] };
   for (const channel of guild.channels?.cache?.values?.() ?? []) {
     if (!isTextChannel(channel) || typeof channel.permissionsFor !== 'function') continue;
-    const missing = lacking(channel.permissionsFor(me), POST);
+    const perms = channel.permissionsFor(me);
+    const missing = lacking(perms, POST_TEXT);
     if (missing.length) channels.blocked[channel.id] = missing.map(labelOf);
+    else if (can(perms, 'EmbedLinks') === false) channels.noEmbed.push(channel.id);
   }
   return { roles, channels };
 }
@@ -552,11 +636,7 @@ export async function buildHealthReport(guild, { modules } = {}) {
       href: v2CardHref(def.id, guild.id),
       ...(def.ownerOnly ? { ownerOnly: true } : {}),
     };
-    const seen = new Set();
-    for (const need of needs) {
-      const key = `${need.type}|${need.id ?? need.perm}|${need.action ?? ''}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
+    for (const need of mergeNeeds(needs)) {
       const check =
         need.type === 'guild'
           ? guildCheck(moduleBase, need, me)

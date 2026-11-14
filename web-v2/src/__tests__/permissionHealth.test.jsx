@@ -28,6 +28,7 @@ const GUILD = '123456789012345678';
 const HIGH = '222222222222222222';
 const MANAGED = '222222222222222223';
 const CH = '111111111111111111';
+const NO_EMBED = '111111111111111112';
 
 const check = (over = {}) => ({
   module: 'verification',
@@ -48,7 +49,7 @@ const health = (over = {}) => ({
   checks: [check()],
   targets: {
     roles: { blockedAll: null, blocked: { [HIGH]: 'above', [MANAGED]: 'managed' } },
-    channels: { blocked: { [CH]: ['Send Messages', 'Embed Links'] } },
+    channels: { blocked: { [CH]: ['Send Messages'] }, noEmbed: [NO_EMBED] },
   },
   ...over,
 });
@@ -68,9 +69,18 @@ describe('the notes under a picker', () => {
 
   it('says what Sylo lacks in a channel', () => {
     expect(channelWarning(health(), CH)).toBe(
-      "Sylo can't post in this channel: it is missing Send Messages, Embed Links."
+      "Sylo can't post in this channel: it is missing Send Messages."
     );
     expect(channelWarning(health(), '999999999999999999')).toBeNull();
+  });
+
+  it('counts a missing Embed Links only where the module sends an embed', () => {
+    expect(channelWarning(health(), NO_EMBED)).toBeNull();
+    expect(channelWarning(health(), NO_EMBED, { embed: true })).toBe(
+      "Sylo can't send embeds in this channel: it is missing Embed Links."
+    );
+    expect(pickerWarnings(health(), 'channel', NO_EMBED, [], { embed: false })).toEqual([]);
+    expect(pickerWarnings(health(), 'channel', NO_EMBED, [], { embed: true })).toHaveLength(1);
   });
 
   it('warns for every role when Sylo lacks Manage Roles', () => {
@@ -148,6 +158,40 @@ describe('Needs attention', () => {
     const items = attentionItems(data, GUILD);
     expect(items.map((i) => i.key)).toEqual(['health-verification']);
     expect(items[0].kind).toBe('health');
+  });
+
+  it('says a missing server-wide permission once, in the permissions row, not once per module', () => {
+    const missing = (module, moduleName) =>
+      check({
+        module,
+        moduleName,
+        code: 'missing-guild-permission',
+        kind: 'guild-permission',
+        permission: 'ManageRoles',
+        permissionLabel: 'Manage Roles',
+        message: 'Sylo is missing Manage Roles.',
+        fix: 'Give it.',
+      });
+    const checks = [
+      missing('roles', 'Reaction roles'),
+      missing('verification', 'Verification'),
+      check({ module: 'leveling', moduleName: 'Leveling' }),
+    ];
+    const h = health({ checks });
+    expect(healthItems(h, GUILD).map((i) => i.moduleId)).toEqual(['roles', 'verification', 'leveling']);
+    expect(healthItems(h, GUILD, ['Manage Roles']).map((i) => i.moduleId)).toEqual(['leveling']);
+    const cards = ['roles', 'verification', 'leveling'].map((id) => ({
+      id,
+      name: id,
+      hasToggle: true,
+      enabled: true,
+      status: 'on',
+    }));
+    const items = attentionItems(
+      { groups: [{ title: 'x', cards }], attention: { health: h, missingPermissions: ['Manage Roles'] } },
+      GUILD
+    );
+    expect(items.map((i) => i.key)).toEqual(['health-leveling', 'permissions']);
   });
 
   it('works with an overview from an older server that has no health', () => {
@@ -262,5 +306,47 @@ describe('the shared read', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
     await waitFor(() => expect(getGuildHealth).toHaveBeenLastCalledWith(GUILD, { refresh: true }));
     await waitFor(() => expect(screen.queryByText("Sylo can't do everything this module needs")).toBeNull());
+  });
+
+  it('keeps the last answer when the server refuses a re-check, says so, and shows a busy button meanwhile', async () => {
+    getGuildHealth.mockResolvedValueOnce(health());
+    render(
+      <HealthProvider guildId={GUILD}>
+        <ModuleHealth moduleId="verification" />
+        <PickerHealth kind="role" value={HIGH} />
+      </HealthProvider>
+    );
+    await screen.findByText("Sylo can't do everything this module needs");
+    let refuse;
+    getGuildHealth.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          refuse = () => reject(Object.assign(new Error('Too many re-checks'), { status: 429 }));
+        })
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
+    const busy = await screen.findByRole('button', { name: 'Checking…' });
+    expect(busy.getAttribute('aria-busy')).toBe('true');
+    expect(busy.disabled).toBe(true);
+    refuse();
+    expect(await screen.findByText('Checked recently — try again in a moment.')).toBeTruthy();
+    // nothing disappeared: the warnings of the last answer are still there
+    expect(screen.getByText("Sylo can't do everything this module needs")).toBeTruthy();
+    expect(screen.getAllByRole('note').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'Check again' }).disabled).toBe(false);
+  });
+
+  it('keeps the last answer when a plain read fails', async () => {
+    getGuildHealth.mockResolvedValueOnce(health());
+    render(
+      <HealthProvider guildId={GUILD}>
+        <ModuleHealth moduleId="verification" />
+      </HealthProvider>
+    );
+    await screen.findByText("Sylo can't do everything this module needs");
+    getGuildHealth.mockRejectedValueOnce(new Error('down'));
+    fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
+    await waitFor(() => expect(getGuildHealth).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("Sylo can't do everything this module needs")).toBeTruthy();
   });
 });

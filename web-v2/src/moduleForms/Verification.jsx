@@ -113,7 +113,7 @@ export default function Verification() {
                 </option>
               ))}
             </select>
-            <PickerHealth kind="channel" value={form.channelId} />
+            <PickerHealth kind="channel" value={form.channelId} embed />
             <p className="v2-field-hint">
               Saving posts the verify message here, or updates the one that is already there. Sylo needs to
               see the channel, send messages and embed links in it.
@@ -171,7 +171,7 @@ export default function Verification() {
                 </option>
               ))}
             </select>
-            <PickerHealth kind="channel" value={form.logChannelId} />
+            <PickerHealth kind="channel" value={form.logChannelId} embed />
           </div>
 
           <div className="v2-field">

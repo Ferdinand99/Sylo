@@ -145,7 +145,7 @@ export function attentionItems(data, guildId) {
   }
   // What Sylo cannot do in the channels and roles a module uses (a role above Sylo's, a channel it cannot
   // post in): one item per module, with a "Fix" link to the module's page.
-  for (const item of healthItems(a.health, guildId)) {
+  for (const item of healthItems(a.health, guildId, a.missingPermissions ?? [])) {
     if (byId.get(item.moduleId) && byId.get(item.moduleId).enabled === false) continue;
     items.push(item);
   }

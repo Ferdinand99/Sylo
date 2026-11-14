@@ -186,15 +186,16 @@ a minute per server and is dropped when a setting is saved; `?refresh=1` checks 
   }],
   "targets": {
     "roles": { "blockedAll": null, "blocked": { "<roleId>": "above | managed" } },
-    "channels": { "blocked": { "<channelId>": ["Send Messages", "Embed Links"] } }
+    "channels": { "blocked": { "<channelId>": ["View Channel", "Send Messages"] }, "noEmbed": ["<channelId>"] }
   }
 }
 ```
 
 `severity` is `error` when a module cannot do that part of its job and `warning` when it still works.
-`targets` lists only the roles Sylo cannot give and the channels it cannot post in, for a picker to warn
-about a choice that is not saved yet. A permission the platform does not have (Fluxer has no timeouts or
-thread permissions) is never reported. The same checks come with the overview, in `attention.health`.
+`targets` lists only the roles Sylo cannot give and the channels it cannot send in (`blocked`), and the
+channels where it can send but lacks Embed Links (`noEmbed`, which matters only to a module that sends an
+embed there), for a picker to warn about a choice that is not saved yet. A permission the platform does not
+have (Fluxer has no thread permissions) is never reported. The same checks come with the overview, in `attention.health`.
 
 On a token request, "not signed in" and "not allowed" are JSON, never a
 redirect or an HTML page:

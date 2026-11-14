@@ -206,7 +206,7 @@ export default function Introductions() {
                 </option>
               ))}
             </select>
-            <PickerHealth kind="channel" value={form.channelId} />
+            <PickerHealth kind="channel" value={form.channelId} embed />
             <p className="v2-field-hint">
               Sylo needs View Channel, Send Messages and Embed Links there. Nothing works until a channel is
               chosen.

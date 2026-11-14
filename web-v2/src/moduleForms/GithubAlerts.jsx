@@ -67,7 +67,7 @@ function WatchForm({ initial, channels, roles, eventTypes, onSave, onCancel, sav
             </option>
           ))}
         </select>
-        <PickerHealth kind="channel" value={channelId} />
+        <PickerHealth kind="channel" value={channelId} embed />
       </div>
 
       <div className="v2-field">

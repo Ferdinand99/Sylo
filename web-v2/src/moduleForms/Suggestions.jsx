@@ -374,7 +374,7 @@ export default function Suggestions() {
                   </option>
                 ))}
               </select>
-              <PickerHealth kind="channel" value={form.channel} />
+              <PickerHealth kind="channel" value={form.channel} embed />
             </div>
 
             <div className="v2-field">
@@ -393,7 +393,7 @@ export default function Suggestions() {
                   </option>
                 ))}
               </select>
-              <PickerHealth kind="channel" value={form.logChannel} />
+              <PickerHealth kind="channel" value={form.logChannel} embed />
               <p className="v2-field-hint">
                 Where a suggestion that is approved, denied or implemented is also posted. Pick how below.
               </p>

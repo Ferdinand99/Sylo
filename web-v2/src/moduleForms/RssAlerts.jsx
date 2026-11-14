@@ -148,7 +148,7 @@ export default function RssAlerts() {
                         </option>
                       ))}
                     </select>
-                    <PickerHealth kind="channel" value={row.channelId} />
+                    <PickerHealth kind="channel" value={row.channelId} embed />
                   </div>
                   <div className="v2-field">
                     <label>

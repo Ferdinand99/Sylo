@@ -66,7 +66,7 @@ export default function Logging() {
               </option>
             ))}
           </select>
-          <PickerHealth kind="channel" value={form.channel} />
+          <PickerHealth kind="channel" value={form.channel} embed />
         </div>
 
         <div className="v2-field">

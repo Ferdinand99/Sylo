@@ -166,7 +166,7 @@ export default function Appeals() {
               </option>
             ))}
           </select>
-          <PickerHealth kind="channel" value={form.reviewChannelId} />
+          <PickerHealth kind="channel" value={form.reviewChannelId} embed />
         </div>
 
         <div className="v2-field">

@@ -67,3 +67,11 @@
 .v2-attention-lines li span {
   color: var(--text-muted);
 }
+.v2-module-health-notice {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.v2-module-health-notice:empty {
+  display: none;
+}

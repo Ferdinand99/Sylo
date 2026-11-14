@@ -26,11 +26,21 @@ export function roleWarning(health, roleId) {
   return block && ROLE_REASON[block] ? `Sylo can't give this role: ${ROLE_REASON[block]}.` : null;
 }
 
-/** Why Sylo cannot post in this channel, as a sentence for a picker, or null when it can. */
-export function channelWarning(health, channelId) {
-  const missing = health?.targets?.channels?.blocked?.[channelId];
-  if (!Array.isArray(missing) || !missing.length) return null;
-  return `Sylo can't post in this channel: it is missing ${missing.join(', ')}.`;
+/**
+ * Why Sylo cannot post in this channel, as a sentence for a picker, or null when it can. A channel where
+ * Sylo only lacks Embed Links is a problem just for a picker whose module sends embeds (`embed`): a
+ * plain-text message goes out without it.
+ */
+export function channelWarning(health, channelId, { embed = false } = {}) {
+  const channels = health?.targets?.channels;
+  const missing = channels?.blocked?.[channelId];
+  if (Array.isArray(missing) && missing.length) {
+    return `Sylo can't post in this channel: it is missing ${missing.join(', ')}.`;
+  }
+  if (embed && Array.isArray(channels?.noEmbed) && channels.noEmbed.includes(channelId)) {
+    return "Sylo can't send embeds in this channel: it is missing Embed Links.";
+  }
+  return null;
 }
 
 /**
@@ -40,10 +50,12 @@ export function channelWarning(health, channelId) {
  * @param {'role'|'channel'} kind
  * @param {string|string[]} value  the picked id, or the picked ids
  * @param {Array<{ id: string, name: string }>} [items]  to name each failing id of a list
+ * @param {{ embed?: boolean }} [opts]  `embed`: the module sends an embed in the channel
  * @returns {string[]}
  */
-export function pickerWarnings(health, kind, value, items = []) {
-  const warn = kind === 'channel' ? channelWarning : roleWarning;
+export function pickerWarnings(health, kind, value, items = [], { embed = false } = {}) {
+  const warn =
+    kind === 'channel' ? (h, id) => channelWarning(h, id, { embed }) : (h, id) => roleWarning(h, id);
   if (Array.isArray(value)) {
     return value.flatMap((id) => {
       const text = warn(health, id);
@@ -59,11 +71,14 @@ export function pickerWarnings(health, kind, value, items = []) {
 /**
  * The "Needs attention" items of the health check, one per module, errors before warnings. The item's
  * `lines` are every problem of the module with what to do about it; `href` is the module's page.
+ * A missing server-wide permission that the "Sylo is missing N permissions" row already names
+ * (`missingPermissions`, by label) is left out here, so it is said once and not once per module.
  * @returns {Array<{ key: string, kind: 'health', severity: 'error'|'warning', moduleId: string, title: string, detail: string, href: string, lines: Array<{ message: string, fix: string, severity: string }> }>}
  */
-export function healthItems(health, guildId) {
+export function healthItems(health, guildId, missingPermissions = []) {
   const byModule = new Map();
   for (const c of checksOf(health)) {
+    if (c.kind === 'guild-permission' && missingPermissions.includes(c.permissionLabel)) continue;
     if (!byModule.has(c.module)) byModule.set(c.module, { name: c.moduleName ?? c.module, checks: [] });
     byModule.get(c.module).checks.push(c);
   }

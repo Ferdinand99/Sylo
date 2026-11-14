@@ -21,9 +21,19 @@ export default function ModuleHealth({ moduleId }) {
           </li>
         ))}
       </ul>
-      <button type="button" className="v2-btn-ghost v2-module-health-recheck" onClick={ctx.recheck}>
-        Check again
+      <button
+        type="button"
+        className="v2-btn-ghost v2-module-health-recheck"
+        onClick={ctx.recheck}
+        disabled={ctx.rechecking}
+        aria-busy={ctx.rechecking}
+      >
+        {ctx.rechecking ? 'Checking…' : 'Check again'}
       </button>
+      {/* Always rendered, so a screen reader announces the notice when it appears. */}
+      <p className="v2-module-health-notice" role="status">
+        {ctx.notice}
+      </p>
     </Callout>
   );
 }

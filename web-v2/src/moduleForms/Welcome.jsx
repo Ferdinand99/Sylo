@@ -150,7 +150,7 @@ export default function Welcome() {
                   </option>
                 ))}
               </select>
-              <PickerHealth kind="channel" value={form.joinChannel} />
+              <PickerHealth kind="channel" value={form.joinChannel} embed={form.useEmbed} />
             </div>
             <div className="v2-field">
               <label htmlFor="joinMessage">Message</label>
@@ -258,7 +258,7 @@ export default function Welcome() {
                   </option>
                 ))}
               </select>
-              <PickerHealth kind="channel" value={form.leaveChannel} />
+              <PickerHealth kind="channel" value={form.leaveChannel} embed={form.useEmbed} />
             </div>
             <div className="v2-field">
               <label htmlFor="leaveMessage">Message</label>

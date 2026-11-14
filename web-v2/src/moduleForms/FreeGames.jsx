@@ -39,7 +39,7 @@ export default function FreeGames() {
               </option>
             ))}
           </select>
-          <PickerHealth kind="channel" value={form.channelId} />
+          <PickerHealth kind="channel" value={form.channelId} embed />
           <p className="v2-field-hint">Sylo needs to see the channel, send messages and embed links in it.</p>
         </div>
 

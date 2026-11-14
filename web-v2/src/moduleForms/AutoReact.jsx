@@ -138,7 +138,7 @@ export default function AutoReact() {
               </option>
             ))}
           </select>
-          <PickerHealth kind="channel" value={form.logChannelId} />
+          <PickerHealth kind="channel" value={form.logChannelId} embed />
           <p className="v2-field-hint">
             Posts one line here every time a rule triggers — who it reacted to and what changed.
           </p>

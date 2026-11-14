@@ -120,7 +120,7 @@ export default function Tickets() {
                 </option>
               ))}
             </select>
-            <PickerHealth kind="channel" value={form.notifyChannel} />
+            <PickerHealth kind="channel" value={form.notifyChannel} embed />
           </div>
 
           <div className="v2-field">

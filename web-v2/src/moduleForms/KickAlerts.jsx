@@ -120,7 +120,7 @@ export default function KickAlerts() {
                       </option>
                     ))}
                   </select>
-                  <PickerHealth kind="channel" value={a.channelId} />
+                  <PickerHealth kind="channel" value={a.channelId} embed={!a.plainText} />
                 </div>
                 <div className="v2-field">
                   <label>
