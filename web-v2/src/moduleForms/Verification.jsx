@@ -1,4 +1,5 @@
 import LoadError from '../components/LoadError.jsx';
+import PickerHealth from '../components/PickerHealth.jsx';
 import MentionTextarea from '../components/MentionTextarea.jsx';
 import PreviewLayout from '../components/PreviewLayout.jsx';
 import SetupCallout from '../components/SetupCallout.jsx';
@@ -90,6 +91,7 @@ export default function Verification() {
                 </option>
               ))}
             </select>
+            <PickerHealth kind="role" value={form.verifiedRoleId} />
             <p className="v2-field-hint">
               Sylo's own role must be higher than this one in your server's role list, or it can't give it
               out.
@@ -111,6 +113,7 @@ export default function Verification() {
                 </option>
               ))}
             </select>
+            <PickerHealth kind="channel" value={form.channelId} />
             <p className="v2-field-hint">
               Saving posts the verify message here, or updates the one that is already there. Sylo needs to
               see the channel, send messages and embed links in it.
@@ -168,6 +171,7 @@ export default function Verification() {
                 </option>
               ))}
             </select>
+            <PickerHealth kind="channel" value={form.logChannelId} />
           </div>
 
           <div className="v2-field">

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import PickerHealth from '../components/PickerHealth.jsx';
 import { useCmd } from '../platformContext.jsx';
 import { publishIntroPrompt, unpublishIntroPrompt } from '../api.js';
 import { notify } from '../notify.js';
@@ -205,6 +206,7 @@ export default function Introductions() {
                 </option>
               ))}
             </select>
+            <PickerHealth kind="channel" value={form.channelId} />
             <p className="v2-field-hint">
               Sylo needs View Channel, Send Messages and Embed Links there. Nothing works until a channel is
               chosen.

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import PickerHealth from '../components/PickerHealth.jsx';
 import { useSearchParams } from 'react-router-dom';
 import '../styles/wp4-inbox.css';
 import { useCmd } from '../platformContext.jsx';
@@ -373,6 +374,7 @@ export default function Suggestions() {
                   </option>
                 ))}
               </select>
+              <PickerHealth kind="channel" value={form.channel} />
             </div>
 
             <div className="v2-field">
@@ -391,6 +393,7 @@ export default function Suggestions() {
                   </option>
                 ))}
               </select>
+              <PickerHealth kind="channel" value={form.logChannel} />
               <p className="v2-field-hint">
                 Where a suggestion that is approved, denied or implemented is also posted. Pick how below.
               </p>

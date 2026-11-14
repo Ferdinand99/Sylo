@@ -82,11 +82,28 @@ function NeedsAttention({ items }) {
           </li>
         ) : null}
         {rest.map((item) => (
-          <li key={item.key} className={`v2-attention-item is-${item.kind}`}>
+          <li
+            key={item.key}
+            className={`v2-attention-item is-${item.kind}${item.severity ? ` is-${item.severity}` : ''}`}
+          >
             <span className="v2-attention-dot" aria-hidden="true" />
             <div className="v2-attention-text">
               <strong>{item.title}</strong>
-              <span>{item.detail}</span>
+              {item.lines?.length > 1 ? (
+                // A module with several problems: each one with what to do, not just the first.
+                <ul className="v2-attention-lines">
+                  {item.lines.map((line) => (
+                    <li key={line.message}>
+                      {line.message} <span>{line.fix}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <span>
+                  {item.detail}
+                  {item.lines?.[0]?.fix ? ` ${item.lines[0].fix}` : ''}
+                </span>
+              )}
             </div>
             {item.href ? (
               <Link

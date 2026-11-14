@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import PickerHealth from '../components/PickerHealth.jsx';
 import { welcomeCardPreviewUrl } from '../api.js';
 import ToggleSection from '../components/ToggleSection.jsx';
 import ChipPicker from '../components/ChipPicker.jsx';
@@ -149,6 +150,7 @@ export default function Welcome() {
                   </option>
                 ))}
               </select>
+              <PickerHealth kind="channel" value={form.joinChannel} />
             </div>
             <div className="v2-field">
               <label htmlFor="joinMessage">Message</label>
@@ -256,6 +258,7 @@ export default function Welcome() {
                   </option>
                 ))}
               </select>
+              <PickerHealth kind="channel" value={form.leaveChannel} />
             </div>
             <div className="v2-field">
               <label htmlFor="leaveMessage">Message</label>
@@ -291,6 +294,7 @@ export default function Welcome() {
                 kind="role"
                 items={data.roles}
                 value={form.autoroles}
+                health="role"
                 onChange={(autoroles) => set({ autoroles })}
               />
             </div>

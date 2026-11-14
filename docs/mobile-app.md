@@ -147,6 +147,7 @@ authorization-code flow with PKCE (RFC 7636, S256 only).
 | `DELETE /api/mobile/token` | Bearer token | `204`, or `401` without a valid token |
 | `/api/v2/*` | Bearer token | The dashboard's JSON API |
 | `GET /api/v2/changelog?limit=N` | Bearer token or session | `{ version, releases: [{ version, date, url, sections: [{ title, kind, items: [{ scope, text, refs }] }] }] }`, newest first; the same release notes as the dashboard's What's new page |
+| `GET /api/v2/guilds/:id/health` | Bearer token, server admin | The permission and role-hierarchy health check of one server (below) |
 
 `GET /api/mobile/info` is public. The app calls it when you type a server
 address, to tell whether the address is a Sylo server and whether it can sign
@@ -160,10 +161,40 @@ in there:
 | `login` | Whether sign-in is available (false in open mode) |
 | `loginProviders` | The configured logins, for example `["discord", "fluxer"]`; empty when `login` is false |
 | `platforms` | The platforms the bot runs on, for example `["discord"]` |
-| `features` | What this version's app API supports, for example `["app-login", "live-access", "changelog"]`, so the app can hide what an older Sylo lacks; `changelog` means `GET /api/v2/changelog` is there |
+| `features` | What this version's app API supports, for example `["app-login", "live-access", "changelog", "health"]`, so the app can hide what an older Sylo lacks; `changelog` means `GET /api/v2/changelog` is there, `health` means `GET /api/v2/guilds/:id/health` is |
 
 An older Sylo without this endpoint answers `404`, and the app says the server
 is too old for it.
+
+### Health check
+
+`GET /api/v2/guilds/:id/health` tells a server admin what Sylo cannot do in the places its modules are
+set up to use: a channel it cannot post in, a role it cannot give because Sylo's role is not above it,
+a permission an action needs. Only the modules that are switched on are checked. The answer is cached for
+a minute per server and is dropped when a setting is saved; `?refresh=1` checks again at once (6 per minute).
+
+```json
+{
+  "guildId": "…", "available": true, "platform": "discord", "checkedAt": 1760000000000,
+  "summary": { "errors": 1, "warnings": 0 },
+  "checks": [{
+    "module": "verification", "moduleName": "Verification", "severity": "error",
+    "code": "role-above", "kind": "role-hierarchy",
+    "message": "Sylo can't give Verified: Sylo's role is not above it.",
+    "fix": "In the server's role settings, move Sylo's role above Verified.",
+    "href": "/v2/guilds/…/m/verification", "targetKind": "role", "targetId": "…", "targetName": "Verified"
+  }],
+  "targets": {
+    "roles": { "blockedAll": null, "blocked": { "<roleId>": "above | managed" } },
+    "channels": { "blocked": { "<channelId>": ["Send Messages", "Embed Links"] } }
+  }
+}
+```
+
+`severity` is `error` when a module cannot do that part of its job and `warning` when it still works.
+`targets` lists only the roles Sylo cannot give and the channels it cannot post in, for a picker to warn
+about a choice that is not saved yet. A permission the platform does not have (Fluxer has no timeouts or
+thread permissions) is never reported. The same checks come with the overview, in `attention.health`.
 
 On a token request, "not signed in" and "not allowed" are JSON, never a
 redirect or an HTML page:

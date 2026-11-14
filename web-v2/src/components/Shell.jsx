@@ -4,6 +4,7 @@ import { getGuilds, getPublicSession } from '../api.js';
 import { readLastGuildId, writeLastGuildId } from '../util.js';
 import { isPublicPath } from '../publicRoutes.js';
 import { OverviewProvider } from '../OverviewContext.jsx';
+import { HealthProvider } from '../HealthContext.jsx';
 import Announcement from './Announcement.jsx';
 import ServerSwitcher from './ServerSwitcher.jsx';
 import Sidebar from './Sidebar.jsx';
@@ -100,20 +101,22 @@ function SignedInShell() {
         <AccountMenu />
       </header>
       <OverviewProvider guildId={lastGuildId}>
-        <div className="v2-body">
-          <Sidebar
-            activeGuildId={lastGuildId}
-            open={mobileNavOpen}
-            onClose={() => setMobileNavOpen(false)}
-            returnFocusRef={navToggleRef}
-          />
-          <main className="v2-page">
-            <Announcement />
-            <Suspense fallback={<p className="v2-state">Loading…</p>}>
-              <Outlet context={{ guilds, guildsLoading: loading, guildsError: error }} />
-            </Suspense>
-          </main>
-        </div>
+        <HealthProvider guildId={lastGuildId}>
+          <div className="v2-body">
+            <Sidebar
+              activeGuildId={lastGuildId}
+              open={mobileNavOpen}
+              onClose={() => setMobileNavOpen(false)}
+              returnFocusRef={navToggleRef}
+            />
+            <main className="v2-page">
+              <Announcement />
+              <Suspense fallback={<p className="v2-state">Loading…</p>}>
+                <Outlet context={{ guilds, guildsLoading: loading, guildsError: error }} />
+              </Suspense>
+            </main>
+          </div>
+        </HealthProvider>
       </OverviewProvider>
       <Toasts />
     </div>

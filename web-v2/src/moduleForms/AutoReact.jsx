@@ -1,4 +1,5 @@
 import EmojiPicker from '../components/EmojiPicker.jsx';
+import PickerHealth from '../components/PickerHealth.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
@@ -137,6 +138,7 @@ export default function AutoReact() {
               </option>
             ))}
           </select>
+          <PickerHealth kind="channel" value={form.logChannelId} />
           <p className="v2-field-hint">
             Posts one line here every time a rule triggers — who it reacted to and what changed.
           </p>
@@ -277,6 +279,7 @@ export default function AutoReact() {
                     </option>
                   ))}
                 </select>
+                <PickerHealth kind="role" value={r.roleId} />
                 {r.roleId ? (
                   <>
                     <span aria-hidden="true">→</span>

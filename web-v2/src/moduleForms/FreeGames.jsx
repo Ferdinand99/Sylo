@@ -1,4 +1,5 @@
 import { useCmd } from '../platformContext.jsx';
+import PickerHealth from '../components/PickerHealth.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import SendTestButton from '../components/SendTestButton.jsx';
@@ -38,6 +39,7 @@ export default function FreeGames() {
               </option>
             ))}
           </select>
+          <PickerHealth kind="channel" value={form.channelId} />
           <p className="v2-field-hint">Sylo needs to see the channel, send messages and embed links in it.</p>
         </div>
 

@@ -1,0 +1,69 @@
+/* Permission and role-hierarchy health: the note under a role or channel picker, the list at the top of a
+   module page, and the module's lines in "Needs attention". The colours are the status tokens. */
+
+/* ---- Under a picker: "Sylo can't give this role ..." --------------------------------------------------- */
+.v2-picker-warn {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+}
+.v2-picker-warn-mark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--warn);
+  color: var(--bg-main);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: 1;
+}
+.v2-picker-warn-line {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+/* ---- Top of a module page ---------------------------------------------------------------------------- */
+.v2-module-health {
+  margin: 0 0 14px;
+}
+.v2-module-health-list {
+  margin: 6px 0 10px;
+  padding-left: 18px;
+}
+.v2-module-health-list li {
+  margin: 4px 0;
+  overflow-wrap: anywhere;
+}
+.v2-module-health-list li span {
+  color: var(--text-muted);
+}
+.v2-module-health-recheck {
+  min-height: 32px;
+}
+@media (pointer: coarse) {
+  .v2-module-health-recheck {
+    min-height: 44px;
+  }
+}
+
+/* ---- Needs attention: a module with several problems ------------------------------------------------- */
+.v2-attention-lines {
+  margin: 2px 0 0;
+  padding-left: 16px;
+  font-size: var(--fs-sm);
+}
+.v2-attention-lines li {
+  margin: 3px 0;
+  overflow-wrap: anywhere;
+}
+.v2-attention-lines li span {
+  color: var(--text-muted);
+}

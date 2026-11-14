@@ -1,4 +1,5 @@
 import ChipPicker from '../components/ChipPicker.jsx';
+import PickerHealth from '../components/PickerHealth.jsx';
 import EmojiPicker from '../components/EmojiPicker.jsx';
 import { appendEmoji } from '../emojiText.js';
 import LoadError from '../components/LoadError.jsx';
@@ -178,6 +179,7 @@ export default function Starboard() {
                       </option>
                     ))}
                   </select>
+                  <PickerHealth kind="channel" value={b.channelId} />
                 </div>
               </div>
 

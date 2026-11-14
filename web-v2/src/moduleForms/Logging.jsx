@@ -1,4 +1,5 @@
 import LoadError from '../components/LoadError.jsx';
+import PickerHealth from '../components/PickerHealth.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import SendTestButton from '../components/SendTestButton.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
@@ -65,6 +66,7 @@ export default function Logging() {
               </option>
             ))}
           </select>
+          <PickerHealth kind="channel" value={form.channel} />
         </div>
 
         <div className="v2-field">

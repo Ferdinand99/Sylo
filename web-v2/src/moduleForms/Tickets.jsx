@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import PickerHealth from '../components/PickerHealth.jsx';
 import ChipPicker from '../components/ChipPicker.jsx';
 import MentionTextarea from '../components/MentionTextarea.jsx';
 import PlaceholderBar from '../components/PlaceholderBar.jsx';
@@ -119,6 +120,7 @@ export default function Tickets() {
                 </option>
               ))}
             </select>
+            <PickerHealth kind="channel" value={form.notifyChannel} />
           </div>
 
           <div className="v2-field">

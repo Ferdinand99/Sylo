@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import PickerHealth from '../components/PickerHealth.jsx';
 import { useParams } from 'react-router-dom';
 import {
   getGithubWatches,
@@ -66,6 +67,7 @@ function WatchForm({ initial, channels, roles, eventTypes, onSave, onCancel, sav
             </option>
           ))}
         </select>
+        <PickerHealth kind="channel" value={channelId} />
       </div>
 
       <div className="v2-field">

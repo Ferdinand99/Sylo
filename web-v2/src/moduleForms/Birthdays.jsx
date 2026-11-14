@@ -1,4 +1,5 @@
 import { useCmd } from '../platformContext.jsx';
+import PickerHealth from '../components/PickerHealth.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import MentionTextarea from '../components/MentionTextarea.jsx';
 import PreviewLayout from '../components/PreviewLayout.jsx';
@@ -49,6 +50,7 @@ export default function Birthdays() {
                 </option>
               ))}
             </select>
+            <PickerHealth kind="channel" value={form.channel} />
           </div>
 
           <div className="v2-field">
@@ -84,6 +86,7 @@ export default function Birthdays() {
                 </option>
               ))}
             </select>
+            <PickerHealth kind="role" value={form.roleId} />
             <p className="v2-field-hint">
               Sylo's highest role must sit above this one, and it needs <strong>Manage Roles</strong>.
             </p>
