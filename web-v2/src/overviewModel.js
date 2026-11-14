@@ -125,7 +125,7 @@ export function attentionItems(data, guildId) {
     applications,
     'application waiting',
     'applications waiting',
-    `/guilds/${guildId}/m/applications`
+    `/guilds/${guildId}/m/applications?tab=submissions`
   );
   work('suggestions', suggestions, 'open suggestion', 'open suggestions', `/guilds/${guildId}/m/suggestions`);
 
@@ -220,7 +220,8 @@ export function navModel({ guildId, data, operator }) {
       key: 'applications',
       label: 'Applications',
       icon: 'clipboard',
-      href: g('/m/applications'),
+      // With work waiting the entry opens on the queue; with none, on the forms (the page's own default).
+      href: g(count(waiting.applications) > 0 ? '/m/applications?tab=submissions' : '/m/applications'),
       prefix: true,
       count: count(waiting.applications),
     },

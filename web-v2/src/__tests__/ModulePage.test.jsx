@@ -15,7 +15,11 @@ vi.mock('../api.js', () => ({
 }));
 // A stand-in settings form: the shell is under test, not a module's form.
 vi.mock('../moduleForms/index.js', () => ({
-  MODULE_FORMS: { 'auto-threads': () => <h2>Auto threads form</h2> },
+  MODULE_FORMS: {
+    'auto-threads': () => <h2>Auto threads form</h2>,
+    tickets: () => <h2>Tickets form</h2>,
+    appeals: () => <h2>Appeals form</h2>,
+  },
 }));
 const { getOverview, getPlatformInfo, getAccount, setModuleEnabled } = await import('../api.js');
 
@@ -315,5 +319,27 @@ describe('ModulePage status bar edge cases', () => {
     const toggle = await screen.findByRole('switch', { name: 'Auto threads' });
     expect(toggle.getAttribute('aria-checked')).toBe('true');
     expect(setModuleEnabled).not.toHaveBeenCalled();
+  });
+});
+
+describe('ModulePage inbox link', () => {
+  it('the settings of a module with its own queue page link back to it', async () => {
+    getOverview.mockResolvedValue(overview(true));
+    const { unmount } = renderPage('tickets');
+    expect((await screen.findByRole('link', { name: /Open the inbox/ })).getAttribute('href')).toBe(
+      `/guilds/${GUILD}/tickets`
+    );
+    unmount();
+    renderPage('appeals');
+    expect((await screen.findByRole('link', { name: /Open the inbox/ })).getAttribute('href')).toBe(
+      `/guilds/${GUILD}/appeals`
+    );
+  });
+
+  it('other modules show no such link', async () => {
+    getOverview.mockResolvedValue(overview(true));
+    renderPage();
+    await screen.findByRole('heading', { name: 'Auto threads form' });
+    expect(screen.queryByRole('link', { name: /Open the inbox/ })).toBeNull();
   });
 });

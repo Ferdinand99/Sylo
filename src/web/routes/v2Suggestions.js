@@ -16,6 +16,7 @@ import {
   countSuggestionsOutside,
   getSuggestionByNumber,
   listSuggestions,
+  openSuggestionCount,
 } from '../../db/suggestions.js';
 import {
   ACTIONS,
@@ -70,13 +71,17 @@ function filterOf(query = {}) {
 const settingsOf = async (guildId) =>
   normaliseSuggestionsConfig((await getGuildModule(guildId, 'suggestions')).config);
 
-/** The list, and how many suggestions in the whole server could be moved back (the list is cut). */
+/**
+ * The list, how many suggestions in the whole server could be moved back (the list is cut), and how many
+ * are still waiting for a decision (whatever the filter, for the "n open" on the page's tab).
+ */
 async function listOf(guild, query) {
   const cfg = await settingsOf(guild.id);
   const rows = await listSuggestions(guild.id, { ...filterOf(query), limit: LIST_SHOWN });
   return {
     suggestions: rows.map((r) => view(r, guild, cfg)),
     outside: cfg.channel ? await countSuggestionsOutside(guild.id, cfg.channel) : 0,
+    openCount: await openSuggestionCount(guild.id),
   };
 }
 

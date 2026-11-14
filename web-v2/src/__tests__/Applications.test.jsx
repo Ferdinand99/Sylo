@@ -143,7 +143,7 @@ const answer = (over = {}) => ({
     { id: ROLE_A, name: 'Reviewer' },
     { id: ROLE_B, name: 'Member' },
   ],
-  pending: 2,
+  pending: 0,
   webAddress: 'https://sylo.example/apply/123/<form>',
   threads: true,
   ...over,
@@ -171,14 +171,41 @@ const cardOf = (label) =>
     .closest('.v2-rule-card');
 
 describe('Applications form', () => {
-  it('lists the forms with their state and what is missing, and counts the waiting applications on the tab', async () => {
+  it('lists the forms with their state and what is missing', async () => {
     renderPage();
     expect(await screen.findByRole('heading', { name: 'Applications' })).toBeTruthy();
     expect(api.getModuleConfig).toHaveBeenCalledWith(GUILD, 'applications');
     expect(screen.getByText('Staff')).toBeTruthy();
     expect(screen.getByText('Moderator')).toBeTruthy();
     expect(screen.getByText(/Not ready: No channel is set/)).toBeTruthy();
-    expect(screen.getByRole('tab', { name: /Applications \(2\)/ })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Submissions' })).toBeTruthy();
+  });
+
+  it('opens on the queue when applications wait, and the tab says how many', async () => {
+    api.getModuleConfig.mockResolvedValue(answer({ pending: 3 }));
+    renderPage();
+    const tab = await screen.findByRole('tab', { name: 'Submissions · 3 waiting' });
+    expect(tab.getAttribute('aria-selected')).toBe('true');
+    await waitFor(() => expect(api.getApplicationSubmissions).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: 'New form' })).toBeNull();
+  });
+
+  it('"?tab=forms" opens the forms even when applications wait, and a click on a tab sets "?tab="', async () => {
+    api.getModuleConfig.mockResolvedValue(answer({ pending: 3 }));
+    const { router } = renderPage();
+    await router.navigate(`/g/${GUILD}?tab=forms`);
+    expect(await screen.findByRole('button', { name: 'New form' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Panel and settings' }));
+    await waitFor(() => expect(router.state.location.search).toBe('?tab=panel'));
+    expect(await screen.findByText('Panel message')).toBeTruthy();
+  });
+
+  it('opens on the forms when nothing waits, and "?tab=submissions" opens the queue', async () => {
+    const { router } = renderPage();
+    expect(await screen.findByRole('button', { name: 'New form' })).toBeTruthy();
+    await router.navigate(`/g/${GUILD}?tab=submissions`);
+    await waitFor(() => expect(api.getApplicationSubmissions).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: 'New form' })).toBeNull();
   });
 
   it('the new form button stops at the most forms a server may have', async () => {
@@ -305,7 +332,7 @@ describe('Applications form', () => {
       pageSize: 25,
     });
     renderPage();
-    fireEvent.click(await screen.findByRole('tab', { name: /Applications/ }));
+    fireEvent.click(await screen.findByRole('tab', { name: /Submissions/ }));
     const link = await screen.findByRole('link', { name: /#12 · Staff/ });
     expect(link.getAttribute('href')).toBe(`/guilds/${GUILD}/applications/12`);
     fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'denied' } });

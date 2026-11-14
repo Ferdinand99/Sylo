@@ -97,7 +97,7 @@ describe('Overview', () => {
     const tickets = within(panel).getByRole('link', { name: '2 open tickets' });
     expect(tickets.getAttribute('href')).toBe(`/guilds/${GUILD}/tickets`);
     const applications = within(panel).getByRole('link', { name: '3 applications waiting' });
-    expect(applications.getAttribute('href')).toBe(`/guilds/${GUILD}/m/applications`);
+    expect(applications.getAttribute('href')).toBe(`/guilds/${GUILD}/m/applications?tab=submissions`);
     expect(within(panel).getByText('AFK is on but not set up', { selector: 'strong' })).toBeTruthy();
     expect(within(panel).getByText('The channel is not set')).toBeTruthy();
     const fix = within(panel).getByRole('link', { name: /Fix AFK is on but not set up/ });

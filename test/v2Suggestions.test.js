@@ -53,6 +53,7 @@ test('GET config: the defaults, the channel and role lists, no suggestions yet',
   assert.ok(data.roles.some((r) => r.id === ROLE.member));
   assert.deepEqual(data.suggestions, []);
   assert.equal(data.outside, 0);
+  assert.equal(data.openCount, 0);
 });
 
 test('POST config stores the normalised settings and writes an audit row', async () => {
@@ -282,6 +283,9 @@ test('the list marks suggestions outside the suggestions channel, counts them fo
   assert.equal(flag(home.number), false);
   assert.equal(flag(away1.number), true);
   assert.ok(list.outside >= 2, 'the count covers the server, not only the shown list');
+  assert.ok(list.openCount >= 3, 'the open count covers the server, whatever the filter');
+  const approvedOnly = await json(await api.get('/modules/suggestions/list?status=approved'));
+  assert.equal(approvedOnly.openCount, list.openCount);
   const outsideBefore = list.outside;
 
   app.sink.messages.length = 0;

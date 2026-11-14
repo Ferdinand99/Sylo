@@ -58,6 +58,16 @@ describe('Sidebar', () => {
     expect(screen.getByRole('group', { name: 'More' })).toBeTruthy();
   });
 
+  it('the Applications entry opens the queue when applications wait, and is active on the page whatever the query', () => {
+    const waiting = data('Welcome', 0);
+    waiting.attention.waiting.applications = 3;
+    useOverview.mockReturnValue({ data: waiting, dataGuildId: A });
+    renderAt(`/guilds/${A}/m/applications`, A);
+    const link = screen.getByRole('link', { name: /Applications/ });
+    expect(link.getAttribute('href')).toBe(`/guilds/${A}/m/applications?tab=submissions`);
+    expect(link.getAttribute('aria-current')).toBe('page');
+  });
+
   it('opens with an Overview link that is active on the overview and nowhere else', () => {
     useOverview.mockReturnValue({ data: data('Welcome', 0), dataGuildId: A });
     const { unmount } = renderAt(`/guilds/${A}`, A);

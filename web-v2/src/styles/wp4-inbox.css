@@ -1,0 +1,43 @@
+/* Inbox pages: queue first, consistent links (suggestions, applications, tickets, appeals). */
+
+/* "Set status" is a plain button until a status is picked; picked, it is a clear action, not a grey pill.
+   (The disabled look is the shared recessed one, so the two states differ.) */
+.wp4-set-status:not(:disabled) {
+  border-color: var(--text);
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* The radio group that sits under the log channel hint gets room above it. */
+.wp4-log-mode {
+  margin-top: 14px;
+}
+
+/* A link to the page's counterpart ("Open the inbox →") at the top of an inbox settings page. */
+.wp4-inbox-link {
+  margin: 0 0 12px;
+  text-align: right;
+}
+.wp4-inbox-link a {
+  color: var(--text-muted);
+}
+
+/* The ticket's header: name and status first, the rest on a muted line under them. */
+.wp4-ticket-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.wp4-ticket-head > h1 {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+.wp4-ticket-head > .v2-overflow {
+  flex: none;
+}
+.wp4-ticket-title-badge {
+  margin-left: 10px;
+  vertical-align: 0.15em;
+}
