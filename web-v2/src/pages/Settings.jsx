@@ -1,7 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import PickerHealth from '../components/PickerHealth.jsx';
 import { Link } from 'react-router-dom';
-import { getGuildSettings, saveGuildSettings, exportGuildConfig } from '../api.js';
+import {
+  getGuildSettings,
+  saveGuildSettings,
+  exportGuildConfig,
+  getGuildAccess,
+  saveGuildAccess,
+} from '../api.js';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import Field from '../components/Field.jsx';
@@ -9,13 +15,38 @@ import { useModuleForm } from '../components/useModuleForm.js';
 import ChipPicker from '../components/ChipPicker.jsx';
 import { notify } from '../notify.js';
 import Reveal from '../components/Reveal.jsx';
+import { AccessLock, useAccess } from '../access.jsx';
 
 const toForm = (data) => ({
   modlogChannelId: data.modlogChannelId,
   embedColor: data.embedColorHex,
   botMasterRoleIds: data.botMasterRoleIds,
   commandPrefix: data.commandPrefix ?? '',
+  inboxRoleIds: data.access?.inboxRoleIds ?? [],
+  viewRoleIds: data.access?.viewRoleIds ?? [],
 });
+
+// The settings and the dashboard access in one load. Without the access answer (an older server)
+// the page still works, just without the Inbox and View roles.
+async function loadSettings(guildId) {
+  const [settings, access] = await Promise.all([
+    getGuildSettings(guildId),
+    Promise.resolve()
+      .then(() => getGuildAccess(guildId))
+      .catch(() => null),
+  ]);
+  return { ...settings, access };
+}
+
+// The body for the settings route: the access roles go to their own route.
+function settingsOnly(body) {
+  const out = { ...body };
+  delete out.inboxRoleIds;
+  delete out.viewRoleIds;
+  return out;
+}
+
+const sameIds = (a = [], b = []) => a.length === b.length && a.every((id) => b.includes(id));
 
 // The same rules the server enforces (it has the last word; see src/lib/commandPrefix.js).
 // Empty is fine: it means the default.
@@ -40,11 +71,25 @@ function settingsBody(form, data) {
 }
 
 export default function Settings() {
+  // The Inbox and View roles as last saved, so a save only writes them (and logs it) when they changed.
+  const savedAccess = useRef(null);
+  // The configuration download holds every setting as stored: Edit access (access.jsx).
+  const canExport = useAccess().can('edit');
+  async function saveAll(guildId, body) {
+    const { inboxRoleIds, viewRoleIds } = body;
+    const result = await saveGuildSettings(guildId, settingsOnly(body));
+    const before = savedAccess.current;
+    const known = before?.guildId === guildId;
+    if (known && (!sameIds(inboxRoleIds, before.inboxRoleIds) || !sameIds(viewRoleIds, before.viewRoleIds))) {
+      savedAccess.current = { ...(await saveGuildAccess(guildId, { inboxRoleIds, viewRoleIds })), guildId };
+    }
+    return result;
+  }
   const { guildId, data, form, setForm, load, status, error, dirty, saving, save, reset } = useModuleForm(
     'settings',
     {
-      load: getGuildSettings,
-      save: saveGuildSettings,
+      load: loadSettings,
+      save: saveAll,
       select: (d) => d,
       toForm,
       fromForm: settingsBody,
@@ -54,6 +99,9 @@ export default function Settings() {
   );
   const [resettingColor, setResettingColor] = useState(false);
   const [exporting, setExporting] = useState(false);
+  useEffect(() => {
+    savedAccess.current = data?.access ? { ...data.access, guildId } : null;
+  }, [data, guildId]);
 
   if (status === 'error') return <LoadError error={error} what="settings" />;
   // Same <Reveal> root as the ready return below, so React keeps it across a
@@ -70,10 +118,10 @@ export default function Settings() {
   async function onResetColor() {
     setResettingColor(true);
     try {
-      const body = settingsBody(form, data);
+      const body = settingsOnly(settingsBody(form, data));
       await saveGuildSettings(guildId, { ...body, embedColorReset: true });
       const fresh = await getGuildSettings(guildId);
-      load({ ...body, embedColor: fresh.embedColorHex });
+      load({ ...form, ...body, embedColor: fresh.embedColorHex });
     } catch (err) {
       notify(err.message);
     } finally {
@@ -107,85 +155,131 @@ export default function Settings() {
     <Reveal>
       <h1 className="v2-section-title">Settings</h1>
 
-      <form onSubmit={save} data-savebar>
-        <Field label="Mod-log channel" hint="Every moderation action posts an embed here.">
-          <select
-            id="modlog"
-            value={form.modlogChannelId}
-            onChange={(e) => setForm((f) => ({ ...f, modlogChannelId: e.target.value }))}
-          >
-            <option value="">— off —</option>
-            {data.channels.map((c) => (
-              <option key={c.id} value={c.id}>
-                #{c.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <PickerHealth kind="channel" value={form.modlogChannelId} />
-
-        {data.platform === 'fluxer' ? (
-          <Field
-            label="Command prefix"
-            labelNote="— optional"
-            hint={
-              <>
-                Fluxer has no slash commands, so members start a command with this, for example{' '}
-                <code>{`${form.commandPrefix.trim() || data.defaultCommandPrefix}help`}</code>. Leave it empty
-                to use the default, <code>{data.defaultCommandPrefix}</code>. Mentioning Sylo (@Sylo help)
-                always works.
-              </>
-            }
-            error={prefixProblem(form.commandPrefix, data.commandPrefixMaxLength)}
-          >
-            <input
-              type="text"
-              className="v2-input-short"
-              value={form.commandPrefix}
-              maxLength={data.commandPrefixMaxLength}
-              placeholder={data.defaultCommandPrefix}
-              autoComplete="off"
-              spellCheck={false}
-              onChange={(e) => setForm((f) => ({ ...f, commandPrefix: e.target.value }))}
-            />
-          </Field>
-        ) : null}
-
-        <Field
-          group
-          label="Bot master roles"
-          hint="Members with these roles can open this dashboard and change Sylo's settings for the server, like someone with Manage Server. Roles with Administrator already can."
-        >
-          <ChipPicker
-            kind="role"
-            items={data.roles}
-            value={form.botMasterRoleIds}
-            onChange={(botMasterRoleIds) => setForm((f) => ({ ...f, botMasterRoleIds }))}
-          />
-        </Field>
-
-        <div className="v2-field">
-          <label htmlFor="color">Default embed colour</label>
-          <div className="v2-field-row">
-            <input
-              id="color"
-              type="color"
-              className="v2-color-input"
-              value={form.embedColor}
-              onChange={(e) => setForm((f) => ({ ...f, embedColor: e.target.value }))}
-            />
-            <span>{form.embedColor}</span>
-            <button
-              type="button"
-              className="v2-btn-ghost"
-              onClick={onResetColor}
-              disabled={saving || resettingColor}
+      <AccessLock need="edit" note>
+        <form onSubmit={save} data-savebar>
+          <Field label="Mod-log channel" hint="Every moderation action posts an embed here.">
+            <select
+              id="modlog"
+              value={form.modlogChannelId}
+              onChange={(e) => setForm((f) => ({ ...f, modlogChannelId: e.target.value }))}
             >
-              Reset to default
-            </button>
+              <option value="">— off —</option>
+              {data.channels.map((c) => (
+                <option key={c.id} value={c.id}>
+                  #{c.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <PickerHealth kind="channel" value={form.modlogChannelId} />
+
+          {data.platform === 'fluxer' ? (
+            <Field
+              label="Command prefix"
+              labelNote="— optional"
+              hint={
+                <>
+                  Fluxer has no slash commands, so members start a command with this, for example{' '}
+                  <code>{`${form.commandPrefix.trim() || data.defaultCommandPrefix}help`}</code>. Leave it
+                  empty to use the default, <code>{data.defaultCommandPrefix}</code>. Mentioning Sylo (@Sylo
+                  help) always works.
+                </>
+              }
+              error={prefixProblem(form.commandPrefix, data.commandPrefixMaxLength)}
+            >
+              <input
+                type="text"
+                className="v2-input-short"
+                value={form.commandPrefix}
+                maxLength={data.commandPrefixMaxLength}
+                placeholder={data.defaultCommandPrefix}
+                autoComplete="off"
+                spellCheck={false}
+                onChange={(e) => setForm((f) => ({ ...f, commandPrefix: e.target.value }))}
+              />
+            </Field>
+          ) : null}
+
+          <div className="v2-field">
+            <label htmlFor="color">Default embed colour</label>
+            <div className="v2-field-row">
+              <input
+                id="color"
+                type="color"
+                className="v2-color-input"
+                value={form.embedColor}
+                onChange={(e) => setForm((f) => ({ ...f, embedColor: e.target.value }))}
+              />
+              <span>{form.embedColor}</span>
+              <button
+                type="button"
+                className="v2-btn-ghost"
+                onClick={onResetColor}
+                disabled={saving || resettingColor}
+              >
+                Reset to default
+              </button>
+            </div>
           </div>
-        </div>
-      </form>
+
+          <div className="v2-group v2-section-gap v2-access-levels">
+            <h2 className="v2-group-title">Dashboard access</h2>
+            <p className="v2-field-hint">
+              Who may use this dashboard and the Sylo app for this server, besides the server owner and
+              members with Manage Server or Administrator, who can always change everything.
+            </p>
+            <Field
+              group
+              label="Edit"
+              hint={
+                <>
+                  <strong>Bot master roles.</strong> Can change all of Sylo's settings for the server, like
+                  someone with Manage Server.
+                  {data.access && !data.access.canChangeEditRoles
+                    ? ' Only the server owner or someone with Manage Server can change this list.'
+                    : ''}
+                </>
+              }
+            >
+              <fieldset
+                className="v2-access-lock"
+                disabled={Boolean(data.access) && !data.access.canChangeEditRoles}
+              >
+                <ChipPicker
+                  kind="role"
+                  items={data.roles}
+                  value={form.botMasterRoleIds}
+                  onChange={(botMasterRoleIds) => setForm((f) => ({ ...f, botMasterRoleIds }))}
+                />
+              </fieldset>
+            </Field>
+            {data.access ? (
+              <>
+                <Field
+                  group
+                  label="Inbox"
+                  hint="Can handle tickets, ban appeals, applications and suggestions, and look at everything else."
+                >
+                  <ChipPicker
+                    kind="role"
+                    items={data.roles}
+                    value={form.inboxRoleIds}
+                    onChange={(inboxRoleIds) => setForm((f) => ({ ...f, inboxRoleIds }))}
+                  />
+                </Field>
+                <Field group label="View" hint="Can look at every page and setting, but not change anything.">
+                  <ChipPicker
+                    kind="role"
+                    items={data.roles}
+                    value={form.viewRoleIds}
+                    onChange={(viewRoleIds) => setForm((f) => ({ ...f, viewRoleIds }))}
+                  />
+                </Field>
+              </>
+            ) : null}
+          </div>
+        </form>
+      </AccessLock>
 
       <div className="v2-group v2-section-gap">
         <h2 className="v2-group-title">Server data</h2>
@@ -208,7 +302,12 @@ export default function Settings() {
               </p>
             </div>
             <div className="v2-row-actions">
-              <button type="button" className="v2-btn-ghost" onClick={onExport} disabled={exporting}>
+              <button
+                type="button"
+                className="v2-btn-ghost"
+                onClick={onExport}
+                disabled={exporting || !canExport}
+              >
                 {exporting ? 'Exporting…' : 'Download JSON'}
               </button>
             </div>

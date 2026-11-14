@@ -16,15 +16,14 @@ import {
 import { COMMAND_PREFIX_MAX, commandPrefixError } from '../../lib/commandPrefix.js';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
-import { Router, raw } from 'express';
+import { raw } from 'express';
 import { PermissionFlagsBits } from 'discord.js';
 import {
-  requireGuildAdmin,
   requireOwner,
   requireRealUser,
   isOwner,
   manageableGuilds,
-  managesGuildLive,
+  guildEntries,
   holdsManageServerLive,
   userIdForGuild,
   currentUser,
@@ -37,6 +36,15 @@ import {
   guardRoleGrants,
   RoleGrantError,
 } from '../middleware/roleGrants.js';
+import {
+  accessRouter,
+  requestCan,
+  useMiddleware,
+  requireGuildAccess,
+  roleAccessGuildKeys,
+  accountGuildAccess,
+  checksLive,
+} from '../middleware/access.js';
 import { limitWhen, platformActionLimit, rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { changelogHandler } from '../lib/changelogFeed.js';
@@ -253,6 +261,8 @@ import {
   setModlogChannel,
   getBotMasterRoles,
   setBotMasterRoles,
+  getDashboardAccessRoles,
+  setDashboardAccessRoles,
   setEmbedColor,
   guildEmbedColor,
   getCommandPrefix,
@@ -312,7 +322,7 @@ const backupLimit = rateLimit({
   message: 'Too many backup operations — wait a minute.',
 });
 
-const router = Router();
+const router = accessRouter('');
 
 // The name written into audit-log "actor" strings.
 function moderatorDisplayName(req) {
@@ -328,16 +338,35 @@ function parseUserId(raw) {
   return m ? m[1] || m[2] : null;
 }
 
-// The servers the signed-in person can manage — the server switcher and the "Choose a server"
-// picker (see src/web/middleware/auth.js).
+// The servers the signed-in person can use in the dashboard — the server switcher and the "Choose a
+// server" picker (see src/web/middleware/auth.js): the ones they manage, and the ones an access role
+// (bot-master, Inbox or View) lets them in to, as the bot's member cache sees it. `access` is their
+// level in each (src/web/middleware/access.js).
 router.get(
   '/guilds',
   asyncHandler(async (req, res) => {
-    const guilds = manageableGuilds(req);
-    if (!req.viaToken) return res.json({ guilds });
+    const managed = manageableGuilds(req);
+    const viaRole = guildEntries(await roleAccessGuildKeys(req.account, new Set(managed.map((g) => g.id))));
+    const all = [...managed, ...viaRole].sort((a, b) => a.name.localeCompare(b.name));
+    if (!req.viaToken) {
+      // The managed ones from the sign-in snapshot as before (each page checks again); a role is
+      // checked now, as the page would.
+      const managedIds = new Set(managed.map((g) => g.id));
+      const levels = await Promise.all(
+        all.map((g) =>
+          managedIds.has(g.id)
+            ? 'edit'
+            : accountGuildAccess(req.account, g.id, { live: checksLive(req, g.id) }).catch(() => null)
+        )
+      );
+      return res.json({ guilds: all.map((g, i) => ({ ...g, access: levels[i] })).filter((g) => g.access) });
+    }
     // The Sylo app: the sign-in snapshot, minus any server where the person no longer has the
-    // rights (checked live, the same way requireGuildAdmin does for token requests).
-    const live = await Promise.all(guilds.map((g) => managesGuildLive(g.id, userIdForGuild(req, g.id))));
+    // rights (checked live, the same way requireGuildAccess does for token requests).
+    const levels = await Promise.all(
+      all.map((g) => accountGuildAccess(req.account, g.id, { live: true }).catch(() => null))
+    );
+    const guilds = all.map((g, i) => ({ ...g, access: levels[i] })).filter((g) => g.access);
     // Server insights, for the app's "messages today": one query each for every server, and a
     // server only has a number while the module is on for it (null otherwise). "Today" is the UTC
     // day, which is how Server insights keeps its daily rows (it also flushes about hourly, so the
@@ -347,17 +376,15 @@ router.get(
     // Ticket counts for the app's server list: which servers have tickets waiting. The member
     // count is the bot's cached one (the figure on the dashboard's Overview), never fetched.
     const withCounts = await Promise.all(
-      guilds
-        .filter((_, i) => live[i])
-        .map(async (g) => ({
-          ...g,
-          // The same cached count on both platforms (guild.memberCount, as the dashboard
-          // overview reads it); null when the platform sent none, so the app shows nothing.
-          memberCount: Number.isFinite(guildByKey(g.id)?.memberCount) ? guildByKey(g.id).memberCount : null,
-          messagesToday: insightsOn.has(g.id) ? (messagesToday.get(g.id) ?? 0) : null,
-          openTickets: await openTicketCount(g.id),
-          unreadTickets: await unreadTicketCount(g.id),
-        }))
+      guilds.map(async (g) => ({
+        ...g,
+        // The same cached count on both platforms (guild.memberCount, as the dashboard
+        // overview reads it); null when the platform sent none, so the app shows nothing.
+        memberCount: Number.isFinite(guildByKey(g.id)?.memberCount) ? guildByKey(g.id).memberCount : null,
+        messagesToday: insightsOn.has(g.id) ? (messagesToday.get(g.id) ?? 0) : null,
+        openTickets: await openTicketCount(g.id),
+        unreadTickets: await unreadTicketCount(g.id),
+      }))
     );
     res.json({ guilds: withCounts });
   })
@@ -446,10 +473,12 @@ function loadGuildJson(req, res, next) {
   if (!req.guild) return res.status(404).json({ error: 'Unknown or unavailable server' });
   next();
 }
-// Tickets go before the admin guard: members with a configured staff role may use
-// them without being server admins (ticketsRouter does its own access check).
+// Tickets go before the access guard: members with a configured staff role may use
+// them without other dashboard access (ticketsRouter does its own access check).
 // The web shop (/shop/<server>): for the signed-in members of a server, not only admins, so it
-// sits before the admin guard below and does its own access check (v2ShopMember.js).
+// sits before the access guard below and does its own access check (v2ShopMember.js).
+// Every /guilds/:guildId route after the guard needs the level src/web/lib/routeAccess.js gives it
+// (view, inbox or edit; edit when it gives none), checked by the access router (access.js).
 router.use('/shop/:guildId', shopMemberRouter);
 // The web form of an application (/apply/<server>/<form>): the same kind of page, the same access rule.
 router.use('/apply/:guildId', applyMemberRouter);
@@ -462,11 +491,11 @@ function captureConfigChanges(req, res, next) {
 }
 router.use(
   '/guilds/:guildId',
-  requireGuildAdmin,
-  loadGuildJson,
-  guardRoleGrants,
-  dropHealthOnWrite,
-  captureConfigChanges
+  requireGuildAccess,
+  useMiddleware(loadGuildJson),
+  useMiddleware(guardRoleGrants),
+  useMiddleware(dropHealthOnWrite),
+  useMiddleware(captureConfigChanges)
 );
 // Appeals review, command limits and the moderation hub (v2Staff.js).
 router.use('/guilds/:guildId', staffRouter);
@@ -1677,12 +1706,30 @@ router.post(
   })
 );
 
+/** A feed with its URL cut to the origin ("https://example.com/…"); feeds by name (Reddit) are kept. */
+function maskFeedUrl(feed) {
+  const mask = (u) => {
+    try {
+      return `${new URL(u).origin}/…`;
+    } catch {
+      return '…';
+    }
+  };
+  return {
+    ...feed,
+    ref: /^https?:\/\//i.test(feed.ref) ? mask(feed.ref) : feed.ref,
+    url: feed.url ? mask(feed.url) : feed.url,
+  };
+}
+
 router.get(
   '/guilds/:guildId/modules/rss/config',
   asyncHandler(async (req, res) => {
     const { config: cfg } = await getGuildModule(req.guild.id, 'rss');
+    const config = normaliseRssConfig(cfg);
     res.json({
-      config: normaliseRssConfig(cfg),
+      // A feed URL can carry a token (src/modules/rss.js): below Edit only its address's origin shows.
+      config: requestCan(req, 'edit') ? config : { ...config, feeds: config.feeds.map(maskFeedUrl) },
       channels: guildTextChannels(req.guild),
       roles: assignableRoles(req.guild),
       feedTypes: FEED_TYPES,
@@ -2372,6 +2419,63 @@ router.post(
   })
 );
 
+// --- Dashboard access (src/web/middleware/access.js) ------------------------
+// Which roles may use the dashboard at which level. Edit roles are the bot-master roles, and only the
+// server owner or someone with Manage Server may change those (lib/botMasters.js), here as on the
+// settings page. Inbox and View roles may be changed by anyone with Edit.
+
+async function accessView(req) {
+  const roles = await getDashboardAccessRoles(req.guild.id);
+  return {
+    // The signed-in person's own level in this server: the dashboard hides what it does not allow.
+    level: req.access ?? 'edit',
+    editRoleIds: roles.edit,
+    inboxRoleIds: roles.inbox,
+    viewRoleIds: roles.view,
+    canChangeEditRoles:
+      !config.authEnabled ||
+      (requestCan(req, 'edit') &&
+        (await holdsManageServerLive(req.guild.id, userIdForGuild(req, req.guild.id)))),
+  };
+}
+
+router.get(
+  '/guilds/:guildId/access',
+  asyncHandler(async (req, res) => {
+    res.json(await accessView(req));
+  })
+);
+
+router.post(
+  '/guilds/:guildId/access',
+  asyncHandler(async (req, res) => {
+    const guild = req.guild;
+    const { editRoleIds, inboxRoleIds, viewRoleIds } = req.body;
+    const lists = [editRoleIds, inboxRoleIds, viewRoleIds];
+    if (lists.every((v) => v === undefined)) {
+      return res.status(400).json({ error: 'Send editRoleIds, inboxRoleIds or viewRoleIds.' });
+    }
+    if (lists.some((v) => v !== undefined && !Array.isArray(v))) {
+      return res.status(400).json({ error: 'Each role list must be an array of role ids.' });
+    }
+    const before = await getDashboardAccessRoles(guild.id);
+    // Before anything is saved: only the owner or Manage Server may change the Edit roles.
+    const saveEdit =
+      editRoleIds !== undefined && (await shouldSaveBotMasters(req, guild, editRoleIds, before.edit));
+    const saved = await setDashboardAccessRoles(guild.id, {
+      inbox: inboxRoleIds ?? before.inbox,
+      view: viewRoleIds ?? before.view,
+    });
+    const edit = saveEdit ? await setBotMasterRoles(guild.id, editRoleIds) : before.edit;
+    await recordAudit(guild.id, {
+      actor: moderatorDisplayName(req),
+      action: 'settings:access',
+      detail: `edit: ${edit.length} role(s), inbox: ${saved.inbox.length}, view: ${saved.view.length}`,
+    });
+    res.json(await accessView(req));
+  })
+);
+
 // --- Server insights (mirrors guilds.js:2804-2864) -------------------------
 
 const INSIGHTS_HOURLY = { 24: 24, 48: 48 };
@@ -2427,7 +2531,7 @@ router.post(
 
 // --- Bot Personalizer (mirrors settings.js) — bot-wide, not per-guild ------
 // Owner only: this changes the bot's identity everywhere it's installed, not
-// just in the admin's own guild, so requireGuildAdmin isn't strict enough.
+// just in the admin's own guild, so a per-server access level isn't strict enough.
 
 router.get('/personalizer', requireOwner, (req, res) => {
   const u = primaryClient()?.user ?? null;
@@ -3010,8 +3114,12 @@ router.get(
   '/guilds/:guildId/modules/github/watches',
   asyncHandler(async (req, res) => {
     const rows = await listGithubWatches(req.guild.id);
+    // The webhook secret and address are credentials: only for those who may change the watches.
+    const watches = rows.map(shapeGithubWatch);
     res.json({
-      watches: rows.map(shapeGithubWatch),
+      watches: requestCan(req, 'edit')
+        ? watches
+        : watches.map((w) => ({ ...w, secret: null, webhookUrl: null })),
       channels: guildTextChannels(req.guild),
       roles: assignableRoles(req.guild),
       eventTypes: GITHUB_EVENT_TYPES,

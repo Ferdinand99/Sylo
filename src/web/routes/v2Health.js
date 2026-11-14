@@ -5,14 +5,14 @@
 // one, is refused before this file runs. The report is built by lib/permissionHealth.js and cached
 // per server for a minute (a settings save drops it); `?refresh=1` re-checks at once, behind its own
 // small rate limit, because that walks every channel and role of the server again.
-import { Router } from 'express';
+import { accessRouter } from '../middleware/access.js';
 import { isOwner } from '../middleware/auth.js';
 import { clientKey, rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { invalidateHealth } from '../../lib/healthCache.js';
 import { getHealthReport, reportFor } from '../lib/permissionHealth.js';
 
-const router = Router({ mergeParams: true });
+const router = accessRouter('/guilds/:guildId', { mergeParams: true });
 
 // One re-check budget per server and person.
 const recheckLimit = rateLimit({
@@ -37,7 +37,7 @@ router.get(
 /**
  * Any dashboard save on a server (a module's settings, a reminder, a shop item, an application form
  * ...) can change what the health check reads, so the cached report is dropped once the request is done.
- * Mounted on the guild routers after the admin guard; reads leave the cache alone.
+ * Mounted on the guild routers after the access guard; reads leave the cache alone.
  * @type {import('express').RequestHandler}
  */
 export function dropHealthOnWrite(req, res, next) {

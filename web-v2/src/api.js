@@ -10,6 +10,8 @@ export class ApiError extends Error {
     this.reason = body?.reason;
     this.errors = body?.errors;
     this.view = body?.view;
+    // An access-level refusal (src/web/middleware/access.js): the level the request needed.
+    this.required = body?.required;
     // A refusal the page can act on (the settings changed since an audit entry: confirm to undo anyway).
     this.code = body?.code;
     this.laterChanges = body?.laterChanges;
@@ -277,6 +279,9 @@ export const setLeaderboardVanity = (guildId, slug) =>
 
 export const getGuildSettings = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/settings`);
 export const saveGuildSettings = (guildId, body) => postJson(`/api/v2/guilds/${gid(guildId)}/settings`, body);
+// Dashboard access: the signed-in person's level in the server, and the roles for each level.
+export const getGuildAccess = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/access`);
+export const saveGuildAccess = (guildId, body) => postJson(`/api/v2/guilds/${gid(guildId)}/access`, body);
 
 export const getPersonalizer = () => apiFetch('/api/v2/personalizer');
 export const getPersonalizerPresence = () => apiFetch('/api/v2/personalizer/presence');

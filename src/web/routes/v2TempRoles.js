@@ -5,7 +5,7 @@
 // Mounted at /guilds/:guildId AFTER the admin guard in v2Api.js, so req.guild is set, the caller
 // manages this server, the state-changing calls have passed the CSRF check and guardRoleGrants
 // knows who is acting (checkRoleGrants refuses a role above the caller's own).
-import { Router } from 'express';
+import { accessRouter } from '../middleware/access.js';
 import { actingUserId, currentUser } from '../middleware/auth.js';
 import { checkRoleGrants } from '../middleware/roleGrants.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -27,7 +27,7 @@ const LIST_SHOWN = 200;
 /** How many members the picker returns at most. */
 const SEARCH_SHOWN = 10;
 
-const router = Router({ mergeParams: true });
+const router = accessRouter('/guilds/:guildId', { mergeParams: true });
 
 const actor = (req) => (currentUser(req)?.open ? 'Dashboard' : `${currentUser(req).name} (dashboard)`);
 const fail = (res, message, status = 400) => res.status(status).json({ error: message });
