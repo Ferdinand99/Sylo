@@ -8,6 +8,7 @@ import Callout from '../components/Callout.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import MentionTextarea from '../components/MentionTextarea.jsx';
 import PlaceholderBar from '../components/PlaceholderBar.jsx';
+import TemplatePicker, { textTemplates } from '../components/TemplatePicker.jsx';
 import PreviewLayout from '../components/PreviewLayout.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
@@ -171,6 +172,11 @@ export default function Welcome() {
                 value={form.joinMessage}
                 onChange={(joinMessage) => set({ joinMessage })}
               />
+              <TemplatePicker
+                templates={textTemplates('welcome')}
+                hasContent={form.joinMessage.trim() !== ''}
+                onPick={(t) => set({ joinMessage: t.text })}
+              />
             </div>
             <label className="v2-check">
               <input
@@ -235,6 +241,11 @@ export default function Welcome() {
                 tokens={tokens}
                 value={form.dmMessage}
                 onChange={(dmMessage) => set({ dmMessage })}
+              />
+              <TemplatePicker
+                templates={textTemplates('welcomeDm')}
+                hasContent={form.dmMessage.trim() !== ''}
+                onPick={(t) => set({ dmMessage: t.text })}
               />
             </div>
           </ToggleSection>

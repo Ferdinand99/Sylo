@@ -42,7 +42,7 @@ const insertStmt = prepare(
   INSERT INTO scheduled_messages
     (guild_id, name, channel_id, content, spec, mode, days, interval_minutes, start_at, end_at, run_at, next_run_at, enabled, created_at)
   VALUES
-    (@guildId, @name, @channelId, @content, @spec, @mode, @days, @intervalMinutes, @startAt, @endAt, @runAt, @nextRunAt, 1, @createdAt)
+    (@guildId, @name, @channelId, @content, @spec, @mode, @days, @intervalMinutes, @startAt, @endAt, @runAt, @nextRunAt, @enabled, @createdAt)
 `,
   { returningId: true }
 );
@@ -119,6 +119,8 @@ export async function createReminder(guildId, r) {
     endAt: r.endAt ?? null,
     runAt: r.mode === 'single' ? (r.runAt ?? null) : null,
     nextRunAt: firstRun,
+    // On unless the caller says `enabled: false`: a copy is inserted paused, so the scheduler can never see it on.
+    enabled: r.enabled === false ? 0 : 1,
     createdAt: now,
   });
   return result.lastInsertRowid;

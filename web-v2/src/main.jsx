@@ -17,6 +17,7 @@ import './styles/wp1-members.css';
 import './styles/wp2-alerts.css';
 import './styles/wp4-inbox.css';
 import './styles/wp5-lists.css';
+import './styles/p6-import.css';
 import './styles/setup-wizard.css';
 import './styles/access.css';
 import './styles/history.css';

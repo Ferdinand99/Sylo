@@ -462,6 +462,19 @@ export const undoAuditChange = (guildId, id, { confirm = false, token = '' } = {
     confirm ? { confirm: true, token } : {}
   );
 export const exportGuildConfig = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/export`);
+// Import of an export file: the preview changes nothing; apply needs `confirm` to be the word the preview names.
+export const previewConfigImport = (guildId, file) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/import/preview`, { export: file });
+export const applyConfigImport = (guildId, file, items, confirm) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/import/apply`, { export: file, items, confirm });
+// "Duplicate" in the "⋯" menu of a list row. Each answers { ok, id, name }.
+const duplicate = (guildId, path) => postJson(`/api/v2/guilds/${gid(guildId)}/${path}/duplicate`, {});
+export const duplicateReminder = (guildId, id) => duplicate(guildId, `modules/reminders/${id}`);
+export const duplicateComposedMessage = (guildId, id) => duplicate(guildId, `messages/${id}`);
+export const duplicateReactionRole = (guildId, id) => duplicate(guildId, `modules/roles/rr/${id}`);
+export const duplicateCustomCommand = (guildId, id) =>
+  duplicate(guildId, `modules/custom-commands/cmd/${id}`);
+export const duplicateShopItem = (guildId, id) => duplicate(guildId, `modules/economy/shop/items/${id}`);
 // The setup wizard: what Sylo proposes for this server, and applying the ticked items.
 export const getSetupSuggestion = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/setup/suggest`);
 export const applySetup = (guildId, body) => postJson(`/api/v2/guilds/${gid(guildId)}/setup/apply`, body);
