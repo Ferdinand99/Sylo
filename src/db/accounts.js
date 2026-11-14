@@ -33,6 +33,12 @@ registerPostgresBootstrap(`
     PRIMARY KEY (platform, platform_user_id)
   );
   CREATE INDEX IF NOT EXISTS idx_account_identities_account ON account_identities (account_id);
+  -- One login per platform and account. An earlier version only checked this before inserting, so two
+  -- sign-ins at the same moment could leave two: keep the one linked first, then enforce it.
+  DELETE FROM account_identities a USING account_identities b
+    WHERE a.account_id = b.account_id AND a.platform = b.platform
+      AND (a.linked_at, a.platform_user_id) > (b.linked_at, b.platform_user_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_account_identities_one ON account_identities (account_id, platform);
   CREATE TABLE IF NOT EXISTS sessions (
     id         TEXT PRIMARY KEY,
     account_id TEXT NOT NULL,
@@ -90,6 +96,8 @@ const s = {
   deleteAccountSessions: prepare('DELETE FROM sessions WHERE account_id = ?'),
   deleteAccountIdentities: prepare('DELETE FROM account_identities WHERE account_id = ?'),
   deleteAccountCodes: prepare('DELETE FROM mobile_codes WHERE account_id = ?'),
+  deleteAccountConnectCodes: prepare('DELETE FROM mobile_connect_codes WHERE account_id = ?'),
+  deleteAccountConnectResults: prepare('DELETE FROM mobile_connect_results WHERE account_id = ?'),
   deleteAccount: prepare('DELETE FROM accounts WHERE id = ?'),
   deletePrefs: prepare('DELETE FROM user_prefs WHERE user_id = ?'),
   deleteVotes: prepare('DELETE FROM roadmap_votes WHERE user_id = ?'),
@@ -160,8 +168,10 @@ export async function signInIdentity(identity) {
  * Link an identity to an existing account ("connect Fluxer" while signed in).
  * @throws {IdentityLinkedError} when it already belongs to a different account
  * @throws {PlatformAlreadyLinkedError} when the account has another identity on that platform
+ * @param {{ afterChecks?: () => Promise<void> | void }} [hooks] for tests: runs after the checks and
+ *   before the insert, the moment a concurrent link can slip in
  */
-export async function linkIdentity(accountId, identity) {
+export async function linkIdentity(accountId, identity, { afterChecks } = {}) {
   const existing = await findIdentity(identity.platform, identity.platformUserId);
   if (existing && existing.accountId !== accountId) throw new IdentityLinkedError();
   if (existing) {
@@ -170,7 +180,29 @@ export async function linkIdentity(accountId, identity) {
   }
   const sameKind = (await identitiesOf(accountId)).find((i) => i.platform === identity.platform);
   if (sameKind) throw new PlatformAlreadyLinkedError(identity.platform);
-  await s.insertIdentity.run({ ...params(identity), accountId, linkedAt: Date.now() });
+  await afterChecks?.();
+  try {
+    // ON CONFLICT DO NOTHING on the login's own key: no row written means somebody linked this login first.
+    const { changes } = await s.insertIdentity.run({ ...params(identity), accountId, linkedAt: Date.now() });
+    if (Number(changes) === 0) await refuseIfTakenByAnother(accountId, identity);
+  } catch (err) {
+    if (!isUniqueViolation(err)) throw err;
+    // Lost a race on (account, platform): another login on this platform got into this account first.
+    await refuseIfTakenByAnother(accountId, identity);
+    throw new PlatformAlreadyLinkedError(identity.platform);
+  }
+}
+
+/** After a lost race: this login belongs to another account? Then say so. Same account: nothing to do. */
+async function refuseIfTakenByAnother(accountId, identity) {
+  const taken = await findIdentity(identity.platform, identity.platformUserId);
+  if (taken && taken.accountId !== accountId) throw new IdentityLinkedError();
+}
+
+/** A unique or primary key violation, from either driver (SQLite constraint codes, Postgres 23505). */
+function isUniqueViolation(err) {
+  const code = String(err?.code ?? '');
+  return code === '23505' || code === 'SQLITE_CONSTRAINT_UNIQUE' || code === 'SQLITE_CONSTRAINT_PRIMARYKEY';
 }
 
 /**
@@ -202,6 +234,8 @@ export async function deleteAccount(accountId) {
   const people = (await identitiesOf(accountId)).map((i) => i.platformUserId);
   await revokeAccountTokens(accountId);
   await s.deleteAccountCodes.run(accountId);
+  await s.deleteAccountConnectCodes.run(accountId);
+  await s.deleteAccountConnectResults.run(accountId);
   for (const id of [...people, accountId]) {
     await s.deletePrefs.run(id);
     await s.deleteVotes.run(id);

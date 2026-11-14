@@ -420,6 +420,8 @@ const USER_ID_COLUMNS = {
   'roadmap_votes.user_id': 'account',
   'bot_audit.actor': 'account (the operator)',
   'account_identities.platform_user_id': 'account',
+  // a login the Sylo app is adding, kept for two minutes until the app completes it (or it expires)
+  'mobile_connect_results.platform_user_id': 'account',
 };
 
 test('every column that holds a user id is handled by forgetUser, kept on purpose, or account data', () => {
