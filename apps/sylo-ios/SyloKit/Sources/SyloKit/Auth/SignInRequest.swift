@@ -22,6 +22,9 @@ public enum SignInError: Error, Equatable, Sendable {
     case missingCode
     /// The server sent back an error other than Cancel (its `error` value).
     case serverError(String)
+    /// The callback names another server than the one the person chose (its `iss`, shown as a plain
+    /// address). It was relayed from there, so its code must not be redeemed or sent anywhere.
+    case issuerMismatch(String)
 }
 
 /// One app sign-in: the URL to open in the sign-in sheet, and what it needs to check and redeem the
@@ -39,6 +42,8 @@ public struct SignInRequest: Sendable {
     /// The value the callback must carry back unchanged.
     public let state: String
     public let platform: SignInPlatform?
+    /// The chosen server's origin, which the callback's `iss` must match when it has one.
+    let serverOrigin: String?
 
     /// A sign-in with a new PKCE pair and state.
     /// - Parameter server: The Sylo server's base URL, which may include a sub-path.
@@ -72,19 +77,25 @@ public struct SignInRequest: Sendable {
         self.pkce = pkce
         self.state = state
         self.platform = platform
+        self.serverOrigin = CallbackIssuer.origin(of: server.absoluteString)
     }
 
     /// The code from the URL the sign-in sheet returned, after checking it carries this
-    /// sign-in's state.
+    /// sign-in's state and, when it names one, the chosen server as its issuer.
     public func authorizationCode(from callbackURL: URL) throws(SignInError) -> String {
-        try Self.authorizationCode(from: callbackURL, expectedState: state)
+        try Self.authorizationCode(from: callbackURL, expectedState: state, serverOrigin: serverOrigin)
     }
 
-    /// The code from `sylo://auth?code=…&state=…`. The state is checked first (compared byte for
-    /// byte), so nothing from a callback this sign-in did not start is trusted, an error included.
+    /// The code from `sylo://auth?code=…&state=…[&iss=…]`. The state is checked first (compared byte for
+    /// byte), so nothing from a callback this sign-in did not start is trusted, an error included. Then
+    /// `iss`, when the callback has it, must be the chosen server's origin (`serverOrigin`; compared as
+    /// normalised origins, so letter case and a default port do not matter, and a path in it is ignored).
+    /// Another server, a second `iss` or one with a user name is refused. A callback without `iss` (an older
+    /// Sylo) is accepted.
     public static func authorizationCode(
         from callbackURL: URL,
-        expectedState: String
+        expectedState: String,
+        serverOrigin: String? = nil
     ) throws(SignInError) -> String {
         guard
             let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
@@ -99,6 +110,15 @@ public struct SignInRequest: Sendable {
             let state = parameters["state"], state.count == 1,
             !expectedState.isEmpty, state[0].utf8.elementsEqual(expectedState.utf8)
         else { throw .stateMismatch }
+
+        // An `iss` that is not valid percent-encoding is left out of `parameters`, and must not read as "no issuer".
+        let namesIssuer = (components.percentEncodedQuery ?? "").split(separator: "&").contains {
+            $0.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false).first == "iss"
+        }
+        let issuers = parameters["iss"] ?? (namesIssuer ? [""] : nil)
+        if case .mismatch(let claimed) = CallbackIssuer.check(issuers: issuers, serverOrigin: serverOrigin) {
+            throw .issuerMismatch(claimed)
+        }
 
         if let error = parameters["error"]?.first {
             throw error == "access_denied" ? .cancelled : .serverError(error)

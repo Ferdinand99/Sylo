@@ -193,12 +193,18 @@ public final class AppSession {
         }
     }
 
-    /// Signs this device out: forgets the token here at once, then asks the server to revoke it
-    /// (best effort; offline, the token simply stays unused until it expires).
+    /// Signs this device out: forgets the token here at once, then asks the server to take down this
+    /// device's notifications and revoke the token (best effort; offline, the token simply stays unused
+    /// until it expires). Notifications stop on the device itself without the server: the app drops its
+    /// registration with iOS and forgets what it sent (``PushDeviceState/signedOut()``).
     public func signOut() async {
         guard case .signedIn(let server) = phase else { return }
         let client = self.client
+        let pushesToServer = has(.push) || has(.pushPigeon)
         signOutLocally(of: server)
+        // Tells the server the notifications are off before the token that carries them goes, so it stops
+        // sending even if it keeps the token's row.
+        if pushesToServer { _ = try? await client?.send(Endpoints.UnregisterPush()) }
         _ = try? await client?.send(Endpoints.SignOut())
     }
 
@@ -403,6 +409,8 @@ public final class AppSession {
         switch error {
         case .invalidServerURL: ServerURLError.invalid.userMessage
         case .serverError: "The server couldn't sign you in. Try again."
+        case .issuerMismatch(let claimed):
+            "This sign-in came from a different server (\(claimed)). Sign in again, or add the server with that address."
         case .cancelled, .stateMismatch, .wrongCallback, .missingCode: unfinishedSignIn
         }
     }
