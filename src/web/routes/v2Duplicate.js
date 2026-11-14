@@ -9,7 +9,7 @@
 //
 // Mounted at /guilds/:guildId AFTER the admin guard in v2Api.js, so req.guild is set, the caller manages
 // this server, the CSRF check has passed and the role-grant guard knows who is saving.
-import { Router } from 'express';
+import { accessRouter } from '../middleware/access.js';
 import { currentUser } from '../middleware/auth.js';
 import { checkModuleGrants, checkRoleGrants } from '../middleware/roleGrants.js';
 import { rateLimit } from '../middleware/rateLimit.js';
@@ -28,8 +28,8 @@ import { reactionMessagesFull, LIMITS as ROLES_LIMITS } from '../../modules/role
 import { LIMITS as CC_LIMITS, NAME_RE, normaliseCustomCommands } from '../../modules/customCommands.js';
 import { reservedCommandNames, syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
 
-// One line to change when this router moves to the access levels: `Router(...)` becomes `accessRouter(...)`.
-const router = Router({ mergeParams: true });
+// Every route here needs Edit (routeAccess.js).
+const router = accessRouter('/guilds/:guildId', { mergeParams: true });
 
 // A copy is one write, but a script should not be able to fill a server with them in a loop.
 const duplicateLimit = rateLimit({

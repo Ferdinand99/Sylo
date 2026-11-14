@@ -209,3 +209,35 @@ test('a request without the CSRF token is refused on all seven routes', async ()
   }
   assert.equal((await listItems(D_GUILD)).length, before);
 });
+
+test('a person with only the View or Inbox level is refused on all seven routes', async () => {
+  const { setDashboardAccessRoles } = await import('../src/db/guildSettings.js');
+  const VIEW = '800000000000000030';
+  const INBOX = '800000000000000031';
+  await setDashboardAccessRoles(D_GUILD, { inbox: [INBOX], view: [VIEW] });
+  const before = (await listItems(D_GUILD)).length;
+  try {
+    for (const held of [VIEW, INBOX]) {
+      const id = `${USER.slice(0, -2)}${held.slice(-2)}`;
+      const cache = new Map([[held, { id: held }]]);
+      cache.hasAny = (...ids) => ids.some((r) => cache.has(r));
+      cache.some = (fn) => [...cache.values()].some(fn);
+      guild.members.cache.set(id, {
+        id,
+        permissions: { has: () => false },
+        roles: { highest: { position: 1 }, cache },
+      });
+      const p = await session({
+        discordId: id,
+        guilds: [{ id: D_GUILD, owner: false, permissions: '0' }],
+      });
+      for (const path of [...DUPLICATES(D_GUILD), ...IMPORTS(D_GUILD)]) {
+        const res = await p.post(path, { export: file([]), items: ['settings'], confirm: 'IMPORT' });
+        assert.equal(res.status, 403, `${held === VIEW ? 'view' : 'inbox'}: ${path}`);
+      }
+    }
+  } finally {
+    await setDashboardAccessRoles(D_GUILD, { inbox: [], view: [] });
+  }
+  assert.equal((await listItems(D_GUILD)).length, before);
+});

@@ -438,6 +438,12 @@ describe('ConfigImport', () => {
     expect(await screen.findByText('Imported 1 of 1.')).toBeTruthy();
   });
 
+  it('cannot choose a file below the Edit level', () => {
+    const { container } = render(<ConfigImport guildId={GUILD} disabled />);
+    expect(container.querySelector('input[type="file"]').disabled).toBe(true);
+    expect(container.querySelector('label.v2-import-choose').getAttribute('aria-disabled')).toBe('true');
+  });
+
   it('writes nothing when the confirmation is declined', async () => {
     api.previewConfigImport.mockResolvedValue(plan);
     confirmDialog.mockResolvedValue(false);

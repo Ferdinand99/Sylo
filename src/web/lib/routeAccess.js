@@ -220,6 +220,15 @@ export const ROUTE_ACCESS = Object.freeze({
   'GET /guilds/:guildId/audit/:id/change': 'view',
   'POST /guilds/:guildId/audit/:id/undo': 'edit',
   'GET /guilds/:guildId/export': 'edit',
+  // v2ConfigImport.js: the preview only reads, but it plans what an edit would do
+  'POST /guilds/:guildId/import/preview': 'edit',
+  'POST /guilds/:guildId/import/apply': 'edit',
+  // v2Duplicate.js
+  'POST /guilds/:guildId/modules/reminders/:id/duplicate': 'edit',
+  'POST /guilds/:guildId/messages/:id/duplicate': 'edit',
+  'POST /guilds/:guildId/modules/roles/rr/:id/duplicate': 'edit',
+  'POST /guilds/:guildId/modules/custom-commands/cmd/:id/duplicate': 'edit',
+  'POST /guilds/:guildId/modules/economy/shop/items/:id/duplicate': 'edit',
   'GET /guilds/:guildId/member-data': 'view',
   'POST /guilds/:guildId/member-data/forget': 'edit',
 

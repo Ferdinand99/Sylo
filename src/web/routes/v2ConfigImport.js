@@ -4,7 +4,7 @@
 //
 // Mounted at /guilds/:guildId AFTER the admin guard in v2Api.js, so req.guild is set, the caller
 // manages this server, the CSRF check has passed and the role-grant guard knows who is saving.
-import { Router } from 'express';
+import { accessRouter } from '../middleware/access.js';
 import { currentUser } from '../middleware/auth.js';
 import { platformActionLimit, rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -16,8 +16,8 @@ import {
   publicPlan,
 } from '../lib/configImport.js';
 
-// One line to change when this router moves to the access levels: `Router(...)` becomes `accessRouter(...)`.
-const router = Router({ mergeParams: true });
+// Both routes need Edit (routeAccess.js): the preview only reads, but it plans what an edit would do.
+const router = accessRouter('/guilds/:guildId', { mergeParams: true });
 
 // Planning reads a few tables per module: a person importing does not need more than this.
 const importLimit = rateLimit({

@@ -214,9 +214,18 @@ test('a module that cannot be imported, an unknown one and an operator-only one 
   assert.equal((await getGuildModule(GID, 'apple-connect')).config.appId, undefined);
 });
 
-test('server settings: a colour is imported, a mod-log channel of another server is not, and Discord has no prefix', async () => {
+test('server settings: a colour is imported, a mod-log channel of another server is not, Discord has no prefix, and the dashboard access roles are never touched', async () => {
+  const { setBotMasterRoles } = await import('../src/db/guildSettings.js');
+  await setBotMasterRoles(GID, [ROLE.admin]);
   const doc = file({
-    settings: { modlog_channel_id: FOREIGN_CH, embed_color: 0x112233, command_prefix: '!' },
+    settings: {
+      modlog_channel_id: FOREIGN_CH,
+      embed_color: 0x112233,
+      command_prefix: '!',
+      bot_master_roles: JSON.stringify([ROLE.member]),
+      dashboard_inbox_roles: JSON.stringify([ROLE.member]),
+      dashboard_view_roles: JSON.stringify([ROLE.member]),
+    },
   });
   const { body } = await preview(doc);
   const s = item(body, 'settings');
@@ -229,6 +238,12 @@ test('server settings: a colour is imported, a mod-log channel of another server
   assert.equal(stored.embed_color, 0x112233);
   assert.ok(!stored.modlog_channel_id);
   assert.ok(!stored.command_prefix);
+  assert.ok(s.notes.some((n) => /access roles in the file are never imported/.test(n)));
+  assert.equal(stored.bot_master_roles, JSON.stringify([ROLE.admin]));
+  assert.equal(stored.dashboard_inbox_roles, '[]');
+  assert.equal(stored.dashboard_view_roles, '[]');
+  const exported = await (await api.get('/export')).json();
+  assert.doesNotMatch(JSON.stringify(exported.settings), /bot_master|dashboard_/);
   assert.equal((await auditRows(GID, 'settings:server')).at(0).detail, 'imported from a file');
 });
 

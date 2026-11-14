@@ -85,6 +85,9 @@ const MAX_MODULE_BYTES = 128 * 1024;
 
 const MAX_CLEARED_PATHS = 12;
 
+// The columns of guild_settings that decide who may use the dashboard (db/guildSettings.js).
+const ACCESS_COLUMNS = ['bot_master_roles', 'dashboard_inbox_roles', 'dashboard_view_roles'];
+
 const SNOWFLAKE = /^\d{17,20}$/;
 const MENTION = /<(#|@&)(\d{17,20})>/g;
 
@@ -533,6 +536,11 @@ async function planSettings(guild, file) {
   };
   const after = { ...before };
   const todo = {};
+  // Who may open or change this dashboard (the bot-master, Inbox and View roles) is never imported: a file
+  // from another server must not be able to hand out access. Only the three settings below are read.
+  if (ACCESS_COLUMNS.some((c) => c in raw)) {
+    notes.push('The dashboard access roles in the file are never imported.');
+  }
 
   if (SNOWFLAKE.test(raw.modlog_channel_id ?? '')) {
     if (
