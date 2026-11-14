@@ -6,6 +6,7 @@ import PlaceholderBar from '../components/PlaceholderBar.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
+import EmptyList from '../components/EmptyList.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import {
@@ -89,7 +90,9 @@ export default function AutoThreads() {
 
       <form onSubmit={save} data-savebar>
         {form.rules.length === 0 ? (
-          <p className="v2-field-hint">No rules yet — add a channel below.</p>
+          <EmptyList start={{ label: 'Add your first rule', onClick: addRule }}>
+            Give every new post in a channel its own thread, named the way you choose.
+          </EmptyList>
         ) : null}
         {form.rules.map((r, i) => {
           const preview = renderThreadName(r.nameTemplate, {

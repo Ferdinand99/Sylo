@@ -151,3 +151,9 @@ test('a server creating its first reminder is recorded as pings off', async () =
   );
   assert.equal((await getGuildModule(D_GUILD, 'reminders')).config.allowPings, false);
 });
+
+test('the reminders list tells the most a server may have, for the counter', async () => {
+  const b = await signedInManager();
+  const list = await (await b.get(`/api/v2/guilds/${D_GUILD}/modules/reminders/list`)).json();
+  assert.equal(list.maxReminders, 50);
+});

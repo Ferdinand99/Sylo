@@ -1,4 +1,4 @@
-# Tickets (modmail)
+# Tickets
 
 Members open a ticket by **DMing the bot**. Staff read the conversation and reply
 from the dashboard — replies are delivered to the member as a DM from Sylo.

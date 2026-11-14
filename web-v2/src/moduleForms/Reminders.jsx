@@ -12,7 +12,7 @@ import {
 import { notify } from '../notify.js';
 import Badge from '../components/Badge.jsx';
 import LoadError from '../components/LoadError.jsx';
-import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import { counter, limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import EmbedEditor from '../components/EmbedEditor.jsx';
 import { describeTime } from '../formatTime.js';
@@ -408,8 +408,9 @@ export default function Reminders() {
     <>
       <ListPageHead
         title="Reminders"
+        // With nothing in the list the empty state below carries the one accent button.
         action={
-          creating ? null : (
+          creating || d.reminders.length === 0 ? null : (
             <button type="button" className="v2-btn-primary" onClick={() => setCreating(true)}>
               + New reminder
             </button>
@@ -440,18 +441,12 @@ export default function Reminders() {
       </div>
 
       <div className="v2-group">
-        <h2 className="v2-group-title">Your reminders ({d.reminders.length})</h2>
+        <h2 className="v2-group-title">Your reminders ({counter(d.reminders.length, d.maxReminders)})</h2>
         {d.reminders.length === 0 ? (
           <EmptyList
-            action={
-              creating ? null : (
-                <button type="button" className="v2-btn-ghost" onClick={() => setCreating(true)}>
-                  + New reminder
-                </button>
-              )
-            }
+            start={creating ? null : { label: 'Add your first reminder', onClick: () => setCreating(true) }}
           >
-            None yet — create one to post a message on a schedule.
+            Post a message in a channel on a schedule, once or on repeat, without anyone having to remember.
           </EmptyList>
         ) : (
           <div className="v2-list">

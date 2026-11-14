@@ -6,6 +6,7 @@ import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import PreviewLayout from '../components/PreviewLayout.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
+import EmptyList from '../components/EmptyList.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { cardTitle, hostOf } from '../util.js';
@@ -91,7 +92,11 @@ export default function RssAlerts() {
         </HowItWorks>
 
         <form onSubmit={save} data-savebar>
-          {form.feeds.length === 0 ? <p className="v2-field-hint">No feeds yet — add one below.</p> : null}
+          {form.feeds.length === 0 ? (
+            <EmptyList start={{ label: 'Add your first feed', onClick: addRow }}>
+              Post new items of any RSS or Atom feed in a channel.
+            </EmptyList>
+          ) : null}
           {form.feeds.map((row) => {
             const hint = HINTS[row.type] || HINTS.url;
             return (

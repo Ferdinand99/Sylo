@@ -8,6 +8,7 @@ import { GID, CH, ROLE } from './helpers/fakeGuild.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getGuildModule, setGuildModule } from '../src/db/modules.js';
+import { purgeGuild } from '../src/db/purge.js';
 import {
   createSuggestion,
   decideSuggestion,
@@ -351,4 +352,22 @@ test('delete removes the suggestion and its votes; a second delete and a missing
   assert.ok((await auditRows(GID, 'module:suggestions')).some((a) => a.detail === `deleted #${number}`));
   assert.equal((await api.post(`/modules/suggestions/${number}/delete`)).status, 404);
   assert.equal((await api.post('/modules/suggestions/0/delete')).status, 404);
+});
+
+test('the list and the config carry the count of every status, for the filter chips', async () => {
+  await purgeGuild(GID);
+  const a = await make({ body: 'One' });
+  const b = await make({ body: 'Two' });
+  const c = await make({ body: 'Three' });
+  await make({ body: 'Four' });
+  await decideSuggestion(a.id, { status: 'approved' });
+  await decideSuggestion(b.id, { status: 'denied' });
+  await decideSuggestion(c.id, { status: 'considering' });
+
+  const expected = { all: 4, open: 1, considering: 1, approved: 1, denied: 1, implemented: 0 };
+  assert.deepEqual((await json(await api.get('/modules/suggestions/config'))).counts, expected);
+  // the counts are for the whole server, whatever the filter on the list
+  const filtered = await json(await api.get('/modules/suggestions/list?status=denied'));
+  assert.equal(filtered.suggestions.length, 1);
+  assert.deepEqual(filtered.counts, expected);
 });

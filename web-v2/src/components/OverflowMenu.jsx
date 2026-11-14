@@ -18,8 +18,12 @@ const MENU_PADDING = 12;
  * closes when the page scrolls or the window is resized, since it would no longer sit under its button.
  *
  *   <OverflowMenu label="More actions for Golden Anchor" items={[{ label: 'Pause', onClick }, …]} />
+ *
+ * With `text` the button reads that word and a small arrow ("Set status ▾") instead of the "⋯": for a menu
+ * that holds one kind of choice, where the word says more than the dots. `label` stays the accessible name
+ * (it should start with the visible word).
  */
-export default function OverflowMenu({ label, items }) {
+export default function OverflowMenu({ label, items, text = null }) {
   const [open, setOpen] = useState(false);
   const [place, setPlace] = useState(null);
   const root = useRef(null);
@@ -93,14 +97,20 @@ export default function OverflowMenu({ label, items }) {
       <button
         ref={button}
         type="button"
-        className="v2-btn-ghost v2-overflow-button"
+        className={`v2-btn-ghost v2-overflow-button${text ? ' has-text' : ''}`}
         aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         onClick={() => (open ? close() : setOpen(true))}
       >
-        <span aria-hidden="true">⋯</span>
+        {text ? (
+          <>
+            {text} <span aria-hidden="true">▾</span>
+          </>
+        ) : (
+          <span aria-hidden="true">⋯</span>
+        )}
       </button>
       {open
         ? createPortal(

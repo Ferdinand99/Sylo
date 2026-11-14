@@ -398,7 +398,7 @@ describe('Economy: the Shop tab', () => {
       ])
     );
     await openTab('Shop');
-    expect(await screen.findByRole('heading', { name: 'Items (2)' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'Items (2 / 100)' })).toBeTruthy();
     const first = screen.getByText('Shout-out').closest('.v2-row-main');
     expect(first.textContent).toContain('Custom item (staff fulfil it)');
     expect(first.textContent).toContain('3 of 5 left');
@@ -452,6 +452,29 @@ describe('Economy: the Shop tab', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save item' }));
     await waitFor(() => expect(notify).toHaveBeenCalledWith('Give the item a name.'));
     expect(screen.getByRole('button', { name: 'Save item' })).toBeTruthy();
+  });
+
+  it('shows the item counter and the collectible picture quota with the server limits', async () => {
+    api.getShopItems.mockResolvedValue({
+      ...shopData([item()]),
+      maxItems: 100,
+      pictures: { count: 3, bytes: 5 * 1024 * 1024, maxCount: 200, maxBytes: 25 * 1024 * 1024 },
+    });
+    await openTab('Shop');
+    expect(await screen.findByRole('heading', { name: 'Items (1 / 100)' })).toBeTruthy();
+    expect(screen.getByTestId('shop-pictures').textContent).toBe(
+      'Collectible pictures: 3 / 200 · 5 MB / 25 MB'
+    );
+  });
+
+  it('an empty shop says what it gives and has one start button, not a second one under the list', async () => {
+    api.getShopItems.mockResolvedValue(shopData([]));
+    await openTab('Shop');
+    const start = await screen.findByRole('button', { name: 'Add your first item' });
+    expect(start.className).toContain('v2-btn-primary');
+    expect(screen.queryByRole('button', { name: 'Add an item' })).toBeNull();
+    fireEvent.click(start);
+    expect(await screen.findByRole('heading', { name: 'New item' })).toBeTruthy();
   });
 
   it('edits an item, pauses it, reorders and deletes after a confirmation', async () => {

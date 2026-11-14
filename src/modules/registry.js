@@ -43,7 +43,7 @@ export const MODULES = [
   },
   {
     id: 'tickets',
-    name: 'Tickets (modmail)',
+    name: 'Tickets',
     description: 'Members DM the bot; staff read and reply from this dashboard.',
     icon: '🎫',
     requiredIntents: [],

@@ -7,8 +7,7 @@ import LoadError from '../components/LoadError.jsx';
 import Breadcrumb, { peopleCrumb } from '../components/Breadcrumb.jsx';
 import Field from '../components/Field.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
-import { copyIdHint, formatCount } from '../util.js';
-import { usePlatformInfo } from '../usePlatformInfo.js';
+import { formatCount } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
 import MemberPicker, { parseMemberIds } from '../components/MemberPicker.jsx';
 import '../styles/wp1-members.css';
@@ -17,7 +16,6 @@ import '../styles/wp1-members.css';
 // Moderation cases and other safety records are kept.
 export default function MemberData() {
   const { guildId } = useParams();
-  const { info } = usePlatformInfo(guildId);
   const [params, setParams] = useSearchParams();
   const user = params.get('user') ?? '';
   const { data, error, setData } = useApiData(
@@ -53,8 +51,7 @@ export default function MemberData() {
           clearLabel="Look up another member"
         />
         <p className="v2-field-hint" id="member-id-hint">
-          Type two letters of the name. For a member who has left, paste the user ID.{' '}
-          {copyIdHint(info.platform)}
+          Type two letters of the name, or paste the user ID of someone who has left.
         </p>
       </div>
 

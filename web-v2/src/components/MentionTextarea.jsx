@@ -22,13 +22,15 @@ import {
 /**
  * The names of the channels, roles and members a text mentions, as small chips under the field, so a
  * person reads "#welcome" and "@Verified" and not <#1000…>. A channel or role that was deleted is marked.
+ * With `quiet` the row is only for assistive technology (and forced colours): the names are already drawn
+ * inside the field, so nothing is shown under it.
  */
-export function MentionChips({ value, channels = [], roles = [], members = new Map() }) {
+export function MentionChips({ value, channels = [], roles = [], members = new Map(), quiet = false }) {
   const found = mentionsIn(value);
   if (!found.length) return null;
   const lookup = { channels, roles, members };
   return (
-    <ul className="v2-mention-chips" aria-label="Mentions in this text">
+    <ul className={`v2-mention-chips${quiet ? ' is-quiet' : ''}`} aria-label="Mentions in this text">
       {found.map((part) => {
         const missing = mentionIsMissing(part, lookup);
         return (
@@ -137,7 +139,11 @@ export default function MentionTextarea({
   }, [trigger, channels, roles, people]);
   const open = suggestions.length > 0;
   // The mirror is for fields that wrap their text; a one-line input keeps showing its tokens as they are.
-  const mirrored = Boolean(field) && field.tagName === 'TEXTAREA' && hasMentions(rest.value);
+  // It is only there while the suggestions are closed: while a "#gen" is being typed the field shows its own
+  // text, so the half-typed word is never drawn twice (once as typed, once as a name over a finished token).
+  // Only complete tokens (<#id>, <@id>, <@&id>) ever become names; see mirrorParts.
+  const showsNames = Boolean(field) && field.tagName === 'TEXTAREA' && hasMentions(rest.value);
+  const mirrored = showsNames && !open;
 
   /** Delete a range of the field the way typing would, so the browser keeps its undo history. */
   function removeRange(el, start, end) {
@@ -354,7 +360,17 @@ export default function MentionTextarea({
           ))}
         </ul>
       ) : null}
-      {chips ? <MentionChips value={rest.value} channels={channels} roles={roles} members={members} /> : null}
+      {/* A field that draws its names inside the text needs no row of chips under it. The list stays for a screen
+          reader (the field's own text holds the raw tokens) and for forced colours, where no names are drawn. */}
+      {chips ? (
+        <MentionChips
+          value={rest.value}
+          channels={channels}
+          roles={roles}
+          members={members}
+          quiet={showsNames}
+        />
+      ) : null}
     </div>
   );
 }

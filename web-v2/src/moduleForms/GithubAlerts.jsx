@@ -247,8 +247,9 @@ export default function GithubAlerts() {
     <>
       <ListPageHead
         title="GitHub alerts"
+        // With nothing in the list the empty state below carries the one accent button.
         action={
-          creating ? null : (
+          creating || d.watches.length === 0 ? null : (
             <button type="button" className="v2-btn-primary" onClick={() => setCreating(true)}>
               + Add repository
             </button>
@@ -271,15 +272,9 @@ export default function GithubAlerts() {
         <h2 className="v2-group-title">Watched repos ({d.watches.length})</h2>
         {d.watches.length === 0 ? (
           <EmptyList
-            action={
-              creating ? null : (
-                <button type="button" className="v2-btn-ghost" onClick={() => setCreating(true)}>
-                  + Add repository
-                </button>
-              )
-            }
+            start={creating ? null : { label: 'Add your first repository', onClick: () => setCreating(true) }}
           >
-            None yet — add a repo to start posting its activity here.
+            Post a repository's commits, releases and issues in a channel as they happen.
           </EmptyList>
         ) : (
           <div className="v2-list">

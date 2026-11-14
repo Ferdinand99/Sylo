@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import { PermissionsBitField } from 'discord.js';
 import { setGuildModule } from '../src/db/modules.js';
 import { buildOverview } from '../src/web/lib/overviewSummary.js';
+import { MODULES } from '../src/modules/registry.js';
+import { createComposed } from '../src/db/composedMessages.js';
 
 const G = '700000000000000001';
 
@@ -257,4 +259,32 @@ test('the Auto threads card counts the channels that have a rule', async () => {
   });
   const card = await find();
   assert.equal(card.lines.find((l) => l.label === 'Channels with auto threads').value, '2');
+});
+
+test('the Embed messages card reads "n saved · m published" and keeps its first line for the apps', async () => {
+  const find = async () =>
+    (await buildOverview(stubGuild(G))).groups.flatMap((g) => g.cards).find((c) => c.id === 'messages');
+  const empty = await find();
+  assert.deepEqual(empty.summaryParts, ['No saved embeds yet']);
+  assert.equal(empty.lines[0].label, 'Saved embeds', 'the first line stays what an older app reads');
+
+  const spec = { content: 'hi', embeds: [] };
+  await createComposed(G, { name: 'Draft', channelId: '111', messageId: null, spec });
+  await createComposed(G, { name: 'Posted', channelId: '111', messageId: '900000000000000001', spec });
+  await createComposed(G, { name: 'Draft 2', channelId: '111', messageId: null, spec });
+  const card = await find();
+  assert.deepEqual(card.summaryParts, ['3 saved', '1 published']);
+  assert.equal(card.summary, '3 saved · 1 published');
+  assert.deepEqual(
+    card.lines.map((l) => `${l.label}: ${l.value}`),
+    ['Saved embeds: 3', 'Published: 1']
+  );
+});
+
+test('the tickets module has one name, "Tickets", on its card and in the registry', async () => {
+  const card = (await buildOverview(stubGuild(G))).groups
+    .flatMap((g) => g.cards)
+    .find((c) => c.id === 'tickets');
+  assert.equal(card.name, 'Tickets');
+  assert.equal(MODULES.find((m) => m.id === 'tickets').name, 'Tickets');
 });

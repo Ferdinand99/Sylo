@@ -12,10 +12,14 @@ import {
 } from '../api.js';
 import { notify } from '../notify.js';
 import ChipPicker from './ChipPicker.jsx';
+import EmptyList from './EmptyList.jsx';
 import LoadError from './LoadError.jsx';
 import Meta from './Meta.jsx';
 import { confirmDialog } from './ConfirmDialog.jsx';
-import { limitOf, useModuleLimits } from './useModuleLimits.js';
+import { counter, limitOf, useModuleLimits } from './useModuleLimits.js';
+
+// "3.4 MB" for the storage a server's collectible pictures use.
+const formatMegabytes = (bytes) => `${(Number(bytes) / 1024 / 1024).toFixed(1).replace(/\.0$/, '')} MB`;
 
 const TYPE_LABELS = {
   temp_role: 'Temporary role',
@@ -100,7 +104,7 @@ export default function EconomyShopAdmin({ guildId, currency }) {
     setBusy(true);
     try {
       const out = await fn();
-      setData((d) => ({ ...d, items: out.items }));
+      setData((d) => ({ ...d, items: out.items, pictures: out.pictures ?? d.pictures }));
       return out;
     } catch (err) {
       notify(err.message);
@@ -181,12 +185,22 @@ export default function EconomyShopAdmin({ guildId, currency }) {
   return (
     <>
       <div className="v2-group">
-        <h2 className="v2-group-title">Items ({items.length})</h2>
+        <h2 className="v2-group-title">Items ({counter(items.length, data.maxItems)})</h2>
+        {data.pictures ? (
+          <p className="v2-field-hint" data-testid="shop-pictures">
+            Collectible pictures: {counter(data.pictures.count, data.pictures.maxCount)} ·{' '}
+            {formatMegabytes(data.pictures.bytes)} / {formatMegabytes(data.pictures.maxBytes)}
+          </p>
+        ) : null}
         <p className="v2-field-hint">
           Members see the items that are not paused, in this order. Buying a temporary role again while it
           runs adds the new time to what is left.
         </p>
-        {items.length === 0 ? <p className="v2-note">No items yet. Add the first one below.</p> : null}
+        {items.length === 0 && !form ? (
+          <EmptyList start={{ label: 'Add your first item', onClick: () => setForm(blankForm()) }}>
+            Sell roles, collectibles and custom items for the server's currency.
+          </EmptyList>
+        ) : null}
         <div className="v2-list">
           {items.map((item, index) => (
             <div className="v2-row v2-shop-row" key={item.id}>
@@ -252,7 +266,7 @@ export default function EconomyShopAdmin({ guildId, currency }) {
             </div>
           ))}
         </div>
-        {!form ? (
+        {!form && items.length > 0 ? (
           <button type="button" className="v2-btn-primary" onClick={() => setForm(blankForm())}>
             Add an item
           </button>

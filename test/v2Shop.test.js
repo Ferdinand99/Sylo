@@ -314,3 +314,23 @@ test('the dashboard refuses what it must: module off, unknown item, bots, people
   );
   assert.equal((await api.post(`/modules/economy/members/${U}/inventory/999999/refund`, {})).status, 404);
 });
+
+test('the items answer carries the picture quota of the server, with the limits', async () => {
+  const empty = await json(await api.get('/modules/economy/shop/items'));
+  assert.deepEqual(empty.pictures, {
+    count: 0,
+    bytes: 0,
+    maxCount: 200,
+    maxBytes: 25 * 1024 * 1024,
+  });
+  assert.equal(empty.maxItems, 100);
+  db.prepare(
+    'INSERT INTO collectible_images (id, guild_id, mime, bytes, data, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run('a'.repeat(32), GID, 'image/webp', 1234, Buffer.alloc(1234), 1);
+  const after = await json(await api.get('/modules/economy/shop/items'));
+  assert.equal(after.pictures.count, 1);
+  assert.equal(after.pictures.bytes, 1234);
+  // every change answers with the numbers too, so the counter follows without another request
+  const added = await json(await add({ name: 'Another' }));
+  assert.equal(added.pictures.count, 1);
+});

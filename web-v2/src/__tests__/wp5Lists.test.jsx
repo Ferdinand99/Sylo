@@ -196,17 +196,15 @@ describe('list rows: Edit plus a "⋯" menu, one accent button', () => {
   it('Reminders: the new button is an accent in the header, and the empty state has the same one as a secondary', async () => {
     loadReminders([]);
     const { container } = renderAtGuild(<Reminders />, GUILD);
-    await screen.findByText(/None yet/);
-    expect(accentButtons(container).map((b) => b.textContent)).toEqual(['+ New reminder']);
+    await screen.findByText(/Post a message in a channel on a schedule/);
+    // one accent button: the empty state's own start button; the header's "+ New reminder" steps aside
+    expect(accentButtons(container).map((b) => b.textContent)).toEqual(['Add your first reminder']);
     const header = container.querySelector('.v2-listhead');
-    expect(within(header).getByRole('button', { name: '+ New reminder' })).toBeTruthy();
-    const empty = container.querySelector('.v2-empty');
-    const again = within(empty).getByRole('button', { name: '+ New reminder' });
-    expect(again.classList.contains('v2-btn-primary')).toBe(false);
-    fireEvent.click(again);
-    // the editor opened: the header button gives way to the form's own buttons
-    expect(await screen.findByRole('heading', { name: 'New reminder' })).toBeTruthy();
     expect(within(header).queryByRole('button', { name: '+ New reminder' })).toBeNull();
+    const empty = container.querySelector('.v2-empty');
+    fireEvent.click(within(empty).getByRole('button', { name: 'Add your first reminder' }));
+    // the editor opened
+    expect(await screen.findByRole('heading', { name: 'New reminder' })).toBeTruthy();
   });
 
   it('Channel cleanup', async () => {
@@ -370,12 +368,12 @@ describe('Custom commands', () => {
     expect(confirmDialog).toHaveBeenCalledTimes(1);
   });
 
-  it('has a new-command button in the header and in the empty state', async () => {
+  it('an empty list says what commands give and has one start button, not a second one in the header', async () => {
     load([]);
     const { container } = renderAtGuild(<CustomCommands />, GUILD);
-    await screen.findByText(/None yet/);
-    expect(accentButtons(container)).toHaveLength(1);
-    expect(screen.getAllByRole('button', { name: '+ New command' })).toHaveLength(2);
+    await screen.findByText(/Give members a command of your own/);
+    expect(accentButtons(container).map((b) => b.textContent)).toEqual(['Create your first command']);
+    expect(screen.queryByRole('button', { name: '+ New command' })).toBeNull();
   });
 
   it('opens an editor with one placeholder bar for all the messages, and # picks a channel', async () => {
@@ -436,7 +434,7 @@ describe('Custom commands', () => {
     load([]);
     api.saveCustomCommand.mockResolvedValue({});
     renderAtGuild(<CustomCommands />, GUILD);
-    fireEvent.click((await screen.findAllByRole('button', { name: '+ New command' }))[0]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Create your first command' }));
     expect(await screen.findByRole('heading', { name: 'New command' })).toBeTruthy();
     fireEvent.change(screen.getByPlaceholderText('my-command'), { target: { value: 'ping' } });
     type(screen.getByLabelText('Message 1 text'), 'Pong');

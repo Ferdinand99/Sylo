@@ -14,7 +14,7 @@ import ListPageHead from '../components/ListPageHead.jsx';
 import RowActions from '../components/RowActions.jsx';
 import EmptyList from '../components/EmptyList.jsx';
 import { newKey } from '../components/EmbedCard.jsx';
-import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import { counter, limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { PlatformContext } from '../platformContext.jsx';
 import Meta, { plural } from '../components/Meta.jsx';
 import { tokensFor } from '../placeholders.js';
@@ -456,6 +456,7 @@ function CommandForm({ initial, title, channels, roles, placeholders, onSave, on
 }
 
 export default function CustomCommands() {
+  const limits = useModuleLimits('custom-commands');
   const { platform } = useContext(PlatformContext);
   const { guildId } = useParams();
   const [state, setState] = useState({ loading: true, data: null, error: null });
@@ -534,10 +535,13 @@ export default function CustomCommands() {
     <>
       <ListPageHead
         title="Custom commands"
+        // With no command yet the empty state below carries the one accent button.
         action={
-          <button type="button" className="v2-btn-primary" onClick={() => setCreating(true)}>
-            + New command
-          </button>
+          d.commands.length === 0 ? null : (
+            <button type="button" className="v2-btn-primary" onClick={() => setCreating(true)}>
+              + New command
+            </button>
+          )
         }
       >
         <p className="v2-field-hint">
@@ -547,16 +551,14 @@ export default function CustomCommands() {
       </ListPageHead>
 
       <div className="v2-group">
-        <h2 className="v2-group-title">Your commands ({d.commands.length})</h2>
+        <h2 className="v2-group-title">
+          Your commands ({counter(d.commands.length, limitOf(limits, 'commands').maxItems)})
+        </h2>
         {d.commands.length === 0 ? (
           <EmptyList
-            action={
-              <button type="button" className="v2-btn-ghost" onClick={() => setCreating(true)}>
-                + New command
-              </button>
-            }
+            start={creating ? null : { label: 'Create your first command', onClick: () => setCreating(true) }}
           >
-            None yet — create one to give members a command of your own.
+            Give members a command of your own that replies, posts to a channel or hands out a role.
           </EmptyList>
         ) : (
           <div className="v2-list">

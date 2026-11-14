@@ -6,6 +6,7 @@ import PreviewLayout from '../components/PreviewLayout.jsx';
 import SetupCallout from '../components/SetupCallout.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
+import EmptyList from '../components/EmptyList.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { cardTitle } from '../util.js';
@@ -82,7 +83,9 @@ export default function KickAlerts() {
 
         <form onSubmit={save} data-savebar>
           {form.alerts.length === 0 ? (
-            <p className="v2-field-hint">No streamers yet — add one below.</p>
+            <EmptyList start={{ label: 'Add your first streamer', onClick: addRow }}>
+              Post in a channel the moment a streamer goes live on Kick.
+            </EmptyList>
           ) : null}
           {form.alerts.map((a) => (
             <div className="v2-rule-card" key={a.key} {...focusProps(a.key)}>

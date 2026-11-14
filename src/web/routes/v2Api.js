@@ -170,6 +170,7 @@ import {
   welcomeTrigger,
 } from '../../modules/welcome.js';
 import { MODULE_LIMITS } from '../../modules/limits.js';
+import { LIMITS as CEILINGS } from '../../lib/limits.js';
 import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
 import { normaliseAfkConfig } from '../../modules/afk.js';
 import { normaliseAppealsConfig } from '../../modules/appeals.js';
@@ -3109,6 +3110,8 @@ router.get(
       weekdays: WEEKDAYS,
       minIntervalMinutes: MIN_INTERVAL_MINUTES,
       maxIntervalMinutes: MAX_INTERVAL_MINUTES,
+      // The most reminders one server may have (db/scheduledMessages.js refuses the next one), for the counter.
+      maxReminders: CEILINGS.reminders,
     });
   })
 );

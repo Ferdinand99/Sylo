@@ -11,6 +11,7 @@ import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
 import ApplicationsFormEditor, { newDraft, toDraft } from '../components/ApplicationsFormEditor.jsx';
 import ApplicationsSubmissions from '../components/ApplicationsSubmissions.jsx';
+import EmptyList from '../components/EmptyList.jsx';
 import Badge from '../components/Badge.jsx';
 import HowItWorks from '../components/HowItWorks.jsx';
 import LoadError from '../components/LoadError.jsx';
@@ -233,7 +234,14 @@ export default function Applications() {
           />
         ) : (
           <div className="v2-section-gap">
-            {data.forms.length === 0 ? <p className="v2-note">No forms yet.</p> : null}
+            {data.forms.length === 0 ? (
+              <EmptyList
+                start={{ label: 'Create your first form', onClick: () => setEditing(newDraft(data)) }}
+              >
+                Let members apply for a role or a position with the questions you choose, and review the
+                answers here.
+              </EmptyList>
+            ) : null}
             <div className="v2-list">
               {data.forms.map((f) => (
                 <div className="v2-row" key={f.id}>
@@ -263,14 +271,17 @@ export default function Applications() {
                 </div>
               ))}
             </div>
-            <button
-              type="button"
-              className="v2-btn-primary"
-              disabled={data.forms.length >= data.maxForms}
-              onClick={() => setEditing(newDraft(data))}
-            >
-              New form
-            </button>
+            {/* With no form yet the empty state above carries the one accent button. */}
+            {data.forms.length > 0 ? (
+              <button
+                type="button"
+                className="v2-btn-primary"
+                disabled={data.forms.length >= data.maxForms}
+                onClick={() => setEditing(newDraft(data))}
+              >
+                New form
+              </button>
+            ) : null}
             {data.forms.length >= data.maxForms ? (
               <p className="v2-field-hint">A server can have at most {data.maxForms} forms.</p>
             ) : null}

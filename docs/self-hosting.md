@@ -141,7 +141,7 @@ Discord's approval for Message Content.
    - **Manage Server** — invite tracker (reads the invite list) and the automod
      push to native Discord AutoMod (creates/edits `Sylo:`-named rules)
 
-   Open the generated URL to invite the bot. Tickets (modmail) need no extra
+   Open the generated URL to invite the bot. Tickets need no extra
    permission — just leave the bot able to receive DMs.
 5. Drag **Sylo's role above the roles it should manage** in *Server Settings →
    Roles*. The bot can never kick/ban/timeout someone whose highest role sits
