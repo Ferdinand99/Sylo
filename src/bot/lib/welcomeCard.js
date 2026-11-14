@@ -43,10 +43,56 @@ const fmt = (n) => nf.format(Math.max(0, Math.round(Number(n) || 0)));
 const MAX_CARD_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_CARD_IMAGE_PIXELS = 25_000_000; // e.g. 5000×5000; a card is 1000×340
 
+// The decoder allocates the whole bitmap (4 bytes a pixel) inside this one process, so only a few
+// backgrounds are decoded at a time; the rest wait briefly and then go without a card.
+const MAX_CONCURRENT_RENDERS = 2;
+const MAX_WAITING_RENDERS = 8;
+const RENDER_QUEUE_TIMEOUT_MS = 5000;
+let rendering = 0;
+const renderQueue = [];
+
+/** Take one of the render places; resolves to a function that gives it back, or null when too busy. */
+function takeRenderPlace(timeoutMs = RENDER_QUEUE_TIMEOUT_MS) {
+  const placeTaken = () => {
+    let given = false;
+    return () => {
+      if (given) return;
+      given = true;
+      rendering -= 1;
+      const next = renderQueue.shift();
+      if (!next) return;
+      clearTimeout(next.timer);
+      rendering += 1;
+      next.resolve(placeTaken());
+    };
+  };
+  if (rendering < MAX_CONCURRENT_RENDERS) {
+    rendering += 1;
+    return Promise.resolve(placeTaken());
+  }
+  if (renderQueue.length >= MAX_WAITING_RENDERS) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const entry = { resolve, timer: null };
+    entry.timer = setTimeout(() => {
+      const at = renderQueue.indexOf(entry);
+      if (at >= 0) renderQueue.splice(at, 1);
+      resolve(null);
+    }, timeoutMs);
+    entry.timer.unref?.();
+    renderQueue.push(entry);
+  });
+}
+
+/** For tests: how many cards are being drawn and how many wait. */
+export const _renderQueue = () => ({ running: rendering, waiting: renderQueue.length });
+export const _takeRenderPlace = takeRenderPlace;
+
 /**
  * Download a background image a server admin chose, or null. The URL is theirs, so the fetch
  * may not reach the host's own network, the file is size-capped, and its pixel size is read
  * from the header before the canvas library decodes it (a tiny file can claim 30000×30000).
+ * The header reader looks at the same fields the decoder uses (see imageSize.js); the decoded
+ * size is checked again in renderWelcomeCard.
  * @param {string} url
  * @param {{ allowPrivate?: boolean }} [opts]
  * @returns {Promise<Buffer|null>}
@@ -102,6 +148,22 @@ function ellipsize(ctx, text, maxWidth) {
  */
 export async function renderWelcomeCard(o) {
   if (!canvasMod) return null;
+  // Fetch first, outside the render places: a slow host must not hold one of them.
+  const bgFile = o.backgroundUrl ? await fetchCardImage(o.backgroundUrl) : null;
+  if (!bgFile) return drawWelcomeCard(o, null);
+  const giveBack = await takeRenderPlace();
+  if (!giveBack) {
+    log.warn('welcome-card', 'too many card renders at once — card skipped');
+    return null;
+  }
+  try {
+    return await drawWelcomeCard(o, bgFile);
+  } finally {
+    giveBack();
+  }
+}
+
+async function drawWelcomeCard(o, bgFile) {
   const { createCanvas, loadImage } = canvasMod;
   const accent = /^#[0-9a-f]{6}$/i.test(o.accent || '') ? o.accent : '#5b7cfa';
 
@@ -111,8 +173,9 @@ export async function renderWelcomeCard(o) {
   const ctx = canvas.getContext('2d');
 
   // Background: a cover-fit image behind a scrim, else an accent gradient.
-  const bgFile = o.backgroundUrl ? await fetchCardImage(o.backgroundUrl) : null;
-  const bg = bgFile ? await loadImageBounded(loadImage, bgFile) : null;
+  let bg = bgFile ? await loadImageBounded(loadImage, bgFile) : null;
+  // Belt and braces: whatever the header said, an image that decoded larger than allowed is not drawn.
+  if (bg && !(bg.width * bg.height <= MAX_CARD_IMAGE_PIXELS)) bg = null;
   roundRect(ctx, 0, 0, W, H, 28);
   ctx.save();
   ctx.clip();
