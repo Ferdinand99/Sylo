@@ -1,0 +1,54 @@
+name: iOS sneak capture
+
+# Capture-only branch, never merged: records short iPhone simulator clips of the app against a canned
+# Sylo 5.2 server (see apps/sylo-ios/SyloKit/Sources/SyloKit/Demo). The clips are the workflow artifact.
+
+on:
+  push:
+    branches: [chore/ios-sneak-capture]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-sneak-capture
+  cancel-in-progress: true
+
+jobs:
+  capture:
+    runs-on: xcode-27
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Select Xcode 27
+        run: |
+          XCODE=$(for x in /Applications/Xcode_27*.app; do realpath "$x"; done 2>/dev/null \
+            | grep -viE 'beta|release_candidate' | sort -uV | tail -1)
+          [ -n "$XCODE" ] || XCODE=$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XCODE" ]; then
+            echo "::error::No Xcode 27 on this runner. Installed:"; ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+          xcrun simctl list runtimes
+
+      - name: Record the scenes
+        run: bash .github/ios-sneak-capture/capture.sh
+
+      - name: Upload the clips
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-clips
+          path: |
+            build/clips
+            build/raw
+            build/sheets
+            build/logs
+            build/markers
+            build/failure-*
+          if-no-files-found: warn
+          retention-days: 7

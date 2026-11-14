@@ -5,15 +5,7 @@ name: iOS app
 # signing and App Store uploads happen in Xcode (or Xcode Cloud).
 
 on:
-  pull_request:
-    paths:
-      - 'apps/sylo-ios/**'
-      - '.github/workflows/ios.yml'
-  # Every branch, so a work-in-progress branch gets a build before it has a pull request.
-  push:
-    paths:
-      - 'apps/sylo-ios/**'
-      - '.github/workflows/ios.yml'
+  # Capture-only branch: the sneak-capture workflow builds the app here, so this one only runs by hand.
   workflow_dispatch:
 
 permissions:

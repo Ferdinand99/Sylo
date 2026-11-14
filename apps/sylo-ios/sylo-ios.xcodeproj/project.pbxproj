@@ -13,6 +13,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		0B000000000000000000000B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000000000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 000000000000000100000000;
+			remoteInfo = "sylo-ios";
+		};
 		0A00456D30950175006F7A4E /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 000000000000000000000000 /* Project object */;
@@ -35,6 +42,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0B0000000000000000000002 /* SneakCaptureUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SneakCaptureUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000000120 /* sylo-ios.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "sylo-ios.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		0A00456830950175006F7A4E /* SyloNotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SyloNotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -50,6 +58,11 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		0B0000000000000000000003 /* SneakCaptureUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = SneakCaptureUITests;
+			sourceTree = "<group>";
+		};
 		000000000000000000000010 /* sylo-ios */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "sylo-ios";
@@ -66,6 +79,11 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		0B0000000000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
 		000000000000000130000000 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
@@ -86,6 +104,7 @@
 			children = (
 				000000000000000000000010 /* sylo-ios */,
 				0A00456930950175006F7A4E /* SyloNotificationService */,
+				0B0000000000000000000003 /* SneakCaptureUITests */,
 				000000000000000000000020 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -95,6 +114,7 @@
 			children = (
 				000000000000000000000120 /* sylo-ios.app */,
 				0A00456830950175006F7A4E /* SyloNotificationService.appex */,
+				0B0000000000000000000002 /* SneakCaptureUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -148,6 +168,29 @@
 			productReference = 0A00456830950175006F7A4E /* SyloNotificationService.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		0B0000000000000000000001 /* SneakCaptureUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0B0000000000000000000007 /* Build configuration list for PBXNativeTarget "SneakCaptureUITests" */;
+			buildPhases = (
+				0B0000000000000000000004 /* Sources */,
+				0B0000000000000000000005 /* Frameworks */,
+				0B0000000000000000000006 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				0B000000000000000000000A /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				0B0000000000000000000003 /* SneakCaptureUITests */,
+			);
+			name = SneakCaptureUITests;
+			packageProductDependencies = (
+			);
+			productName = SneakCaptureUITests;
+			productReference = 0B0000000000000000000002 /* SneakCaptureUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -163,6 +206,10 @@
 					};
 					0A00456730950175006F7A4E = {
 						CreatedOnToolsVersion = 27.1;
+					};
+					0B0000000000000000000001 = {
+						CreatedOnToolsVersion = 27.1;
+						TestTargetID = 000000000000000100000000;
 					};
 				};
 			};
@@ -186,11 +233,17 @@
 			targets = (
 				000000000000000100000000 /* sylo-ios */,
 				0A00456730950175006F7A4E /* SyloNotificationService */,
+				0B0000000000000000000001 /* SneakCaptureUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		0B0000000000000000000006 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
 		000000000000000140000000 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
@@ -204,6 +257,11 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		0B0000000000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
 		000000000000000120000000 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
@@ -217,6 +275,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		0B000000000000000000000A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 000000000000000100000000 /* sylo-ios */;
+			targetProxy = 0B000000000000000000000B /* PBXContainerItemProxy */;
+		};
 		0A00456E30950175006F7A4E /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 0A00456730950175006F7A4E /* SyloNotificationService */;
@@ -524,6 +587,44 @@
 			};
 			name = Release;
 		};
+		0B0000000000000000000008 /* Debug configuration for PBXNativeTarget "SneakCaptureUITests" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "net.opland.sylo.sneak-capture-uitests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = "sylo-ios";
+			};
+			name = Debug;
+		};
+		0B0000000000000000000009 /* Release configuration for PBXNativeTarget "SneakCaptureUITests" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "net.opland.sylo.sneak-capture-uitests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = "sylo-ios";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -548,6 +649,14 @@
 			buildConfigurations = (
 				0A00457130950175006F7A4E /* Debug configuration for PBXNativeTarget "SyloNotificationService" */,
 				0A00457230950175006F7A4E /* Release configuration for PBXNativeTarget "SyloNotificationService" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		0B0000000000000000000007 /* Build configuration list for PBXNativeTarget "SneakCaptureUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0B0000000000000000000008 /* Debug configuration for PBXNativeTarget "SneakCaptureUITests" */,
+				0B0000000000000000000009 /* Release configuration for PBXNativeTarget "SneakCaptureUITests" */,
 			);
 			defaultConfigurationName = Release;
 		};

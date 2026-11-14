@@ -11,7 +11,9 @@ import UserNotifications
     init() {
         // Exports and other downloads can hold personal data: none is kept from an earlier launch.
         DownloadedFile.removeAllTemporary()
-        let session = AppSession.live()
+        // Capture-only branch: the launch argument swaps the network for a canned Sylo 5.2.
+        let session = ProcessInfo.processInfo.arguments.contains(SneakDemo.launchArgument)
+            ? AppSession.sneakDemo() : AppSession.live()
         // Reads the remembered server and token before the first frame, so a signed-in launch
         // never flashes the sign-in screen.
         session.start()
