@@ -34,6 +34,11 @@ test('GET /api/mobile/info describes a server with login on, without a cookie or
   assert.ok(info.features.includes('app-login'));
   assert.ok(info.features.includes('live-access'));
   assert.ok(info.features.includes('changelog'), 'GET /api/v2/changelog');
+  // What a 5.2 server has that an older one lacks, so the app can hide those controls.
+  assert.ok(info.features.includes('collectibles'), 'collectible pictures and the inventory');
+  assert.ok(info.features.includes('welcome-trigger'), 'the Welcome trigger');
+  assert.ok(info.features.includes('member-search'), 'GET /api/v2/guilds/:id/members');
+  assert.ok(info.features.includes('app-connect'), 'both logins are set up, so one can be added');
   assert.ok(info.features.includes('health'), 'GET /api/v2/guilds/:id/health');
   assert.ok(info.features.every((f) => typeof f === 'string'));
 });
@@ -88,4 +93,6 @@ test('GET /api/mobile/info answers in open mode and says login is unavailable', 
   assert.equal(info.apiVersion, 1);
   assert.ok(!info.features.includes('push'), 'no app sign-in, so no push either');
   assert.ok(info.features.includes('changelog'), 'the changelog does not need a sign-in in open mode');
+  assert.ok(info.features.includes('member-search'), 'features describe the build, not the login');
+  assert.ok(!info.features.includes('app-connect'), 'no accounts to add a login to');
 });
