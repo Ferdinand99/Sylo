@@ -27,14 +27,14 @@ export function goalDone(data, goalId) {
   return items.length > 0 && items.every((i) => i.configured);
 }
 
-/** The goals ticked at first: the ones that still have something to set up. */
-export const initialGoals = (data) =>
-  new Set(data.goals.filter((g) => !goalDone(data, g.id)).map((g) => g.id));
+/** No goal is ticked at first: the admin picks the goals. */
+export const initialGoals = () => new Set();
 
 /**
- * The first choices for every item: what was found by name, nothing created. An item that is already set up
- * or cannot run is off; the admin ticks it on to replace it.
- * @returns {Record<string, { on: boolean, fields: Record<string, { mode: 'pick' | 'create', id: string }> }>}
+ * The first choices for every item: what was found by name, nothing created, no permission changed. An item
+ * of a goal the admin picks is on, unless it is already set up or cannot run; the admin ticks such an item on
+ * to replace it.
+ * @returns {Record<string, { on: boolean, fields: Record<string, { mode: 'pick' | 'create', id: string, fix: boolean }> }>}
  */
 export function initialChoices(data) {
   const out = {};
@@ -42,7 +42,10 @@ export function initialChoices(data) {
     out[item.id] = {
       on: !item.configured && usable(item),
       fields: Object.fromEntries(
-        item.fields.map((f) => [f.key, { mode: 'pick', id: f.match ? f.match.id : '' }])
+        item.fields.map((f) => [
+          f.key,
+          { mode: 'pick', id: (f.match ?? f.create?.existing)?.id ?? '', fix: false },
+        ])
       ),
     };
   }
@@ -57,7 +60,7 @@ export function itemProblems(data, item, choice) {
   const problems = [];
   for (const field of item.fields) {
     const pick = choice.fields[field.key] ?? { mode: 'pick', id: '' };
-    if (pick.mode === 'create' && field.create) continue;
+    if (pick.mode === 'create' && field.create && !field.create.existing) continue;
     if (!pick.id) {
       if (!field.optional) problems.push(`${field.label}: pick one, or tick Create.`);
       continue;
@@ -82,11 +85,16 @@ export function reviewSummary(data, goalIds, choices) {
   const active = activeItems(data, goalIds, choices);
   const channels = new Map();
   const roles = new Map();
+  const changed = [];
   let problems = 0;
   for (const item of active) {
     problems += itemProblems(data, item, choices[item.id]).length;
     for (const field of item.fields) {
-      if (choices[item.id].fields[field.key]?.mode !== 'create' || !field.create) continue;
+      const pick = choices[item.id].fields[field.key];
+      if (pick?.fix && field.create?.existing && pick.id === field.create.existing.id) {
+        changed.push(field.create.existing.name);
+      }
+      if (pick?.mode !== 'create' || !field.create || field.create.existing) continue;
       (field.kind === 'channel' ? channels : roles).set(field.create.name, field.create);
     }
   }
@@ -95,6 +103,7 @@ export function reviewSummary(data, goalIds, choices) {
     replaced: active.filter((i) => i.configured).length,
     channels: [...channels.keys()],
     roles: [...roles.keys()],
+    changed: [...new Set(changed)],
     problems,
   };
 }
@@ -105,7 +114,7 @@ export function missingCreates(data, goalIds, choices) {
   for (const item of activeItems(data, goalIds, choices)) {
     for (const field of item.fields) {
       const pick = choices[item.id].fields[field.key];
-      if (field.create && !field.optional && pick?.mode === 'pick' && !pick.id)
+      if (field.create && !field.create.existing && !field.optional && pick?.mode === 'pick' && !pick.id)
         out.push([item.id, field.key]);
     }
   }
@@ -122,10 +131,12 @@ export function toPayload(data, goalIds, choices) {
       fields: Object.fromEntries(
         item.fields.map((field) => {
           const pick = choices[item.id].fields[field.key] ?? { mode: 'pick', id: '' };
-          return [
-            field.key,
-            pick.mode === 'create' && field.create ? { create: true } : pick.id ? { id: pick.id } : {},
-          ];
+          if (pick.mode === 'create' && field.create && !field.create.existing)
+            return [field.key, { create: true }];
+          if (!pick.id) return [field.key, {}];
+          // A channel's permissions change only where the wizard knows how, and only when the admin ticked it.
+          const fix = pick.fix && field.create?.existing?.id === pick.id;
+          return [field.key, fix ? { id: pick.id, fix: true } : { id: pick.id }];
         })
       ),
     })),

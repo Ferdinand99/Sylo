@@ -83,6 +83,9 @@ test('matches names the way a person writes them: case, emoji and separators do 
   assert.equal(matchByName(items, ['verify', 'rules']).id, '1', 'the order of the names is the preference');
   assert.equal(matchByName(items, ['welcome'], ['welcome']).id, '3', 'a whole word counts as a loose match');
   assert.equal(matchByName(items, ['logs']), null, '"logs" inside another word does not match');
+  // A name in a fancy Unicode font reads as plain letters (NFKC).
+  assert.equal(matchByName([{ id: '9', name: '𝗺𝗼𝗱-𝗹𝗼𝗴' }], ['modlog']).id, '9');
+  assert.equal(matchByName([{ id: '8', name: '𝐕𝐞𝐫𝐢𝐟𝐲' }], ['verify']).id, '8');
 });
 
 test('a server with nothing to match proposes to create, and creates nothing by asking', async () => {
@@ -103,7 +106,16 @@ test('a server with nothing to match proposes to create, and creates nothing by 
     kind: 'channel',
     private: false,
     readOnly: true,
+    everyoneCanView: false,
+    existing: null,
   });
+  assert.equal(
+    field(itemOf(body, 'verification'), 'channelId').create.everyoneCanView,
+    true,
+    'verify is readable'
+  );
+  assert.equal(field(itemOf(body, 'modlog'), 'viewRole').viewer, true);
+  assert.equal(field(itemOf(body, 'tickets'), 'staffRoles').viewer, true);
   assert.equal(field(itemOf(body, 'modlog'), 'channelId').create.private, true);
   assert.equal(field(itemOf(body, 'verification'), 'verifiedRoleId').create.kind, 'role');
   assert.equal(itemOf(body, 'welcome').configured, false);
@@ -172,7 +184,7 @@ test('a ticked Create makes the channel (read-only or private), saves the module
   const res = await api.post('/setup/apply', {
     items: [
       { id: 'welcome', fields: { joinChannel: { create: true } } },
-      { id: 'modlog', fields: { channelId: { create: true } } },
+      { id: 'modlog', fields: { channelId: { create: true }, viewRole: { create: true } } },
       { id: 'verification', fields: { channelId: { create: true }, verifiedRoleId: { create: true } } },
     ],
   });
@@ -190,12 +202,22 @@ test('a ticked Create makes the channel (read-only or private), saves the module
   );
   assert.deepEqual(
     made.roles.map((r) => r.name),
-    ['Verified']
+    ['Verified', 'Support team']
   );
 
   const everyone = (c) => c.permissionOverwrites.find((o) => o.id === GID);
   const welcomeCh = made.channels.find((c) => c.name === 'welcome');
   assert.ok(everyone(welcomeCh).deny.includes(PermissionsBitField.Flags.SendMessages), 'read-only');
+  assert.ok(
+    !everyone(welcomeCh).allow?.includes(PermissionsBitField.Flags.ViewChannel),
+    'View Channel is inherited, so a server that hides channels from unverified members keeps this one hidden'
+  );
+  const verifyCh = made.channels.find((c) => c.name === 'verify');
+  assert.ok(
+    everyone(verifyCh).allow.includes(PermissionsBitField.Flags.ViewChannel),
+    'only the verify channel says View Channel outright: the unverified must see it'
+  );
+  assert.ok(everyone(verifyCh).deny.includes(PermissionsBitField.Flags.SendMessages));
   assert.ok(
     !everyone(welcomeCh).deny.includes(PermissionsBitField.Flags.AddReactions),
     'reactions stay open: buttons are reactions on Fluxer'
@@ -205,6 +227,12 @@ test('a ticked Create makes the channel (read-only or private), saves the module
   assert.ok(
     modlogCh.permissionOverwrites.some((o) => o.id === 'bot-id'),
     'Sylo can still use it'
+  );
+  const staffRole = made.roles.find((r) => r.name === 'Support team');
+  const staffOverwrite = modlogCh.permissionOverwrites.find((o) => o.id === staffRole.id);
+  assert.ok(
+    staffOverwrite.allow.includes(PermissionsBitField.Flags.ViewChannel),
+    'the staff role made a moment before can open the private channel'
   );
 
   const welcome = await getGuildModule(GID, 'welcome');
@@ -218,12 +246,19 @@ test('a ticked Create makes the channel (read-only or private), saves the module
   assert.equal(verification.config.verifiedRoleId, made.roles[0].id);
   assert.equal((await getGuildSettings(GID)).modlog_channel_id, made.channels[2].id);
 
-  // One audit entry per saved item, none for the rest.
+  // One audit entry per saved item, and one for each channel and role that was made.
   const audit = await listAudit(GID, 20);
-  assert.equal(audit.length, 3);
+  assert.equal(audit.length, 3 + 3 + 2);
+  assert.equal((await auditRows(GID, 'setup:channel')).length, 3);
+  assert.equal((await auditRows(GID, 'setup:role')).length, 2);
+  assert.match((await auditRows(GID, 'setup:role'))[0].detail, /created Support team for Mod-log channel/);
   assert.match((await auditRows(GID, 'module:welcome'))[0].detail, /setup wizard; created #welcome/);
-  assert.match((await auditRows(GID, 'module:verification'))[0].detail, /created #verify, Verified/);
-  assert.match((await auditRows(GID, 'settings'))[0].detail, /mod-log channel set by the setup wizard/);
+  assert.match((await auditRows(GID, 'module:verification'))[0].detail, /created Verified, #verify/);
+  // Filed like the Server settings save, so the history lists it like one.
+  assert.match(
+    (await auditRows(GID, 'settings:server'))[0].detail,
+    /mod-log channel set by the setup wizard/
+  );
 });
 
 test('an item that is already set up is left alone, and a second run creates nothing again', async () => {
@@ -239,7 +274,7 @@ test('an item that is already set up is left alone, and a second run creates not
     assert.match(r.message, /Already set up/);
   }
   assert.equal(made.channels.length, 3, 'no second #welcome');
-  assert.equal((await listAudit(GID, 20)).length, 3, 'and no new audit entry');
+  assert.equal((await listAudit(GID, 20)).length, 8, 'and no new audit entry');
 });
 
 test('"Replace" changes the channels and switches, and keeps the text the admin wrote', async () => {

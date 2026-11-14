@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { applySetup, getSetupSuggestion } from '../api.js';
 import { useApiData } from '../useApiData.js';
@@ -65,7 +65,7 @@ function LookStep({ data, guildId, onNext }) {
   const done = usableItems.filter((i) => i.configured).length;
   return (
     <section className="v2-group" aria-labelledby="setup-look">
-      <h2 id="setup-look" className="v2-group-title">
+      <h2 id="setup-look" className="v2-group-title" tabIndex={-1}>
         What Sylo found
       </h2>
       <p>
@@ -109,7 +109,7 @@ function GoalsStep({ data, goals, setGoals, onBack, onNext }) {
   };
   return (
     <section className="v2-group" aria-labelledby="setup-goals">
-      <h2 id="setup-goals" className="v2-group-title">
+      <h2 id="setup-goals" className="v2-group-title" tabIndex={-1}>
         What do you want Sylo to do here?
       </h2>
       <p className="v2-field-hint">Pick as many as you like. You review everything before it is applied.</p>
@@ -140,6 +140,13 @@ function GoalsStep({ data, goals, setGoals, onBack, onNext }) {
   );
 }
 
+// What a channel the wizard makes or changes ends up as, in words.
+function accessPhrase(create) {
+  if (create.private) return 'private (only admins and Sylo, and the role below if you pick one)';
+  if (create.everyoneCanView) return 'readable by everyone and read-only';
+  return 'read-only for members';
+}
+
 function PickField({ item, field, pick, data, disabled, onChange }) {
   const pool = field.kind === 'channel' ? data.channels : data.roles;
   const prefix = field.kind === 'channel' ? '#' : '';
@@ -147,13 +154,19 @@ function PickField({ item, field, pick, data, disabled, onChange }) {
   const creating = pick.mode === 'create';
   const found = pool.find((p) => p.id === pick.id);
   const flag = found?.problem && (field.kind === 'channel' ? field.post : field.give) ? found.problem : null;
+  const existing = field.create?.existing ?? null;
   const access = field.create?.private
-    ? ' Only admins and Sylo can see it.'
-    : field.create?.readOnly
+    ? ' Only admins and Sylo can see it, and the role below if you pick one.'
+    : field.create?.everyoneCanView
       ? ' Everyone can read it, only Sylo can post.'
-      : field.kind === 'role'
-        ? ' It has no permissions.'
-        : '';
+      : field.create?.readOnly
+        ? ' Only Sylo can post. Members see it like your other channels.'
+        : field.kind === 'role'
+          ? ' It has no permissions.'
+          : '';
+  // The channel that already has the name "Create" would give: it is in the list, and its permissions are only
+  // changed when the admin ticks the box.
+  const usingExisting = Boolean(existing && existing.gap && pick.id === existing.id);
   return (
     <div className="v2-field v2-setup-field">
       <label htmlFor={selectId}>
@@ -164,7 +177,7 @@ function PickField({ item, field, pick, data, disabled, onChange }) {
         id={selectId}
         value={creating ? '' : pick.id}
         disabled={disabled || creating}
-        onChange={(e) => onChange({ mode: 'pick', id: e.target.value })}
+        onChange={(e) => onChange({ mode: 'pick', id: e.target.value, fix: false })}
       >
         <option value="">{field.optional ? 'None' : 'Pick one'}</option>
         {pool.map((p) => (
@@ -174,19 +187,38 @@ function PickField({ item, field, pick, data, disabled, onChange }) {
           </option>
         ))}
       </select>
-      {field.create ? (
+      {field.create && !existing ? (
         <label className="v2-check v2-setup-create">
           <input
             type="checkbox"
             checked={creating}
             disabled={disabled}
-            onChange={(e) => onChange({ mode: e.target.checked ? 'create' : 'pick', id: '' })}
+            onChange={(e) => onChange({ mode: e.target.checked ? 'create' : 'pick', id: '', fix: false })}
           />
           <span>
             Create {prefix}
             {field.create.name}.{access}
           </span>
         </label>
+      ) : null}
+      {usingExisting && field.kind === 'channel' ? (
+        <>
+          <p className="v2-row-warn">
+            {prefix}
+            {existing.name} already exists. {existing.gap}
+          </p>
+          <label className="v2-check v2-setup-create">
+            <input
+              type="checkbox"
+              checked={Boolean(pick.fix)}
+              disabled={disabled}
+              onChange={(e) => onChange({ ...pick, fix: e.target.checked })}
+            />
+            <span>
+              Change its permissions to {accessPhrase(field.create)}. Leave this unticked to use it as it is.
+            </span>
+          </label>
+        </>
       ) : null}
       {flag && !creating ? <p className="v2-row-warn">{flag}</p> : null}
       {field.warning && !creating && pick.id ? <p className="v2-row-warn">{field.warning}</p> : null}
@@ -271,7 +303,10 @@ function ReviewStep({ data, goals, choices, setChoices, applying, onBack, onAppl
     setChoices((prev) => {
       const next = { ...prev };
       for (const [id, key] of creates) {
-        next[id] = { ...next[id], fields: { ...next[id].fields, [key]: { mode: 'create', id: '' } } };
+        next[id] = {
+          ...next[id],
+          fields: { ...next[id].fields, [key]: { mode: 'create', id: '', fix: false } },
+        };
       }
       return next;
     });
@@ -281,10 +316,11 @@ function ReviewStep({ data, goals, choices, setChoices, applying, onBack, onAppl
   if (summary.channels.length) parts.push(`create ${listNames(summary.channels, '#')}`);
   if (summary.roles.length)
     parts.push(`create the ${plural(summary.roles.length, 'role')} ${listNames(summary.roles)}`);
+  if (summary.changed.length) parts.push(`change the permissions of ${listNames(summary.changed, '#')}`);
 
   return (
     <section className="v2-group" aria-labelledby="setup-review">
-      <h2 id="setup-review" className="v2-group-title">
+      <h2 id="setup-review" className="v2-group-title" tabIndex={-1}>
         Review
       </h2>
       <p className="v2-field-hint">
@@ -349,7 +385,7 @@ function DoneStep({ guildId, results, onAgain }) {
   const applied = results.filter((r) => r.status === 'applied');
   return (
     <section className="v2-group" aria-labelledby="setup-done">
-      <h2 id="setup-done" className="v2-group-title">
+      <h2 id="setup-done" className="v2-group-title" tabIndex={-1}>
         {failed.length ? 'Some things were not set up' : 'Done'}
       </h2>
       <p role="status">
@@ -401,6 +437,16 @@ export default function SetupWizard() {
   const [choices, setChoices] = useState(null);
   const [applying, setApplying] = useState(false);
   const [results, setResults] = useState([]);
+  // A step change moves focus to the new step's heading: the button that was pressed is gone.
+  const stepRef = useRef(null);
+  const firstStep = useRef(true);
+  useEffect(() => {
+    if (firstStep.current) {
+      firstStep.current = false;
+      return;
+    }
+    stepRef.current?.querySelector('h2')?.focus();
+  }, [step]);
 
   // The first choices are made from the first read of this server, once.
   const ready = useMemo(
@@ -466,34 +512,36 @@ export default function SetupWizard() {
           use a reaction.
         </Callout>
       ) : null}
-      {step === 'look' ? <LookStep data={data} guildId={guildId} onNext={() => setStep('goals')} /> : null}
-      {step === 'goals' ? (
-        <GoalsStep
-          data={data}
-          goals={ready.goals}
-          setGoals={setGoals}
-          onBack={() => setStep('look')}
-          onNext={() => {
-            setGoals(ready.goals);
-            setChoices(ready.choices);
-            setStep('review');
-          }}
-        />
-      ) : null}
-      {step === 'review' ? (
-        <ReviewStep
-          data={data}
-          goals={ready.goals}
-          choices={ready.choices}
-          setChoices={setChoices}
-          applying={applying}
-          onBack={() => setStep('goals')}
-          onApply={onApply}
-        />
-      ) : null}
-      {step === 'done' ? (
-        <DoneStep guildId={guildId} results={results} onAgain={() => setStep('review')} />
-      ) : null}
+      <div ref={stepRef}>
+        {step === 'look' ? <LookStep data={data} guildId={guildId} onNext={() => setStep('goals')} /> : null}
+        {step === 'goals' ? (
+          <GoalsStep
+            data={data}
+            goals={ready.goals}
+            setGoals={setGoals}
+            onBack={() => setStep('look')}
+            onNext={() => {
+              setGoals(ready.goals);
+              setChoices(ready.choices);
+              setStep('review');
+            }}
+          />
+        ) : null}
+        {step === 'review' ? (
+          <ReviewStep
+            data={data}
+            goals={ready.goals}
+            choices={ready.choices}
+            setChoices={setChoices}
+            applying={applying}
+            onBack={() => setStep('goals')}
+            onApply={onApply}
+          />
+        ) : null}
+        {step === 'done' ? (
+          <DoneStep guildId={guildId} results={results} onAgain={() => setStep('review')} />
+        ) : null}
+      </div>
     </Reveal>
   );
 }

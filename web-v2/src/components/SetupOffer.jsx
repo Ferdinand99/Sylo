@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useCanSetUp } from '../setupAccess.js';
 import '../styles/setup-wizard.css';
 
 const key = (guildId) => `sylo-setup-offer-dismissed:${guildId}`;
@@ -19,8 +20,9 @@ function dismissed(guildId) {
  * setup wizard. "Not now" hides it for this server (the wizard stays in Server settings).
  */
 export default function SetupOffer({ guildId }) {
+  const canSetUp = useCanSetUp();
   const [hidden, setHidden] = useState(() => dismissed(guildId));
-  if (hidden) return null;
+  if (hidden || !canSetUp) return null;
 
   function dismiss() {
     try {

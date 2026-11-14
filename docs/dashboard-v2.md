@@ -44,10 +44,14 @@ note.
   and roles by name (`welcome`, `rules`, `mod-log`, `logs`, `tickets`,
   `support` …). You review it, then apply. A channel or role is only created
   when you tick **Create** for it, and only if Sylo has Manage Channels or
-  Manage Roles; channels for logs and ticket alerts are made private. A module
-  that is already set up is left alone unless you tick it. Each module is saved
-  like its own settings page saves it and gets its own audit entry. It works
-  the same way on Fluxer.
+  Manage Roles. Channels for logs and ticket alerts are made private (visible to
+  admins, Sylo and the staff role you pick); the others are read-only for
+  members and keep the server's own rules for who can see them. A channel with
+  the wanted name that already exists is used only if it is what the wizard
+  promises, and its permissions change only when you tick it. A module that is
+  already set up is left alone unless you tick it. Each module is saved like its
+  own settings page saves it and gets its own audit entry, and so does every
+  channel or role the wizard makes. It works the same way on Fluxer.
 - **Mobile gets a real off-canvas menu** (hamburger button, slide-in sidebar)
   below ~860px, rather than the sidebar just disappearing.
 

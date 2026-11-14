@@ -12,9 +12,11 @@ vi.mock('../api.js', () => ({
 vi.mock('../notify.js', () => ({ notify: vi.fn() }));
 vi.mock('../moduleForms/index.js', () => ({ v2Href: (card, guildId) => `/guilds/${guildId}/m/${card.id}` }));
 vi.mock('../OverviewContext.jsx', () => ({ useOverview: vi.fn() }));
+vi.mock('../setupAccess.js', () => ({ useCanSetUp: vi.fn() }));
 const api = await import('../api.js');
 const { notify } = await import('../notify.js');
 const { useOverview } = await import('../OverviewContext.jsx');
+const { useCanSetUp } = await import('../setupAccess.js');
 
 const GUILD = '123456789012345678';
 const GENERAL = '100000000000000001';
@@ -80,6 +82,7 @@ const reload = vi.fn();
 beforeEach(() => {
   vi.resetAllMocks();
   useOverview.mockReturnValue({ reload });
+  useCanSetUp.mockReturnValue(true);
   api.getSetupSuggestion.mockResolvedValue(suggestion());
   api.applySetup.mockResolvedValue({
     results: [
@@ -98,6 +101,7 @@ beforeEach(() => {
 async function toReview() {
   renderAtGuild(<SetupWizard />, GUILD);
   fireEvent.click(await screen.findByRole('button', { name: 'Choose goals' }));
+  fireEvent.click(screen.getByRole('checkbox', { name: /Welcome new members/ }));
   fireEvent.click(screen.getByRole('button', { name: 'Review' }));
   await screen.findByRole('heading', { name: 'Review' });
 }
@@ -123,12 +127,24 @@ describe('SetupWizard', () => {
     expect(screen.getByText(/can't tell whether it may create roles/)).toBeTruthy();
   });
 
-  it('ticks the goals that still have work, and marks the others "Already set up"', async () => {
+  it('starts with no goal ticked, and marks a goal that is done "Already set up"', async () => {
     renderAtGuild(<SetupWizard />, GUILD);
     fireEvent.click(await screen.findByRole('button', { name: 'Choose goals' }));
-    expect(screen.getByRole('checkbox', { name: /Welcome new members/ }).checked).toBe(true);
+    expect(screen.getByRole('checkbox', { name: /Welcome new members/ }).checked).toBe(false);
     expect(screen.getByRole('checkbox', { name: /Moderation and logging/ }).checked).toBe(false);
+    expect(screen.getByRole('button', { name: 'Review' }).disabled).toBe(true);
     expect(screen.getByText('Already set up')).toBeTruthy();
+  });
+
+  it('moves focus to the heading of the new step when the step changes', async () => {
+    renderAtGuild(<SetupWizard />, GUILD);
+    fireEvent.click(await screen.findByRole('button', { name: 'Choose goals' }));
+    const goals = screen.getByRole('heading', { name: 'What do you want Sylo to do here?' });
+    await waitFor(() => expect(document.activeElement).toBe(goals));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Welcome new members/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    const review = await screen.findByRole('heading', { name: 'Review' });
+    await waitFor(() => expect(document.activeElement).toBe(review));
   });
 
   it('does not apply an item with no channel, and a ticked Create fills it; nothing is created by default', async () => {
@@ -137,7 +153,7 @@ describe('SetupWizard', () => {
     expect(screen.getByText('Welcome channel: pick one, or tick Create.')).toBeTruthy();
     const create = screen.getByRole('checkbox', { name: /Create #welcome/ });
     expect(create.checked).toBe(false);
-    expect(screen.getByText(/Everyone can read it, only Sylo can post/)).toBeTruthy();
+    expect(screen.getByText(/Members see it like your other channels/)).toBeTruthy();
 
     fireEvent.click(create);
     expect(screen.getByRole('button', { name: 'Apply' }).disabled).toBe(false);
@@ -192,6 +208,7 @@ describe('SetupWizard', () => {
   it('puts an item that is already set up behind a tick, with the replace sentence', async () => {
     renderAtGuild(<SetupWizard />, GUILD);
     fireEvent.click(await screen.findByRole('button', { name: 'Choose goals' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Welcome new members/ }));
     fireEvent.click(screen.getByRole('checkbox', { name: /Moderation and logging/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Review' }));
     const head = await screen.findByRole('checkbox', { name: /Replace Mod-log channel/ });
@@ -226,6 +243,68 @@ describe('SetupWizard', () => {
   });
 });
 
+describe('SetupWizard: a channel that already has the wanted name', () => {
+  const existing = { id: GENERAL, name: 'general', gap: 'Everyone can see it.' };
+  const withExisting = () =>
+    suggestion({
+      items: [
+        {
+          ...suggestion().items[0],
+          fields: [
+            field({
+              match: { id: GENERAL, name: 'general' },
+              create: { name: 'general', kind: 'channel', private: true, readOnly: false, existing },
+            }),
+          ],
+        },
+      ],
+    });
+
+  it('is not silently reused: it says how it differs, and changes its permissions only when ticked', async () => {
+    api.getSetupSuggestion.mockResolvedValue(withExisting());
+    await toReview();
+    expect(screen.getByText(/#general already exists. Everyone can see it./)).toBeTruthy();
+    expect(screen.queryByRole('checkbox', { name: /Create #general/ })).toBeNull();
+    const fix = screen.getByRole('checkbox', { name: /Change its permissions to private/ });
+    expect(fix.checked).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(api.applySetup).toHaveBeenCalled());
+    expect(api.applySetup.mock.calls[0][1].items[0].fields.joinChannel).toEqual({ id: GENERAL });
+  });
+
+  it('sends the tick, and the summary names the channel it will change', async () => {
+    api.getSetupSuggestion.mockResolvedValue(withExisting());
+    await toReview();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Change its permissions to private/ }));
+    expect(screen.getByText(/change the permissions of #general/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(api.applySetup).toHaveBeenCalled());
+    expect(api.applySetup.mock.calls[0][1].items[0].fields.joinChannel).toEqual({ id: GENERAL, fix: true });
+  });
+
+  it('shows what was made before a step failed, as the server wrote it', async () => {
+    api.applySetup.mockResolvedValue({
+      results: [
+        {
+          id: 'welcome',
+          name: 'Welcome & leave',
+          status: 'failed',
+          message:
+            'Could not save this: Missing Permissions Before it stopped, Sylo created Support team. That was left in place; remove it in your server if you do not want it.',
+          warnings: [],
+          created: [{ kind: 'role', name: 'Support team', id: '1' }],
+          reused: [],
+          changed: [],
+        },
+      ],
+    });
+    await toReview();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Create #welcome/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(await screen.findByText(/Before it stopped, Sylo created Support team/)).toBeTruthy();
+  });
+});
+
 describe('SetupOffer', () => {
   beforeEach(() => {
     try {
@@ -233,6 +312,30 @@ describe('SetupOffer', () => {
     } catch {
       // storage is optional
     }
+  });
+
+  it('works when the browser blocks storage: it shows, and "Not now" hides it for this visit', () => {
+    const get = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    try {
+      renderAtGuild(<SetupOffer guildId={GUILD} />, GUILD);
+      expect(screen.getByRole('link', { name: 'Set up Sylo' })).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Not now' }));
+      expect(screen.queryByRole('link', { name: 'Set up Sylo' })).toBeNull();
+    } finally {
+      get.mockRestore();
+      set.mockRestore();
+    }
+  });
+
+  it('is not shown to someone who may not set the server up', () => {
+    useCanSetUp.mockReturnValue(false);
+    renderAtGuild(<SetupOffer guildId={GUILD} />, GUILD);
+    expect(screen.queryByRole('link', { name: 'Set up Sylo' })).toBeNull();
   });
 
   it('links to the wizard, and "Not now" hides it for this server only', () => {

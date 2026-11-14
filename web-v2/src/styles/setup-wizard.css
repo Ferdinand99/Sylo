@@ -239,3 +239,8 @@
     flex: 1 1 100%;
   }
 }
+
+/* A step heading takes focus when the step changes; it is not a control, so no ring. */
+.v2-group-title[tabindex='-1']:focus {
+  outline: none;
+}

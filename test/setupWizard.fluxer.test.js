@@ -88,6 +88,6 @@ test('apply on Fluxer creates through the platform calls, with the raw @everyone
   assert.equal(welcome.enabled, true);
   assert.equal(welcome.config.joinChannel, made.channels[0].id);
   assert.equal((await getGuildModule(KEY, 'verification')).config.verifiedRoleId, made.roles[0].id);
-  assert.equal((await listAudit(KEY, 20)).length, 3);
+  assert.equal((await listAudit(KEY, 20)).length, 7, 'three items, and the four things the wizard made');
   assert.equal((await listAudit(RAW, 20)).length, 0, 'nothing is filed under the bare id');
 });

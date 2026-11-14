@@ -9,6 +9,8 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { platformActionKey, rateLimit } from '../middleware/rateLimit.js';
 import { applySetup, setupItemIds, suggestSetup } from '../lib/setupWizard.js';
 
+// Both routes are for someone who may change the server's settings (today: the guild admin guard they are
+// mounted behind). One router, two routes, so an access-level wrapper can take the whole file at once.
 const router = Router({ mergeParams: true });
 
 const actor = (req) => (currentUser(req)?.open ? 'Dashboard' : `${currentUser(req).name} (dashboard)`);
@@ -50,8 +52,9 @@ function readSelections(body) {
       if (key.length > 40) return null;
       fields[key] = {
         ...(typeof pick?.id === 'string' && ID.test(pick.id) ? { id: pick.id } : {}),
-        // Only an explicit true creates anything.
+        // Only an explicit true creates anything, and only an explicit true changes a channel's permissions.
         ...(pick?.create === true ? { create: true } : {}),
+        ...(pick?.fix === true ? { fix: true } : {}),
       };
     }
     out.push({ id, replace: raw?.replace === true, fields });

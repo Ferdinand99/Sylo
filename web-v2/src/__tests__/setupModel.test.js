@@ -102,9 +102,12 @@ describe('the first choices', () => {
       items: [item({ fields: [field({ match: { id: '100000000000000001', name: 'welcome' } })] })],
     });
     const c = initialChoices(d);
-    expect(c.welcome).toEqual({ on: true, fields: { channel: { mode: 'pick', id: '100000000000000001' } } });
+    expect(c.welcome).toEqual({
+      on: true,
+      fields: { channel: { mode: 'pick', id: '100000000000000001', fix: false } },
+    });
     const none = initialChoices(data());
-    expect(none.welcome.fields.channel).toEqual({ mode: 'pick', id: '' });
+    expect(none.welcome.fields.channel).toEqual({ mode: 'pick', id: '', fix: false });
   });
 
   it('leave an item that is already set up, or cannot run, switched off', () => {
@@ -116,12 +119,22 @@ describe('the first choices', () => {
     expect(c.verification.on).toBe(false);
   });
 
-  it('start with the goals that still have something to set up', () => {
+  it('start with no goal ticked: the admin picks the goals', () => {
     const d = data({
       items: [item({ configured: true }), item({ id: 'verification', goal: 'verify' })],
     });
     expect(goalDone(d, 'welcome')).toBe(true);
-    expect([...initialGoals(d)]).toEqual(['verify']);
+    expect([...initialGoals(d)]).toEqual([]);
+  });
+
+  it('pick the channel that already has the name Create would give', () => {
+    const existing = { id: '100000000000000002', name: 'tickets', gap: 'Everyone can see it.' };
+    const d = data({
+      items: [
+        item({ fields: [field({ create: { name: 'tickets', kind: 'channel', private: true, existing } })] }),
+      ],
+    });
+    expect(initialChoices(d).welcome.fields.channel.id).toBe('100000000000000002');
   });
 });
 
@@ -213,6 +226,7 @@ describe('the summary and the request', () => {
       replaced: 0,
       channels: ['welcome', 'verify'],
       roles: ['Verified'],
+      changed: [],
       problems: 0,
     });
   });
@@ -245,6 +259,47 @@ describe('the summary and the request', () => {
     const c = initialChoices(d);
     c.welcome.fields.channel = { mode: 'create', id: '' };
     expect(toPayload(d, new Set(['welcome']), c).items[0].fields.channel).toEqual({});
+  });
+});
+
+describe('a channel that already has the wanted name', () => {
+  const existing = { id: '100000000000000002', name: 'tickets', gap: 'Everyone can see it.' };
+  const make = () =>
+    data({
+      channels: [{ id: '100000000000000002', name: 'tickets', problem: null }],
+      items: [
+        item({
+          fields: [
+            field({
+              match: { id: '100000000000000002', name: 'tickets' },
+              create: { name: 'tickets', kind: 'channel', private: true, readOnly: false, existing },
+            }),
+          ],
+        }),
+      ],
+    });
+
+  it('is not offered as a Create, and its permissions are changed only when the admin ticked it', () => {
+    const d = make();
+    const goals = new Set(['welcome']);
+    const c = initialChoices(d);
+    expect(missingCreates(d, goals, c)).toEqual([]);
+    expect(toPayload(d, goals, c).items[0].fields.channel).toEqual({ id: '100000000000000002' });
+    expect(reviewSummary(d, goals, c).changed).toEqual([]);
+
+    c.welcome.fields.channel.fix = true;
+    expect(toPayload(d, goals, c).items[0].fields.channel).toEqual({ id: '100000000000000002', fix: true });
+    expect(reviewSummary(d, goals, c).changed).toEqual(['tickets']);
+  });
+
+  it('never sends the tick for another channel than the one that exists', () => {
+    const d = make();
+    d.channels.push({ id: '100000000000000003', name: 'other', problem: null });
+    const c = initialChoices(d);
+    c.welcome.fields.channel = { mode: 'pick', id: '100000000000000003', fix: true };
+    expect(toPayload(d, new Set(['welcome']), c).items[0].fields.channel).toEqual({
+      id: '100000000000000003',
+    });
   });
 });
 

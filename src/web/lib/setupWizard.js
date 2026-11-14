@@ -12,6 +12,7 @@ import { ChannelType, PermissionFlagsBits } from 'discord.js';
 import { getGuildModule, getGuildModules, setGuildModule } from '../../db/modules.js';
 import { getGuildSettings, setModlogChannel, withoutEveryone } from '../../db/guildSettings.js';
 import { recordAudit } from '../../db/audit.js';
+import { checkModuleGrants } from '../middleware/roleGrants.js';
 import { getModule, missingIntents } from '../../modules/registry.js';
 import { createGuildChannel } from '../../platform/channels.js';
 import { createGuildRole } from '../../platform/roles.js';
@@ -67,13 +68,18 @@ const LOGGED_EVENTS = LOG_EVENTS.map(([key]) => key).filter((key) => key !== 'ni
 
 // --- matching names ---------------------------------------------------------------------------------
 
-/** A name with case, spaces, emoji and separators removed: "📜│Mod-Log" and "mod_log" are both "modlog". */
+/**
+ * A name with case, spaces, emoji and separators removed: "📜│Mod-Log" and "mod_log" are both "modlog".
+ * NFKC first, so a name in a fancy Unicode font ("𝗺𝗼𝗱-𝗹𝗼𝗴") reads as plain letters.
+ */
 const squash = (name) =>
   String(name ?? '')
+    .normalize('NFKC')
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, '');
 const words = (name) =>
   String(name ?? '')
+    .normalize('NFKC')
     .toLowerCase()
     .split(/[^\p{L}\p{N}]+/u)
     .filter(Boolean);
@@ -108,8 +114,34 @@ export function matchByName(items, names, loose = []) {
  * @property {boolean} [staffOnly]  the channel carries things only staff should see
  * @property {string[]} names       squashed names that match, best first
  * @property {string[]} [loose]     whole words that also match
- * @property {{ name: string, access?: 'private'|'readonly' }} [create]  what "Create" makes
+ * @property {boolean} [viewer]     the role may see the private channels of this item (staff access)
+ * @property {{ name: string, access?: 'private'|'readonly'|'public-readonly' }} [create]  what "Create" makes.
+ *   private: only admins, Sylo and the viewer role see it. readonly: members may not post, and View Channel is
+ *   inherited, so a server that hides channels from unverified members keeps them hidden. public-readonly:
+ *   everyone may read it (the verify channel, which unverified members must see).
  */
+
+const STAFF_NAMES = [
+  'support',
+  'supportteam',
+  'staff',
+  'staffteam',
+  'moderator',
+  'moderators',
+  'mod',
+  'mods',
+];
+
+/** The optional role that may see a private channel, so moderators without Administrator can open it. */
+const viewerField = {
+  key: 'viewRole',
+  kind: 'role',
+  label: 'Role that can see this channel',
+  optional: true,
+  viewer: true,
+  names: STAFF_NAMES,
+  create: { name: 'Support team' },
+};
 
 /** Every item the wizard can set up, in the order they are applied. `module` is the registry id. */
 const SPECS = [
@@ -162,7 +194,7 @@ const SPECS = [
         post: true,
         names: ['verify', 'verification', 'verifyhere', 'getverified', 'starthere', 'rules', 'serverrules'],
         loose: ['verify', 'verification', 'rules'],
-        create: { name: 'verify', access: 'readonly' },
+        create: { name: 'verify', access: 'public-readonly' },
       },
       {
         key: 'verifiedRoleId',
@@ -204,10 +236,12 @@ const SPECS = [
         names: ['modlog', 'modlogs', 'moderationlog', 'moderationlogs', 'modactions', 'modactionlog'],
         create: { name: 'mod-log', access: 'private' },
       },
+      viewerField,
     ],
     // Not a module: the channel is a setting of the server (Server settings).
     configured: (_cfg, settings) => Boolean(settings?.modlog_channel_id),
-    audit: { action: 'settings', detail: 'mod-log channel set by the setup wizard' },
+    // Filed like the Server settings save, so the history lists it like one.
+    audit: { action: 'settings:server', detail: 'saved; mod-log channel set by the setup wizard' },
   },
   {
     id: 'moderation',
@@ -246,6 +280,7 @@ const SPECS = [
         names: ['logs', 'log', 'serverlog', 'serverlogs', 'auditlog', 'auditlogs', 'eventlog', 'eventlogs'],
         create: { name: 'server-log', access: 'private' },
       },
+      viewerField,
     ],
     configured: (cfg) => Boolean(cfg.channel || Object.values(cfg.events ?? {}).some(Boolean)),
     build(f, { prev }) {
@@ -286,7 +321,8 @@ const SPECS = [
         kind: 'role',
         label: 'Staff role',
         optional: true,
-        names: ['support', 'supportteam', 'staff', 'staffteam', 'moderator', 'moderators', 'mod', 'mods'],
+        viewer: true,
+        names: STAFF_NAMES,
         create: { name: 'Support team' },
       },
     ],
@@ -424,13 +460,36 @@ function postProblem(guild, channel) {
   }
 }
 
-/** Whether every member can see a channel (so staff-only content posted there would not be private). */
-function visibleToEveryone(guild, channel) {
+/** Whether @everyone holds `flag` in a channel: true, false, or null when the platform cannot say. */
+function everyoneCan(guild, channel, flag) {
   try {
-    return Boolean(channel?.permissionsFor?.(guild.roles.everyone)?.has('ViewChannel'));
+    const perms = channel?.permissionsFor?.(guild.roles.everyone);
+    return perms ? Boolean(perms.has(flag)) : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+/** Whether every member can see a channel (so staff-only content posted there would not be private). */
+const visibleToEveryone = (guild, channel) => everyoneCan(guild, channel, 'ViewChannel') === true;
+
+/** What each kind of channel the wizard makes means, in words. */
+const ACCESS_WORDS = {
+  private: 'private (only admins and Sylo, and the staff role if there is one)',
+  readonly: 'read-only for members (only Sylo posts)',
+  'public-readonly': 'readable by everyone and read-only (only Sylo posts)',
+};
+
+/**
+ * Why a channel does not match what the wizard promises for `access`, or null when it does. A permission the
+ * platform cannot report is not held against it.
+ */
+function accessGap(guild, channel, access) {
+  const view = everyoneCan(guild, channel, 'ViewChannel');
+  const send = everyoneCan(guild, channel, 'SendMessages');
+  if (access === 'private') return view === true ? 'Everyone can see it.' : null;
+  if (access === 'public-readonly' && view === false) return 'Members cannot see it.';
+  return send === true ? 'Everyone can post in it.' : null;
 }
 
 /** Why Sylo cannot give a role to members, or null. */
@@ -456,6 +515,19 @@ async function currentState(guild, spec) {
   if (spec.module)
     return { config: (await getGuildModule(guild.id, spec.module)).config ?? {}, settings: null };
   return { config: {}, settings: await getGuildSettings(guild.id) };
+}
+
+/** The channel or role that already has the name "Create" would give, and how it differs from the promise. */
+function existingOf(guild, field, pool) {
+  const found = pool.find((item) => squash(item.name) === squash(field.create.name));
+  if (!found) return null;
+  const gap =
+    field.kind === 'channel'
+      ? accessGap(guild, guild.channels.cache.get(found.id), field.create.access)
+      : field.give
+        ? giveProblem(guild, guild.roles.cache.get(found.id))
+        : null;
+  return { id: found.id, name: found.name, gap };
 }
 
 /**
@@ -514,12 +586,17 @@ export async function suggestSetup(guild) {
             channel && field.staffOnly && visibleToEveryone(guild, channel)
               ? 'Everyone can see this channel, so what Sylo posts there is not private.'
               : null,
+          viewer: Boolean(field.viewer),
           create: field.create
             ? {
                 name: field.create.name,
                 kind: field.kind,
                 private: field.create.access === 'private',
-                readOnly: field.create.access === 'readonly',
+                readOnly: field.create.access !== undefined && field.create.access !== 'private',
+                everyoneCanView: field.create.access === 'public-readonly',
+                // A channel or role of that name is already there: "Create" would use it, and only when it is
+                // what the wizard promises. `gap` says how it is not (null: it is, or cannot be told).
+                existing: existingOf(guild, field, pool),
               }
             : null,
         };
@@ -541,37 +618,79 @@ export async function suggestSetup(guild) {
 
 // --- applying ----------------------------------------------------------------------------------------------
 
-function overwritesFor(guild, access) {
+/** A role id that stands for a role that does not exist yet, while the module's config is checked in advance. */
+const NOT_YET = '000000000000000001';
+
+// What Sylo needs for itself to say who may see or post in a channel. The platform refuses a permission
+// overwrite that allows or denies something the bot does not hold.
+const CRITICAL = [
+  ['ViewChannel', 'View Channel'],
+  ['SendMessages', 'Send Messages'],
+];
+
+/** The permission overwrites of a channel the wizard creates. Flags Sylo does not hold itself are left out. */
+function overwritesFor(guild, access, viewerRoleId = '') {
   const me = botMember(guild);
-  const botAllow = [
-    PermissionFlagsBits.ViewChannel,
-    PermissionFlagsBits.SendMessages,
-    PermissionFlagsBits.EmbedLinks,
-    PermissionFlagsBits.ReadMessageHistory,
-    PermissionFlagsBits.AddReactions,
-  ];
-  const everyone =
-    access === 'private'
-      ? { id: rawGuildId(guild), deny: [PermissionFlagsBits.ViewChannel] }
-      : {
-          id: rawGuildId(guild),
-          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory],
-          // Reactions stay open: members vote with them (and on Fluxer buttons are reactions).
-          deny: [
-            PermissionFlagsBits.SendMessages,
-            PermissionFlagsBits.CreatePublicThreads,
-            PermissionFlagsBits.CreatePrivateThreads,
-          ],
-        };
-  return me ? [everyone, { id: me.id, allow: botAllow }] : [everyone];
+  const held = (flags) => flags.filter((flag) => botHas(guild, flag) !== false);
+  const F = PermissionFlagsBits;
+  const everyoneId = rawGuildId(guild);
+  let everyone;
+  if (access === 'private') {
+    everyone = { id: everyoneId, deny: held([F.ViewChannel]) };
+  } else {
+    everyone = {
+      id: everyoneId,
+      // Only the verify channel says View Channel outright: the unverified must see it. The others inherit it,
+      // so a server that hides its channels from unverified members keeps them hidden.
+      ...(access === 'public-readonly' ? { allow: held([F.ViewChannel, F.ReadMessageHistory]) } : {}),
+      // Reactions stay open: members vote with them (and on Fluxer buttons are reactions).
+      deny: held([F.SendMessages, F.CreatePublicThreads, F.CreatePrivateThreads]),
+    };
+  }
+  const viewer =
+    access === 'private' && viewerRoleId
+      ? { id: viewerRoleId, allow: held([F.ViewChannel, F.ReadMessageHistory]) }
+      : null;
+  const bot = me
+    ? {
+        id: me.id,
+        allow: held([F.ViewChannel, F.SendMessages, F.EmbedLinks, F.ReadMessageHistory, F.AddReactions]),
+      }
+    : null;
+  return [everyone, viewer, bot].filter(Boolean);
+}
+
+/** Change an existing channel's overwrites to what the wizard promises. Sylo's own access is set first. */
+async function fixAccess(guild, channelId, access, viewerRoleId, reason) {
+  const channel = guild.channels.cache.get(channelId);
+  const everyone = rawGuildId(guild);
+  const me = botMember(guild);
+  const edit = (target, opts) => channel.permissionOverwrites.edit(target, opts, { reason });
+  if (me) await edit(me.id, { ViewChannel: true, SendMessages: true, EmbedLinks: true });
+  if (access === 'private') {
+    await edit(everyone, { ViewChannel: false });
+    if (viewerRoleId) await edit(viewerRoleId, { ViewChannel: true, ReadMessageHistory: true });
+    return;
+  }
+  await edit(everyone, {
+    SendMessages: false,
+    CreatePublicThreads: false,
+    CreatePrivateThreads: false,
+    ...(access === 'public-readonly' ? { ViewChannel: true } : {}),
+  });
 }
 
 const fail = (res, message) => Object.assign(res, { status: 'failed', message });
+const label = (kind, name) => (kind === 'channel' ? `#${name}` : name);
+const list = (things) => things.map((t) => label(t.kind, t.name)).join(', ');
 
 /**
- * Apply the admin's choices, one item at a time.
- * @param {{ guild: any, selections: Array<{ id: string, replace?: boolean, fields?: Record<string, { id?: string, create?: boolean }> }>, actor: string }} opts
- * @returns {Promise<Array<{ id: string, name: string, status: 'applied'|'skipped'|'failed', message: string, warnings: string[], created: Array<{ kind: string, name: string, id: string }> }>>}
+ * Apply the admin's choices, one item at a time. Everything that can be checked is checked before the first
+ * channel or role of an item is created (who the choices are, Sylo's own permissions, whether the person may
+ * hand out the roles); what was created is audited as it is made and named in the result, even when a later
+ * step fails.
+ * @param {{ guild: any, selections: Array<{ id: string, replace?: boolean, fields?: Record<string, { id?: string, create?: boolean, fix?: boolean }> }>, actor: string }} opts
+ * @returns {Promise<Array<{ id: string, name: string, status: 'applied'|'skipped'|'failed', message: string, warnings: string[], created: Array<{ kind: string, name: string, id: string }>, reused: Array<{ kind: string, name: string, id: string }>, changed: Array<{ kind: string, name: string, id: string }> }>>}
  */
 export async function applySetup({ guild, selections, actor }) {
   const byId = new Map(selections.map((s) => [s.id, s]));
@@ -583,7 +702,16 @@ export async function applySetup({ guild, selections, actor }) {
   for (const spec of SPECS) {
     const sel = byId.get(spec.id);
     if (!sel) continue;
-    const res = { id: spec.id, name: spec.name, status: 'applied', message: '', warnings: [], created: [] };
+    const res = {
+      id: spec.id,
+      name: spec.name,
+      status: 'applied',
+      message: '',
+      warnings: [],
+      created: [],
+      reused: [],
+      changed: [],
+    };
     results.push(res);
     try {
       await applyOne(spec, sel, res);
@@ -591,6 +719,13 @@ export async function applySetup({ guild, selections, actor }) {
       // A refused role grant says why in plain words; anything else is the platform's own answer.
       log.warn('setup', `${spec.id} failed:`, err.message);
       fail(res, err.name === 'RoleGrantError' ? err.message : `Could not save this: ${err.message}`);
+    }
+    // Whatever was made before the failure stays, and the admin is told exactly what it is.
+    if (res.status === 'failed' && (res.created.length || res.changed.length)) {
+      const parts = [];
+      if (res.created.length) parts.push(`created ${list(res.created)}`);
+      if (res.changed.length) parts.push(`changed who can see ${list(res.changed)}`);
+      res.message += ` Before it stopped, Sylo ${parts.join(' and ')}. That was left in place; remove it in your server if you do not want it.`;
     }
   }
   return results;
@@ -611,13 +746,14 @@ export async function applySetup({ guild, selections, actor }) {
       });
     }
 
-    // 1. Read the choices and refuse what would not work, before anything is created.
+    // 1. Read the choices and refuse what would not work. Nothing is created until every check has passed.
     const resolved = {};
-    const toCreate = [];
+    const wantCreate = [];
+    const fixes = [];
     for (const field of spec.fields) {
       const pick = sel.fields?.[field.key];
       if (pick?.create === true && field.create) {
-        toCreate.push(field);
+        wantCreate.push({ field, fix: pick.fix === true });
         continue;
       }
       const id = typeof pick?.id === 'string' ? pick.id : '';
@@ -631,6 +767,7 @@ export async function applySetup({ guild, selections, actor }) {
           return fail(res, `${field.label}: that channel no longer exists.`);
         const why = field.post ? postProblem(guild, guild.channels.cache.get(id)) : null;
         if (why) return fail(res, `${field.label}: ${why}`);
+        if (pick?.fix === true && field.create?.access) fixes.push(field);
       } else {
         if (!rolesNow().some((r) => r.id === id))
           return fail(res, `${field.label}: that role no longer exists.`);
@@ -640,15 +777,64 @@ export async function applySetup({ guild, selections, actor }) {
       resolved[field.key] = id;
     }
 
-    // 2. Sylo's own permission, checked before the first thing is created.
-    if (toCreate.some((f) => f.kind === 'channel') && botHas(guild, 'ManageChannels') === false) {
-      return fail(res, 'Sylo needs the Manage Channels permission to create a channel.');
+    // 2. A channel or role of the wanted name that is already there is used instead of a second one, but only
+    // when it is what the wizard promises (a private channel that is public is not "reused" silently).
+    const toCreate = [];
+    for (const { field, fix } of wantCreate) {
+      const wanted = field.create.name;
+      const existing = (field.kind === 'channel' ? channelsNow() : rolesNow()).find(
+        (item) => squash(item.name) === squash(wanted)
+      );
+      if (!existing) {
+        toCreate.push(field);
+        continue;
+      }
+      if (field.kind === 'role') {
+        const why = field.give ? giveProblem(guild, guild.roles.cache.get(existing.id)) : null;
+        if (why) return fail(res, `${field.label}: the role ${existing.name} already exists. ${why}`);
+      } else {
+        const channel = guild.channels.cache.get(existing.id);
+        const why = field.post ? postProblem(guild, channel) : null;
+        if (why) return fail(res, `${field.label}: #${existing.name} already exists. ${why}`);
+        const gap = accessGap(guild, channel, field.create.access);
+        if (gap && !fix) {
+          return fail(
+            res,
+            `${field.label}: #${existing.name} already exists. ${gap} Pick it to use it as it is, or tick the box that changes its permissions to ${ACCESS_WORDS[field.create.access]}.`
+          );
+        }
+        if (gap) fixes.push(field);
+      }
+      resolved[field.key] = existing.id;
+      res.reused.push({ kind: field.kind, name: existing.name, id: existing.id });
     }
-    if (toCreate.some((f) => f.kind === 'role') && botHas(guild, 'ManageRoles') === false) {
-      return fail(res, 'Sylo needs the Manage Roles permission to create a role.');
-    }
+
+    // 3. Sylo's own permissions, and the caps.
     const newChannels = toCreate.filter((f) => f.kind === 'channel').length;
     const newRoles = toCreate.filter((f) => f.kind === 'role').length;
+    if ((newChannels || fixes.length) && botHas(guild, 'ManageChannels') === false) {
+      return fail(
+        res,
+        newChannels
+          ? 'Sylo needs the Manage Channels permission to create a channel.'
+          : 'Sylo needs the Manage Channels permission to change a channel.'
+      );
+    }
+    if (newRoles && botHas(guild, 'ManageRoles') === false) {
+      return fail(res, 'Sylo needs the Manage Roles permission to create a role.');
+    }
+    if (fixes.length && botHas(guild, 'ManageRoles') === false) {
+      return fail(res, "Sylo needs the Manage Roles permission to change a channel's permissions.");
+    }
+    if (newChannels || fixes.length) {
+      const lacking = CRITICAL.filter(([flag]) => botHas(guild, flag) === false).map(([, text]) => text);
+      if (lacking.length) {
+        return fail(
+          res,
+          `Sylo needs the ${lacking.join(' and ')} permission${lacking.length > 1 ? 's' : ''} itself to set who can see or post in a channel. Give Sylo ${lacking.length > 1 ? 'those permissions' : 'that permission'}, or pick a channel that exists.`
+        );
+      }
+    }
     if (made.channels + newChannels > MAX_CREATED_CHANNELS || made.roles + newRoles > MAX_CREATED_ROLES) {
       return fail(
         res,
@@ -656,55 +842,97 @@ export async function applySetup({ guild, selections, actor }) {
       );
     }
 
-    // 3. Create what was ticked. A channel or role of that name that is already there is used instead,
-    // so a second run never makes a duplicate.
-    for (const field of toCreate) {
+    // 4. May this person hand out the roles the module will give? Checked on the config as it will be saved,
+    // with a stand-in for a role that is not made yet, so a refusal comes before anything exists.
+    if (spec.module) {
+      const standIn = { ...resolved };
+      for (const field of toCreate) standIn[field.key] = NOT_YET;
+      await checkModuleGrants(spec.module, prev, spec.build(standIn, { prev, guild }));
+    }
+
+    // 5. Create what was ticked, roles first (a private channel can name the staff role made a moment ago).
+    // Each one is audited as it is made, so a later failure still leaves a record.
+    const viewerKey = spec.fields.find((f) => f.viewer)?.key;
+    const reason = `Created by the setup wizard (${spec.name})`;
+    for (const field of [...toCreate].sort(
+      (a, b) => (a.kind === 'role' ? -1 : 0) - (b.kind === 'role' ? -1 : 0)
+    )) {
       const wanted = field.create.name;
-      const pool = field.kind === 'channel' ? channelsNow() : rolesNow();
-      const existing = pool.find((item) => squash(item.name) === squash(wanted));
-      if (existing) {
-        const why =
-          field.kind === 'role' && field.give ? giveProblem(guild, guild.roles.cache.get(existing.id)) : null;
-        if (why) return fail(res, `${field.label}: the role ${existing.name} already exists. ${why}`);
-        resolved[field.key] = existing.id;
-        continue;
-      }
-      const reason = `Created by the setup wizard (${spec.name})`;
       const thing =
         field.kind === 'channel'
           ? await createGuildChannel(guild, {
               name: wanted,
               type: ChannelType.GuildText,
               reason,
-              permissionOverwrites: overwritesFor(guild, field.create.access),
+              permissionOverwrites: overwritesFor(
+                guild,
+                field.create.access,
+                viewerKey ? resolved[viewerKey] : ''
+              ),
             })
           : await createGuildRole(guild, { name: wanted, reason });
       if (field.kind === 'channel') made.channels += 1;
       else made.roles += 1;
       resolved[field.key] = thing.id;
       res.created.push({ kind: field.kind, name: wanted, id: thing.id });
+      await recordAudit(guild.id, {
+        actor,
+        action: `setup:${field.kind}`,
+        detail: `created ${label(field.kind, wanted)} for ${spec.name} (setup wizard)`,
+      });
     }
 
-    // 4. Save through the module's own normaliser and write path.
+    // 6. Change the permissions of an existing channel, only where the admin ticked it.
+    for (const field of fixes) {
+      const id = resolved[field.key];
+      const channel = guild.channels.cache.get(id);
+      await fixAccess(guild, id, field.create.access, viewerKey ? resolved[viewerKey] : '', reason);
+      res.changed.push({ kind: 'channel', name: channel?.name ?? id, id });
+      await recordAudit(guild.id, {
+        actor,
+        action: 'setup:channel',
+        detail: `changed who can see or post in #${channel?.name ?? id} to ${ACCESS_WORDS[field.create.access]} for ${spec.name} (setup wizard)`,
+      });
+    }
+
+    // 7. Save through the module's own normaliser and write path.
+    const extras = [
+      res.created.length ? `created ${list(res.created)}` : '',
+      res.reused.length ? `used the existing ${list(res.reused)}` : '',
+      res.changed.length ? `changed the permissions of ${list(res.changed)}` : '',
+    ].filter(Boolean);
+    const detailEnd = extras.length ? `; ${extras.join('; ')}` : '';
     if (!spec.module) {
+      const before = settings?.modlog_channel_id ?? '';
       await setModlogChannel(guild.id, resolved.channelId);
+      await recordAudit(guild.id, {
+        actor,
+        action: spec.audit.action,
+        detail: `${spec.audit.detail}${detailEnd}`,
+        // For the change history when it keeps what changed (ignored until then).
+        change: { before: { modlogChannelId: before }, after: { modlogChannelId: resolved.channelId } },
+      });
     } else {
       const config = spec.build(resolved, { prev, guild });
       await setGuildModule(guild.id, spec.module, { enabled: true, config });
       await spec.afterSave?.(guild, config, prev);
+      await recordAudit(guild.id, {
+        actor,
+        action: `module:${spec.module}`,
+        detail: `configured by the setup wizard${detailEnd}`,
+      });
     }
-    const created = res.created.map((c) => `${c.kind === 'channel' ? '#' : ''}${c.name}`);
-    await recordAudit(guild.id, {
-      actor,
-      action: spec.audit?.action ?? `module:${spec.module}`,
-      detail: `${spec.audit?.detail ?? 'configured by the setup wizard'}${created.length ? `; created ${created.join(', ')}` : ''}`,
-    });
 
-    for (const [flag, label] of spec.botPerms ?? []) {
+    for (const [flag, text] of spec.botPerms ?? []) {
       if (botHas(guild, flag) === false)
-        res.warnings.push(`Sylo needs the ${label} permission for this to work.`);
+        res.warnings.push(`Sylo needs the ${text} permission for this to work.`);
     }
-    res.message = created.length ? `Set up. Created ${created.join(', ')}.` : 'Set up.';
+    const said = [
+      res.created.length ? `Created ${list(res.created)}.` : '',
+      res.reused.length ? `Used the existing ${list(res.reused)}.` : '',
+      res.changed.length ? `Changed the permissions of ${list(res.changed)}.` : '',
+    ].filter(Boolean);
+    res.message = ['Set up.', ...said].join(' ');
   }
 }
 
