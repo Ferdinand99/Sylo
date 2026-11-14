@@ -387,14 +387,14 @@ export async function purchase({
   const account = out.accounts.get(userId);
   if (!isRoleItemType(item.type)) {
     const row = await getInventoryRow(guildId, box.rowId);
-    if (!row) return erasedMeanwhile({ guildId, userId, item, box });
+    if (!row) return erasedMeanwhile({ guildId, userId, item, box, stock: true });
     if (item.type === 'custom') await notifyStaff({ guildId, config, item, member, row });
     else await announcePurchase({ guildId, config, item, userId });
     return { ok: true, row, item, account };
   }
   return trackGrant(box.rowId, async () => {
     const row = await getInventoryRow(guildId, box.rowId);
-    if (!row) return erasedMeanwhile({ guildId, userId, item, box });
+    if (!row) return erasedMeanwhile({ guildId, userId, item, box, stock: true });
     return finishRoleGrant({ guild, member, item, row, account, box, config, now, refundOnFailure: true });
   });
 }
@@ -402,13 +402,32 @@ export async function purchase({
 /**
  * The row of a purchase or grant that just committed is gone: the member ran /forget (or staff erased
  * them) in the gap between that commit and this read. /forget is several statements, not one
- * transaction, so it can land there. The member asked for their data to go, so nothing is given, nobody is
- * told, and the temp-role record the transaction wrote is put back as it was (the account, the ledger and
- * the inventory went with the /forget). The caller gets a refusal, never a row to dereference.
+ * transaction, so it can land there. The member asked for their data to go, so nothing is given and nobody
+ * is told. What the committed transaction left behind that /forget did not already take is undone, in one
+ * transaction (the account, the ledger and the inventory went with the /forget):
+ *   - the unit of stock a purchase took goes back (`sold - 1`, like a refund);
+ *   - the temp-role record goes back to what it was, but ONLY while it is still the one this purchase
+ *     wrote (its `expires_at` is `box.expiresAt`). /forget deletes the temp-role records before it erases
+ *     the inventory, so a record that is gone stays gone: writing the earlier one back would store the
+ *     erased member's data again. A record /forget kept (`keepTempRoles`) still carries the purchase's
+ *     time and is restored.
+ * The lock order is the one of a refund: the item, then the temp-role record.
+ * The caller gets a refusal, never a row to dereference.
  */
-async function erasedMeanwhile({ guildId, userId, item, box }) {
-  if (item.type === 'temp_role' && item.roleId) {
+async function erasedMeanwhile({ guildId, userId, item, box, stock = false }) {
+  const tempRole = item.type === 'temp_role' && item.roleId;
+  if (stock || tempRole) {
     await transaction(function* (tx) {
+      if (stock) {
+        yield tx.run(
+          'UPDATE economy_items SET sold = sold - 1 WHERE guild_id = ? AND id = ? AND sold > 0',
+          guildId,
+          item.id
+        );
+      }
+      if (!tempRole) return;
+      const rec = yield* readTempRoleRow(tx, guildId, userId, item.roleId);
+      if (!rec || rec.expires_at !== box.expiresAt) return;
       if (box.previous) {
         yield* writeTempRoleRow(tx, {
           guildId,

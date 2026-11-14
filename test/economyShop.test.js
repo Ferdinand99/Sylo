@@ -903,13 +903,17 @@ test('a purchase that added no time (added_ms 0, capped at 365 days) leaves the 
 // worst moment, deterministically: it deletes the new row inside the transaction that inserted it, so
 // the row is gone right after the commit, as if the /forget had committed a moment later.
 
-/** Make every new inventory row of `userId` vanish as soon as it is inserted (a /forget landing at once). */
-function forgetOnInsert(userId) {
+/**
+ * Make every new inventory row of `userId` vanish as soon as it is inserted (a /forget landing at once).
+ * `tempRoles` also deletes the member's temp-role records, as /forget does before it erases the inventory.
+ */
+function forgetOnInsert(userId, { tempRoles = false } = {}) {
   db.exec(`
     CREATE TRIGGER IF NOT EXISTS forget_on_insert AFTER INSERT ON economy_inventory
     WHEN NEW.user_id = '${userId}'
     BEGIN
       DELETE FROM economy_inventory WHERE id = NEW.id;
+      ${tempRoles ? 'DELETE FROM guild_temp_roles WHERE guild_id = NEW.guild_id AND user_id = NEW.user_id;' : ''}
     END
   `);
   return () => db.exec('DROP TRIGGER IF EXISTS forget_on_insert');
@@ -971,4 +975,44 @@ test('an earlier temp-role record is put back as it was when the purchase that e
   }
   const rec = await record(m);
   assert.deepEqual([rec.expires_at, rec.added_by, rec.reason], [t0 + HOUR, 'staff', 'earlier']);
+});
+
+test('a /forget that already deleted the temp-role records leaves them deleted: the earlier one is not written back', async () => {
+  const m = await buyer(93);
+  const id = await tempItem({ durationHours: 24 });
+  await putTempRole({
+    guildId: G,
+    userId: m.id,
+    roleId: ROLE_A,
+    expiresAt: Date.now() + HOUR,
+    addedBy: 'staff',
+    reason: 'earlier',
+  });
+  const undo = forgetOnInsert(m.id, { tempRoles: true });
+  try {
+    assert.equal((await buy(m, id, { config: cfg() })).reason, 'erased');
+  } finally {
+    undo();
+  }
+  assert.equal(await record(m), null, 'nothing of the erased member is stored again');
+  assert.deepEqual(m.adds, []);
+});
+
+test('a purchase that is erased gives its unit of stock back; an erased free grant has none to give back', async () => {
+  const m = await buyer(94);
+  const other = await buyer(95);
+  const limited = await item({ price: 50, stock: 3 });
+  assert.equal((await buy(other, limited)).ok, true);
+  assert.equal((await getItem(G, limited)).sold, 1);
+  const undo = forgetOnInsert(m.id);
+  try {
+    assert.equal((await buy(m, limited, { config: cfg() })).reason, 'erased');
+    assert.equal((await getItem(G, limited)).sold, 1, 'the erased purchase did not use up a unit');
+    // a free grant takes no stock, so it gives none back (the other buyer's unit stays counted)
+    const granted = await grantItem({ guild: ctx.guild, member: m, itemId: limited, config: cfg() });
+    assert.equal(granted.reason, 'erased');
+    assert.equal((await getItem(G, limited)).sold, 1);
+  } finally {
+    undo();
+  }
 });
