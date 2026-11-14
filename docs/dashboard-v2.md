@@ -48,8 +48,35 @@ Every module has its own V2 settings page, and so do the staff pages (tickets,
 ban appeals, the moderation hub with commands, automod and logging), embed
 messages, insights, the leaderboard, Health, Stats and the Bot Personalizer. The
 server tools are there too, under **Settings → Server data**: the audit log,
-config export (a JSON file) and member data (look up and forget a member;
-moderation cases and other safety records are kept).
+config export and import (a JSON file) and member data (look up and forget a
+member; moderation cases and other safety records are kept).
+
+**Import configuration** reads a file made by the export, from this or another
+server. It shows what each module would change, you tick what to import, and
+you type `IMPORT` to confirm. Every module goes through the same checks as
+saving its own page, so a role you may not hand out is refused. Channels, roles
+and custom emoji that this server does not have are cleared (with a warning),
+and the ids of messages the other server posted are never carried over.
+Reminders, reaction-role sets, custom commands, embed messages, the shop and
+member data are not in the export and are not imported. Each import is written
+to the audit log.
+
+## Duplicate and templates
+
+The "⋯" menu of a reminder, an embed message, a reaction-role set, a custom
+command and a shop item has **Duplicate**. The copy never starts on its own: a
+reminder and a shop item are paused, an embed message and a reaction-role set
+are drafts (nothing is posted), and a custom command gets a free name ending in
+`-copy`. A copy counts against the same limits as creating one.
+
+**Start from a template** (the message builder, Welcome, the Welcome channel and
+the alert messages) offers a small gallery: Rules, Welcome card, Announcement,
+Stream live, Giveaway and Event. A template only fills in the form; nothing is
+saved until you save. The message builder and the Welcome channel also have
+**Message JSON**: the message as Discord message JSON (the shape Discohook uses)
+to copy or download, and a box to paste or load JSON back in. JSON that is over
+the limits is refused with the reason; what cannot be carried over (buttons that
+need a bot, timestamps) is listed.
 
 Two pages are public, with no login: the command list (`/v2/commands`) and the
 roadmap (`/v2/roadmap`). They show the same lists as before; voting

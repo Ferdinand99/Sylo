@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { getRoles, saveAutoroles, saveReactionRole, deleteReactionRole } from '../api.js';
+import {
+  getRoles,
+  saveAutoroles,
+  saveReactionRole,
+  deleteReactionRole,
+  duplicateReactionRole,
+} from '../api.js';
 import Badge from '../components/Badge.jsx';
 import Meta, { plural } from '../components/Meta.jsx';
 import LoadError from '../components/LoadError.jsx';
@@ -323,6 +329,16 @@ export default function Roles() {
     }
   }
 
+  async function onDuplicate(id) {
+    try {
+      await duplicateReactionRole(guildId, id);
+      await load();
+      notify('Created a draft copy. Nothing was posted: open it and publish it when it is ready.', 'info');
+    } catch (err) {
+      notify(err.message);
+    }
+  }
+
   async function onDelete(id) {
     const ok = await confirmDialog({
       title: 'Delete this reaction-role set?',
@@ -408,7 +424,10 @@ export default function Roles() {
                     <RowActions
                       edit={{ onClick: () => setEditingId(rm.id) }}
                       menuLabel={`More actions for ${title}`}
-                      items={[{ label: 'Delete', danger: true, onClick: () => onDelete(rm.id) }]}
+                      items={[
+                        { label: 'Duplicate', onClick: () => onDuplicate(rm.id) },
+                        { label: 'Delete', danger: true, onClick: () => onDelete(rm.id) },
+                      ]}
                     />
                   )}
                 </div>

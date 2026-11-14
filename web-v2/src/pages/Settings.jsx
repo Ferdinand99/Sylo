@@ -8,6 +8,7 @@ import { useModuleForm } from '../components/useModuleForm.js';
 import ChipPicker from '../components/ChipPicker.jsx';
 import { notify } from '../notify.js';
 import Reveal from '../components/Reveal.jsx';
+import ConfigImport from '../components/ConfigImport.jsx';
 
 const toForm = (data) => ({
   modlogChannelId: data.modlogChannelId,
@@ -211,6 +212,7 @@ export default function Settings() {
               </button>
             </div>
           </div>
+          <ConfigImport guildId={guildId} />
           <Link className="v2-row" to={`/guilds/${guildId}/member-data`}>
             <div className="v2-row-main">
               <h3>Member data</h3>

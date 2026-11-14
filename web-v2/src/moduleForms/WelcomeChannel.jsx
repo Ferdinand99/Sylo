@@ -14,6 +14,8 @@ import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { isDirty } from '../components/formEqual.js';
 import { useUnsavedChangesGuard } from '../components/useUnsavedChangesGuard.js';
 import EmbedCard, { EmbedToolbar, pickImage, newKey } from '../components/EmbedCard.jsx';
+import TemplatePicker, { embedTemplates } from '../components/TemplatePicker.jsx';
+import EmbedJsonTools from '../components/EmbedJsonTools.jsx';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { tokensFor } from '../placeholders.js';
 
@@ -266,6 +268,15 @@ export default function WelcomeChannel() {
         </button>
       </div>
 
+      <TemplatePicker
+        templates={embedTemplates({ tokens: true })}
+        what="message"
+        hasContent={form.content.trim() !== '' || form.items.length > 0}
+        onPick={(t) =>
+          setForm({ content: t.message.content, items: t.message.embeds.slice(0, maxItems).map(normItem) })
+        }
+      />
+
       <div className="v2-field">
         <label htmlFor="wc-content">
           Message text <span className="v2-field-hint">— optional, shown above the embeds</span>
@@ -337,6 +348,13 @@ export default function WelcomeChannel() {
           ))}
         </div>
       </div>
+
+      <EmbedJsonTools
+        getSpec={() => formToSpec(form)}
+        onImport={(spec) => setForm(specToForm(spec))}
+        hasContent={form.content.trim() !== '' || form.items.length > 0}
+        fileName="welcome-channel"
+      />
 
       <p className="v2-field-hint v2-section-gap">
         <strong>Save draft</strong> keeps your work here without posting anything.{' '}

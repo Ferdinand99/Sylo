@@ -2,6 +2,7 @@ import AutoGrowTextarea from '../components/AutoGrowTextarea.jsx';
 import MentionTextarea from '../components/MentionTextarea.jsx';
 import PlaceholderBar from '../components/PlaceholderBar.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
+import TemplatePicker, { textTemplates } from '../components/TemplatePicker.jsx';
 import PreviewLayout from '../components/PreviewLayout.jsx';
 import SetupCallout from '../components/SetupCallout.jsx';
 import LoadError from '../components/LoadError.jsx';
@@ -162,6 +163,11 @@ export default function TwitchAlerts() {
                   tokens={tokensFor('twitch')}
                   value={a.message}
                   onChange={(message) => updateRow(a.key, { message })}
+                />
+                <TemplatePicker
+                  templates={textTemplates('stream')}
+                  hasContent={a.message.trim() !== ''}
+                  onPick={(t) => updateRow(a.key, { message: t.text })}
                 />
               </div>
 

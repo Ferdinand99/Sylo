@@ -1,0 +1,191 @@
+/* Import configuration (Settings), the change list it shares, the template gallery and the raw JSON tools. */
+
+.v2-import-file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.v2-import-choose {
+  cursor: pointer;
+}
+.v2-import-file:focus-visible + .v2-import-choose {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.v2-import-panel {
+  flex: 1 1 100%;
+  min-width: 0;
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+.v2-import-panel > .v2-note {
+  margin: 0 0 4px;
+}
+.v2-import-items {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.v2-import-item {
+  padding: 10px 12px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  min-width: 0;
+}
+.v2-import-item-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.v2-import-item-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.v2-import-item .v2-callout {
+  margin: 8px 0 0;
+}
+.v2-import-item .v2-field-hint {
+  margin: 6px 0 0;
+}
+.v2-import-details {
+  margin-top: 8px;
+}
+.v2-import-details > summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.v2-import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.v2-import-spacer {
+  flex: 1 1 0;
+}
+
+/* The change list: label, then the old value struck through, an arrow, the new value. */
+.v2-changelist {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--fs-sm);
+}
+.v2-changelist-row {
+  display: grid;
+  grid-template-columns: minmax(7rem, 14rem) minmax(0, 1fr);
+  gap: 4px 12px;
+}
+.v2-changelist-label {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.v2-changelist-values {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.v2-changelist-before {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+.v2-changelist-after {
+  text-decoration: none;
+  color: var(--text);
+}
+.v2-changelist-more {
+  color: var(--text-muted);
+}
+@media (max-width: 600px) {
+  .v2-changelist-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Template gallery. */
+.v2-templates {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.v2-template-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
+  height: 100%;
+  padding: 12px;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.v2-template-card:hover {
+  border-color: var(--border-strong);
+}
+.v2-template-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.v2-template-name {
+  font-weight: 600;
+}
+.v2-template-blurb {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.v2-template-sample {
+  margin: 0;
+  padding: 6px 8px;
+  max-height: 5.5rem;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  background: var(--bg-main);
+  border-radius: 6px;
+}
+.v2-template-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+/* Raw JSON of a message. */
+.v2-json-tools textarea {
+  width: 100%;
+  min-height: 12rem;
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+}
+.v2-json-tools .v2-dialog-actions {
+  margin-top: 12px;
+}

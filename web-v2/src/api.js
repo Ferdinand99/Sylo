@@ -437,6 +437,19 @@ export const getAuditLog = (guildId, { action, before, limit } = {}) => {
   return apiFetch(`/api/v2/guilds/${gid(guildId)}/audit${qs ? `?${qs}` : ''}`);
 };
 export const exportGuildConfig = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/export`);
+// Import of an export file: the preview changes nothing; apply needs `confirm` to be the word the preview names.
+export const previewConfigImport = (guildId, file) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/import/preview`, { export: file });
+export const applyConfigImport = (guildId, file, items, confirm) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/import/apply`, { export: file, items, confirm });
+// "Duplicate" in the "⋯" menu of a list row. Each answers { ok, id, name }.
+const duplicate = (guildId, path) => postJson(`/api/v2/guilds/${gid(guildId)}/${path}/duplicate`, {});
+export const duplicateReminder = (guildId, id) => duplicate(guildId, `modules/reminders/${id}`);
+export const duplicateComposedMessage = (guildId, id) => duplicate(guildId, `messages/${id}`);
+export const duplicateReactionRole = (guildId, id) => duplicate(guildId, `modules/roles/rr/${id}`);
+export const duplicateCustomCommand = (guildId, id) =>
+  duplicate(guildId, `modules/custom-commands/cmd/${id}`);
+export const duplicateShopItem = (guildId, id) => duplicate(guildId, `modules/economy/shop/items/${id}`);
 export const getMemberData = (guildId, user) =>
   apiFetch(`/api/v2/guilds/${gid(guildId)}/member-data?user=${encodeURIComponent(user ?? '')}`);
 export const forgetMemberData = (guildId, userId, reason) =>

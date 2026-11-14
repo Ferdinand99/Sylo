@@ -19,6 +19,7 @@ vi.mock('../api.js', () => ({
   setShopItemEnabled: vi.fn(),
   reorderShopItems: vi.fn(),
   deleteShopItem: vi.fn(),
+  duplicateShopItem: vi.fn(),
   uploadShopItemImage: vi.fn(),
   deleteShopItemImage: vi.fn(),
   grantShopItem: vi.fn(),
@@ -489,6 +490,20 @@ describe('Economy: the Shop tab', () => {
 
     await choose('Renamed', 'Move down');
     await waitFor(() => expect(api.reorderShopItems).toHaveBeenCalledWith(GUILD, [2, 1]));
+
+    // Duplicate: a paused copy from the server, then the list is read again
+    api.duplicateShopItem.mockResolvedValue({ ok: true, id: 3, name: 'Renamed (copy)' });
+    api.getShopItems.mockResolvedValueOnce(
+      shopData([
+        item({ id: 2, name: 'Second' }),
+        item({ name: 'Renamed', enabled: false }),
+        item({ id: 3, name: 'Renamed (copy)', enabled: false }),
+      ])
+    );
+    await choose('Renamed', 'Duplicate');
+    await waitFor(() => expect(api.duplicateShopItem).toHaveBeenCalledWith(GUILD, 1));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith(expect.stringMatching(/paused copy/), 'info'));
+    expect(await screen.findByText('Renamed (copy)')).toBeTruthy();
 
     await choose('Renamed', 'Delete');
     await waitFor(() => expect(api.deleteShopItem).toHaveBeenCalled());
