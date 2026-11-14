@@ -11,6 +11,8 @@ import {
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
+import SaveBar from '../components/SaveBar.jsx';
+import '../styles/wp5-lists.css';
 import { tokensFor } from '../placeholders.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { isDirty } from '../components/formEqual.js';
@@ -39,8 +41,9 @@ export default function Personalizer() {
   const [presence, setPresence] = useState({ status: 'online', type: 'Listening', text: '' });
   const [announcement, setAnnouncement] = useState({ title: '', body: '', severity: 'info' });
   const [saving, setSaving] = useState(false);
-  // Three independent forms (identity, presence, announcement), each with its
-  // own submit — what was last loaded/saved for each, to flag unsaved edits.
+  // Three independent forms (identity, presence, announcement). Identity and presence are saved together
+  // by the SaveBar; the announcement is published on its own (it goes live for everyone at once). What
+  // was last loaded/saved for each, to flag unsaved edits.
   const [saved, setSaved] = useState(null);
   const dirtyIdentity = isDirty(identity, saved?.identity);
   const dirtyPresence = isDirty(presence, saved?.presence);
@@ -77,9 +80,7 @@ export default function Personalizer() {
   if (state.error) return <LoadError error={state.error} what="the bot personalizer" />;
   if (state.loading) return <p className="v2-state">Loading…</p>;
 
-  async function onSaveIdentity(e) {
-    e.preventDefault();
-    setSaving(true);
+  async function saveIdentity() {
     const sent = identity;
     try {
       const { done, failed } = await savePersonalizerIdentity(sent);
@@ -89,14 +90,10 @@ export default function Personalizer() {
       if (!failed.length) markSaved({ identity: sent });
     } catch (err) {
       notify(err.message);
-    } finally {
-      setSaving(false);
     }
   }
 
-  async function onSavePresence(e) {
-    e.preventDefault();
-    setSaving(true);
+  async function savePresence() {
     try {
       const { presence: savedPresence } = await savePersonalizerPresence(presence);
       setPresence(savedPresence);
@@ -104,9 +101,25 @@ export default function Personalizer() {
       notify('Presence updated.', 'info');
     } catch (err) {
       notify(err.message);
+    }
+  }
+
+  // The SaveBar's Save: whichever of identity and presence has edits, one after the other.
+  async function onSaveSettings(e) {
+    e?.preventDefault?.();
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (dirtyIdentity) await saveIdentity();
+      if (dirtyPresence) await savePresence();
     } finally {
       setSaving(false);
     }
+  }
+
+  function onResetSettings() {
+    if (saved?.identity) setIdentity(saved.identity);
+    if (saved?.presence) setPresence(saved.presence);
   }
 
   async function onSaveAnnouncement(e) {
@@ -152,7 +165,7 @@ export default function Personalizer() {
 
   return (
     <>
-      <h1 className="v2-section-title">Bot Personalizer</h1>
+      <h1 className="v2-section-title">Bot personalizer</h1>
 
       {!state.bot ? (
         <p className="v2-note">The bot isn't connected yet — try again in a moment.</p>
@@ -173,7 +186,7 @@ export default function Personalizer() {
       )}
 
       <h2 className="v2-group-title">Identity</h2>
-      <form onSubmit={onSaveIdentity}>
+      <form onSubmit={onSaveSettings} data-savebar>
         <div className="v2-field">
           <label htmlFor="username">Username</label>
           <input
@@ -213,18 +226,10 @@ export default function Personalizer() {
             onChange={(e) => setIdentity((f) => ({ ...f, bannerUrl: e.target.value }))}
           />
         </div>
-        <div className="v2-composer-actions">
-          <button type="submit" className="v2-btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save identity'}
-          </button>
-          <span className="v2-composer-status" aria-live="polite">
-            {dirtyIdentity ? 'Unsaved changes' : ''}
-          </span>
-        </div>
       </form>
 
       <h2 className="v2-group-title v2-section-gap v2-section-divided">Presence</h2>
-      <form onSubmit={onSavePresence}>
+      <form onSubmit={onSaveSettings} data-savebar>
         <div className="v2-field">
           <label htmlFor="pstatus">Status</label>
           <select
@@ -268,23 +273,15 @@ export default function Personalizer() {
             onChange={(text) => setPresence((p) => ({ ...p, text }))}
           />
         </div>
-        <div className="v2-composer-actions">
-          <button type="submit" className="v2-btn-primary" disabled={saving}>
-            {saving ? 'Saving…' : 'Save presence'}
-          </button>
-          <span className="v2-composer-status" aria-live="polite">
-            {dirtyPresence ? 'Unsaved changes' : ''}
-          </span>
-        </div>
       </form>
 
       <h2 className="v2-group-title v2-section-gap v2-section-divided">Announcement</h2>
-      <p className="v2-field-hint">
+      <p className="v2-field-hint v2-gap-after">
         Shown to everyone signed in to the dashboard, on every page — e.g. to explain an incident or outage.{' '}
         <strong>Critical</strong> announcements have no dismiss button and stay until you clear them.
       </p>
       {state.announcement ? (
-        <p className="v2-note">
+        <p className="v2-note v2-gap-after">
           Currently live: <strong>{state.announcement.title}</strong> ({state.announcement.severity})
         </p>
       ) : null}
@@ -344,6 +341,14 @@ export default function Personalizer() {
           ) : null}
         </div>
       </form>
+      <SaveBar
+        guard={false}
+        dirty={dirtyIdentity || dirtyPresence}
+        saving={saving}
+        onSave={onSaveSettings}
+        onReset={onResetSettings}
+        saveLabel="Save changes"
+      />
     </>
   );
 }

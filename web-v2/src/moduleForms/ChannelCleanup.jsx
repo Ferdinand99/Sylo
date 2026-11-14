@@ -13,6 +13,9 @@ import LoadError from '../components/LoadError.jsx';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import Meta from '../components/Meta.jsx';
+import ListPageHead from '../components/ListPageHead.jsx';
+import RowActions from '../components/RowActions.jsx';
+import EmptyList from '../components/EmptyList.jsx';
 import UnitInput from '../components/UnitInput.jsx';
 
 function dayLabel(days, weekdays) {
@@ -208,16 +211,36 @@ export default function ChannelCleanup() {
 
   return (
     <>
-      <h1 className="v2-section-title">Channel cleanup</h1>
-      <p className="v2-field-hint">
-        Auto-delete messages older than a threshold from a channel, on a weekly schedule you pick. Needs{' '}
-        <strong>Manage Messages</strong> in the target channel.
-      </p>
+      <ListPageHead
+        title="Channel cleanup"
+        action={
+          creating ? null : (
+            <button type="button" className="v2-btn-primary" onClick={() => setCreating(true)}>
+              + New schedule
+            </button>
+          )
+        }
+      >
+        <p className="v2-field-hint">
+          Auto-delete messages older than a threshold from a channel, on a weekly schedule you pick. Needs{' '}
+          <strong>Manage Messages</strong> in the target channel.
+        </p>
+      </ListPageHead>
 
       <div className="v2-group">
         <h2 className="v2-group-title">Your schedules ({d.schedules.length})</h2>
         {d.schedules.length === 0 ? (
-          <p className="v2-note">None yet — create one to start cleaning up a channel.</p>
+          <EmptyList
+            action={
+              creating ? null : (
+                <button type="button" className="v2-btn-ghost" onClick={() => setCreating(true)}>
+                  + New schedule
+                </button>
+              )
+            }
+          >
+            None yet — create one to start cleaning up a channel.
+          </EmptyList>
         ) : (
           <div className="v2-list">
             {d.schedules.map((s) => {
@@ -254,17 +277,14 @@ export default function ChannelCleanup() {
                     ) : null}
                   </div>
                   {editingId === s.id ? null : (
-                    <div className="v2-row-actions">
-                      <button type="button" className="v2-btn-ghost" onClick={() => setEditingId(s.id)}>
-                        Edit
-                      </button>
-                      <button type="button" className="v2-btn-ghost" onClick={() => onToggle(s.id)}>
-                        {s.enabled ? 'Pause' : 'Resume'}
-                      </button>
-                      <button type="button" className="v2-btn-danger-ghost" onClick={() => onDelete(s.id)}>
-                        Delete
-                      </button>
-                    </div>
+                    <RowActions
+                      edit={{ onClick: () => setEditingId(s.id) }}
+                      menuLabel={`More actions for #${channel ? channel.name : s.channelId}`}
+                      items={[
+                        { label: s.enabled ? 'Pause' : 'Resume', onClick: () => onToggle(s.id) },
+                        { label: 'Delete', danger: true, onClick: () => onDelete(s.id) },
+                      ]}
+                    />
                   )}
                 </div>
               );
@@ -286,11 +306,7 @@ export default function ChannelCleanup() {
             onCancel={() => setCreating(false)}
           />
         </div>
-      ) : (
-        <button type="button" className="v2-btn-primary" onClick={() => setCreating(true)}>
-          + New schedule
-        </button>
-      )}
+      ) : null}
     </>
   );
 }

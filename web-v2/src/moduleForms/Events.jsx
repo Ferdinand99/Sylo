@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useCmd } from '../platformContext.jsx';
 import { cancelEvent, createEvent, updateEvent } from '../api.js';
 import { notify } from '../notify.js';
@@ -9,20 +9,16 @@ import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { describeTime, formatDateTime } from '../formatTime.js';
+import ListPageHead from '../components/ListPageHead.jsx';
+import RowActions from '../components/RowActions.jsx';
+import EmptyList from '../components/EmptyList.jsx';
+import TimeZoneSelect from '../components/TimeZoneSelect.jsx';
 
 const browserZone = () => {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || '';
   } catch {
     return '';
-  }
-};
-
-const zoneNames = () => {
-  try {
-    return Intl.supportedValuesOf('timeZone');
-  } catch {
-    return [];
   }
 };
 
@@ -44,27 +40,6 @@ function ReminderSelect({ id, value, onChange, limits }) {
         </option>
       ))}
     </select>
-  );
-}
-
-function ZoneInput({ id, value, onChange }) {
-  return (
-    <>
-      <input
-        id={id}
-        type="text"
-        list={`${id}-zones`}
-        value={value}
-        placeholder="Europe/Oslo"
-        autoComplete="off"
-        onChange={(e) => onChange(e.target.value)}
-      />
-      <datalist id={`${id}-zones`}>
-        {zoneNames().map((z) => (
-          <option key={z} value={z} />
-        ))}
-      </datalist>
-    </>
   );
 }
 
@@ -143,7 +118,7 @@ function EventForm({ initial, editing, channels, roles, saving, onSave, onCancel
         </div>
         <div className="v2-field">
           <label htmlFor="ev-zone">Time zone</label>
-          <ZoneInput id="ev-zone" value={f.timeZone} onChange={(timeZone) => set({ timeZone })} />
+          <TimeZoneSelect id="ev-zone" value={f.timeZone} onChange={(timeZone) => set({ timeZone })} />
         </div>
       </div>
       <p className="v2-field-hint">
@@ -298,6 +273,13 @@ export default function Events() {
   const [editingId, setEditingId] = useState(null);
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
+  // The "+ New event" button is at the top of the page, the form under the upcoming events: bring it into view.
+  const createRef = useRef(null);
+  useEffect(() => {
+    if (!creating || !createRef.current) return;
+    createRef.current.scrollIntoView?.({ block: 'start' });
+    createRef.current.querySelector('input, textarea, select')?.focus({ preventScroll: true });
+  }, [creating]);
 
   if (status === 'error') return <LoadError error={error} what="Events" />;
   if (status === 'loading') return <p className="v2-state">Loading…</p>;
@@ -329,12 +311,22 @@ export default function Events() {
 
   return (
     <>
-      <h1 className="v2-section-title">Events</h1>
-      <p className="v2-field-hint">
-        Post an event with Join, Maybe and Leave buttons. Staff can also use{' '}
-        <code>{cmd('/event create')}</code>, <code>{cmd('/event list')}</code> and{' '}
-        <code>{cmd('/event cancel')}</code>.
-      </p>
+      <ListPageHead
+        title="Events"
+        action={
+          creating ? null : (
+            <button type="button" className="v2-btn-primary" onClick={() => setCreating(true)}>
+              + New event
+            </button>
+          )
+        }
+      >
+        <p className="v2-field-hint">
+          Post an event with Join, Maybe and Leave buttons. Staff can also use{' '}
+          <code>{cmd('/event create')}</code>, <code>{cmd('/event list')}</code> and{' '}
+          <code>{cmd('/event cancel')}</code>.
+        </p>
+      </ListPageHead>
 
       <form onSubmit={save} data-savebar>
         <div className="v2-field">
@@ -400,9 +392,14 @@ export default function Events() {
 
         <div className="v2-field">
           <label htmlFor="timeZone">
-            Time zone for commands <span className="v2-field-hint">— blank = UTC</span>
+            Time zone for commands <span className="v2-field-hint">— default UTC</span>
           </label>
-          <ZoneInput id="timeZone" value={form.timeZone} onChange={(timeZone) => set({ timeZone })} />
+          <TimeZoneSelect
+            id="timeZone"
+            blankLabel="UTC (default)"
+            value={form.timeZone}
+            onChange={(timeZone) => set({ timeZone })}
+          />
           <p className="v2-field-hint">
             <code>{cmd('/event create')}</code> reads its times in this zone unless the command names another.
           </p>
@@ -423,7 +420,19 @@ export default function Events() {
 
       <div className="v2-group v2-section-gap">
         <h2 className="v2-group-title">Upcoming events ({upcoming.length})</h2>
-        {upcoming.length === 0 ? <p className="v2-note">None scheduled.</p> : null}
+        {upcoming.length === 0 ? (
+          <EmptyList
+            action={
+              creating ? null : (
+                <button type="button" className="v2-btn-ghost" onClick={() => setCreating(true)}>
+                  + New event
+                </button>
+              )
+            }
+          >
+            None scheduled.
+          </EmptyList>
+        ) : null}
         <div className="v2-list">
           {upcoming.map((ev) => (
             <div className="v2-row v2-row-stack" key={ev.id}>
@@ -453,48 +462,35 @@ export default function Events() {
                 ) : null}
               </div>
               {editingId === ev.id ? null : (
-                <div className="v2-row-actions">
-                  <button
-                    type="button"
-                    className="v2-btn-ghost"
-                    disabled={busy}
-                    onClick={() => setEditingId(ev.id)}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="v2-btn-danger-ghost"
-                    disabled={busy}
-                    onClick={() => onCancelEvent(ev)}
-                  >
-                    Cancel event
-                  </button>
-                </div>
+                <RowActions
+                  edit={{ disabled: busy, onClick: () => setEditingId(ev.id) }}
+                  menuLabel={`More actions for ${ev.title}`}
+                  items={[
+                    { label: 'Cancel event', danger: true, disabled: busy, onClick: () => onCancelEvent(ev) },
+                  ]}
+                />
               )}
             </div>
           ))}
         </div>
 
         {creating ? (
-          <EventForm
-            initial={BLANK(data.config)}
-            channels={data.channels}
-            roles={data.roles}
-            saving={busy}
-            onSave={(body) =>
-              run(
-                () => createEvent(guildId, body),
-                () => setCreating(false)
-              )
-            }
-            onCancel={() => setCreating(false)}
-          />
-        ) : (
-          <button type="button" className="v2-btn-primary" onClick={() => setCreating(true)}>
-            + New event
-          </button>
-        )}
+          <div ref={createRef}>
+            <EventForm
+              initial={BLANK(data.config)}
+              channels={data.channels}
+              roles={data.roles}
+              saving={busy}
+              onSave={(body) =>
+                run(
+                  () => createEvent(guildId, body),
+                  () => setCreating(false)
+                )
+              }
+              onCancel={() => setCreating(false)}
+            />
+          </div>
+        ) : null}
       </div>
 
       {past.length > 0 ? (

@@ -1,4 +1,6 @@
 import ChipPicker from '../components/ChipPicker.jsx';
+import EmojiPicker from '../components/EmojiPicker.jsx';
+import { appendEmoji } from '../emojiText.js';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import SendTestButton from '../components/SendTestButton.jsx';
@@ -180,15 +182,22 @@ export default function Starboard() {
               </div>
 
               <div className="v2-field">
-                <label>Emoji(s)</label>
-                <input
-                  type="text"
-                  placeholder="⭐"
-                  value={b.emojiText}
-                  onChange={(e) => updateBoard(b.key, { emojiText: e.target.value })}
-                />
+                <label htmlFor={`emojis-${b.key}`}>Emoji(s)</label>
+                <div className="v2-field-row v2-emoji-row">
+                  <input
+                    id={`emojis-${b.key}`}
+                    type="text"
+                    placeholder="⭐"
+                    value={b.emojiText}
+                    onChange={(e) => updateBoard(b.key, { emojiText: e.target.value })}
+                  />
+                  <EmojiPicker
+                    onPick={(emoji) => updateBoard(b.key, { emojiText: appendEmoji(b.emojiText, emoji) })}
+                  />
+                </div>
                 <p className="v2-field-hint">
-                  Space-separated. Paste custom emojis directly. First emoji is the one shown on the post.
+                  Pick one or more with the smiley, or type or paste them, separated by spaces. The first
+                  emoji is the one shown on the post.
                 </p>
               </div>
 
