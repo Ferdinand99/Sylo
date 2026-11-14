@@ -86,7 +86,7 @@ struct PendingRevocationTests {
         #expect(kept.first?.server == server)
         #expect(kept.first?.token == "sylo_live")
         #expect(kept.first?.hadPush == true)
-        #expect(kept.first?.attempts == 1)
+        #expect(kept.first?.attempts == 0)
         #expect(signedIn.hasPendingRevocations)
         // The token is never in a description.
         #expect(!String(describing: kept[0]).contains("sylo_live"))
@@ -188,7 +188,7 @@ struct PendingRevocationTests {
         #expect(registrar.registerCalls == 1)
         let kept = try store.load()
         #expect(kept.count == 1)
-        #expect(kept[0].attempts == 1)
+        #expect(kept[0].attempts == 0)
     }
 
     // MARK: Cleared
@@ -218,7 +218,7 @@ struct PendingRevocationTests {
         await session(stub, store: store, token: nil).revokePending()
         let kept = try store.load()
         #expect(kept.count == 1)
-        #expect(kept[0].attempts == 1)
+        #expect(kept[0].attempts == 0)
     }
 
     @Test("Given up after too many tries or too long, with no call")
@@ -231,9 +231,9 @@ struct PendingRevocationTests {
         #expect(stub.calls.isEmpty)
         #expect(try store.load().isEmpty)
 
-        // Each failed try counts, up to the limit.
+        // Each answer that is an error counts, up to the limit.
         let last = InMemoryPendingRevocationStore([item(attempts: PendingRevocation.maxAttempts - 1)])
-        let failing = clients { _ in throw NetworkError.offline }
+        let failing = clients { _ in throw NetworkError.server(status: 500) }
         let relaunch = session(failing, store: last, token: nil)
         await relaunch.revokePending()
         #expect(try last.load().first?.attempts == PendingRevocation.maxAttempts)

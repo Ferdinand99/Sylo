@@ -66,8 +66,13 @@ public final class InMemoryPendingRevocationStore: PendingRevocationStore, @unch
 
 #if canImport(Security)
 /// One generic-password item holding the list, readable after the first unlock, on this device only (no
-/// iCloud Keychain, not in a restored backup). Kept in the app-only Keychain group, so the notification
-/// extension never sees it, and apart from the app tokens (own service name).
+/// iCloud Keychain, not in a restored backup). Apart from the app tokens (own service name).
+///
+/// With `accessGroup` set to the app-only group (the second `keychain-access-groups` entry, which the
+/// notification extension does not have) the extension cannot read it. With `accessGroup` nil the item lands in
+/// the process's default group, which the extension shares: the app passes nil when that group cannot be told
+/// (a build without signing, a Keychain that cannot be opened yet; see ``SyloAppStorage/pigeonKeychainGroup()``).
+/// The extension never calls this store either way, so nothing in it asks for the item.
 public struct KeychainPendingRevocationStore: PendingRevocationStore {
     public let service: String
     public let accessGroup: String?

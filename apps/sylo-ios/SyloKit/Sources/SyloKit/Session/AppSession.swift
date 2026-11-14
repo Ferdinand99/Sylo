@@ -51,7 +51,10 @@ public final class AppSession {
     private let makeClient: ClientFactory
     /// Sign-outs the server could not be told about yet (see ``PendingRevocation``).
     private let pending: any PendingRevocationStore
-    private var isReplaying = false
+    /// The replay that is running now, so a second caller waits for it instead of starting another.
+    private var replay: Task<Void, Never>?
+    /// How long a caller waits for a replay (``revokePending(within:)``); tests shorten it.
+    var revokeTimeout: Duration = .seconds(10)
 
     /// - Parameters:
     ///   - deviceName: Sent with the sign-in, shown in the account's device list.
@@ -212,7 +215,8 @@ public final class AppSession {
             addPending(PendingRevocation(server: server, token: stored.token, hadPush: pushesToServer))
         }
         signOutLocally(of: server)
-        await replayPending()
+        // The same limited path as every other caller, so a server that is down cannot hold sign-out up.
+        await revokePending()
     }
 
     // MARK: - Pending revocations
@@ -224,15 +228,24 @@ public final class AppSession {
     /// registration and revoke the token, each only the server it was issued by. Call it at launch, when the app
     /// comes to the front, and before the device registers for notifications again. Gives up waiting after
     /// `limit` (the item stays for the next time), so a server that is down never holds the app up for long.
-    public func revokePending(within limit: Duration = .seconds(10)) async {
-        guard hasPendingRevocations else { return }
-        let replay = Task { await self.replayPending() }
-        let timer = Task {
-            try? await Task.sleep(for: limit)
-            replay.cancel()
+    public func revokePending(within limit: Duration? = nil) async {
+        // A replay is already running (it has its own limit): wait for it, so nobody registers for
+        // notifications before it has finished or timed out.
+        if let running = replay {
+            await running.value
+            return
         }
-        await replay.value
+        guard hasPendingRevocations else { return }
+        let task = Task { await self.replayPending() }
+        replay = task
+        let wait = limit ?? revokeTimeout
+        let timer = Task {
+            try? await Task.sleep(for: wait)
+            task.cancel()
+        }
+        await task.value
         timer.cancel()
+        replay = nil
     }
 
     private func addPending(_ item: PendingRevocation) {
@@ -246,8 +259,10 @@ public final class AppSession {
     private enum Step {
         /// The server answered (success, 404), or said the token is already dead (401: `dead`).
         case done(dead: Bool)
-        /// Not reached, or an error answer: try again later.
-        case retry
+        /// Try again later. `answered` is true when the server sent an HTTP answer (an error status); only
+        /// those count as a try. Not being able to reach it at all (offline, timeout, TLS) does not, so a
+        /// phone that stays offline never uses up the tries.
+        case retry(answered: Bool)
         case cancelled
     }
 
@@ -260,15 +275,22 @@ public final class AppSession {
             if error == .unauthorized { return .done(dead: true) }
             if case .notFound = error { return .done(dead: false) }
             if error == .cancelled { return .cancelled }
-            return .retry
+            return .retry(answered: Self.isServerAnswer(error))
+        }
+    }
+
+    /// Whether the server itself sent an answer (any HTTP status), as opposed to the call not getting through.
+    private static func isServerAnswer(_ error: NetworkError) -> Bool {
+        switch error {
+        case .timeout, .offline, .unreachable, .secureConnectionFailed, .cancelled, .transport, .invalidURL, .encoding:
+            false
+        default:
+            true
         }
     }
 
     /// One try for every pending revocation. Each goes to its own server with its own token.
     private func replayPending() async {
-        guard !isReplaying else { return }
-        isReplaying = true
-        defer { isReplaying = false }
         let items = (try? pending.load()) ?? []
         guard !items.isEmpty else { return }
         var finished = Set<UUID>()
@@ -281,19 +303,20 @@ public final class AppSession {
             }
             let client = makeClient(item.server, item.token)
             var allDone = true
+            var answered = false
             var dead = false
             var wasCancelled = false
             if item.hadPush {
                 switch await attempt(client, Endpoints.UnregisterPush()) {
                 case .done(let tokenDead): dead = tokenDead
-                case .retry: allDone = false
+                case .retry(let heard): allDone = false; answered = answered || heard
                 case .cancelled: wasCancelled = true
                 }
             }
             if !dead, !wasCancelled {
                 switch await attempt(client, Endpoints.SignOut()) {
                 case .done: break
-                case .retry: allDone = false
+                case .retry(let heard): allDone = false; answered = answered || heard
                 case .cancelled: wasCancelled = true
                 }
             }
@@ -301,7 +324,7 @@ public final class AppSession {
             if allDone || dead {
                 finished.insert(item.id)
             } else {
-                attempts[item.id] = item.attempts + 1
+                if answered { attempts[item.id] = item.attempts + 1 }
             }
         }
         // Reloaded, so a sign-out that happened meanwhile is not lost.
