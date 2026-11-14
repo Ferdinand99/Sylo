@@ -105,8 +105,16 @@ export async function setGuildModule(guildId, moduleId, patch) {
   if (moduleId === 'welcome' && patch.enabled === true && !current.enabled) {
     patch = { ...patch, config: restartTriggerClock(patch.config ?? current.config) };
   }
-  if (patch.config && configGuard) {
-    await configGuard({ guildId, moduleId, prev: current.config ?? {}, next: patch.config });
+  // Switching a module on makes the bot act on everything it holds: each grant it makes is checked as
+  // new, not only the ones this write changes.
+  const switchingOn = patch.enabled === true && !current.enabled;
+  if ((patch.config || switchingOn) && configGuard) {
+    await configGuard({
+      guildId,
+      moduleId,
+      prev: switchingOn ? {} : (current.config ?? {}),
+      next: patch.config ?? current.config ?? {},
+    });
   }
   await upsertStmt.run({
     guildId,

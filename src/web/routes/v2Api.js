@@ -3539,7 +3539,7 @@ router.post(
   platformActionLimit, // every save publishes
   asyncHandler(async (req, res) => {
     const guild = req.guild;
-    const cfg = (await getGuildModule(guild.id, 'roles')).config;
+    const { config: cfg, enabled: rolesOn } = await getGuildModule(guild.id, 'roles');
     const list = Array.isArray(cfg.reactionMessages) ? cfg.reactionMessages : [];
 
     const channelId = /^\d{17,20}$/.test(req.body.channelId ?? '') ? req.body.channelId : '';
@@ -3570,7 +3570,8 @@ router.post(
     };
     // The guard on the save below would refuse a role this person may not hand out, but only
     // after the message was posted: check first, so a refused set never reaches the channel.
-    await checkModuleGrants('roles', cfg, {
+    // This save switches the module on, which checks everything it holds, not only this set.
+    await checkModuleGrants('roles', rolesOn ? cfg : {}, {
       ...cfg,
       reactionMessages: existing ? list.map((x) => (String(x.id) === id ? rm : x)) : [...list, rm],
     });
