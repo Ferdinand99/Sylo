@@ -1565,8 +1565,8 @@ export const MIGRATIONS = [
   // Dashboard access levels (src/db/guildSettings.js, which adds the same columns on Postgres with
   // ADD COLUMN IF NOT EXISTS): the roles that may use the dashboard with Inbox or View access. The
   // Edit roles are the bot-master roles (bot_master_roles). Migration 79, after the change history's 78
-  // (#342). Each column is added only when it is
-  // missing, so a database that already ran this step under another number is not broken by it.
+  // (#342). Each column is added only when it is missing, so a database that already ran this step
+  // under another number is not broken by it.
   (database) => {
     const has = new Set(
       database
