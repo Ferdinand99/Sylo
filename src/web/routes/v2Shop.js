@@ -123,13 +123,13 @@ function withinPlatformLimit(req, res) {
 }
 
 /** The role of an item must be one the caller may hand out, and one the server really has. */
-function roleProblem(req, res, guild, item) {
+async function roleProblem(req, res, guild, item) {
   if (item.type === 'custom') return false;
   if (!assignableRoles(guild).some((r) => r.id === item.roleId)) {
     fail(res, 'Pick a role from the list.');
     return true;
   }
-  checkRoleGrants([item.roleId]); // throws a RoleGrantError (403) for a role the person may not hand out
+  await checkRoleGrants([item.roleId]); // throws a RoleGrantError (403) for a role the person may not hand out
   return false;
 }
 
@@ -153,7 +153,7 @@ router.post(
     const item = normaliseItem(req.body);
     const problem = itemProblem(item);
     if (problem) return fail(res, problem);
-    if (roleProblem(req, res, req.guild, item)) return undefined;
+    if (await roleProblem(req, res, req.guild, item)) return undefined;
     checkLimit(await itemCount(req.guild.id), CEILINGS.shopItems, 'shop items');
     const id = await createItem(req.guild.id, item);
     await recordAudit(req.guild.id, {
@@ -188,7 +188,7 @@ router.post(
     const item = normaliseItem(req.body);
     const problem = itemProblem(item);
     if (problem) return fail(res, problem);
-    if (roleProblem(req, res, req.guild, item)) return undefined;
+    if (await roleProblem(req, res, req.guild, item)) return undefined;
     await updateItem(req.guild.id, id, item);
     await recordAudit(req.guild.id, {
       actor: actor(req),
@@ -258,7 +258,7 @@ router.post(
     if (!isItemId(req.body?.itemId)) return fail(res, 'Pick an item.');
     const item = await getItem(guild.id, Number(req.body.itemId));
     if (!item) return fail(res, 'Unknown item.', 404);
-    if (roleProblem(req, res, guild, item)) return undefined;
+    if (await roleProblem(req, res, guild, item)) return undefined;
     const member = await memberOf(guild, userId);
     if (!member) return fail(res, shopRefusalText({ reason: 'member_gone' }, config));
     if (member.user?.bot) return fail(res, 'Bots do not have an account.');
