@@ -823,8 +823,16 @@ export function installFluxerCompat(sdk, { Collection, voice } = {}) {
       const emoji = reaction.emojiIdentifier;
       const load = () => reaction.message ?? reaction.fetchMessage();
       return {
-        fetch: async () => {
+        // Like discord.js: with an `after` cursor this is exactly one page of `limit` (default and
+        // most 100) users, so a caller that pages (polls) makes progress. With no cursor it reads
+        // up to 20 pages, the list a plain fetch() has always returned here.
+        fetch: async (opts) => {
           const msg = await load();
+          if (opts?.after) {
+            const limit = Math.min(100, Math.max(1, Math.trunc(Number(opts.limit)) || 100));
+            const res = await msg.fetchReactionUsersPage(emoji, { limit, after: String(opts.after) });
+            return new Collection(res.users.map((u) => [u.id, u]));
+          }
           const users = [];
           let after;
           for (let page = 0; page < 20; page++) {

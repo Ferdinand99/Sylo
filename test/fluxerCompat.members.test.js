@@ -239,6 +239,14 @@ test('MessageReaction.partial / fetch / remove / users', async () => {
   await methodOf(sdk.MessageReaction, 'remove').call(reaction);
   const users = getterOf(sdk.MessageReaction, 'users').call(reaction);
   assert.deepEqual([...(await users.fetch()).keys()], ['u1', 'u2', 'u3']);
+  // With a cursor it is one page after it, which is what lets a caller page through the users.
+  const pageCalls = [];
+  message.fetchReactionUsersPage = async (_e, opts) => {
+    pageCalls.push(opts);
+    return { users: [{ id: 'u7' }], hasMore: true, nextAfter: 'u7' };
+  };
+  assert.deepEqual([...(await users.fetch({ limit: 500, after: 'u2' })).keys()], ['u7']);
+  assert.deepEqual(pageCalls, [{ limit: 100, after: 'u2' }]);
   await users.remove({ id: 'u1' });
   assert.deepEqual(removed, [
     ['emoji', '⭐'],
