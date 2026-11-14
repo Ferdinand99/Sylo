@@ -1,11 +1,12 @@
 // JSON API behind the dashboard's command palette: look up an inbox item (ticket, suggestion, appeal or
 // application) of this server by its number.
 //
-// Mounted at /guilds/:guildId AFTER the admin guard in v2Api.js, so req.guild is set and the caller
-// manages this server. Every lookup is keyed by the server's own id, so a number that belongs to
-// another server is never found. The answer holds no message text, no answers and no member data:
+// Mounted at /guilds/:guildId AFTER the access guard in v2Api.js, so req.guild is set and the caller
+// has dashboard access to this server (View is enough: it only reads, see src/web/lib/routeAccess.js).
+// Every lookup is keyed by the server's own id, so a number that belongs to another server is never
+// found. The answer holds no message text, no answers and no member data:
 // only what the palette needs to name the item and open its page.
-import { Router } from 'express';
+import { accessRouter } from '../middleware/access.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { getTicket } from '../../db/tickets.js';
@@ -13,7 +14,7 @@ import { getAppeal } from '../../db/appeals.js';
 import { getSubmission } from '../../db/applications.js';
 import { getSuggestionByNumber } from '../../db/suggestions.js';
 
-const router = Router({ mergeParams: true });
+const router = accessRouter('/guilds/:guildId', { mergeParams: true });
 
 // Each press of a key in the palette can ask: the budget is for typing, not for scanning.
 const searchLimit = rateLimit({

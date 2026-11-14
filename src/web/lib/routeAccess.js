@@ -293,4 +293,7 @@ export const ROUTE_ACCESS = Object.freeze({
   'GET /guilds/:guildId/modules/temp-roles/members': 'view',
   'POST /guilds/:guildId/modules/temp-roles/add': 'edit',
   'POST /guilds/:guildId/modules/temp-roles/remove': 'edit',
+
+  // v2Search.js
+  'GET /guilds/:guildId/search/inbox': 'view',
 });
