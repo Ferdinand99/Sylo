@@ -40,22 +40,46 @@ export const initialGoals = () => new Set();
  * The channel a field's "Change its permissions" tick is about, when the admin has picked it: the one with the
  * wanted name, or the one found by name that others can see, and only when it differs from what the wizard promises.
  */
-export function fixableChannel(field, pickId) {
-  return [field.create?.existing, field.unsafeMatch].find((c) => c && c.gap && c.id === pickId) ?? null;
+export function fixableChannel(field, pickId, ctx = null) {
+  const known = [field.create?.existing, field.unsafeMatch].find((c) => c && c.gap && c.id === pickId);
+  if (known) return known;
+  // Any other channel picked for a staff-only field that others can see (from who the proposal says can see it).
+  const gap = ctx && field.create ? exposureGap(ctx.data, ctx.item, ctx.choice, field, pickId) : null;
+  return gap
+    ? { id: pickId, name: ctx.data.channels.find((c) => c.id === pickId)?.name ?? pickId, gap }
+    : null;
+}
+
+/**
+ * Why a channel picked for a staff-only field is not private, from who can see it (the proposal lists them): the
+ * staff role picked in the same item does not count. Null when it is private, or when the proposal did not say.
+ */
+export function exposureGap(data, item, choice, field, pickId) {
+  if (!field.staffOnly || !pickId) return null;
+  const seen = data.channels.find((c) => c.id === pickId)?.exposure;
+  if (!seen) return null;
+  if (seen.everyone) return 'Everyone can see it.';
+  const viewerField = item.fields.find((f) => f.viewer);
+  const viewer = viewerField ? choice?.fields?.[viewerField.key]?.id : '';
+  const others = seen.roles.filter((r) => r.id !== viewer);
+  if (!others.length) return null;
+  const names = others.map((r) => r.name).join(', ');
+  return `Members with the ${names} role${others.length > 1 ? 's' : ''} can see it.`;
 }
 
 /**
  * Whether a role that is only for who may see a channel does anything now: Sylo sets who sees a channel when it
  * creates it, or when the admin ticks the change of its permissions. With neither, the field is not used.
  */
-export function viewerActive(item, choice) {
+export function viewerActive(item, choice, data = null) {
   return item.fields.some((f) => {
     const pick = choice?.fields?.[f.key];
     return (
       f.kind === 'channel' &&
       f.create &&
       pick &&
-      ((pick.mode === 'create' && !f.create.existing) || (pick.fix && fixableChannel(f, pick.id)))
+      ((pick.mode === 'create' && !f.create.existing) ||
+        (pick.fix && fixableChannel(f, pick.id, data && { data, item, choice })))
     );
   });
 }
@@ -118,11 +142,13 @@ export function reviewSummary(data, goalIds, choices) {
   let problems = 0;
   for (const item of active) {
     problems += itemProblems(data, item, choices[item.id]).length;
-    const viewerOn = viewerActive(item, choices[item.id]);
+    const viewerOn = viewerActive(item, choices[item.id], data);
     for (const field of item.fields) {
       const pick = choices[item.id].fields[field.key];
       if (field.viewerOnly && !viewerOn) continue;
-      const fixing = pick?.fix ? fixableChannel(field, pick.id) : null;
+      const fixing = pick?.fix
+        ? fixableChannel(field, pick.id, { data, item, choice: choices[item.id] })
+        : null;
       if (fixing) changed.push(fixing.name);
       if (pick?.mode !== 'create' || !field.create || field.create.existing) continue;
       (field.kind === 'channel' ? channels : roles).set(field.create.name, field.create);
@@ -162,12 +188,12 @@ export function toPayload(data, goalIds, choices) {
         item.fields.map((field) => {
           const pick = choices[item.id].fields[field.key] ?? { mode: 'pick', id: '' };
           // A role only for who may see a channel is sent only when it will be used.
-          if (field.viewerOnly && !viewerActive(item, choices[item.id])) return [field.key, {}];
+          if (field.viewerOnly && !viewerActive(item, choices[item.id], data)) return [field.key, {}];
           if (pick.mode === 'create' && field.create && !field.create.existing)
             return [field.key, { create: true }];
           if (!pick.id) return [field.key, {}];
           // A channel's permissions change only where the wizard knows how, and only when the admin ticked it.
-          const fix = pick.fix && fixableChannel(field, pick.id);
+          const fix = pick.fix && fixableChannel(field, pick.id, { data, item, choice: choices[item.id] });
           return [field.key, fix ? { id: pick.id, fix: true } : { id: pick.id }];
         })
       ),

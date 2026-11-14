@@ -301,6 +301,10 @@ export const ROUTE_ACCESS = Object.freeze({
   // v2Search.js
   'GET /guilds/:guildId/search/inbox': 'view',
 
+  // v2Setup.js (the proposal is a read; applying creates channels and roles and saves modules)
+  'GET /guilds/:guildId/setup/suggest': 'view',
+  'POST /guilds/:guildId/setup/apply': 'edit',
+
   // v2Health.js (the re-check with ?refresh=1 has its own per-server limit)
   'GET /guilds/:guildId/health': 'view',
 });

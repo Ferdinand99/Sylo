@@ -304,6 +304,35 @@ describe('SetupWizard: staff-only channels and the staff role', () => {
   });
 });
 
+describe('SetupWizard: a staff-only channel picked by hand', () => {
+  const withExposure = () =>
+    suggestion({
+      channels: [{ id: GENERAL, name: 'chat', problem: null, exposure: { everyone: true, roles: [] } }],
+      items: [
+        {
+          ...suggestion().items[0],
+          fields: [
+            field({
+              staffOnly: true,
+              create: { name: 'server-log', kind: 'channel', private: true, readOnly: false, existing: null },
+            }),
+          ],
+        },
+      ],
+    });
+
+  it('warns that others can see it, and sends the permission change only when ticked', async () => {
+    api.getSetupSuggestion.mockResolvedValue(withExposure());
+    await toReview();
+    fireEvent.change(screen.getByLabelText('Welcome channel'), { target: { value: GENERAL } });
+    expect(screen.getByText(/#chat is not private\. Everyone can see it\./)).toBeTruthy();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Change its permissions to private/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(api.applySetup).toHaveBeenCalled());
+    expect(api.applySetup.mock.calls[0][1].items[0].fields.joinChannel).toEqual({ id: GENERAL, fix: true });
+  });
+});
+
 describe('SetupWizard: a channel that already has the wanted name', () => {
   const existing = { id: GENERAL, name: 'general', gap: 'Everyone can see it.' };
   const withExisting = () =>

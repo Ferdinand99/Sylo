@@ -12,6 +12,7 @@ import {
   toPayload,
   viewerActive,
   fixableChannel,
+  exposureGap,
 } from '../setupModel.js';
 
 const field = (over) => ({
@@ -384,6 +385,86 @@ describe('a role that is only for who may see a channel', () => {
     const c = initialChoices(d);
     c.welcome.fields.viewRole = { mode: 'create', id: '', fix: false };
     expect(reviewSummary(d, new Set(['welcome']), c).roles).toEqual([]);
+  });
+});
+
+describe('a staff-only channel the admin picks by hand', () => {
+  const ROLE = '200000000000000002';
+  const make = (exposure) =>
+    data({
+      channels: [
+        { id: '100000000000000002', name: 'chat', problem: null, ...(exposure ? { exposure } : {}) },
+      ],
+      roles: [{ id: ROLE, name: 'Support team', problem: null }],
+      items: [
+        item({
+          fields: [
+            field({
+              staffOnly: true,
+              create: { name: 'server-log', kind: 'channel', private: true, existing: null },
+            }),
+            field({
+              key: 'viewRole',
+              kind: 'role',
+              optional: true,
+              viewer: true,
+              viewerOnly: true,
+              post: false,
+              create: { name: 'Support team', kind: 'role' },
+            }),
+          ],
+        }),
+      ],
+    });
+  const pick = (d, viewer = '') => {
+    const c = initialChoices(d);
+    c.welcome.fields.channel = { mode: 'pick', id: '100000000000000002', fix: false };
+    if (viewer) c.welcome.fields.viewRole = { mode: 'pick', id: viewer, fix: false };
+    return c;
+  };
+
+  it('is flagged when everyone, or a role besides the staff role, can see it', () => {
+    const d = make({ everyone: true, roles: [] });
+    expect(exposureGap(d, d.items[0], pick(d).welcome, d.items[0].fields[0], '100000000000000002')).toBe(
+      'Everyone can see it.'
+    );
+    const e = make({
+      everyone: false,
+      roles: [
+        { id: ROLE, name: 'Support team' },
+        { id: '3', name: 'Verified' },
+      ],
+    });
+    expect(
+      exposureGap(e, e.items[0], pick(e, ROLE).welcome, e.items[0].fields[0], '100000000000000002')
+    ).toBe('Members with the Verified role can see it.');
+  });
+
+  it('is not flagged when only the staff role sees it, or when the proposal did not say', () => {
+    const d = make({ everyone: false, roles: [{ id: ROLE, name: 'Support team' }] });
+    expect(
+      exposureGap(d, d.items[0], pick(d, ROLE).welcome, d.items[0].fields[0], '100000000000000002')
+    ).toBeNull();
+    const none = make(null);
+    expect(
+      exposureGap(none, none.items[0], pick(none).welcome, none.items[0].fields[0], '100000000000000002')
+    ).toBeNull();
+  });
+
+  it('can have its permissions changed when the admin ticks it, and is then sent with fix', () => {
+    const d = make({ everyone: true, roles: [] });
+    const c = pick(d);
+    const ctx = { data: d, item: d.items[0], choice: c.welcome };
+    expect(fixableChannel(d.items[0].fields[0], '100000000000000002', ctx)?.name).toBe('chat');
+    expect(toPayload(d, new Set(['welcome']), c).items[0].fields.channel).toEqual({
+      id: '100000000000000002',
+    });
+    c.welcome.fields.channel.fix = true;
+    expect(toPayload(d, new Set(['welcome']), c).items[0].fields.channel).toEqual({
+      id: '100000000000000002',
+      fix: true,
+    });
+    expect(reviewSummary(d, new Set(['welcome']), c).changed).toEqual(['chat']);
   });
 });
 

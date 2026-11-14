@@ -481,12 +481,10 @@ function everyoneCan(guild, channel, flag) {
  */
 function rolesThatSee(guild, channel, skip = []) {
   try {
-    const skipIds = new Set(skip.filter(Boolean));
-    for (const id of botMember(guild)?.roles?.cache?.keys?.() ?? []) skipIds.add(id);
+    const skipIds = skipSet(guild, skip);
     const out = [];
     for (const role of guild.roles.cache.values()) {
-      if (role.id === rawGuildId(guild) || role.managed || skipIds.has(role.id)) continue;
-      if (role.permissions?.has?.('Administrator')) continue;
+      if (role.id === rawGuildId(guild) || isIgnoredRole(role, skipIds)) continue;
       if (channel?.permissionsFor?.(role)?.has('ViewChannel')) out.push(role);
     }
     return out;
@@ -494,6 +492,21 @@ function rolesThatSee(guild, channel, skip = []) {
     return [];
   }
 }
+
+/** The role ids that never count as "can see it": the ones asked for and Sylo's own roles. */
+function skipSet(guild, skip) {
+  const ids = new Set(skip.filter(Boolean));
+  for (const id of botMember(guild)?.roles?.cache?.keys?.() ?? []) ids.add(id);
+  return ids;
+}
+
+/**
+ * A role that is left alone when a channel is made private, and does not count as seeing it: one in `skipIds`
+ * (the staff role, Sylo's own roles), a role that belongs to an integration (another bot), or one with
+ * Administrator (it sees everything whatever the overwrites say).
+ */
+const isIgnoredRole = (role, skipIds) =>
+  skipIds.has(role.id) || Boolean(role.managed) || Boolean(role.permissions?.has?.('Administrator'));
 
 const roleNames = (roles) =>
   roles.length > 3
@@ -551,6 +564,17 @@ async function currentState(guild, spec) {
   if (spec.module)
     return { config: (await getGuildModule(guild.id, spec.module)).config ?? {}, settings: null };
   return { config: {}, settings: await getGuildSettings(guild.id) };
+}
+
+/** Above this many channel-by-role checks the proposal leaves out who can see each channel (the apply still warns). */
+const EXPOSURE_BUDGET = 30_000;
+
+/** Who can see a channel besides the admins and Sylo: @everyone, and the roles that can. */
+function exposureOf(guild, channel) {
+  return {
+    everyone: everyoneCan(guild, channel, 'ViewChannel') === true,
+    roles: rolesThatSee(guild, channel, []).map((r) => ({ id: r.id, name: r.name })),
+  };
 }
 
 /** The channel or role that already has the name "Create" would give, and how it differs from the promise. */
@@ -628,6 +652,7 @@ export async function suggestSetup(guild) {
                   : null,
           viewer: Boolean(field.viewer),
           viewerOnly: Boolean(field.viewerOnly),
+          staffOnly: Boolean(field.staffOnly),
           create: field.create
             ? {
                 name: field.create.name,
@@ -651,7 +676,17 @@ export async function suggestSetup(guild) {
     // null: the platform cannot say, so Sylo tries and reports what the platform answers.
     botCan: { createChannels: botHas(guild, 'ManageChannels'), createRoles: botHas(guild, 'ManageRoles') },
     goals: GOALS,
-    channels: channels.map((c) => ({ ...c, problem: postProblem(guild, guild.channels.cache.get(c.id)) })),
+    channels: channels.map((c) => {
+      const channel = guild.channels.cache.get(c.id);
+      return {
+        ...c,
+        problem: postProblem(guild, channel),
+        // Who can see it, so a staff-only field can warn about a channel the admin picks by hand.
+        ...(channels.length * (guild.roles?.cache?.size ?? 0) <= EXPOSURE_BUDGET
+          ? { exposure: exposureOf(guild, channel) }
+          : {}),
+      };
+    }),
     roles: roles.map((r) => ({ ...r, problem: giveProblem(guild, guild.roles.cache.get(r.id)) })),
     items,
   };
@@ -707,18 +742,24 @@ function overwritesFor(guild, access, viewerRoleId = '') {
   return [everyone, viewer, bot].filter(Boolean);
 }
 
-/** The overwrites of a channel that are for a role other than @everyone, Sylo and the viewer, and allow View. */
-function viewGrants(guild, channel, keep) {
+/**
+ * The role overwrites of a channel that allow View, for a role that is not @everyone, not in `skipIds`, not an
+ * integration's and not an Administrator role (those keep their access, as in rolesThatSee).
+ * @returns {Array<{ id: string, name: string }>}
+ */
+function viewGrants(guild, channel, skipIds) {
   const out = [];
   try {
     for (const ov of channel.permissionOverwrites?.cache?.values?.() ?? []) {
-      if (keep.has(ov.id) || ov.id === rawGuildId(guild)) continue;
+      if (ov.id === rawGuildId(guild)) continue;
       if (ov.type !== undefined && ov.type !== 0 && ov.type !== 'role') continue; // a member, not a role
+      const role = guild.roles.cache.get(ov.id);
+      if (role ? isIgnoredRole(role, skipIds) : skipIds.has(ov.id)) continue;
       const allows =
         typeof ov.allow?.has === 'function'
           ? ov.allow.has('ViewChannel')
           : (BigInt(ov._allow ?? 0n) & PermissionFlagsBits.ViewChannel) !== 0n;
-      if (allows) out.push(ov.id);
+      if (allows) out.push({ id: ov.id, name: role?.name ?? ov.id });
     }
   } catch {
     // The platform does not list them: the check afterwards still looks at every role.
@@ -727,14 +768,33 @@ function viewGrants(guild, channel, keep) {
 }
 
 /**
- * Change an existing channel's overwrites to what the wizard promises, one edit at a time; `onEdit` is called
- * after each edit that was made, so a failure halfway can still say what changed. Flags Sylo does not hold
- * itself are left out (the platform refuses an overwrite for a permission the bot lacks). Sylo's own access is
- * set first. A private channel ends up closed to every role but the viewer: @everyone is denied, and a role
- * overwrite that allows View is cleared; if any other role can still see it afterwards this throws, so a channel
- * is never called private when it is not.
+ * The channel as the platform has it now. An overwrite edit does not update discord.js's cache (the update
+ * arrives later through the gateway), so a check after the edits needs a forced fetch; Fluxer's SDK updates
+ * its cache when it edits, and its compat fetch answers from that cache.
  */
-async function fixAccess(guild, channelId, access, viewerRoleId, reason, onEdit = () => {}) {
+async function freshChannel(guild, channelId) {
+  const fetched = await guild.channels.fetch(channelId, { force: true }).catch(() => null);
+  return fetched ?? guild.channels.cache.get(channelId);
+}
+
+/**
+ * Change an existing channel's overwrites to what the wizard promises, one edit at a time; `onEdit` is called
+ * after each edit that was made, so a failure halfway can still say what changed, and `onClear` with the name of
+ * each role whose View overwrite was removed. Flags Sylo does not hold itself are left out (the platform
+ * refuses an overwrite for a permission the bot lacks). Sylo's own access is set first. A private channel ends up
+ * closed to every role but the viewer: @everyone is denied, and a role overwrite that allows View is cleared
+ * (not Sylo's, another bot's or an Administrator role's); the channel is then read again from the platform, and
+ * if any other role can still see it this throws, so a channel is never called private when it is not.
+ */
+async function fixAccess(
+  guild,
+  channelId,
+  access,
+  viewerRoleId,
+  reason,
+  onEdit = () => {},
+  onClear = () => {}
+) {
   const channel = guild.channels.cache.get(channelId);
   const everyone = rawGuildId(guild);
   const me = botMember(guild);
@@ -748,10 +808,14 @@ async function fixAccess(guild, channelId, access, viewerRoleId, reason, onEdit 
   if (access === 'private') {
     await edit(everyone, { ViewChannel: false });
     if (viewerRoleId) await edit(viewerRoleId, { ViewChannel: true, ReadMessageHistory: true });
-    const keep = new Set([viewerRoleId, me?.id].filter(Boolean));
-    for (const id of viewGrants(guild, channel, keep)) await edit(id, { ViewChannel: null });
-    const still = rolesThatSee(guild, channel, [viewerRoleId]);
-    if (everyoneCan(guild, channel, 'ViewChannel') === true || still.length) {
+    const skipIds = skipSet(guild, [viewerRoleId, me?.id]);
+    for (const grant of viewGrants(guild, channel, skipIds)) {
+      await edit(grant.id, { ViewChannel: null });
+      onClear(grant.name);
+    }
+    const now = await freshChannel(guild, channelId);
+    const still = rolesThatSee(guild, now, [viewerRoleId]);
+    if (everyoneCan(guild, now, 'ViewChannel') === true || still.length) {
       throw new Error(
         `#${channel.name} is still not private: ${
           still.length ? `members with the ${roleNames(still)} role${still.length > 1 ? 's' : ''}` : 'members'
@@ -771,6 +835,12 @@ async function fixAccess(guild, channelId, access, viewerRoleId, reason, onEdit 
 const fail = (res, message) => Object.assign(res, { status: 'failed', message });
 const label = (kind, name) => (kind === 'channel' ? `#${name}` : name);
 const list = (things) => things.map((t) => label(t.kind, t.name)).join(', ');
+/** " (View removed from the roles A and B)" for a channel whose permissions were changed. */
+const clearedNote = (t) =>
+  t.cleared?.length
+    ? ` (View removed from the role${t.cleared.length > 1 ? 's' : ''} ${t.cleared.join(', ')})`
+    : '';
+const listChanged = (things) => things.map((t) => `${label(t.kind, t.name)}${clearedNote(t)}`).join(', ');
 
 /**
  * Apply the admin's choices, one item at a time. Everything that can be checked is checked before the first
@@ -812,7 +882,7 @@ export async function applySetup({ guild, selections, actor }) {
     if (res.status === 'failed' && (res.created.length || res.changed.length)) {
       const parts = [];
       if (res.created.length) parts.push(`created ${list(res.created)}`);
-      if (res.changed.length) parts.push(`changed who can see or post in ${list(res.changed)}`);
+      if (res.changed.length) parts.push(`changed who can see or post in ${listChanged(res.changed)}`);
       res.message += ` Before it stopped, Sylo ${parts.join(' and ')}. That was left in place; check it in your server and undo it if you do not want it.`;
     }
   }
@@ -864,6 +934,16 @@ export async function applySetup({ guild, selections, actor }) {
         if (why) return fail(res, `${field.label}: ${why}`);
       }
       resolved[field.key] = id;
+    }
+
+    // A staff-only channel the admin picked by hand: said in the result if others can see it (the admin
+    // chose it, so it is saved), unless the admin ticked the change of its permissions.
+    for (const field of spec.fields) {
+      const pick = sel.fields?.[field.key];
+      if (!field.staffOnly || !resolved[field.key] || pick?.fix === true) continue;
+      const picked = guild.channels.cache.get(resolved[field.key]);
+      const gap = accessGap(guild, picked, 'private', [viewerKey ? resolved[viewerKey] : '']);
+      if (gap) res.warnings.push(`#${picked?.name ?? ''}: ${gap} What Sylo posts there is not private.`);
     }
 
     // 2. A channel or role of the wanted name that is already there is used instead of a second one, but only
@@ -975,22 +1055,30 @@ export async function applySetup({ guild, selections, actor }) {
     for (const field of fixes) {
       const id = resolved[field.key];
       const channel = guild.channels.cache.get(id);
-      const entry = { kind: 'channel', name: channel?.name ?? id, id };
+      const entry = { kind: 'channel', name: channel?.name ?? id, id, cleared: [] };
       let touched = false;
       let done = false;
       try {
-        await fixAccess(guild, id, field.create.access, viewerKey ? resolved[viewerKey] : '', reason, () => {
-          // The first edit that was made: the change is on record from then on, even if a later one fails.
-          if (!touched) res.changed.push(entry);
-          touched = true;
-        });
+        await fixAccess(
+          guild,
+          id,
+          field.create.access,
+          viewerKey ? resolved[viewerKey] : '',
+          reason,
+          () => {
+            // The first edit that was made: the change is on record from then on, even if a later one fails.
+            if (!touched) res.changed.push(entry);
+            touched = true;
+          },
+          (name) => entry.cleared.push(name)
+        );
         done = true;
       } finally {
         if (touched) {
           await recordAudit(guild.id, {
             actor,
             action: 'setup:channel',
-            detail: `${done ? 'changed' : 'partly changed'} who can see or post in #${entry.name} to ${ACCESS_WORDS[field.create.access]} for ${spec.name} (setup wizard)`,
+            detail: `${done ? 'changed' : 'partly changed'} who can see or post in #${entry.name} to ${ACCESS_WORDS[field.create.access]}${clearedNote(entry)} for ${spec.name} (setup wizard)`,
             change: NO_CHANGE,
           }).catch((err) => log.warn('setup', 'audit of a permission change failed:', err.message));
         }
@@ -1014,7 +1102,7 @@ export async function applySetup({ guild, selections, actor }) {
     const extras = [
       res.created.length ? `created ${list(res.created)}` : '',
       res.reused.length ? `used the existing ${list(res.reused)}` : '',
-      res.changed.length ? `changed the permissions of ${list(res.changed)}` : '',
+      res.changed.length ? `changed the permissions of ${listChanged(res.changed)}` : '',
     ].filter(Boolean);
     const detailEnd = extras.length ? `; ${extras.join('; ')}` : '';
     if (!spec.module) {
@@ -1045,7 +1133,7 @@ export async function applySetup({ guild, selections, actor }) {
     const said = [
       res.created.length ? `Created ${list(res.created)}.` : '',
       res.reused.length ? `Used the existing ${list(res.reused)}.` : '',
-      res.changed.length ? `Changed the permissions of ${list(res.changed)}.` : '',
+      res.changed.length ? `Changed the permissions of ${listChanged(res.changed)}.` : '',
     ].filter(Boolean);
     res.message = ['Set up.', ...said].join(' ');
   }

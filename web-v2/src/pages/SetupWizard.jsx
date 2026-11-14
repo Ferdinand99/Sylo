@@ -150,7 +150,7 @@ function accessPhrase(create) {
   return 'read-only for members';
 }
 
-function PickField({ item, field, pick, data, disabled: disabledByItem, viewerUnused, onChange }) {
+function PickField({ item, field, pick, choice, data, disabled: disabledByItem, viewerUnused, onChange }) {
   // A role only for who may see a channel does nothing unless the channel is created or its permissions change.
   const disabled = disabledByItem || viewerUnused;
   const pool = field.kind === 'channel' ? data.channels : data.roles;
@@ -171,7 +171,8 @@ function PickField({ item, field, pick, data, disabled: disabledByItem, viewerUn
           : '';
   // A channel the admin picked that is not what the wizard promises (the one with the name Create would give, or
   // the one found by name that others can see): its permissions are only changed when the admin ticks the box.
-  const fixing = pick.id && field.kind === 'channel' ? fixableChannel(field, pick.id) : null;
+  const fixing =
+    pick.id && field.kind === 'channel' ? fixableChannel(field, pick.id, { data, item, choice }) : null;
   const unsafe = field.unsafeMatch && !pick.id && !creating ? field.unsafeMatch : null;
   return (
     <div className="v2-field v2-setup-field">
@@ -293,7 +294,8 @@ function ItemCard({ data, item, choice, setChoice }) {
           data={data}
           pick={choice.fields[field.key]}
           disabled={!choice.on}
-          viewerUnused={Boolean(field.viewerOnly) && !viewerActive(item, choice)}
+          choice={choice}
+          viewerUnused={Boolean(field.viewerOnly) && !viewerActive(item, choice, data)}
           onChange={(pick) => setChoice({ ...choice, fields: { ...choice.fields, [field.key]: pick } })}
         />
       ))}

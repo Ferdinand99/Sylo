@@ -1,17 +1,17 @@
 // JSON API for the setup wizard: the proposal for this server and applying the admin's choices.
 //
-// Mounted at /guilds/:guildId AFTER the admin guard in v2Api.js, so req.guild is set, the caller manages
-// this server and the state-changing call has passed the CSRF check (and the role-grant guard that
-// remembers who is saving, for the module write path).
-import { Router } from 'express';
+// Mounted at /guilds/:guildId in v2Api.js behind the access guard, so req.guild is set, the caller has a
+// dashboard level, and the state-changing call has passed the CSRF check and the role-grant guard that
+// remembers who is saving (for the module write path).
 import { currentUser } from '../middleware/auth.js';
+import { accessRouter } from '../middleware/access.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { platformActionKey, rateLimit } from '../middleware/rateLimit.js';
 import { applySetup, setupItemIds, suggestSetup } from '../lib/setupWizard.js';
 
-// Both routes are for someone who may change the server's settings (today: the guild admin guard they are
-// mounted behind). One router, two routes, so an access-level wrapper can take the whole file at once.
-const router = Router({ mergeParams: true });
+// Reading the proposal needs View; applying (it creates channels and roles and saves modules) needs Edit.
+// The levels are in src/web/lib/routeAccess.js.
+const router = accessRouter('/guilds/:guildId', { mergeParams: true });
 
 const actor = (req) => (currentUser(req)?.open ? 'Dashboard' : `${currentUser(req).name} (dashboard)`);
 

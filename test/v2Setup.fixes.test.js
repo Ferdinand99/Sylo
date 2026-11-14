@@ -39,22 +39,33 @@ let failEditAt = 0; // the number of the edit that throws (0: none)
  * overwrites that allow View; `stuck` are role ids whose overwrite cannot be changed.
  */
 function channelOf(id, name, everyone, extra = {}) {
+  // What the platform has (`live`) and what the bot's cache shows (`seen`). Like discord.js, an overwrite edit
+  // changes only the platform's copy; the cache catches up with a forced fetch (or the gateway, later).
+  const live = {
+    everyone,
+    hidden: Boolean(extra.hidden),
+    roleAllow: new Map(Object.entries(extra.roleAllow ?? {})),
+  };
+  const copy = () => ({ everyone: live.everyone, hidden: live.hidden, roleAllow: new Map(live.roleAllow) });
   const channel = {
     id,
     name,
     type: ChannelType.GuildText,
     rawPosition: 50,
     guild: app.guild,
-    everyone,
-    hidden: Boolean(extra.hidden),
-    roleAllow: new Map(Object.entries(extra.roleAllow ?? {})),
+    live,
+    seen: copy(),
+    refresh: () => {
+      channel.seen = copy();
+    },
     isTextBased: () => true,
     permissionsFor: (who) => {
-      if (who === app.guild.roles.everyone) return new PermissionsBitField(channel.everyone);
+      const now = channel.seen;
+      if (who === app.guild.roles.everyone) return new PermissionsBitField(now.everyone);
       if (who?.permissions && who !== app.guild.members.me) {
-        let bits = channel.everyone;
-        if (who.grantsView && !channel.hidden) bits |= F.ViewChannel;
-        bits |= channel.roleAllow.get(who.id) ?? 0n;
+        let bits = now.everyone;
+        if (who.grantsView && !now.hidden) bits |= F.ViewChannel;
+        bits |= now.roleAllow.get(who.id) ?? 0n;
         return new PermissionsBitField(bits);
       }
       return new PermissionsBitField(PermissionsBitField.All);
@@ -62,7 +73,7 @@ function channelOf(id, name, everyone, extra = {}) {
     permissionOverwrites: {
       get cache() {
         return new Map(
-          [...channel.roleAllow].map(([rid, bits]) => [
+          [...channel.seen.roleAllow].map(([rid, bits]) => [
             rid,
             { id: rid, type: 0, allow: { has: (flag) => (bits & F[flag]) !== 0n } },
           ])
@@ -74,14 +85,14 @@ function channelOf(id, name, everyone, extra = {}) {
         edits.push({ channel: id, target: tid, opts });
         if (tid === GID) {
           for (const [flag, on] of Object.entries(opts)) {
-            if (on === false) channel.everyone &= ~F[flag];
-            if (on === true) channel.everyone |= F[flag];
+            if (on === false) live.everyone &= ~F[flag];
+            if (on === true) live.everyone |= F[flag];
           }
-          if (opts.ViewChannel === false) channel.hidden = true;
-          if (opts.ViewChannel === true) channel.hidden = false;
+          if (opts.ViewChannel === false) live.hidden = true;
+          if (opts.ViewChannel === true) live.hidden = false;
         } else if (!extra.stuck?.includes(tid)) {
-          if (opts.ViewChannel === true) channel.roleAllow.set(tid, F.ViewChannel);
-          else if ('ViewChannel' in opts) channel.roleAllow.delete(tid);
+          if (opts.ViewChannel === true) live.roleAllow.set(tid, F.ViewChannel);
+          else if ('ViewChannel' in opts) live.roleAllow.delete(tid);
         }
       },
     },
@@ -120,6 +131,12 @@ function dropByName(cache, name) {
 test.before(async () => {
   app = await startWebApp();
   api = v2Open(app, GID);
+  // Like discord.js: a forced fetch brings the cache up to date; without force the cached channel is answered.
+  app.guild.channels.fetch = async (id, opts) => {
+    const channel = app.guild.channels.cache.get(id) ?? null;
+    if (channel && opts?.force) channel.refresh();
+    return channel;
+  };
   app.guild.channels.create = async (opts) => {
     entered?.();
     if (gate) await gate;
@@ -389,9 +406,9 @@ test('"change its permissions" closes the channel to every role but the staff ro
     edits.some((e) => e.target === members && e.opts.ViewChannel === null),
     'the allow overwrite of the Members role is cleared'
   );
-  assert.ok(channel.roleAllow.has(staff));
+  assert.ok(channel.live.roleAllow.has(staff));
   assert.ok(
-    !channel.roleAllow.has(members),
+    !channel.live.roleAllow.has(members),
     'no role but the staff role (and Sylo) keeps an allow overwrite'
   );
   assert.match(r.message, /Changed the permissions of #server-log/);
@@ -465,4 +482,86 @@ test('a role picked only to see the channel is never ignored silently: it is use
   assert.equal(r.status, 'applied', r.message);
   assert.deepEqual(edits, [], 'no permission was changed: the admin did not tick it');
   assert.match(r.warnings.join(' '), /Support team was not given access to the channel/);
+});
+
+test('on a server that hides channels behind a role, closing a channel works: the check reads the channel fresh from the platform', async () => {
+  clean();
+  addRole('Verified', { grantsView: true });
+  // No overwrites: @everyone cannot see it at role level, Verified can. Only a forced fetch shows the result of
+  // the @everyone deny; the cached copy still says Verified can see the channel.
+  const id = addChannel('server-log', F.SendMessages);
+  const channel = app.guild.channels.cache.get(id);
+  const [r] = await run([logging({ channel: { create: true, fix: true } })]);
+  assert.equal(r.status, 'applied', r.message);
+  assert.equal(channel.live.hidden, true);
+  assert.equal(channel.seen.hidden, true, 'the cache was refreshed by the check');
+});
+
+test("closing a channel leaves other bots, Sylo's roles and Administrator roles alone, and names the roles it cleared", async () => {
+  clean();
+  const members = addRole('Members');
+  const bot = addRole('Ticket bot', { managed: true });
+  const boss = addRole('Boss', { permissions: new PermissionsBitField(F.Administrator) });
+  const sylo = addRole('Sylo');
+  app.guild.members.me.roles.cache = new Map([[sylo, {}]]);
+  const id = addChannel('server-log', F.ViewChannel | F.SendMessages, {
+    roleAllow: {
+      [members]: F.ViewChannel,
+      [bot]: F.ViewChannel,
+      [boss]: F.ViewChannel,
+      [sylo]: F.ViewChannel,
+    },
+  });
+  const channel = app.guild.channels.cache.get(id);
+  try {
+    const [r] = await run([logging({ channel: { create: true, fix: true } })]);
+    assert.equal(r.status, 'applied', r.message);
+    assert.deepEqual(
+      edits.filter((e) => e.opts.ViewChannel === null).map((e) => e.target),
+      [members],
+      'only the Members role was cleared'
+    );
+    for (const keep of [bot, boss, sylo]) assert.ok(channel.live.roleAllow.has(keep), 'kept');
+    assert.deepEqual(r.changed[0].cleared, ['Members']);
+    assert.match(
+      r.message,
+      /Changed the permissions of #server-log \(View removed from the role Members\)\./
+    );
+    assert.match((await auditRows(GID, 'setup:channel'))[0].detail, /\(View removed from the role Members\)/);
+  } finally {
+    delete app.guild.members.me.roles.cache;
+    for (const name of ['Ticket bot', 'Boss', 'Sylo']) dropByName(app.guild.roles.cache, name);
+  }
+});
+
+test('a staff-only channel the admin picks by hand gets the same warning as a proposed one', async () => {
+  clean();
+  const everyoneSees = addChannel('general-chat', F.ViewChannel | F.SendMessages);
+  addRole('Verified', { grantsView: true });
+  const gated = addChannel('team-chat', F.SendMessages);
+  const proposal = await (await api.get('/setup/suggest')).json();
+  const seen = (id) => proposal.channels.find((c) => c.id === id).exposure;
+  assert.deepEqual(seen(everyoneSees), { everyone: true, roles: seen(everyoneSees).roles });
+  assert.deepEqual(
+    seen(gated).roles.map((r) => r.name),
+    ['Verified']
+  );
+  assert.equal(seen(gated).everyone, false);
+  assert.equal(
+    field(
+      proposal.items.find((i) => i.id === 'logging'),
+      'channel'
+    ).staffOnly,
+    true
+  );
+
+  const [r] = await run([logging({ channel: { id: everyoneSees } })]);
+  assert.equal(r.status, 'applied', 'the admin chose it, so it is saved');
+  assert.match(
+    r.warnings.join(' '),
+    /#general-chat: Everyone can see it\. What Sylo posts there is not private\./
+  );
+  const [fixed] = await run([logging({ channel: { id: everyoneSees, fix: true } })]);
+  assert.equal(fixed.status, 'applied', fixed.message);
+  assert.deepEqual(fixed.warnings, [], 'no warning when the permission change was ticked');
 });
