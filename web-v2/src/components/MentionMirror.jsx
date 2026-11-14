@@ -71,8 +71,17 @@ export function syncMirror(field, mirror, { bare = false } = {}) {
     mirror.style.borderWidth = '0';
   } else {
     mirror.scrollTop = field.scrollTop;
+    mirror.scrollLeft = field.scrollLeft;
   }
 }
+
+// A parent that passes no channels, roles or members gets one shared value, so a render of the parent does
+// not hand the mirror new arrays and make it lay out again.
+const NONE = [];
+const NO_MEMBERS = new Map();
+
+/** The text as the field holds it: a textarea keeps a line break as one \n, however it was stored. */
+const lineFeeds = (value) => String(value ?? '').replace(/\r\n?/g, '\n');
 
 const same = (a, b) =>
   a.length === b.length &&
@@ -99,17 +108,27 @@ const same = (a, b) =>
  * Both are hidden from assistive technology (the field is what is read) and are not drawn at all in
  * forced colours mode, where the field shows its text as it is.
  */
-export default function MentionMirror({ field, value, channels = [], roles = [], members = new Map() }) {
+export default function MentionMirror({ field, value, channels = NONE, roles = NONE, members = NO_MEMBERS }) {
   const mirrorRef = useRef(null);
   const namesRef = useRef(null);
   const innerRef = useRef(null);
   const [spots, setSpots] = useState([]);
 
+  const text = lineFeeds(value);
   const parts = useMemo(
-    () => mirrorParts(value, { channels, roles, members }),
-    [value, channels, roles, members]
+    () => mirrorParts(text, { channels, roles, members }),
+    [text, channels, roles, members]
   );
   const mentions = parts.filter((p) => p.kind === 'mention');
+  // What the layers show, as one key: the text and the names are what move a letter.
+  const layoutKey = `${text}\u0000${mentions.map((m) => `${m.type}:${m.label}`).join('\u0001')}`;
+
+  /** The names move with the mirror's scroll, in both directions. */
+  const slide = () => {
+    const mirror = mirrorRef.current;
+    if (!mirror || !innerRef.current) return;
+    innerRef.current.style.transform = `translate(${-mirror.scrollLeft}px, ${-mirror.scrollTop}px)`;
+  };
 
   /** Lay both layers over the field, then find where each token ended up. */
   const lay = () => {
@@ -119,21 +138,30 @@ export default function MentionMirror({ field, value, channels = [], roles = [],
     if (!mirror) return;
     // The names are placed in the content of the mirror and slid by its scroll, so they cannot be limited
     // by how far a layer with so little in it can scroll.
-    if (innerRef.current) innerRef.current.style.transform = `translateY(${-mirror.scrollTop}px)`;
+    slide();
     const origin = mirror.getBoundingClientRect();
     const found = [...mirror.querySelectorAll('[data-token]')].map((el) => {
       const r = el.getClientRects()[0];
       return r
-        ? { x: r.left - origin.left, y: r.top - origin.top + mirror.scrollTop, w: r.width, h: r.height }
+        ? {
+            x: r.left - origin.left + mirror.scrollLeft,
+            y: r.top - origin.top + mirror.scrollTop,
+            w: r.width,
+            h: r.height,
+          }
         : null;
     });
     setSpots((prev) => (same(prev, found) ? prev : found));
   };
 
-  // Every render that can change what or where the text is (the text, the names, the field's class).
+  // Only a change that can move a letter lays the layers out again: the text, the names, the field's class.
+  // A render for any other reason (a keystroke in another field of the form) costs nothing; a new width, a
+  // new font or a new theme comes through the observers below.
   useLayoutEffect(() => {
     lay();
-  });
+    // `lay` reads the field and the refs; the key stands for the props it draws
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [field, layoutKey, field?.className]);
 
   useEffect(() => {
     if (!field) return undefined;
@@ -141,7 +169,8 @@ export default function MentionMirror({ field, value, channels = [], roles = [],
       const mirror = mirrorRef.current;
       if (!mirror) return;
       mirror.scrollTop = field.scrollTop;
-      if (innerRef.current) innerRef.current.style.transform = `translateY(${-mirror.scrollTop}px)`;
+      mirror.scrollLeft = field.scrollLeft;
+      slide();
     };
     const onSize = () => lay();
     field.addEventListener('scroll', onScroll, { passive: true });
@@ -157,7 +186,21 @@ export default function MentionMirror({ field, value, channels = [], roles = [],
     const fonts = document.fonts;
     fonts?.ready?.then(onSize);
     fonts?.addEventListener?.('loadingdone', onSize);
+    // The field's text colour is copied to the layer, so a switch of theme (the toggle sets `data-theme` on
+    // the page, and "auto" follows the system) has to copy it again, or the letters keep the old colour.
+    let themeObserver;
+    if (typeof MutationObserver !== 'undefined') {
+      themeObserver = new MutationObserver(onSize);
+      themeObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['data-theme', 'class'],
+      });
+    }
+    const scheme = window.matchMedia?.('(prefers-color-scheme: dark)');
+    scheme?.addEventListener?.('change', onSize);
     return () => {
+      themeObserver?.disconnect();
+      scheme?.removeEventListener?.('change', onSize);
       field.removeEventListener('scroll', onScroll);
       observer?.disconnect();
       window.removeEventListener('resize', onSize);
@@ -169,7 +212,7 @@ export default function MentionMirror({ field, value, channels = [], roles = [],
 
   // A text that ends in a line break shows an empty last line in a field, but a block of text only
   // does when something follows the break.
-  const endsInBreak = /\n$/.test(String(value ?? ''));
+  const endsInBreak = text.endsWith('\n');
 
   let n = -1;
   return (
