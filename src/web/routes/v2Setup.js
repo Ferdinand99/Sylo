@@ -75,7 +75,9 @@ router.post(
     // Changing the permissions of a channel that exists is something the bot does with its own rights:
     // the person asking must be allowed to do it on the platform (live check; the owner and Administrators
     // always are). Creating new channels with the wizard's overwrites stays open to Edit.
-    const wantsFix = selections.some((s) => Object.values(s.fields).some((pick) => pick.fix === true && !pick.create));
+    const wantsFix = selections.some((s) =>
+      Object.values(s.fields).some((pick) => pick.fix === true && !pick.create)
+    );
     if (wantsFix && !((await actorHolds(req, 'ManageChannels')) && (await actorHolds(req, 'ManageRoles')))) {
       return res.status(403).json({
         error: "You need Manage Channels and Manage Roles in this server to change a channel's permissions.",

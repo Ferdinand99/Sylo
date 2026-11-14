@@ -17,6 +17,7 @@ export const memberCacheIsCurrent = (guild) =>
  * @returns {Promise<import('discord.js').GuildMember>}
  */
 export async function liveMember(guild, userId) {
-  if (memberCacheIsCurrent(guild)) return guild.members.cache.get(userId) ?? (await guild.members.fetch(userId));
+  if (memberCacheIsCurrent(guild))
+    return guild.members.cache.get(userId) ?? (await guild.members.fetch(userId));
   return guild.members.fetch({ user: userId, force: true });
 }

@@ -55,7 +55,10 @@ async function signedIn(top, perms = ['ManageGuild']) {
 }
 
 const sell = (role, extra = {}) =>
-  createItem(D_GUILD, normaliseItem({ name: `${role.name} pass`, price: 50, type: 'role', roleId: role.id, ...extra }));
+  createItem(
+    D_GUILD,
+    normaliseItem({ name: `${role.name} pass`, price: 50, type: 'role', roleId: role.id, ...extra })
+  );
 const cash = async () => Number((await getAccount(D_GUILD, TARGET))?.cash ?? 0);
 
 test.beforeEach(async () => {

@@ -32,7 +32,11 @@ function world() {
     comparePositionTo: (o) => 2 - o.position,
   };
   // The cached member predates the grant; the platform's copy has the role.
-  const cached = { id: USER, user: { id: USER }, roles: { cache: new Map(), add: async () => {}, remove: async () => {} } };
+  const cached = {
+    id: USER,
+    user: { id: USER },
+    roles: { cache: new Map(), add: async () => {}, remove: async () => {} },
+  };
   const live = {
     id: USER,
     user: { id: USER },
@@ -60,7 +64,11 @@ function world() {
       fetch: async (arg) => (arg && typeof arg === 'object' && arg.force ? live : (members.get(arg) ?? live)),
     },
   };
-  const client = { isReady: () => true, guilds: { cache: new Map([[GID, guild]]) }, users: { fetch: async () => null } };
+  const client = {
+    isReady: () => true,
+    guilds: { cache: new Map([[GID, guild]]) },
+    users: { fetch: async () => null },
+  };
   guild.client = client;
   runtime.clients.discord = client;
   return { guild, calls };
@@ -71,7 +79,14 @@ afterEach(async () => {
   runtime.clients.discord = null;
 });
 
-const due = () => putTempRole({ guildId: GID, userId: USER, roleId: ROLE, expiresAt: Date.now() - 1000, createdAt: Date.now() - 60_000 });
+const due = () =>
+  putTempRole({
+    guildId: GID,
+    userId: USER,
+    roleId: ROLE,
+    expiresAt: Date.now() - 1000,
+    createdAt: Date.now() - 60_000,
+  });
 
 test('the intent is off in this run', () => {
   assert.equal(config.intentGuildMembers, false);

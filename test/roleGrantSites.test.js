@@ -160,6 +160,8 @@ test('moduleGrantSites tells the same role apart by where it is handed out', () 
     moduleGrantSites('custom-commands', {
       commands: [{ id: '1', actions: [{ type: 'add-role', roleId: '5' }], allowedRoles: ['9'] }],
     }),
-    moduleGrantSites('custom-commands', { commands: [{ id: '1', actions: [{ type: 'add-role', roleId: '5' }] }] })
+    moduleGrantSites('custom-commands', {
+      commands: [{ id: '1', actions: [{ type: 'add-role', roleId: '5' }] }],
+    })
   );
 });

@@ -142,7 +142,10 @@ router.get(
     }
     // A feed URL can carry a token: below Edit the stored copies show only each feed's origin, as the RSS page does.
     const hideFeeds = (side) =>
-      target?.kind === 'module' && target.id === 'rss' && !requestCan(req, 'edit') && Array.isArray(side?.feeds)
+      target?.kind === 'module' &&
+      target.id === 'rss' &&
+      !requestCan(req, 'edit') &&
+      Array.isArray(side?.feeds)
         ? { ...side, feeds: side.feeds.map(maskFeedUrl) }
         : side;
     res.json({

@@ -94,7 +94,10 @@ export function moduleGrantSites(moduleId, cfg = {}) {
         ),
       ];
     case 'leveling':
-      return list(cfg.rewards).map((r) => ({ roleId: String(r?.roleId ?? ''), site: `level:${r?.level ?? ''}` }));
+      return list(cfg.rewards).map((r) => ({
+        roleId: String(r?.roleId ?? ''),
+        site: `level:${r?.level ?? ''}`,
+      }));
     case 'verification':
       return [{ roleId: String(cfg.verifiedRoleId ?? ''), site: `verified:${cfg.channelId ?? ''}` }];
     case 'birthdays':
@@ -160,7 +163,12 @@ async function checkNewGrants(before, after) {
   if (!req?.guild) return; // the bot's own writes
   const entry = (g) => (typeof g === 'string' ? { roleId: g, site: '' } : g);
   const keyOf = (g) => JSON.stringify([g.roleId, g.site]);
-  const had = new Set(before.map(entry).filter((g) => g.roleId).map(keyOf));
+  const had = new Set(
+    before
+      .map(entry)
+      .filter((g) => g.roleId)
+      .map(keyOf)
+  );
   const added = after.map(entry).filter((g) => g.roleId && !had.has(keyOf(g)));
   const roleIds = [...new Set(added.map((g) => g.roleId))];
   const roles = roleIds.map((id) => req.guild.roles.cache.get(id)).filter(Boolean);
@@ -199,7 +207,9 @@ async function checkPingRaise(moduleId, prev, next) {
   const level = (cfg) => reach.rank[cfg?.[reach.field]] ?? 0;
   if (level(next) <= level(prev)) return;
   if (await holdsManageServerLive(guildKey(req.guild), userIdForGuild(req, req.guild.id))) return;
-  throw new RoleGrantError('Only the server owner or someone with Manage Server can make giveaways ping @here or @everyone.');
+  throw new RoleGrantError(
+    'Only the server owner or someone with Manage Server can make giveaways ping @here or @everyone.'
+  );
 }
 
 /**

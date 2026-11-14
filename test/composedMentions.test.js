@@ -68,9 +68,12 @@ test.afterEach(() => {
 test('a composed payload mentions roles only when the caller says so', () => {
   const { payload } = buildPayload({ content: TEXT });
   assert.deepEqual(payload.allowedMentions, { parse: ['users'] });
-  assert.deepEqual(buildPayload({ content: TEXT }, { allowedMentions: { parse: [] } }).payload.allowedMentions, {
-    parse: [],
-  });
+  assert.deepEqual(
+    buildPayload({ content: TEXT }, { allowedMentions: { parse: [] } }).payload.allowedMentions,
+    {
+      parse: [],
+    }
+  );
 });
 
 test('the reminder Test send is silent while the server has not allowed reminder pings', async () => {

@@ -26,7 +26,11 @@ async function person({ view }) {
   const cache = new Map(view ? [[VIEW, { id: VIEW }]] : []);
   cache.hasAny = (...ids) => ids.some((r) => cache.has(r));
   cache.some = (fn) => [...cache.values()].some(fn);
-  guild.members.cache.set(id, { id, permissions: { has: () => false }, roles: { highest: { position: 1 }, cache } });
+  guild.members.cache.set(id, {
+    id,
+    permissions: { has: () => false },
+    roles: { highest: { position: 1 }, cache },
+  });
   return (path) => b.get(`/api/v2/guilds/${D_GUILD}${path}`, { headers: { accept: 'application/json' } });
 }
 
@@ -39,7 +43,19 @@ test.before(async () => {
     detail: 'settings saved',
     change: {
       before: { feeds: [] },
-      after: { feeds: [{ id: 'a1', type: 'url', ref: SECRET_URL, url: SECRET_URL, channelId: '1', roleId: '', template: '' }] },
+      after: {
+        feeds: [
+          {
+            id: 'a1',
+            type: 'url',
+            ref: SECRET_URL,
+            url: SECRET_URL,
+            channelId: '1',
+            roleId: '',
+            template: '',
+          },
+        ],
+      },
     },
   });
   const { listAuditPage } = await import('../src/db/audit.js');
@@ -65,11 +81,21 @@ test('an Edit user still sees the whole feed address in the change history', asy
 
 test('the permission health report names a feed by its host, never its address', () => {
   const needs = NEEDS.rss({
-    feeds: [{ url: `${SECRET_URL}`, type: 'url', ref: SECRET_URL, channelId: '100000000000000001', roleId: '100000000000000002' }],
+    feeds: [
+      {
+        url: `${SECRET_URL}`,
+        type: 'url',
+        ref: SECRET_URL,
+        channelId: '100000000000000001',
+        roleId: '100000000000000002',
+      },
+    ],
   });
   const text = JSON.stringify(needs);
   assert.ok(text.includes('feeds.example.com'));
   assert.ok(!text.includes('u7Hq2pXk9Lm3') && !text.includes('fd83k2'));
-  const named = JSON.stringify(NEEDS.rss({ feeds: [{ name: 'Podcast', url: SECRET_URL, channelId: '100000000000000001' }] }));
+  const named = JSON.stringify(
+    NEEDS.rss({ feeds: [{ name: 'Podcast', url: SECRET_URL, channelId: '100000000000000001' }] })
+  );
   assert.ok(named.includes('Podcast') && !named.includes('fd83k2'));
 });
