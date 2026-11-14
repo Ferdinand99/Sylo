@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.1.2](https://github.com/Ferdinand99/Sylo/compare/v5.1.1...v5.1.2) (2026-11-14)
+
+
+### Bug Fixes
+
+* do not wait for the verify message check on join, and coalesce the checks ([f577a4f](https://github.com/Ferdinand99/Sylo/commit/f577a4fa143fbe774502095ec111c07fedec1d7f))
+* hotfix 5.1.2 (shop role-grant check, verify/honeypot repost) ([#349](https://github.com/Ferdinand99/Sylo/issues/349)) ([58d46f4](https://github.com/Ferdinand99/Sylo/commit/58d46f49af9d7600ad53b5807ce47427ac875bd1))
+* repost the verify and honeypot messages only when they are gone ([fa5c2f2](https://github.com/Ferdinand99/Sylo/commit/fa5c2f25251aef664c48b3d28ddb350482e9aef2))
+* **security:** await the role-grant check on shop role items ([905b0ba](https://github.com/Ferdinand99/Sylo/commit/905b0ba3687170a2b1fef5ae18b87d7c22f580de))
+* **security:** check the role when a shop item is resumed, and never sell Administrator, Manage Server or Manage Roles ([fc9ee58](https://github.com/Ferdinand99/Sylo/commit/fc9ee58edbffd2fc37e5563416aa78eb1d924912))
+* **web:** pass a failed ticket access lookup to the error handler ([228d7ac](https://github.com/Ferdinand99/Sylo/commit/228d7aca55c203e84daa8db9b631af58e0770902))
+
 ## [5.1.1](https://github.com/Ferdinand99/Sylo/compare/v5.1.0...v5.1.1) (2026-11-12)
 
 
