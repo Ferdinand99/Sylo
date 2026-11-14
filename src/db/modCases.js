@@ -78,6 +78,11 @@ const latestActiveStmt = prepare(`
   WHERE guild_id = ? AND user_id = ? AND action = ? AND active = 1
   ORDER BY case_number DESC LIMIT 1
 `);
+const latestActiveFullStmt = prepare(`
+  SELECT * FROM infractions
+  WHERE guild_id = ? AND user_id = ? AND action = ? AND active = 1
+  ORDER BY case_number DESC LIMIT 1
+`);
 const deleteWarnStmt = prepare(
   "DELETE FROM infractions WHERE guild_id = ? AND case_number = ? AND action = 'warn'"
 );
@@ -155,6 +160,11 @@ export async function editCaseReason(guildId, caseNumber, reason) {
 export async function setCaseActive(guildId, caseNumber, active) {
   const info = await setActiveStmt.run(active ? 1 : 0, guildId, caseNumber);
   return info.changes > 0;
+}
+
+/** The member's most recent still-active case of `action` (the whole row), or null. */
+export async function latestActiveCase(guildId, userId, action) {
+  return (await latestActiveFullStmt.get(guildId, userId, action)) ?? null;
 }
 
 /**

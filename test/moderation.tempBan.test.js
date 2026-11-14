@@ -5,6 +5,9 @@ import { RESTJSONErrorCodes } from 'discord.js';
 import { runtime } from '../src/runtime.js';
 import { settleTempBan } from '../src/modules/moderation.js';
 import { scheduleTempBan, getTempBan } from '../src/db/tempBans.js';
+import { addCase } from '../src/db/modCases.js';
+import { EventEmitter } from 'node:events';
+import { register } from '../src/bot/events/moduleEvents.js';
 
 const GUILD_ID = '900000000000000010';
 
@@ -134,4 +137,78 @@ test('settleTempBan: no BanMembers permission leaves the row for the next retry'
   });
 
   assert.notEqual(await getTempBan(GUILD_ID, '5'), null);
+});
+
+// A temporary ban lifted outside Sylo leaves its row behind. The member is then banned again for good
+// (warn threshold, automod, honeypot, another bot) and the stale timer must not lift that ban.
+test('settleTempBan: a later permanent ban the timer was not set for stays, and the row is dropped', async () => {
+  await scheduleRow('6');
+  const row = await getTempBan(GUILD_ID, '6');
+  let removed = 0;
+  runtime.client = {
+    guilds: {
+      cache: new Map([
+        [
+          GUILD_ID,
+          mockGuild({
+            removeImpl: async () => {
+              removed += 1;
+            },
+          }),
+        ],
+      ]),
+    },
+  };
+  await new Promise((r) => setTimeout(r, 5));
+  // The permanent ban, as the warn-threshold auto-ban records it: no duration.
+  await addCase({ guildId: GUILD_ID, userId: '6', moderatorId: 'auto', action: 'ban', reason: 'warnings' });
+
+  await settleTempBan({ ...row, unban_at: Date.now() - 1 });
+
+  assert.equal(removed, 0, 'still banned');
+  assert.equal(await getTempBan(GUILD_ID, '6'), null);
+});
+
+test('settleTempBan: the timed ban’s own case does not stop it being lifted', async () => {
+  await scheduleRow('7');
+  const row = await getTempBan(GUILD_ID, '7');
+  let removed = 0;
+  runtime.client = {
+    guilds: {
+      cache: new Map([
+        [
+          GUILD_ID,
+          mockGuild({
+            removeImpl: async () => {
+              removed += 1;
+            },
+          }),
+        ],
+      ]),
+    },
+  };
+  await new Promise((r) => setTimeout(r, 5));
+  await addCase({
+    guildId: GUILD_ID,
+    userId: '7',
+    moderatorId: 'tester',
+    action: 'ban',
+    reason: 'r',
+    detail: '1 day',
+  });
+
+  await settleTempBan({ ...row, unban_at: Date.now() - 1 });
+
+  assert.equal(removed, 1);
+  assert.equal(await getTempBan(GUILD_ID, '7'), null);
+});
+
+test('a lifted ban ends the temporary-ban timer even when no module handles the event', async () => {
+  await scheduleRow('8');
+  const client = new EventEmitter();
+  register(client);
+  const guild = { id: GUILD_ID, client: runtime.client };
+  client.emit('guildBanRemove', { guild, user: { id: '8' } });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(await getTempBan(GUILD_ID, '8'), null);
 });
