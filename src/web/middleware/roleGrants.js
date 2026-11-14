@@ -24,7 +24,8 @@ import { normaliseLevelingConfig, rewardRolesToAdd } from '../../modules/levelin
 import { levelFromXp } from '../../modules/lib/levels.js';
 import { setComposedSpecGuard } from '../../db/composedMessages.js';
 import { guildKey } from '../../platform/platformOf.js';
-import { userIdForGuild } from './auth.js';
+import { getDashboardAccessRoles } from '../../db/guildSettings.js';
+import { holdsManageServerLive, userIdForGuild } from './auth.js';
 
 const actors = new AsyncLocalStorage();
 
@@ -171,6 +172,15 @@ async function checkNewGrants(before, after) {
   for (const role of roles) {
     const why = grantRefusal(req.guild, member, role);
     if (why) throw new RoleGrantError(why);
+  }
+  // A bot-master (dashboard Edit) role is a privilege too, though it carries no platform permission: only
+  // those who may choose the bot masters (the owner, a live Manage Server holder) may hand one out.
+  const { edit } = await getDashboardAccessRoles(guildKey(req.guild));
+  const botMaster = roles.find((r) => edit.includes(r.id));
+  if (botMaster && !(await holdsManageServerLive(guildKey(req.guild), userId))) {
+    throw new RoleGrantError(
+      `${botMaster.name} gives Edit access to the dashboard: only the server owner or someone with Manage Server can hand it out.`
+    );
   }
 }
 
