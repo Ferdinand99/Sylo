@@ -37,6 +37,7 @@ import {
   MAX_IMAGE_BYTES_PER_GUILD,
   attachImage,
   detachImage,
+  imageUsage,
 } from '../../db/collectibleImages.js';
 import { ImageError, processImage, readUpload } from '../../lib/collectibleImage.js';
 import { RARITIES, isRoleItemType } from '../../modules/lib/economyConfig.js';
@@ -78,6 +79,12 @@ const itemView = (item, stats) => ({
   purchases: stats?.purchases ?? 0,
   revenue: stats?.revenue ?? 0,
 });
+
+/** How much of the server's picture quota the collectibles use, for the counter on the shop page. */
+async function picturesPayload(guild) {
+  const { count, bytes } = await imageUsage(guild.id);
+  return { count, bytes, maxCount: MAX_IMAGES_PER_GUILD, maxBytes: MAX_IMAGE_BYTES_PER_GUILD };
+}
 
 async function itemsPayload(guild) {
   const [items, stats] = await Promise.all([listItems(guild.id), itemStats(guild.id)]);
@@ -166,6 +173,7 @@ router.get(
   asyncHandler(async (req, res) => {
     res.json({
       items: await itemsPayload(req.guild),
+      pictures: await picturesPayload(req.guild),
       roles: assignableRoles(req.guild),
       channels: guildTextChannels(req.guild),
       maxItems: CEILINGS.shopItems,
@@ -188,7 +196,7 @@ router.post(
       action: 'economy:shop',
       detail: `added item #${id} ${item.name}`,
     });
-    res.json({ items: await itemsPayload(req.guild), id });
+    res.json({ items: await itemsPayload(req.guild), pictures: await picturesPayload(req.guild), id });
   })
 );
 
@@ -202,7 +210,7 @@ router.post(
       action: 'economy:shop',
       detail: 'reordered the items',
     });
-    res.json({ items: await itemsPayload(req.guild) });
+    res.json({ items: await itemsPayload(req.guild), pictures: await picturesPayload(req.guild) });
   })
 );
 
@@ -222,7 +230,7 @@ router.post(
       action: 'economy:shop',
       detail: `edited item #${id} ${item.name}`,
     });
-    res.json({ items: await itemsPayload(req.guild) });
+    res.json({ items: await itemsPayload(req.guild), pictures: await picturesPayload(req.guild) });
   })
 );
 
@@ -238,7 +246,7 @@ router.post(
       action: 'economy:shop',
       detail: `${enabled ? 'resumed' : 'paused'} item #${id}`,
     });
-    res.json({ items: await itemsPayload(req.guild) });
+    res.json({ items: await itemsPayload(req.guild), pictures: await picturesPayload(req.guild) });
   })
 );
 
@@ -256,7 +264,7 @@ router.post(
       action: 'economy:shop',
       detail: `deleted item #${id} (${held} still held)`,
     });
-    res.json({ items: await itemsPayload(req.guild), held });
+    res.json({ items: await itemsPayload(req.guild), pictures: await picturesPayload(req.guild), held });
   })
 );
 
@@ -328,7 +336,7 @@ router.post(
       action: 'economy:shop',
       detail: `changed the picture of item #${id}`,
     });
-    return res.json({ items: await itemsPayload(req.guild) });
+    return res.json({ items: await itemsPayload(req.guild), pictures: await picturesPayload(req.guild) });
   })
 );
 
@@ -346,7 +354,7 @@ router.post(
       action: 'economy:shop',
       detail: `removed the picture of item #${id}`,
     });
-    return res.json({ items: await itemsPayload(req.guild) });
+    return res.json({ items: await itemsPayload(req.guild), pictures: await picturesPayload(req.guild) });
   })
 );
 

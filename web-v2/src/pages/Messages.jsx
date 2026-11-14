@@ -58,8 +58,9 @@ export default function Messages() {
     <Reveal>
       <ListPageHead
         title="Embed messages"
+        // With nothing saved the empty state below carries the one accent button.
         action={
-          canEdit ? (
+          canEdit && data.items.length > 0 ? (
             <Link className="v2-btn-primary" to={`/guilds/${guildId}/messages/new`}>
               + New embed message
             </Link>
@@ -75,15 +76,13 @@ export default function Messages() {
       <h2 className="v2-group-title v2-section-gap">Your embed messages ({data.items.length} / 200)</h2>
       {data.items.length === 0 ? (
         <EmptyList
-          action={
-            canEdit ? (
-              <Link className="v2-btn-ghost" to={`/guilds/${guildId}/messages/new`}>
-                + New embed message
-              </Link>
-            ) : null
+          start={
+            canEdit
+              ? { label: 'Create your first embed message', to: `/guilds/${guildId}/messages/new` }
+              : null
           }
         >
-          None yet — create one to post an embed to a channel.
+          Build a rich message with a live preview, then publish it to a channel as Sylo.
         </EmptyList>
       ) : (
         <div className="v2-list">
