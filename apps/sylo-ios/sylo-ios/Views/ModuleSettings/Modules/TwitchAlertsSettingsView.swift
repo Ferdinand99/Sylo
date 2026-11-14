@@ -31,7 +31,7 @@ struct TwitchAlertsSettingsView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     ChannelPicker(title: "Announce in", selection: $alert.channelId, channels: page.channels,
-                                  noneTitle: "Choose a channel")
+                                  noneTitle: "Choose a channel", embed: !alert.plainText)
                     RolePicker(title: "Ping role", selection: $alert.roleId, roles: page.roles)
                     LimitedTextField(title: "Message", text: $alert.message,
                                      limit: TwitchAlertsSettings.maxMessageLength, lines: 2...6)

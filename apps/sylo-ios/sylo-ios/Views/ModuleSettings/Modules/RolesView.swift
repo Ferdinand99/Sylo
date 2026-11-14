@@ -10,7 +10,6 @@ struct RolesView: View {
     @State private var deleting: ReactionRoleMessage?
     @State private var isConfirmingDiscard = false
     @State private var duplicates: DuplicateModel
-    @State private var canDuplicate = false
     private let session: AppSession
 
     init(server: ServerID, session: AppSession) {
@@ -38,7 +37,7 @@ struct RolesView: View {
         }
         .navigationTitle("Reaction Roles")
         .navigationBarTitleDisplayMode(.inline)
-        .duplicating(duplicates, session: session, isAvailable: $canDuplicate) { await model.load() }
+        .duplicating(duplicates) { await model.load() }
         // Like the module settings: no way back while the autoroles have unsaved changes.
         .navigationBarBackButtonHidden(model.autorolesChanged)
         .tracksUnsavedChanges(model.autorolesChanged)
@@ -110,7 +109,7 @@ struct RolesView: View {
                     }
                     .contextMenu {
                         Button("Edit", systemImage: "pencil") { editor = .edit(set) }
-                        DuplicateButton(model: duplicates, isAvailable: canDuplicate, kind: .reactionRoleSet, id: String(set.id))
+                        DuplicateButton(model: duplicates, kind: .reactionRoleSet, id: String(set.id))
                         Button("Delete", systemImage: "trash", role: .destructive) { deleting = set }
                     }
                 }

@@ -130,7 +130,8 @@ private struct AuditEntryRow: View {
                     .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .combine)
-            if entry.hasChange {
+            // Only a Sylo that announces `config-history` keeps and shows what an entry changed.
+            if entry.hasChange, session.has(.configHistory) {
                 Button(isOpen ? "Hide Changes" : "Show Changes") {
                     isOpen.toggle()
                     if isOpen {

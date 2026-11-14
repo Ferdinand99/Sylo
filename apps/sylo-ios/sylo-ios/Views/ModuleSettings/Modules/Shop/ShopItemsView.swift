@@ -9,7 +9,6 @@ struct ShopItemsView: View {
     @State private var editing: ShopEditorTarget?
     @State private var itemToDelete: ShopItem?
     @State private var duplicates: DuplicateModel
-    @State private var canDuplicate = false
     private let server: ServerID
     private let session: AppSession
     private let currencyEmoji: String
@@ -53,7 +52,7 @@ struct ShopItemsView: View {
                                systemImage: item.enabled ? "pause.circle" : "play.circle") {
                             Task { await model.setEnabled(item, !item.enabled) }
                         }
-                        DuplicateButton(model: duplicates, isAvailable: canDuplicate, kind: .shopItem, id: String(item.id))
+                        DuplicateButton(model: duplicates, kind: .shopItem, id: String(item.id))
                         Button("Delete", systemImage: "trash", role: .destructive) { itemToDelete = item }
                     }
                 }
@@ -131,7 +130,7 @@ struct ShopItemsView: View {
             Text(message)
         }
         .sensoryFeedback(.success, trigger: model.changeCount)
-        .duplicating(duplicates, session: session, isAvailable: $canDuplicate) { await model.load() }
+        .duplicating(duplicates) { await model.load() }
     }
 
     private var isDeleting: Binding<Bool> {

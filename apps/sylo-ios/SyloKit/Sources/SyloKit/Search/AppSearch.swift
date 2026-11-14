@@ -4,8 +4,13 @@ import Observation
 // Search across a server, the app's version of the dashboard's command palette (src/web/routes/v2Search.js,
 // web-v2/src/paletteModel.js): modules and pages by name, members through the member search, and an inbox
 // item by its number ("ticket 12", "suggestion #5", "#12"). The palette's inbox lookup,
-// `GET .../search/inbox?q=`, is Sylo 5.2; it has no feature string, so the app tries it for a query that
-// looks like a number and a 404 means the server has no lookup (the number is then not offered).
+// `GET .../search/inbox?q=`, is announced as `inbox-search`: a Sylo without it is searched for modules, pages and
+// members only.
+
+extension ServerFeature {
+    /// `GET /api/v2/guilds/:id/search/inbox`.
+    public static let inboxSearch = ServerFeature(rawValue: "inbox-search")
+}
 
 /// The kinds of inbox item that have a number.
 public enum InboxItemKind: Hashable, Sendable, RawRepresentable, Decodable {
@@ -349,8 +354,6 @@ public final class ServerSearchModel {
     public private(set) var inboxHits: [InboxHit] = []
     public private(set) var isSearching = false
     public private(set) var errorMessage: String?
-    /// False once this server is known to have no inbox lookup (a 404).
-    public private(set) var hasInboxLookup = true
 
     private let memberSearch: MemberSearchModel
     private let session: AppSession
@@ -390,12 +393,12 @@ public final class ServerSearchModel {
 
     /// Asks the server for an item with this number; only for a text that reads as one.
     private func lookUpInbox(_ typed: String) async -> [InboxHit]? {
-        guard hasInboxLookup, InboxQuery.parse(typed) != nil else { return nil }
+        // Only a Sylo that announces `inbox-search` has the lookup; an older one finds members and pages only.
+        guard InboxQuery.parse(typed) != nil, await session.supports(.inboxSearch) else { return nil }
         do {
             return try await session.send(Endpoints.SearchInbox(server: server, text: typed)).items
         } catch {
-            let error = NetworkError(error)
-            if error.isMissingRoute { hasInboxLookup = false }
+            // A failed lookup leaves the rest of the search as it is.
             return nil
         }
     }

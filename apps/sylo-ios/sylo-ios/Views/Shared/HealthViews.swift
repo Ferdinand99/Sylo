@@ -10,7 +10,8 @@ import SyloKit
 struct HealthNote: View {
     enum Subject {
         case role(String)
-        case channel(String)
+        /// `embed`: the picker is for a message with an embed, so a channel Sylo cannot send embeds in is a problem too.
+        case channel(String, embed: Bool = false)
         case roles([String], names: [String: String])
         case channels([String], names: [String: String])
     }
@@ -35,7 +36,7 @@ struct HealthNote: View {
         guard let targets = health?.targets else { return [] }
         switch subject {
         case .role(let id): return targets.roleWarning(id).map { [$0] } ?? []
-        case .channel(let id): return targets.channelWarning(id).map { [$0] } ?? []
+        case .channel(let id, let embed): return targets.channelWarning(id, embed: embed).map { [$0] } ?? []
         case .roles(let ids, let names): return targets.warnings(forRoles: ids, names: names)
         case .channels(let ids, let names): return targets.warnings(forChannels: ids, names: names)
         }

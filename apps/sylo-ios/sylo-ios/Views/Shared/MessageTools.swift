@@ -4,12 +4,13 @@ import UniformTypeIdentifiers
 
 // Sylo 5.2 (P6): "Start from a template" and Discord message JSON import and export, in the editors of a message with
 // embeds (the message builder and the Welcome channel). Nothing here talks to the server: a template or an import only
-// fills the form, which is saved the usual way. The tools show once the server has answered that it has the P6
-// routes, so a Sylo 5.1 keeps the editors as they were.
+// fills the form, which is saved the usual way. The tools show when the server announces `message-templates`, so a
+// Sylo 5.1 keeps the editors as they were.
 
 /// The Templates and Message JSON section of a message editor.
 struct MessageToolsSection: View {
-    let isAvailable: Bool
+    /// The channel picked for the message ("" for none), to say when its embeds cannot be sent there.
+    let channelID: String
     @Binding var content: String
     @Binding var embeds: [EmbedItem]
     /// The link buttons of the message; nil for a page that has none (the Welcome channel).
@@ -21,7 +22,8 @@ struct MessageToolsSection: View {
 
     @Environment(AppSession.self) private var session
     @Environment(\.dashboardAccess) private var access
-    /// Whether the server has the P6 routes; the parent asks once (`hasImportRoutes`).
+    @Environment(\.serverPlatform) private var platform
+    @Environment(ServerHealthModel.self) private var health: ServerHealthModel?
     @State private var pendingTemplate: MessageTemplate?
     @State private var isChoosingFile = false
     @State private var pendingImport: MessageJSON.Imported?
@@ -32,7 +34,7 @@ struct MessageToolsSection: View {
 
     var body: some View {
         Group {
-            if isAvailable, access.canEdit {
+            if session.has(.messageTemplates), access.canEdit {
                 Section {
                     Menu {
                         ForEach(MessageTemplate.all) { template in
@@ -55,7 +57,15 @@ struct MessageToolsSection: View {
                 } header: {
                     Text("Templates and JSON")
                 } footer: {
-                    Text("A template fills this message with a starting point you then change. Message JSON is the shape Discord and tools such as Discohook use: text, embeds and link buttons. Nothing is saved until you save.")
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("A template fills this message with a starting point you then change. Message JSON is the shape Discord and tools such as Discohook use: text, embeds and link buttons. Nothing is saved until you save.")
+                        // What the target cannot show: the embed part (or the buttons) of a template or of imported
+                        // JSON is dropped when the message is posted, and the person is told before it happens.
+                        ForEach(limitNotes, id: \.self) { note in
+                            Label(note, systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                        }
+                    }
                 }
             }
         }
@@ -86,6 +96,22 @@ struct MessageToolsSection: View {
             Text(verbatim: importErrors.joined(separator: "\n"))
         }
         .fileQuickLook($exported) {}
+    }
+
+    // MARK: What the target cannot show
+
+    /// Why part of this message would not arrive: a channel where Sylo cannot send embeds (it lacks Embed Links),
+    /// and Fluxer, which has no buttons yet. Empty when everything can be posted.
+    private var limitNotes: [String] {
+        var notes: [String] = []
+        if !channelID.isEmpty, health?.targets.channelWarning(channelID, embed: true) != nil,
+           health?.targets.channelWarning(channelID) == nil {
+            notes.append("Sylo can't send embeds in the picked channel (it is missing Embed Links), so the embed part of this message, from a template or from JSON, is dropped when it is posted. Plain text still goes out.")
+        }
+        if platform == .fluxer, links != nil {
+            notes.append("Fluxer has no buttons yet, so link buttons from a template or from JSON are not posted there.")
+        }
+        return notes
     }
 
     // MARK: Templates
@@ -171,7 +197,7 @@ struct TextTemplateMenu: View {
     @State private var pending: String?
 
     var body: some View {
-        if access.canEdit, session.knowsImportRoutes {
+        if access.canEdit, session.has(.messageTemplates) {
             Menu {
                 ForEach(MessageTemplate.templates(for: field)) { template in
                     Button {
@@ -193,8 +219,11 @@ struct TextTemplateMenu: View {
                     pending = nil
                 }
             } message: { _ in
-                Text("The text you wrote is replaced by the template. Nothing is saved until you save.")
+                Text("The text you wrote is replaced by the template. Only the template's text is used here: this field holds plain text, so the embed part of a template is dropped. Nothing is saved until you save.")
             }
+            Text("A plain text field: a template's embed is left out.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
     }
 

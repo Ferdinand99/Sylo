@@ -69,10 +69,15 @@ struct ModuleSettingsForm<Page: ModuleSettingsPage, Content: View>: View {
             ToolbarItem(placement: .confirmationAction) {
                 if model.isSaving {
                     ProgressView()
+                } else if !access.canEdit {
+                    // Where the web's save bar says "View only: you can't save changes here".
+                    Text(verbatim: access.badgeTitle ?? "View only")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 } else {
                     Button("Save") { Task { await model.save() } }
                         .toolbarSaveStyle()
-                        .disabled(!model.hasChanges || problem != nil || !access.canEdit)
+                        .disabled(!model.hasChanges || problem != nil)
                 }
             }
         }

@@ -8,8 +8,6 @@ struct MessageBuilderView: View {
     @State private var model: ComposedMessageBuilderModel
     @State private var isConfirmingDiscard = false
     @State private var pendingMove: PendingMove?
-    /// Whether the server has templates and message JSON (Sylo 5.2, P6).
-    @State private var hasMessageTools = false
     @Environment(AppSession.self) private var session
 
     /// What was asked when a posted message is about to change channel.
@@ -93,7 +91,8 @@ struct MessageBuilderView: View {
         .task {
             if !model.hasLoaded { await model.load() }
         }
-        .task { hasMessageTools = await session.hasImportRoutes(server: model.server) }
+        // Below Edit the message can be read, not changed or posted.
+        .lockedBelow()
     }
 
     // MARK: - The form
@@ -109,7 +108,7 @@ struct MessageBuilderView: View {
 
             Section {
                 ChannelPicker(title: "Channel", selection: $model.channelId, channels: model.channels,
-                              noneTitle: "Choose a channel")
+                              noneTitle: "Choose a channel", embed: true)
                 Button {
                     publish()
                 } label: {
@@ -130,7 +129,7 @@ struct MessageBuilderView: View {
             }
 
             MessageToolsSection(
-                isAvailable: hasMessageTools, content: $model.spec.content, embeds: $model.spec.embeds,
+                channelID: model.channelId, content: $model.spec.content, embeds: $model.spec.embeds,
                 links: $model.spec.links, tokens: false, maxEmbeds: ComposedMessageSpec.maxEmbeds,
                 contentLimit: ComposedMessageSpec.maxContentLength)
 

@@ -25,8 +25,6 @@ struct ServerView: View {
     /// The setup wizard, shared by the overview's offer, Server settings and the search.
     @State private var wizard: SetupWizardModel
     @State private var isSearching = false
-    /// Whether this server has the import routes (Sylo 5.2), for the search.
-    @State private var hasImport = false
 
     enum ServerTab: Hashable {
         case modules, tickets, moderation, settings
@@ -93,6 +91,7 @@ struct ServerView: View {
             .environment(session)
             .environment(\.dashboardAccess, summary.effectiveAccess)
             .environment(health)
+            .environment(\.serverPlatform, summary.platform)
             .environment(openAppeals)
         }
         .navigationDestination(for: ModuleRoute.self) { route in
@@ -115,6 +114,7 @@ struct ServerView: View {
         .sensoryFeedback(.success, trigger: settings.saveCount)
         .environment(openAppeals)
         .environment(health)
+        .environment(\.serverPlatform, summary.platform)
         .environment(\.dashboardAccess, summary.effectiveAccess)
         // A newer overview count replaces an older one.
         .onChange(of: overview.overview?.openAppeals) { _, count in
@@ -124,7 +124,8 @@ struct ServerView: View {
         .task { await tickets.load() }
         .task { await openAppeals.refresh() }
         .task { await health.load() }
-        .task { if summary.effectiveAccess.canEdit { hasImport = await session.hasImportRoutes(server: summary.id) } }
+        // What this Sylo announces (`setup-wizard`, `config-import`, `duplicate`, ...): views show a control only for it.
+        .task { _ = await session.serverFeatures() }
     }
 
     /// The pages the search can open: those of the app, and the wizard and the import where this server has them.
@@ -134,7 +135,7 @@ struct ServerView: View {
         if ServerPages.hasScreen("messages") { pages.append(.messages) }
         if summary.effectiveAccess.canEdit {
             if wizard.isAvailable, wizard.draft != nil { pages.append(.setupWizard) }
-            if hasImport { pages.append(.importConfig) }
+            if session.has(.configImport) { pages.append(.importConfig) }
         }
         return pages
     }

@@ -320,10 +320,13 @@ struct SetupResultTests {
 @Suite("Setup wizard model")
 struct SetupWizardModelTests {
     nonisolated static let proposal = try! decode(SetupProposal.self, proposalJSON)
+    /// A Sylo 5.2 announces `setup-wizard`; the model asks for nothing without it.
+    nonisolated static let wizardInfo = ServerInfo(features: [.appLogin, .setupWizard])
 
     @Test("The steps go look, goals, review, done, and review needs a goal")
     func steps() async {
         let clients = StubClients { endpoint in
+            if endpoint is Endpoints.ServerInfo { return Self.wizardInfo }
             if endpoint is Endpoints.SuggestSetup { return Self.proposal }
             return SetupApplyAnswer(results: [SetupResult(id: "welcome", name: "Welcome", status: .applied, message: "Done")])
         }
@@ -350,7 +353,10 @@ struct SetupWizardModelTests {
 
     @Test("Apply stays off while a field is empty or refused")
     func canApply() async {
-        let clients = StubClients { _ in Self.proposal }
+        let clients = StubClients { endpoint in
+            if endpoint is Endpoints.ServerInfo { return Self.wizardInfo }
+            return Self.proposal
+        }
         let model = SetupWizardModel(server: "1", session: makeSignedInSession(clients: clients))
         await model.load()
         #expect(!model.canApply)
@@ -363,19 +369,24 @@ struct SetupWizardModelTests {
         #expect(!clients.calls.contains { $0.endpoint is Endpoints.ApplySetup })
     }
 
-    @Test("A Sylo without the wizard answers 404 and the wizard is hidden")
+    @Test("A Sylo that does not announce setup-wizard is never asked, and the wizard is hidden")
     func olderServer() async {
-        let clients = StubClients { _ in throw NetworkError.notFound }
+        let clients = StubClients { endpoint in
+            if endpoint is Endpoints.ServerInfo { return ServerInfo(features: [.appLogin, .health]) }
+            throw NetworkError.notFound
+        }
         let model = SetupWizardModel(server: "1", session: makeSignedInSession(clients: clients))
         await model.load()
         #expect(!model.isAvailable)
         #expect(model.errorMessage == nil)
         #expect(model.draft == nil)
+        #expect(!clients.calls.contains { $0.endpoint is Endpoints.SuggestSetup })
     }
 
     @Test("A refusal as a whole keeps the review and shows the server's words")
     func refused() async {
         let clients = StubClients { endpoint in
+            if endpoint is Endpoints.ServerInfo { return Self.wizardInfo }
             if endpoint is Endpoints.SuggestSetup { return Self.proposal }
             throw NetworkError.http(status: HTTPStatus(409, message: "The setup is already running for this server."))
         }
@@ -393,6 +404,7 @@ struct SetupWizardModelTests {
     @Test("A person who may only view cannot apply: the server refuses and says so")
     func viewOnlyRefused() async {
         let clients = StubClients { endpoint in
+            if endpoint is Endpoints.ServerInfo { return Self.wizardInfo }
             if endpoint is Endpoints.SuggestSetup { return Self.proposal }
             throw NetworkError.forbidden(message: "Your dashboard access in this server is View only, so you can't do this.")
         }

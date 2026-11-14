@@ -93,7 +93,7 @@ struct WelcomeSettingsView: View {
                 Toggle(joinToggleTitle(settings), isOn: $settings.joinEnabled)
                 if settings.joinEnabled {
                     ChannelPicker(title: "Channel", selection: $settings.joinChannel, channels: page.channels,
-                                  noneTitle: "Choose a channel")
+                                  noneTitle: "Choose a channel", embed: settings.useEmbed)
                     LimitedTextField(title: "Message", text: $settings.joinMessage,
                                      limit: WelcomeSettings.maxMessageLength, lines: 3...8)
                     TextTemplateMenu(field: .welcome, text: $settings.joinMessage)

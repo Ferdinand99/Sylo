@@ -10,11 +10,21 @@ private struct DashboardAccessKey: EnvironmentKey {
     static let defaultValue: DashboardAccess = .edit
 }
 
+private struct ServerPlatformKey: EnvironmentKey {
+    static let defaultValue: Platform? = nil
+}
+
 extension EnvironmentValues {
     /// The signed-in person's level in the server being shown.
     var dashboardAccess: DashboardAccess {
         get { self[DashboardAccessKey.self] }
         set { self[DashboardAccessKey.self] = newValue }
+    }
+
+    /// The platform of the server being shown (Discord or Fluxer); nil outside a server screen.
+    var serverPlatform: Platform? {
+        get { self[ServerPlatformKey.self] }
+        set { self[ServerPlatformKey.self] = newValue }
     }
 }
 

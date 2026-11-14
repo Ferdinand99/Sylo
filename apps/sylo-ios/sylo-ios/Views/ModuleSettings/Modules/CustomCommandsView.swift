@@ -9,7 +9,6 @@ struct CustomCommandsView: View {
     @State private var editor: CustomCommandTarget?
     @State private var deleting: CustomCommand?
     @State private var duplicates: DuplicateModel
-    @State private var canDuplicate = false
     private let session: AppSession
 
     init(server: ServerID, session: AppSession) {
@@ -55,7 +54,7 @@ struct CustomCommandsView: View {
             CustomCommandEditorView(target: target, model: model)
         }
         .sensoryFeedback(.success, trigger: model.successCount)
-        .duplicating(duplicates, session: session, isAvailable: $canDuplicate) { await model.load() }
+        .duplicating(duplicates) { await model.load() }
         .task {
             await note.load()
             if !model.hasLoaded { await model.load() }
@@ -93,7 +92,7 @@ struct CustomCommandsView: View {
                     }
                     .contextMenu {
                         Button("Edit", systemImage: "pencil") { editor = .edit(command) }
-                        DuplicateButton(model: duplicates, isAvailable: canDuplicate, kind: .customCommand, id: command.id)
+                        DuplicateButton(model: duplicates, kind: .customCommand, id: command.id)
                         Button("Delete", systemImage: "trash", role: .destructive) { deleting = command }
                     }
                 }

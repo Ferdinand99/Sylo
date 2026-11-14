@@ -38,8 +38,6 @@ public final class AppSession {
     private var client: (any APIClient)?
     private var cachedLimits: AllModuleLimits?
     private var cachedFeatures: Set<ServerFeature>?
-    /// Whether a server has the import routes (see ``hasImportRoutes(server:)``), kept for the sign-in.
-    var importRoutes: [ServerID: Bool] = [:]
     /// Files handed out by ``download(_:)`` in this sign-in; deleted at sign-out.
     private var issuedFiles: [DownloadedFile] = []
     /// Which member search this server has, learned by the first search and kept for the sign-in.
@@ -324,6 +322,13 @@ public final class AppSession {
         await serverFeatures().contains(feature)
     }
 
+    /// Whether this server announces `feature`, from what ``serverFeatures()`` has already read (false until it
+    /// has). For a view's body: it re-reads when the features arrive, so a control for a feature an older Sylo
+    /// lacks is simply not shown.
+    public func has(_ feature: ServerFeature) -> Bool {
+        (cachedFeatures ?? Set(serverInfo?.features ?? [])).contains(feature)
+    }
+
     /// Sends a call that needs no sign-in to another server (the notification relay), with a
     /// client that has no token: the Sylo server's token never goes anywhere else.
     public func send<E: APIEndpoint>(_ endpoint: E, to server: ServerURL) async throws -> E.Response {
@@ -344,7 +349,6 @@ public final class AppSession {
         client = makeClient(server, token)
         cachedLimits = nil
         cachedFeatures = nil
-        importRoutes = [:]
         memberSearchRoute = .general
         phase = .signedIn(server)
     }
@@ -355,7 +359,6 @@ public final class AppSession {
         client = nil
         cachedLimits = nil
         cachedFeatures = nil
-        importRoutes = [:]
         memberSearchRoute = .general
         for file in issuedFiles { file.discard() }
         issuedFiles = []

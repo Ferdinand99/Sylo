@@ -11,8 +11,6 @@ struct WelcomeChannelSettingsView: View {
     @State private var isConfirmingRemove = false
     @State private var isConfirmingClear = false
     @State private var isConfirmingCreate = false
-    /// Whether the server has templates and message JSON (Sylo 5.2, P6).
-    @State private var hasMessageTools = false
     @Environment(AppSession.self) private var session
 
     /// What the server fills in on the message text and in the embeds.
@@ -33,7 +31,7 @@ struct WelcomeChannelSettingsView: View {
 
             Section {
                 ChannelPicker(title: "Channel", selection: $settings.channelId, channels: page.channels,
-                              noneTitle: "Choose a channel")
+                              noneTitle: "Choose a channel", embed: true)
                 Button("Create Read-Only #welcome", systemImage: "plus.bubble") {
                     isConfirmingCreate = true
                 }
@@ -60,7 +58,7 @@ struct WelcomeChannelSettingsView: View {
             }
 
             MessageToolsSection(
-                isAvailable: hasMessageTools, content: $settings.content, embeds: $settings.embeds, links: nil,
+                channelID: settings.channelId, content: $settings.content, embeds: $settings.embeds, links: nil,
                 tokens: true, maxEmbeds: WelcomeChannelSettings.maxEmbeds,
                 contentLimit: WelcomeChannelSettings.maxContentLength)
 
@@ -170,7 +168,6 @@ struct WelcomeChannelSettingsView: View {
         }
         .sensoryFeedback(.success, trigger: publisher.successCount)
         .task { await publisher.loadFeatures() }
-        .task { hasMessageTools = await session.hasImportRoutes(server: model.server) }
     }
 
     @ViewBuilder

@@ -178,17 +178,30 @@ struct SuggestionsSettingsView: View {
                 Text(list.isLoading ? "Loading…" : "Nothing here yet.").foregroundStyle(.secondary)
             }
             ForEach(suggestions) { item in
-                HStack(alignment: .top) {
-                    SuggestionLine(item: item)
-                    Spacer(minLength: 0)
-                    Menu {
-                        actions(for: item)
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .imageScale(.large)
-                            .accessibilityLabel("Actions for suggestion #\(item.number)")
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .top) {
+                        SuggestionLine(item: item)
+                        Spacer(minLength: 0)
+                        Menu {
+                            actions(for: item)
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .imageScale(.large)
+                                .accessibilityLabel("Actions for suggestion #\(item.number)")
+                        }
+                        .disabled(list.isWorking || !access.canActOnInbox)
                     }
-                    .disabled(list.isWorking || !access.canActOnInbox)
+                    // Quick Approve and Deny on an open one; both open the reason form with the status set, as
+                    // on the web (Sylo 5.2).
+                    if access.canActOnInbox, item.status == .open || item.status == .considering {
+                        HStack(spacing: 8) {
+                            Button("Approve", systemImage: "checkmark.circle") { ask(.approve, for: item) }
+                            Button("Deny", systemImage: "xmark.circle") { ask(.deny, for: item) }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(list.isWorking)
+                    }
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     if access.canActOnInbox {

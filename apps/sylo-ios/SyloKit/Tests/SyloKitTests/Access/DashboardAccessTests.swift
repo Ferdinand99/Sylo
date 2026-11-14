@@ -164,6 +164,7 @@ struct GuildSettingsAccessTests {
         let settings = access.flatMap { try? decode(DashboardAccessSettings.self, $0) }
         return StubClients { endpoint in
             switch endpoint {
+            case is Endpoints.ServerInfo: return ServerInfo(features: [.appLogin, .accessLevels])
             case is Endpoints.LoadGuildSettings: return page
             case is Endpoints.SaveGuildSettings: return OKResponse()
             case is Endpoints.LoadDashboardAccess:
@@ -264,6 +265,7 @@ struct GuildSettingsAccessTests {
         let page = try! decode(GuildSettingsPage.self, Self.settingsJSON)
         let clients = StubClients { endpoint in
             switch endpoint {
+            case is Endpoints.ServerInfo: return ServerInfo(features: [.appLogin, .accessLevels])
             case is Endpoints.LoadGuildSettings: return page
             case is Endpoints.LoadDashboardAccess: return DashboardAccessSettings(inboxRoleIds: ["20"])
             case is Endpoints.SaveGuildSettings: return OKResponse()

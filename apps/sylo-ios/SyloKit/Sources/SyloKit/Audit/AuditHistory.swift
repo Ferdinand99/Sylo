@@ -9,6 +9,11 @@ import Observation
 // change view gave, which names the state the person saw. Undo covers a module's settings, not lists kept
 // on their own (reminders, shop items). An older server has no `hasChange`, so the app shows nothing new.
 
+extension ServerFeature {
+    /// The before and after values on audit entries, and `POST .../audit/:id/undo`.
+    public static let configHistory = ServerFeature(rawValue: "config-history")
+}
+
 /// Where the settings stand against an entry.
 public enum AuditUndoState: Hashable, Sendable, RawRepresentable, Decodable {
     /// Unchanged since the entry: undo restores exactly the earlier settings.

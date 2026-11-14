@@ -11,6 +11,8 @@ struct ChannelPicker: View {
     @Binding var selection: String
     let channels: [ChannelOption]
     var noneTitle: LocalizedStringKey = "None"
+    /// The module posts an embed here, so a channel where Sylo lacks Embed Links gets a note too (Sylo 5.2).
+    var embed = false
 
     var body: some View {
         Picker(title, selection: $selection) {
@@ -24,7 +26,7 @@ struct ChannelPicker: View {
         }
         .pickerStyle(.navigationLink)
         // Sylo 5.2's health check: a note when Sylo cannot post in the picked channel.
-        HealthNote(subject: .channel(selection))
+        HealthNote(subject: .channel(selection, embed: embed))
     }
 }
 

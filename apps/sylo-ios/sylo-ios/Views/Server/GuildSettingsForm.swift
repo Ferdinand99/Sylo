@@ -13,8 +13,6 @@ struct GuildSettingsForm: View {
 
     @Environment(AppSession.self) private var session
     @Environment(\.dashboardAccess) private var access
-    /// Whether this server has the import routes (Sylo 5.2); asked once the screen shows.
-    @State private var hasImport = false
 
     var body: some View {
         Group {
@@ -35,12 +33,11 @@ struct GuildSettingsForm: View {
         .task {
             if model.page == nil { await model.load() }
         }
-        // The setup wizard and the import exist from Sylo 5.2 and change the server: Edit only. Neither has a
-        // feature string, so the app asks whether the routes are there.
+        // The setup wizard and the import exist from Sylo 5.2 (`setup-wizard`, `config-import`) and change the
+        // server: Edit only. The wizard is read here so its row is shown only where it works.
         .task {
             guard access.canEdit else { return }
             if wizard.draft == nil, wizard.isAvailable, !wizard.isLoading { await wizard.load() }
-            hasImport = await session.hasImportRoutes(server: model.server)
         }
     }
 
@@ -161,7 +158,7 @@ struct GuildSettingsForm: View {
                 "Export Configuration", systemImage: "square.and.arrow.up",
                 endpoint: Endpoints.ExportGuildConfig(server: model.server), session: session)
                 .disabled(!access.canEdit)
-            if access.canEdit, hasImport {
+            if access.canEdit, session.has(.configImport) {
                 NavigationLink {
                     ConfigImportView(server: model.server, session: session)
                 } label: {

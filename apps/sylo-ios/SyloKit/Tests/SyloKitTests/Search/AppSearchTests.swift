@@ -120,6 +120,7 @@ struct ServerSearchModelTests {
     @Test("A number finds the inbox item and members by the same text")
     func numberAndMembers() async {
         let clients = StubClients { endpoint in
+            if endpoint is Endpoints.ServerInfo { return ServerInfo(features: [.appLogin, .inboxSearch]) }
             if endpoint is Endpoints.SearchInbox {
                 return InboxSearchAnswer(items: [InboxHit(kind: .ticket, number: 12, status: "open")])
             }
@@ -151,20 +152,22 @@ struct ServerSearchModelTests {
         #expect(model.inboxHits.isEmpty)
     }
 
-    @Test("A Sylo without the lookup answers 404 once and is not asked again")
+    @Test("A Sylo that does not announce inbox-search is never asked for an item by number")
     func noLookup() async {
         let clients = StubClients { endpoint in
+            if endpoint is Endpoints.ServerInfo { return ServerInfo(features: [.appLogin, .health]) }
             if endpoint is Endpoints.SearchInbox { throw NetworkError.notFound }
             return Self.members
         }
         let model = ServerSearchModel(server: "1", session: makeSignedInSession(clients: clients))
         model.query = "12"
         await model.search()
-        #expect(!model.hasInboxLookup)
         #expect(model.inboxHits.isEmpty)
+        // The members are still searched.
+        #expect(!model.members.isEmpty)
         model.query = "13"
         await model.search()
-        #expect(clients.calls.filter { $0.endpoint is Endpoints.SearchInbox }.count == 1)
+        #expect(!clients.calls.contains { $0.endpoint is Endpoints.SearchInbox })
     }
 
     @Test("Clearing the text clears the results")

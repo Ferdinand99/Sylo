@@ -9,7 +9,6 @@ struct RemindersView: View {
     @State private var editor: ReminderEditorTarget?
     @State private var deleting: Reminder?
     @State private var duplicates: DuplicateModel
-    @State private var canDuplicate = false
     private let session: AppSession
 
     init(server: ServerID, session: AppSession) {
@@ -46,7 +45,7 @@ struct RemindersView: View {
                 Text(message)
             }
             .sensoryFeedback(.success, trigger: model.successCount)
-            .duplicating(duplicates, session: session, isAvailable: $canDuplicate) { await model.load() }
+            .duplicating(duplicates) { await model.load() }
     }
 
     @ViewBuilder
@@ -103,7 +102,7 @@ struct RemindersView: View {
                 .contextMenu {
                     Button("Edit", systemImage: "pencil") { editor = .edit(reminder) }
                     toggleButton(for: reminder)
-                    DuplicateButton(model: duplicates, isAvailable: canDuplicate, kind: .reminder, id: String(reminder.id))
+                    DuplicateButton(model: duplicates, kind: .reminder, id: String(reminder.id))
                     Button("Delete", systemImage: "trash", role: .destructive) { deleting = reminder }
                 }
             }

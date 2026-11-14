@@ -4,9 +4,17 @@ import Observation
 // Import configuration and Duplicate (Sylo 5.2, P6: src/web/routes/v2ConfigImport.js, v2Duplicate.js; web
 // components/ConfigImport.jsx). Import takes the file "Export Configuration" gives, shows what each module would
 // change, and applies the ticked items through the modules' normal save paths with a typed confirmation word.
-// Duplicate copies a list item on the server. Sylo 5.2 announces no feature string for either (a server gap), so
-// the app finds out whether the routes exist: a probe for import (a 404 means no such route), and a 404 on a
-// duplicate hides it afterwards.
+// Duplicate copies a list item on the server. The server announces `config-import`, `duplicate` and
+// `message-templates` in `GET /api/mobile/info`; a Sylo without the string has no such control in the app.
+
+extension ServerFeature {
+    /// `POST .../import/preview` and `.../import/apply`.
+    public static let configImport = ServerFeature(rawValue: "config-import")
+    /// The `duplicate` routes of reminders, embed messages, reaction-role sets, custom commands and shop items.
+    public static let duplicate = ServerFeature(rawValue: "duplicate")
+    /// The built-in message templates and the raw message JSON import and export (client side).
+    public static let messageTemplates = ServerFeature(rawValue: "message-templates")
+}
 
 /// `.../import/preview` answers this; nothing is changed.
 public struct ImportPlan: Decodable, Sendable, Equatable {
@@ -249,8 +257,6 @@ public final class ConfigImportModel {
     /// What the person typed in the confirmation field.
     public var typedWord = ""
     public var errorMessage: String?
-    /// False once this server is known not to have the import routes.
-    public private(set) var isAvailable = true
 
     private var file: JSONValue?
     private let session: AppSession
@@ -286,9 +292,7 @@ public final class ConfigImportModel {
         } catch {
             let error = NetworkError(error)
             phase = .idle
-            if error.isMissingRoute {
-                isAvailable = false
-            } else if error != .cancelled, error != .unauthorized {
+            if error != .cancelled, error != .unauthorized {
                 errorMessage = error.userMessage
             }
         }
@@ -415,8 +419,7 @@ extension Endpoints {
     }
 }
 
-/// Makes copies and remembers whether this server can: a 404 on the route (a Sylo before 5.2's P6) hides the
-/// action afterwards. Shared by the lists that have a "Duplicate" in their menu.
+/// Makes copies for the lists that have a "Duplicate" in their menu (shown when the server announces `duplicate`).
 @MainActor
 @Observable
 public final class DuplicateModel {
@@ -427,7 +430,6 @@ public final class DuplicateModel {
     public private(set) var isWorking = false
     /// Goes up with every copy made, so the list can read again.
     public private(set) var copyCount = 0
-    public private(set) var isAvailable = true
 
     private let session: AppSession
 
@@ -451,50 +453,10 @@ public final class DuplicateModel {
             return copy
         } catch {
             let error = NetworkError(error)
-            if error.isMissingRoute {
-                isAvailable = false
-            } else if error != .cancelled, error != .unauthorized {
+            if error != .cancelled, error != .unauthorized {
                 errorMessage = error.userMessage
             }
             return nil
         }
     }
-}
-
-// MARK: - Do the routes exist?
-
-extension AppSession {
-    /// Whether this server has the Sylo 5.2 import, duplicate and template features (P6). They have no feature
-    /// string, so this sends a harmless preview of an empty file: any answer but a 404 means the route exists
-    /// (400 says it is not an export). Asked once per sign-in and server and kept; a server that cannot be
-    /// reached right now is not remembered.
-    public func hasImportRoutes(server: ServerID) async -> Bool {
-        if let known = importRoutes[server] { return known }
-        do {
-            _ = try await send(Endpoints.PreviewConfigImport(server: server, file: .object([:])))
-            importRoutes[server] = true
-            return true
-        } catch {
-            let error = NetworkError(error)
-            if error.isMissingRoute {
-                importRoutes[server] = false
-                return false
-            }
-            switch error {
-            case .offline, .timeout, .unreachable, .transport, .secureConnectionFailed, .cancelled, .unauthorized,
-                 .notASyloServer, .invalidURL:
-                return false
-            default:
-                // The route answered (a refusal or a "not an export"): it exists.
-                importRoutes[server] = true
-                return true
-            }
-        }
-    }
-}
-
-extension AppSession {
-    /// Whether a probe (``hasImportRoutes(server:)``) has found the P6 routes on this Sylo, without asking again. Every
-    /// server of one Sylo has the same routes, so one answer is enough. False until the server screen has asked.
-    public var knowsImportRoutes: Bool { importRoutes.values.contains(true) }
 }

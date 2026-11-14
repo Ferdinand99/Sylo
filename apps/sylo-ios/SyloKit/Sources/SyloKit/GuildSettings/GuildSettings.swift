@@ -322,7 +322,8 @@ public final class GuildSettingsModel {
     /// Reads who has which level. Best effort: the settings do not depend on it, and a server without the
     /// route (or a failure) leaves the Dashboard access section out.
     private func loadAccess() async {
-        guard hasAccessLevels else { return }
+        // The server list gave a level (`access`) and the Sylo announces `access-levels`: only then is the route asked.
+        guard hasAccessLevels, await session.supports(.accessLevels) else { return }
         do {
             let loaded = try await session.send(Endpoints.LoadDashboardAccess(server: server))
             let keepDraft = accessHasChanges

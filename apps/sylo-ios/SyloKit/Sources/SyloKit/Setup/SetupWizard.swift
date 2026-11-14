@@ -4,15 +4,15 @@ import Observation
 // The setup wizard of Sylo 5.2 (src/web/routes/v2Setup.js, src/web/lib/setupWizard.js; web page
 // web-v2/src/pages/SetupWizard.jsx, rules web-v2/src/setupModel.js). `GET .../setup/suggest` proposes what
 // to set up from the server's channels and roles, `POST .../setup/apply` does the ticked items, one at a
-// time, and answers a result per item. The wizard has no feature string of its own (a server gap): the
-// app offers it when the proposal route answers, and hides it on a 404.
+// time, and answers a result per item. The server announces `setup-wizard`; a Sylo without it has no wizard,
+// and the app asks for nothing then.
 //
 // Safety, the same as the dashboard's: nothing is created or changed unless the person ticked it. A
 // channel or role is created only for an explicit `create: true`; a channel's permissions are changed
 // only for an explicit `fix: true`; a module that is already set up is replaced only when ticked on.
 
 extension ServerFeature {
-    /// Not announced by Sylo 5.2 yet. The app tries the route and a 404 means no wizard.
+    /// `GET .../setup/suggest` and `POST .../setup/apply`.
     public static let setupWizard = ServerFeature(rawValue: "setup-wizard")
 }
 
@@ -750,7 +750,7 @@ public struct SetupApplyAnswer: Decodable, Sendable, Equatable {
 }
 
 extension Endpoints {
-    /// `GET /api/v2/guilds/:id/setup/suggest`. A 404 means a Sylo without the wizard.
+    /// `GET /api/v2/guilds/:id/setup/suggest`. Only a Sylo that announces `setup-wizard`.
     public struct SuggestSetup: APIEndpoint {
         public typealias Response = SetupProposal
         public let server: ServerID
@@ -790,7 +790,7 @@ public final class SetupWizardModel {
     public private(set) var step: Step = .look
     public private(set) var isLoading = false
     public private(set) var isApplying = false
-    /// False once the server is known not to have the wizard (a 404 on the proposal).
+    /// False once the server is known not to announce `setup-wizard`: nothing is asked of it then.
     public private(set) var isAvailable = true
     public var errorMessage: String?
     public private(set) var results: [SetupResult] = []
@@ -806,6 +806,10 @@ public final class SetupWizardModel {
     public func load() async {
         isLoading = true
         defer { isLoading = false }
+        guard await session.supports(.setupWizard) else {
+            isAvailable = false
+            return
+        }
         do {
             let proposal = try await session.send(Endpoints.SuggestSetup(server: server))
             draft = SetupDraft(proposal: proposal)
@@ -813,9 +817,7 @@ public final class SetupWizardModel {
             isAvailable = true
         } catch {
             let error = NetworkError(error)
-            if error.isMissingRoute {
-                isAvailable = false
-            } else if error != .cancelled, error != .unauthorized {
+            if error != .cancelled, error != .unauthorized {
                 errorMessage = error.userMessage
             }
         }

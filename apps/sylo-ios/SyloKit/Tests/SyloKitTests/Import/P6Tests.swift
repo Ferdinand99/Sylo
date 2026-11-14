@@ -326,17 +326,8 @@ struct ConfigImportModelTests {
         await model.preview(fileData: Self.file)
         #expect(model.errorMessage == "This is not a Sylo configuration export.")
         #expect(model.phase == .idle)
-        #expect(model.isAvailable)
     }
 
-    @Test("A Sylo without the import routes hides the feature")
-    func missing() async {
-        let clients = StubClients { _ in throw NetworkError.notFound }
-        let model = ConfigImportModel(server: "1", session: makeSignedInSession(clients: clients))
-        await model.preview(fileData: Self.file)
-        #expect(!model.isAvailable)
-        #expect(model.errorMessage == nil)
-    }
 
     @Test("A person who may only view is refused by the server, and the review stays")
     func viewOnly() async {
@@ -391,38 +382,47 @@ struct DuplicateTests {
         let model = DuplicateModel(server: "1", session: makeSignedInSession(clients: clients))
         #expect(await model.duplicate(.reminder, id: "4") == nil)
         #expect(model.errorMessage == "This server already has the maximum of 25 reminders.")
-        #expect(model.isAvailable)
     }
 
-    @Test("A 404 on the route hides Duplicate")
-    func missing() async {
-        let clients = StubClients { _ in throw NetworkError.notFound }
-        let model = DuplicateModel(server: "1", session: makeSignedInSession(clients: clients))
-        _ = await model.duplicate(.shopItem, id: "1")
-        #expect(!model.isAvailable)
-        #expect(model.errorMessage == nil)
+    @Test("The features a Sylo 5.2 announces, as the server spells them")
+    func featureStrings() {
+        #expect(ServerFeature.configImport.rawValue == "config-import")
+        #expect(ServerFeature.duplicate.rawValue == "duplicate")
+        #expect(ServerFeature.messageTemplates.rawValue == "message-templates")
+        #expect(ServerFeature.setupWizard.rawValue == "setup-wizard")
+        #expect(ServerFeature.configHistory.rawValue == "config-history")
+        #expect(ServerFeature.inboxSearch.rawValue == "inbox-search")
+        #expect(ServerFeature.health.rawValue == "health")
+        #expect(ServerFeature.accessLevels.rawValue == "access-levels")
     }
 
-    @Test("The probe: a refusal or a bad file means the route is there, a 404 means it is not")
-    func probe() async {
-        let there = StubClients { _ in throw NetworkError.badRequest(message: "This is not an export.") }
-        #expect(await makeSignedInSession(clients: there).hasImportRoutes(server: "1"))
-        let forbidden = StubClients { _ in throw NetworkError.forbidden(message: "Your dashboard access in this server is View only, so you can't do this.") }
-        #expect(await makeSignedInSession(clients: forbidden).hasImportRoutes(server: "1"))
-        let absent = StubClients { _ in throw NetworkError.notFound }
-        let session = makeSignedInSession(clients: absent)
-        #expect(!(await session.hasImportRoutes(server: "1")))
-        #expect(!(await session.hasImportRoutes(server: "1")))
-        // Answered once, then remembered.
-        #expect(absent.calls.count == 1)
-    }
-
-    @Test("A server that cannot be reached is not remembered as lacking the routes")
-    func probeOffline() async {
-        let clients = StubClients { _ in throw NetworkError.offline }
+    @Test("A control for a feature shows only when the Sylo announces it, and a probe is never sent")
+    func gating() async {
+        let all = ServerInfo(features: [
+            .appLogin, .accessLevels, .health, .setupWizard, .configHistory, .inboxSearch, .configImport, .duplicate,
+            .messageTemplates,
+        ])
+        let clients = StubClients { _ in all }
         let session = makeSignedInSession(clients: clients)
-        #expect(!(await session.hasImportRoutes(server: "1")))
-        clients.setHandler { _ in throw NetworkError.badRequest(message: "no") }
-        #expect(await session.hasImportRoutes(server: "1"))
+        // Before the features are read, nothing is announced.
+        #expect(!session.has(.configImport))
+        _ = await session.serverFeatures()
+        for feature in [ServerFeature.configImport, .duplicate, .messageTemplates, .setupWizard, .configHistory, .inboxSearch] {
+            #expect(session.has(feature))
+        }
+        // Nothing but the info call went out: no preview of an empty file to see whether import exists.
+        #expect(clients.calls.allSatisfy { $0.endpoint is Endpoints.ServerInfo })
+    }
+
+    @Test("A Sylo 5.2 that predates the strings, or a 5.1, has none of the controls")
+    func olderServer() async {
+        let clients = StubClients { _ in ServerInfo(features: [.appLogin, .liveAccess, .changelog, .accessLevels, .health]) }
+        let session = makeSignedInSession(clients: clients)
+        _ = await session.serverFeatures()
+        for feature in [ServerFeature.configImport, .duplicate, .messageTemplates, .setupWizard, .configHistory, .inboxSearch] {
+            #expect(!session.has(feature))
+        }
+        #expect(session.has(.accessLevels))
+        #expect(session.has(.health))
     }
 }

@@ -12,7 +12,7 @@ struct MessagesView: View {
     @State private var toUnpublish: ComposedMessageSummary?
     @State private var toDelete: ComposedMessageSummary?
     @State private var duplicates: DuplicateModel
-    @State private var canDuplicate = false
+    @Environment(\.dashboardAccess) private var access
 
     init(server: ServerID, session: AppSession) {
         self.server = server
@@ -32,7 +32,7 @@ struct MessagesView: View {
                     } label: {
                         Label("New Message", systemImage: "plus")
                     }
-                    .disabled(!model.hasLoaded || model.isFull)
+                    .disabled(!model.hasLoaded || model.isFull || !access.canEdit)
                 }
             }
             // Runs again when a message is closed and the list is back: it may have changed.
@@ -59,9 +59,9 @@ struct MessagesView: View {
                 Text(message)
             }
             .sensoryFeedback(.success, trigger: model.successCount)
-            .duplicating(duplicates, session: session, isAvailable: $canDuplicate) { await model.load() }
-            // Embed messages are Edit work.
-            .lockedBelow()
+            .duplicating(duplicates) { await model.load() }
+            // Embed messages can be read below Edit, but not made, posted or removed.
+            .accessNotice()
     }
 
     @ViewBuilder
@@ -83,18 +83,22 @@ struct MessagesView: View {
                         }
                         .disabled(model.busy.contains(item.id))
                         .swipeActions(edge: .trailing) {
-                            Button("Delete", systemImage: "trash", role: .destructive) { toDelete = item }
-                            if item.published {
-                                Button("Unpublish", systemImage: "eye.slash") { toUnpublish = item }
-                                    .tint(.orange)
+                            if access.canEdit {
+                                Button("Delete", systemImage: "trash", role: .destructive) { toDelete = item }
+                                if item.published {
+                                    Button("Unpublish", systemImage: "eye.slash") { toUnpublish = item }
+                                        .tint(.orange)
+                                }
                             }
                         }
                         .contextMenu {
-                            if item.published {
-                                Button("Unpublish", systemImage: "eye.slash") { toUnpublish = item }
+                            if access.canEdit {
+                                if item.published {
+                                    Button("Unpublish", systemImage: "eye.slash") { toUnpublish = item }
+                                }
+                                DuplicateButton(model: duplicates, kind: .composedMessage, id: String(item.id))
+                                Button("Delete", systemImage: "trash", role: .destructive) { toDelete = item }
                             }
-                            DuplicateButton(model: duplicates, isAvailable: canDuplicate, kind: .composedMessage, id: String(item.id))
-                            Button("Delete", systemImage: "trash", role: .destructive) { toDelete = item }
                         }
                     }
                 } header: {
