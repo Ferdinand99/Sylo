@@ -12,6 +12,7 @@ import { getGuildModule, setGuildModule } from '../src/db/modules.js';
 import { getAccount } from '../src/db/economy.js';
 import { purgeGuild } from '../src/db/purge.js';
 import { credit, deposit } from '../src/modules/lib/economy.js';
+import { auditDetail } from '../src/web/routes/v2Economy.js';
 
 let app;
 let api;
@@ -220,6 +221,23 @@ test('staff add, remove, set and reset a member from the page, each in the ledge
     .map((r) => r.kind);
   assert.deepEqual(kinds, ['staff_add', 'staff_remove', 'staff_set', 'deposit', 'reset']);
   assert.equal((await auditRows(GID, 'economy:adjust')).length, 4);
+});
+
+test('the audit line of a staff change names the member, not the snowflake', async () => {
+  await enable();
+  await api.post(`/modules/economy/members/${U}/adjust`, { action: 'add', amount: 330 });
+  await api.post(`/modules/economy/members/${V}/adjust`, { action: 'reset-user' });
+  const details = (await auditRows(GID, 'economy:adjust')).map((r) => r.detail).sort();
+  assert.deepEqual(details, ['add 330 for Alice', 'reset-user for Bob']);
+  for (const d of details) assert.doesNotMatch(d, /\d{17,20}/);
+});
+
+test('auditDetail: a name is trimmed and capped, and someone who is gone falls back to the id', () => {
+  assert.equal(auditDetail('remove', 40, { displayName: '  Ann   Lee ' }, U), 'remove 40 for Ann Lee');
+  assert.equal(auditDetail('set', 1, { user: { username: 'ann' } }, U), 'set 1 for ann');
+  assert.equal(auditDetail('add', 5, null, U), `add 5 for ${U}`);
+  assert.equal(auditDetail('reset-user', 0, null, U), `reset-user for ${U}`);
+  assert.ok(auditDetail('add', 5, { displayName: 'x'.repeat(200) }, U).length < 90);
 });
 
 test('the page refuses what /eco would refuse', async () => {
