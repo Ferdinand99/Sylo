@@ -1,10 +1,17 @@
 import LoadError from '../components/LoadError.jsx';
+import MentionTextarea from '../components/MentionTextarea.jsx';
+import PreviewLayout from '../components/PreviewLayout.jsx';
 import SetupCallout from '../components/SetupCallout.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import UnitInput from '../components/UnitInput.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { minutesAsText } from '../util.js';
+
+// What the bot posts when the title or the text is left empty (DEFAULTS in src/modules/verification.js).
+const DEFAULT_TITLE = 'Verification';
+const DEFAULT_BODY = 'Click the button below to verify and unlock the rest of the server.';
+const DEFAULT_SUCCESS = 'You are verified — welcome!';
 
 export default function Verification() {
   const limits = useModuleLimits('verification');
@@ -15,8 +22,28 @@ export default function Verification() {
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
 
+  const previews = [
+    {
+      key: 'verify',
+      title: 'The verify message',
+      embed: {
+        color: '#58d68d',
+        title: form.title || DEFAULT_TITLE,
+        description: form.message || DEFAULT_BODY,
+      },
+      note: 'Members see a green “✅ Verify” button under the message.',
+    },
+    {
+      key: 'success',
+      title: 'Reply after verifying',
+      content: form.successMessage || DEFAULT_SUCCESS,
+      note: 'Only the member who verified sees this reply.',
+    },
+  ];
+
   return (
-    <>
+    <PreviewLayout previews={previews} lookup={{ channels: data.channels, roles: data.roles }}>
+      <>
       <h1 className="v2-section-title">Verification</h1>
       <p className="v2-field-hint">
         Posts a message with a <strong>Verify</strong> button in the chosen channel. New members click it to
@@ -102,7 +129,9 @@ export default function Verification() {
 
         <div className="v2-field">
           <label htmlFor="message">Message body</label>
-          <textarea
+          <MentionTextarea
+            channels={data.channels}
+            roles={data.roles}
             id="message"
             rows={2}
             maxLength={limitOf(limits, 'message').maxLength}
@@ -165,6 +194,7 @@ export default function Verification() {
         option — <strong>Kick Members</strong>.
       </p>
       <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
-    </>
+      </>
+    </PreviewLayout>
   );
 }

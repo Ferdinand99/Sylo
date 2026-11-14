@@ -118,7 +118,7 @@ export default function Giveaways() {
       </p>
 
       <form onSubmit={save} data-savebar>
-        <div className="v2-field">
+        <div className="v2-field v2-section-gap-sm">
           <label htmlFor="ping">Who to ping when winners are announced</label>
           <select
             id="ping"
@@ -146,7 +146,9 @@ export default function Giveaways() {
       <div className="v2-group v2-section-gap">
         <h2 className="v2-group-title">Active giveaways ({active.length})</h2>
         {active.length === 0 ? (
-          <p className="v2-field-hint">None running. Start one with /giveaway start.</p>
+          <p className="v2-field-hint">
+            None running. Start one with <code>{cmd('/giveaway start')}</code> in your server.
+          </p>
         ) : (
           <div className="v2-list">
             {active.map((g) => (
@@ -212,6 +214,7 @@ export default function Giveaways() {
                   </label>
                   <UnitInput
                     id={`reroll-${g.id}`}
+                    className="v2-input-sm"
                     unit={(rerollCounts[g.id] ?? 1) === 1 ? 'winner' : 'winners'}
                     min={limitOf(limits, 'winners').min}
                     max={limitOf(limits, 'winners').max}

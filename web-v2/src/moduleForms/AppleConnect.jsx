@@ -3,6 +3,8 @@ import SetupCallout from '../components/SetupCallout.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import UnitInput from '../components/UnitInput.jsx';
+import '../styles/wp2-alerts.css';
 
 // One channel picker per alert kind; empty means the main channel.
 function ChannelPick({ value, onChange, channels }) {
@@ -17,6 +19,29 @@ function ChannelPick({ value, onChange, channels }) {
     </select>
   );
 }
+
+// The alerts, one grid row each: the alert | its own number (where it has one) | its channel. `option` is the
+// number: the words before it, which setting it is, and the unit after it.
+const ALERTS = [
+  {
+    kind: 'versionState',
+    label: 'App version state changes (waiting for review, in review, rejected, ready for sale …)',
+  },
+  { kind: 'build', label: 'Builds finished or failed processing' },
+  { kind: 'betaReview', label: 'TestFlight review started, approved or rejected' },
+  { kind: 'feedback', label: 'TestFlight feedback and crashes' },
+  {
+    kind: 'reviews',
+    label: 'New customer reviews',
+    option: { lead: 'only up to', field: 'maxStars', unit: 'stars', aria: 'Highest star rating to alert on' },
+  },
+  {
+    kind: 'expiry',
+    label: 'Certificates and profiles expiring',
+    option: { lead: 'from', field: 'days', unit: 'days before', aria: 'Days before expiry to start alerting' },
+    hint: 'Also sent at 7 days and 1 day before. Needs a team API key.',
+  },
+];
 
 // The app list is edited as free text (one id per line); it travels as an array.
 const toForm = (config) => ({ ...config, appsText: config.apps.join('\n') });
@@ -113,118 +138,40 @@ export default function AppleConnect() {
         <p className="v2-field-hint">
           Each alert can go to its own channel; leave it on main channel to use the one above.
         </p>
-        <div className="v2-field">
-          <div className="v2-alert-row">
-            <label className="v2-check">
-              <input
-                type="checkbox"
-                checked={ev.versionState.enabled}
-                onChange={(e) => setKind('versionState', { enabled: e.target.checked })}
+        <div className="v2-field v2-alert-grid">
+          {ALERTS.map(({ kind, label, option, hint }) => (
+            <div className="v2-alert-line" key={kind}>
+              <label className="v2-check">
+                <input
+                  type="checkbox"
+                  checked={ev[kind].enabled}
+                  onChange={(e) => setKind(kind, { enabled: e.target.checked })}
+                />
+                <span>{label}</span>
+              </label>
+              <span className="v2-alert-option">
+                {option ? (
+                  <>
+                    <span className="v2-nowrap">{option.lead}</span>
+                    <UnitInput
+                      aria-label={option.aria}
+                      unit={option.unit}
+                      min={limitOf(limits, `events.${kind}.${option.field}`).min}
+                      max={limitOf(limits, `events.${kind}.${option.field}`).max}
+                      value={ev[kind][option.field]}
+                      onChange={(e) => setKind(kind, { [option.field]: Number(e.target.value) })}
+                    />
+                  </>
+                ) : null}
+              </span>
+              <ChannelPick
+                channels={data.channels}
+                value={ev[kind].channelId}
+                onChange={(channelId) => setKind(kind, { channelId })}
               />
-              App version state changes (waiting for review, in review, rejected, ready for sale …)
-            </label>
-            <ChannelPick
-              channels={data.channels}
-              value={ev.versionState.channelId}
-              onChange={(channelId) => setKind('versionState', { channelId })}
-            />
-          </div>
-          <div className="v2-alert-row">
-            <label className="v2-check">
-              <input
-                type="checkbox"
-                checked={ev.build.enabled}
-                onChange={(e) => setKind('build', { enabled: e.target.checked })}
-              />
-              Builds finished or failed processing
-            </label>
-            <ChannelPick
-              channels={data.channels}
-              value={ev.build.channelId}
-              onChange={(channelId) => setKind('build', { channelId })}
-            />
-          </div>
-          <div className="v2-alert-row">
-            <label className="v2-check">
-              <input
-                type="checkbox"
-                checked={ev.betaReview.enabled}
-                onChange={(e) => setKind('betaReview', { enabled: e.target.checked })}
-              />
-              TestFlight review started, approved or rejected
-            </label>
-            <ChannelPick
-              channels={data.channels}
-              value={ev.betaReview.channelId}
-              onChange={(channelId) => setKind('betaReview', { channelId })}
-            />
-          </div>
-          <div className="v2-alert-row">
-            <label className="v2-check">
-              <input
-                type="checkbox"
-                checked={ev.feedback.enabled}
-                onChange={(e) => setKind('feedback', { enabled: e.target.checked })}
-              />
-              TestFlight feedback and crashes
-            </label>
-            <ChannelPick
-              channels={data.channels}
-              value={ev.feedback.channelId}
-              onChange={(channelId) => setKind('feedback', { channelId })}
-            />
-          </div>
-          <div className="v2-alert-row">
-            <label className="v2-check v2-check-inline">
-              <input
-                type="checkbox"
-                checked={ev.reviews.enabled}
-                onChange={(e) => setKind('reviews', { enabled: e.target.checked })}
-              />
-              <span>New customer reviews — only up to</span>
-              <input
-                type="number"
-                className="v2-input-num"
-                min={limitOf(limits, 'events.reviews.maxStars').min}
-                max={limitOf(limits, 'events.reviews.maxStars').max}
-                value={ev.reviews.maxStars}
-                onChange={(e) => setKind('reviews', { maxStars: Number(e.target.value) })}
-              />
-              <span className="v2-nowrap">stars</span>
-            </label>
-            <ChannelPick
-              channels={data.channels}
-              value={ev.reviews.channelId}
-              onChange={(channelId) => setKind('reviews', { channelId })}
-            />
-          </div>
-          <div className="v2-alert-row">
-            <label className="v2-check v2-check-inline">
-              <input
-                type="checkbox"
-                checked={ev.expiry.enabled}
-                onChange={(e) => setKind('expiry', { enabled: e.target.checked })}
-              />
-              <span>Certificates and profiles expiring — from</span>
-              <input
-                type="number"
-                className="v2-input-num"
-                min={limitOf(limits, 'events.expiry.days').min}
-                max={limitOf(limits, 'events.expiry.days').max}
-                value={ev.expiry.days}
-                onChange={(e) => setKind('expiry', { days: Number(e.target.value) })}
-              />
-              <span className="v2-nowrap">days before</span>
-            </label>
-            <ChannelPick
-              channels={data.channels}
-              value={ev.expiry.channelId}
-              onChange={(channelId) => setKind('expiry', { channelId })}
-            />
-            <p className="v2-field-hint v2-alert-hint">
-              Also sent at 7 days and 1 day before. Needs a team API key.
-            </p>
-          </div>
+              {hint ? <p className="v2-field-hint v2-alert-hint">{hint}</p> : null}
+            </div>
+          ))}
         </div>
       </form>
       <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
