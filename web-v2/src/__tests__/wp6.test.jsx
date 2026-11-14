@@ -87,7 +87,7 @@ describe('overview model: a module waiting for the bot owner', () => {
     name: 'Twitch alerts',
     waitingForOwner: true,
     summaryParts: ['Waiting for the bot owner', '1 streamer'],
-    lines: [line('Streamers', '1', 'on'), line('API', 'TWITCH_CLIENT_ID/SECRET not set', 'off')],
+    lines: [line('Streamers', '1', 'on'), line('API', 'not added by the bot owner', 'off')],
   });
 
   it('is amber with its own label, not a green "On"', () => {
@@ -343,13 +343,34 @@ describe('Audit log', () => {
     expect(api.getMemberNames).toHaveBeenCalledWith(GUILD, [MEMBER, '800000000000000099']);
   });
 
-  it('keeps a name that is already in the text, and finds ids in the actor too', () => {
+  it('keeps a name that is already in the text, and finds the ids in the places a member id stands', () => {
     expect(withNames('add 1 for Alice', new Map())).toBe('add 1 for Alice');
     expect(withNames(`released ${MEMBER}`, new Map([[MEMBER, 'Bob']]))).toBe('released Bob');
-    expect(idsInEntries([{ actor: `x ${MEMBER}`, detail: `y ${MEMBER} z 900000000000000011` }])).toEqual([
-      MEMBER,
-      '900000000000000011',
-    ]);
+    expect(withNames(`${MEMBER} bonus → 3`, new Map([[MEMBER, 'Bob']]))).toBe('Bob bonus → 3');
+    expect(
+      idsInEntries([
+        { actor: 'Mod (dashboard)', detail: `gave Badge to ${MEMBER}` },
+        { actor: 'Mod (dashboard)', detail: `900000000000000011 bonus → 2` },
+        { actor: 'Mod (dashboard)', detail: `deleted data for ${MEMBER}` },
+      ])
+    ).toEqual([MEMBER, '900000000000000011']);
+  });
+
+  it('does not take a channel id, a big count or a numeric nickname for a member', () => {
+    const other = '900000000000000011';
+    const names = new Map([[other, 'Somebody Else']]);
+    const channel = `updated schedule for #${other}`;
+    expect(withNames(channel, names)).toBe(channel);
+    expect(withNames(`count = ${other}`, names)).toBe(`count = ${other}`);
+    // a member whose name is the digits of another member's id: new entries store it with the end of its id
+    expect(withNames(`add 5 for ${other} (…1234)`, names)).toBe(`add 5 for ${other} (…1234)`);
+    expect(withNames('add 5 for 1234 Ann', names)).toBe('add 5 for 1234 Ann');
+    expect(
+      idsInEntries([
+        { actor: other, detail: channel },
+        { actor: `${other} (dashboard)`, detail: `count = ${other}` },
+      ])
+    ).toEqual([]);
   });
 
   it('narrows by kind of change through the server, and "Show 50 more" appends the next page', async () => {

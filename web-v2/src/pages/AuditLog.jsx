@@ -55,7 +55,10 @@ export function auditActionLabel(action, moduleNames = new Map()) {
   return words(key) || key;
 }
 
-const ID = /\b\d{17,20}\b/g;
+// Where a member id stands in an audit line: after "for", "of", "to", "released" or "removed" ("add 5 for <id>",
+// "gave a badge to <id>", "released <id>") or before "bonus →" ("<id> bonus → 3"). Any other long number is not a
+// member: a channel id, a count, a name made of digits (a stored name is followed by "(…1234)", the end of its id).
+const MEMBER_ID = /\b(for|of|to|released|removed) (\d{17,20})\b(?! \(…)|\b(\d{17,20}) bonus →/g;
 const ID_CHUNK = 20;
 
 /** A member id with no name to show for it: the end of the id, so two of them can still be told apart. */
@@ -63,17 +66,22 @@ const unnamed = (id) => `member …${id.slice(-4)}`;
 
 /**
  * An audit line with the member ids in it turned into names: `names` is a Map of id -> name (an id that
- * is not in it reads "member …1234").
+ * is not in it reads "member …1234"). Only a member's place in the line counts (see MEMBER_ID); the actor is
+ * always a name ("Alice (dashboard)"), so it is not read for ids at all.
  */
 export function withNames(text, names) {
-  return String(text ?? '').replace(ID, (id) => names.get(id) ?? unnamed(id));
+  return String(text ?? '').replace(MEMBER_ID, (whole, word, id, bonusId) => {
+    const found = id ?? bonusId;
+    const shown = names.get(found) ?? unnamed(found);
+    return word ? `${word} ${shown}` : `${shown} bonus →`;
+  });
 }
 
-/** The member ids that appear in the entries' text (new entries store the name, older ones the id). */
+/** The member ids that appear in the entries' details (new entries store the name, older ones the id). */
 export function idsInEntries(entries) {
   const ids = new Set();
   for (const e of entries) {
-    for (const text of [e.detail, e.actor]) for (const id of String(text ?? '').match(ID) ?? []) ids.add(id);
+    for (const m of String(e.detail ?? '').matchAll(MEMBER_ID)) ids.add(m[2] ?? m[3]);
   }
   return [...ids];
 }
