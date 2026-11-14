@@ -91,6 +91,11 @@ struct CallbackIssuerTests {
         #expect(outcome("iss=javascript:alert(1)") == unknown)
         #expect(outcome("iss=https://app.sylobot.com&iss=https://app.sylobot.com") == unknown)
         #expect(outcome("iss=https://app.sylobot.com&iss=https://evil.example") == unknown)
+        // A second issuer that cannot be read still counts: it must not leave the first one standing alone.
+        #expect(outcome("iss=https://app.sylobot.com&iss=%FF") == unknown)
+        #expect(outcome("iss=%FF&iss=https://app.sylobot.com") == unknown)
+        #expect(outcome("iss=%FF") == unknown)
+        #expect(outcome("iss=https://app.sylobot.com&%69ss=https://app.sylobot.com") == unknown)
     }
 
     @Test("With no server to compare to, any issuer is refused")
@@ -141,7 +146,7 @@ struct CallbackIssuerTests {
             return URL(string: "sylo://auth?code=c&state=\(state)&iss=https://evil.example")!
         }
         let expected = "This sign-in came from a different server (https://evil.example), "
-            + "but you chose https://app.sylobot.com. Sign in again, or add the server with that address."
+            + "but you chose https://app.sylobot.com. Check the address you entered, or ask whoever runs your server, then sign in again."
         #expect(session.errorMessage == expected)
         #expect(session.phase == .signIn(chosen))
         // The code was not redeemed anywhere.
@@ -163,10 +168,12 @@ struct IssuerFlowTests {
         token: "sylo_new", expiresAt: Date().addingTimeInterval(86_400),
         account: SignedInAccount(name: "ferdi", platforms: [.discord]))
 
-    private func signIn(_ extra: String, tokens: InMemoryTokenStore = InMemoryTokenStore()) async -> AppSession {
+    private func signIn(
+        _ extra: String, server chosen: ServerURL? = nil, tokens: InMemoryTokenStore = InMemoryTokenStore()
+    ) async -> AppSession {
         let clients = self.clients
         let session = AppSession(
-            tokens: tokens, preference: MemoryServerPreference(server), deviceName: "Test",
+            tokens: tokens, preference: MemoryServerPreference(chosen ?? server), deviceName: "Test",
             makeClient: { clients.make($0, $1) })
         session.start()
         let grant = self.grant
@@ -207,7 +214,7 @@ struct IssuerFlowTests {
         let refused = await signIn("&iss=http://sylo.example.com", tokens: tokens)
         #expect(refused.phase == .signIn(server))
         let expected = "This sign-in came from a different server (http://sylo.example.com), "
-            + "but you chose https://sylo.example.com. Sign in again, or add the server with that address."
+            + "but you chose https://sylo.example.com. Check the address you entered, or ask whoever runs your server, then sign in again."
         #expect(refused.errorMessage == expected)
         #expect(!clients.calls.contains { $0.endpoint is Endpoints.ExchangeCode })
         #expect(try tokens.token(for: server.description) == nil)
@@ -270,7 +277,7 @@ struct IssuerFlowTests {
             URL(string: "sylo://connected?result=r-1&platform=fluxer&iss=https://other.example.com")!
         }
         let expected = "This connection came from a different server (https://other.example.com), "
-            + "but you chose https://sylo.example.com. Try again, or add the server with that address."
+            + "but you chose https://sylo.example.com. Check the address you entered, or ask whoever runs your server, then try again."
         #expect(model.platformError == expected)
     }
 }

@@ -246,7 +246,10 @@ public enum ConfigDiff {
             let shown = list.prefix(6).map { format($0, names: names) }
             return list.count > 6 ? "\(shown.joined(separator: ", ")) and \(list.count - 6) more" : shown.joined(separator: ", ")
         case .object:
-            if full { return lines(of: value, names: names, depth: 0).joined(separator: "\n") }
+            if full {
+                let fields = lines(of: value, names: names, depth: 0)
+                return fields.isEmpty ? "(empty)" : fields.joined(separator: "\n")
+            }
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
             let text = (try? encoder.encode(value)).flatMap { String(data: $0, encoding: .utf8) } ?? ""

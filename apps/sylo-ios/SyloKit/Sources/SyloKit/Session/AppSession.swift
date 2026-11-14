@@ -49,18 +49,23 @@ public final class AppSession {
     private let preference: any ServerPreference
     private let deviceName: String
     private let makeClient: ClientFactory
+    /// Sign-outs the server could not be told about yet (see ``PendingRevocation``).
+    private let pending: any PendingRevocationStore
+    private var isReplaying = false
 
     /// - Parameters:
     ///   - deviceName: Sent with the sign-in, shown in the account's device list.
     ///   - makeClient: Builds the client for a server, with the token or nil.
     public init(
         tokens: any TokenStore, preference: any ServerPreference, deviceName: String,
+        pendingRevocations: any PendingRevocationStore = InMemoryPendingRevocationStore(),
         makeClient: @escaping ClientFactory
     ) {
         self.tokens = tokens
         self.preference = preference
         self.deviceName = deviceName
         self.makeClient = makeClient
+        self.pending = pendingRevocations
     }
 
     /// The server in use, whether signed in or not.
@@ -194,18 +199,118 @@ public final class AppSession {
     }
 
     /// Signs this device out: forgets the token here at once, then asks the server to take down this
-    /// device's notifications and revoke the token (best effort; offline, the token simply stays unused
-    /// until it expires). Notifications stop on the device itself without the server: the app drops its
+    /// device's notifications and revoke the token. When the server cannot be reached, a
+    /// ``PendingRevocation`` (the server, and the token to revoke, in an app-only store) is kept and replayed
+    /// by ``revokePending(within:)`` until the server answers, so a registration it still holds cannot
+    /// deliver again later. Notifications stop on the device itself without the server: the app drops its
     /// registration with iOS and forgets what it sent (``PushDeviceState/signedOut()``).
     public func signOut() async {
         guard case .signedIn(let server) = phase else { return }
-        let client = self.client
         let pushesToServer = has(.push) || has(.pushPigeon)
+        // Written before the token goes, so a crash in between cannot lose it.
+        if let stored = (try? tokens.token(for: key(server))) ?? nil {
+            addPending(PendingRevocation(server: server, token: stored.token, hadPush: pushesToServer))
+        }
         signOutLocally(of: server)
-        // Tells the server the notifications are off before the token that carries them goes, so it stops
-        // sending even if it keeps the token's row.
-        if pushesToServer { _ = try? await client?.send(Endpoints.UnregisterPush()) }
-        _ = try? await client?.send(Endpoints.SignOut())
+        await replayPending()
+    }
+
+    // MARK: - Pending revocations
+
+    /// Whether a sign-out is still waiting to be told to its server.
+    public var hasPendingRevocations: Bool { !((try? pending.load()) ?? []).isEmpty }
+
+    /// Tells the servers of earlier sign-outs that could not be reached to take down this device's push
+    /// registration and revoke the token, each only the server it was issued by. Call it at launch, when the app
+    /// comes to the front, and before the device registers for notifications again. Gives up waiting after
+    /// `limit` (the item stays for the next time), so a server that is down never holds the app up for long.
+    public func revokePending(within limit: Duration = .seconds(10)) async {
+        guard hasPendingRevocations else { return }
+        let replay = Task { await self.replayPending() }
+        let timer = Task {
+            try? await Task.sleep(for: limit)
+            replay.cancel()
+        }
+        await replay.value
+        timer.cancel()
+    }
+
+    private func addPending(_ item: PendingRevocation) {
+        var items = (try? pending.load()) ?? []
+        items.removeAll { $0.server == item.server && $0.token == item.token }
+        items.append(item)
+        if items.count > PendingRevocation.maxKept { items.removeFirst(items.count - PendingRevocation.maxKept) }
+        try? pending.save(items)
+    }
+
+    private enum Step {
+        /// The server answered (success, 404), or said the token is already dead (401: `dead`).
+        case done(dead: Bool)
+        /// Not reached, or an error answer: try again later.
+        case retry
+        case cancelled
+    }
+
+    private func attempt<E: APIEndpoint>(_ client: any APIClient, _ endpoint: E) async -> Step {
+        do {
+            _ = try await client.send(endpoint)
+            return .done(dead: false)
+        } catch {
+            let error = NetworkError(error)
+            if error == .unauthorized { return .done(dead: true) }
+            if case .notFound = error { return .done(dead: false) }
+            if error == .cancelled { return .cancelled }
+            return .retry
+        }
+    }
+
+    /// One try for every pending revocation. Each goes to its own server with its own token.
+    private func replayPending() async {
+        guard !isReplaying else { return }
+        isReplaying = true
+        defer { isReplaying = false }
+        let items = (try? pending.load()) ?? []
+        guard !items.isEmpty else { return }
+        var finished = Set<UUID>()
+        var attempts: [UUID: Int] = [:]
+        let now = Date()
+        for item in items {
+            if item.isStale(now: now) {
+                finished.insert(item.id)
+                continue
+            }
+            let client = makeClient(item.server, item.token)
+            var allDone = true
+            var dead = false
+            var wasCancelled = false
+            if item.hadPush {
+                switch await attempt(client, Endpoints.UnregisterPush()) {
+                case .done(let tokenDead): dead = tokenDead
+                case .retry: allDone = false
+                case .cancelled: wasCancelled = true
+                }
+            }
+            if !dead, !wasCancelled {
+                switch await attempt(client, Endpoints.SignOut()) {
+                case .done: break
+                case .retry: allDone = false
+                case .cancelled: wasCancelled = true
+                }
+            }
+            if wasCancelled { continue }
+            if allDone || dead {
+                finished.insert(item.id)
+            } else {
+                attempts[item.id] = item.attempts + 1
+            }
+        }
+        // Reloaded, so a sign-out that happened meanwhile is not lost.
+        var current = (try? pending.load()) ?? []
+        current.removeAll { finished.contains($0.id) }
+        for index in current.indices {
+            if let tried = attempts[current[index].id] { current[index].attempts = tried }
+        }
+        try? pending.save(current)
     }
 
     /// Deletes the account on this server, then forgets the token here. There is no sign-out call:
@@ -410,7 +515,7 @@ public final class AppSession {
         case .invalidServerURL: ServerURLError.invalid.userMessage
         case .serverError: "The server couldn't sign you in. Try again."
         case .issuerMismatch(let claimed):
-            "This sign-in came from a different server (\(claimed)), but you chose \(chosen). Sign in again, or add the server with that address."
+            "This sign-in came from a different server (\(claimed)), but you chose \(chosen). Check the address you entered, or ask whoever runs your server, then sign in again."
         case .cancelled, .stateMismatch, .wrongCallback, .missingCode: unfinishedSignIn
         }
     }

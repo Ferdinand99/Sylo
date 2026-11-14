@@ -74,4 +74,49 @@ struct ServerEnvironmentSourceTests {
         }
         #expect(found == allowed, "navigation destinations found in \(found), allowed \(allowed)")
     }
+
+    /// How many times `needle` appears in each Swift file of the app (files with none are left out).
+    private static func counts(of needle: String) -> [String: Int] {
+        var found: [String: Int] = [:]
+        for url in swiftFiles(under: appRoot.appendingPathComponent("sylo-ios")) {
+            guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            let count = text.components(separatedBy: needle).count - 1
+            if count > 0 { found[url.lastPathComponent] = count }
+        }
+        return found
+    }
+
+    @Test("Every other way a screen is pushed or presented is listed: links take the environment of where they are, so only value-based ones matter")
+    func otherDestinationStyles() throws {
+        // A `NavigationLink` with a destination, and a sheet, take the environment of the view that holds them, so
+        // they get the server's values from `ServerView`. A value-based link, `navigationDestination(item:)` and
+        // `navigationDestination(isPresented:)` resolve in the stack's context instead, so each one in the app is listed.
+        // Value-based links: the server screen's own routes (`ModuleRoute`, `ServerPageRoute`, `TicketRoute`, which
+        // `ServerView` wraps in `scoped`) and the search results (whose sheet sets the values above its stack).
+        #expect(Self.counts(of: "NavigationLink(value:")
+            == ["ServerSearchView.swift": 1, "TicketListView.swift": 2, "OverviewView.swift": 5])
+        // The one `isPresented` destination is Settings' Health page, which reads none of the server's values.
+        #expect(Self.counts(of: ".navigationDestination(isPresented:") == ["SettingsView.swift": 1])
+        #expect(Self.counts(of: ".navigationDestination(item:").isEmpty, "a navigationDestination(item:) needs the server's environment")
+        #expect(Self.counts(of: ".fullScreenCover(").isEmpty)
+
+        // The types the value-based links push are the ones the stack has a destination for.
+        let pattern = try NSRegularExpression(pattern: #"NavigationLink\(value: (\w+)"#)
+        var types = Set<String>()
+        for url in Self.swiftFiles(under: Self.appRoot.appendingPathComponent("sylo-ios")) {
+            guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            for match in pattern.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+                if let range = Range(match.range(at: 1), in: text) { types.insert(String(text[range])) }
+            }
+        }
+        #expect(types == ["ModuleRoute", "ServerPageRoute", "TicketRoute", "item"])
+    }
+
+    @Test("Settings' Health page reads none of the server's values")
+    func healthPageReadsNone() throws {
+        let text = try Self.source("sylo-ios/Views/Settings/HealthView.swift")
+        for needle in ["ServerHealthModel", "OpenAppealsModel", "dashboardAccess", "serverPlatform"] {
+            #expect(!text.contains(needle), "HealthView now reads \(needle): Settings has to give it the server's environment")
+        }
+    }
 }

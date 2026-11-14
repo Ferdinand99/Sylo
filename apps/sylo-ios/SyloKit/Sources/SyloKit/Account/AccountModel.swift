@@ -226,7 +226,7 @@ public final class AccountModel {
         case .cancelled: "Cancelled."
         case .wrongCallback, .missingResult, .invalidServerURL: "Connecting didn't finish. Try again."
         case .issuerMismatch(let claimed):
-            "This connection came from a different server (\(claimed)), but you chose \(chosen). Try again, or add the server with that address."
+            "This connection came from a different server (\(claimed)), but you chose \(chosen). Check the address you entered, or ask whoever runs your server, then try again."
         case .sheetFailed(let reason): "Couldn't open the sign-in sheet: \(reason)"
         case .serverError(let code): Self.connectFailure(code)
         }

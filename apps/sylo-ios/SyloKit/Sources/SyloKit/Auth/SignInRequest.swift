@@ -77,7 +77,8 @@ public struct SignInRequest: Sendable {
         self.pkce = pkce
         self.state = state
         self.platform = platform
-        self.serverOrigin = CallbackIssuer.origin(of: server.absoluteString)
+        // The same normaliser as the connect flow and the messages: the server address the app uses.
+        self.serverOrigin = (try? ServerURL(server.absoluteString))?.origin
     }
 
     /// The code from the URL the sign-in sheet returned, after checking it carries this
@@ -111,11 +112,18 @@ public struct SignInRequest: Sendable {
             !expectedState.isEmpty, state[0].utf8.elementsEqual(expectedState.utf8)
         else { throw .stateMismatch }
 
-        // An `iss` that is not valid percent-encoding is left out of `parameters`, and must not read as "no issuer".
-        let namesIssuer = (components.percentEncodedQuery ?? "").split(separator: "&").contains {
-            $0.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false).first == "iss"
+        // Every pair named `iss` counts, including one that is not valid percent-encoding (it is left out of
+        // `parameters`): two of them refuse the callback, and one that cannot be read is not "no issuer".
+        let issuerPairs = (components.percentEncodedQuery ?? "").split(separator: "&").filter { pair in
+            let name = pair.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)[0]
+            return name.replacingOccurrences(of: "+", with: " ").removingPercentEncoding == "iss"
         }
-        let issuers = parameters["iss"] ?? (namesIssuer ? [""] : nil)
+        let issuers: [String]?
+        switch issuerPairs.count {
+        case 0: issuers = nil
+        case 1: issuers = parameters["iss"] ?? [""]
+        default: issuers = ["", ""]
+        }
         if case .mismatch(let claimed) = CallbackIssuer.check(issuers: issuers, serverOrigin: serverOrigin) {
             throw .issuerMismatch(claimed)
         }

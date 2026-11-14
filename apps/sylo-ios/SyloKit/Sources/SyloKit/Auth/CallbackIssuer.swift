@@ -21,18 +21,32 @@ public enum CallbackIssuer {
     /// What is shown for an issuer that is not a usable address.
     public static let unknownAddress = "an unknown address"
 
-    /// `scheme://host[:port]` in one spelling: scheme and host lowercase, the default port left out, no
-    /// path, query or fragment. Nil when the text is not an http(s) address with a plain host and no user
-    /// name or password.
+    /// `scheme://host[:port]` in one spelling: scheme and host lowercase, an IPv6 host in its canonical compressed
+    /// form, the default port left out, no path, query or fragment. Nil when the text is not an http(s)
+    /// address with a plain host and no user name or password.
     public static func origin(of text: String) -> String? {
-        guard text.count <= 300, !text.contains("\\"), let components = URLComponents(string: text),
+        guard !text.contains("\\"), let components = URLComponents(string: text),
             let scheme = components.scheme?.lowercased(), scheme == "https" || scheme == "http",
             components.user == nil, components.password == nil,
-            let host = components.encodedHost?.lowercased(), isPlainHost(host)
+            let rawHost = components.encodedHost?.lowercased(), isPlainHost(rawHost)
         else { return nil }
+        let host = canonicalHost(rawHost)
         var port = components.port
         if (scheme == "https" && port == 443) || (scheme == "http" && port == 80) { port = nil }
         return "\(scheme)://\(host)" + (port.map { ":\($0)" } ?? "")
+    }
+
+    /// An IPv6 literal such as `[2001:db8:0:0::1]` as `[2001:db8::1]` (what a URL's origin gives), so the same
+    /// address typed two ways compares equal. Anything else is returned as it is.
+    static func canonicalHost(_ host: String) -> String {
+        guard host.hasPrefix("["), host.hasSuffix("]"), host.count > 2 else { return host }
+        let inner = String(host.dropFirst().dropLast())
+        var address = in6_addr()
+        guard inet_pton(AF_INET6, inner, &address) == 1 else { return host }
+        var buffer = [CChar](repeating: 0, count: Int(INET6_ADDRSTRLEN) + 1)
+        guard inet_ntop(AF_INET6, &address, &buffer, socklen_t(INET6_ADDRSTRLEN)) != nil else { return host }
+        let bytes = buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }
+        return "[" + String(decoding: bytes, as: UTF8.self) + "]"
     }
 
     /// Compares the `iss` values of a callback with the chosen server's origin.
@@ -46,7 +60,8 @@ public enum CallbackIssuer {
         guard issuers.count == 1, let claimed = origin(of: issuers[0]) else {
             return .mismatch(claimed: unknownAddress)
         }
-        guard let serverOrigin, claimed == serverOrigin else { return .mismatch(claimed: claimed) }
+        // Both sides in the same spelling (the chosen origin may have been typed with an uncompressed IPv6 host).
+        guard let serverOrigin, claimed == origin(of: serverOrigin) else { return .mismatch(claimed: claimed) }
         return .accepted
     }
 

@@ -12,6 +12,8 @@ extension AppSession {
             preference: UserDefaultsServerPreference(),
             // UIDevice.name is generic since iOS 16, so name the model: "iPhone — Sylo app".
             deviceName: SignInRequest.deviceName(model: device.model, systemName: device.systemName),
+            // App-only Keychain group (the extension never sees it): sign-outs the server could not be told about.
+            pendingRevocations: KeychainPendingRevocationStore(accessGroup: SyloAppStorage.pigeonKeychainGroup()),
             makeClient: { server, token in
                 URLSessionAPIClient(server: server, token: { token })
             }
