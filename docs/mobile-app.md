@@ -13,6 +13,7 @@ reviewing it.
 - [What a self-hosted instance needs](#what-a-self-hosted-instance-needs)
 - [Behind a proxy with its own login](#behind-a-proxy-with-its-own-login)
 - [How sign-in works](#how-sign-in-works)
+- [Adding the other login](#adding-the-other-login)
 - [Endpoints](#endpoints)
 - [Tokens and signed-in devices](#tokens-and-signed-in-devices)
 - [Permissions](#permissions)
@@ -135,6 +136,84 @@ authorization-code flow with PKCE (RFC 7636, S256 only).
 
 ---
 
+## Adding the other login
+
+An account holds one Discord and one Fluxer login. On a Sylo that has both set up
+(`app-connect` in the [features](#endpoints)), the app can add the one the account
+lacks, so a Discord account can also sign in with Fluxer, or the other way round.
+Disconnecting needs nothing new: the account page does it.
+
+The login is finished **in the app**, with its token, not by the browser. That is what
+keeps someone else's link from attaching your login to their account.
+
+1. The app asks for a code. It needs its token, and only for a platform the account
+   does not have yet:
+
+   ```http
+   POST /api/mobile/connect/fluxer
+   Authorization: Bearer sylo_…
+   ```
+
+   ```json
+   { "code": "…", "expiresAt": 1799999999999 }
+   ```
+
+   `400 { "error": "invalid_platform" }` for a platform that is unknown or not set
+   up here, `409 { "error": "already_connected" }` when the account has it. The code
+   names the account and the token that asked.
+2. The app opens `GET /auth/mobile/connect?code=…` in the browser sheet, on the same
+   address. The page asks "Add Fluxer to the Sylo account *name*?" and says which
+   account that is. If the browser is signed in to the dashboard as somebody else, it
+   warns that someone else may have started this.
+3. **Continue** leads to the other platform's login, which is asked to show its consent
+   screen (`prompt=consent`), so the person sees which of their accounts there is used.
+4. The callback links nothing. It keeps the verified login under a **result code** (120
+   seconds, single use, stored as a hash, bound to the account and the token from step 1)
+   and ends the sheet at
+
+   ```
+   sylo://connected?platform=fluxer&result=<code>
+   ```
+
+   or, when nothing was kept, `sylo://connected?platform=fluxer&error=<word>` with one of
+   `access-denied` (cancelled), `invalid-response`, `expired` (took more than ten
+   minutes), `provider-error`, `token-revoked` (the app was signed out meanwhile),
+   `identity-linked` (that login already belongs to another account) or `already-linked`
+   (the account already has a login on that platform).
+5. The app completes the link with the same token:
+
+   ```http
+   POST /api/mobile/connect/complete
+   Authorization: Bearer sylo_…
+   Content-Type: application/json
+
+   { "result": "<code>" }
+   ```
+
+   ```json
+   { "ok": true, "platform": "fluxer", "platforms": ["discord", "fluxer"] }
+   ```
+
+   The login is linked only when this token is the one that asked for the code in step 1.
+   Anything else is `400 { "error": "invalid_result" }` (unknown, used, expired, or made for
+   another token or account), and the code is used up by the attempt. `409` with
+   `identity_linked` or `already_linked` when the login or the platform was taken in the
+   meantime; `401` when the token is no longer valid.
+
+The browser is not signed in to Sylo at any point: nothing here starts, replaces or
+extends a web session.
+
+**For app developers.** In the case this design exists for (someone else's link opened in
+the person's ordinary browser), the `sylo://connected?…&result=…` redirect goes through
+the operating system's URL-scheme dispatcher, and an app on the device that also claims
+`sylo://` could receive it. The server cannot prevent that, because the one who started
+the flow is the attacker. So the app must act only on the callback that comes back from its
+own `ASWebAuthenticationSession` (the one it opened in step 2), and must ignore a
+`sylo://connected` URL that arrives through the normal URL handler. Without the matching
+token a result code is useless to anyone else anyway.
+
+---
+
 ## Endpoints
 
 | Method and path | Auth | Answer |
@@ -145,8 +224,13 @@ authorization-code flow with PKCE (RFC 7636, S256 only).
 | `POST /auth/mobile/confirm` | Browser session + nonce | Redirect to `sylo://auth?code=…&state=…` |
 | `POST /api/mobile/token` | Code + verifier | `{ token, expiresAt, account }`, or `400 invalid_grant` |
 | `DELETE /api/mobile/token` | Bearer token | `204`, or `401` without a valid token |
+| `POST /api/mobile/connect/:platform` | Bearer token | `{ code, expiresAt }`: a one-time code to add that platform's login ([Adding the other login](#adding-the-other-login)); `400`, `401`, `403` or `409` |
+| `GET /auth/mobile/connect?code=…` | None (browser) | The confirmation page; the link is used up when it is opened |
+| `POST /api/mobile/connect/complete` | Bearer token | `{ ok, platform, platforms }`: links the login the sheet ended with, for the token that began the flow only; `400 invalid_result`, `401`, `403` or `409` |
+| `GET /auth/mobile/connect/continue?nonce=…` | Browser session + nonce | Redirect to the other platform's login |
 | `/api/v2/*` | Bearer token | The dashboard's JSON API |
 | `GET /api/v2/changelog?limit=N` | Bearer token or session | `{ version, releases: [{ version, date, url, sections: [{ title, kind, items: [{ scope, text, refs }] }] }] }`, newest first; the same release notes as the dashboard's What's new page |
+| `GET /api/v2/guilds/:id/members?q=` | Bearer token or session, Manage Server | `{ members: [{ id, name, username }] }`: the server's members by name (those Sylo has cached) or one pasted id (looked up live), never a bot, at most 25. 100 searches per minute per account and server |
 
 `GET /api/mobile/info` is public. The app calls it when you type a server
 address, to tell whether the address is a Sylo server and whether it can sign
@@ -160,10 +244,23 @@ in there:
 | `login` | Whether sign-in is available (false in open mode) |
 | `loginProviders` | The configured logins, for example `["discord", "fluxer"]`; empty when `login` is false |
 | `platforms` | The platforms the bot runs on, for example `["discord"]` |
-| `features` | What this version's app API supports, for example `["app-login", "live-access", "changelog", "access-levels"]`, so the app can hide what an older Sylo lacks; `changelog` means `GET /api/v2/changelog` is there, `access-levels` means the dashboard access levels below |
+| `features` | What this version's app API supports, so the app can hide what an older Sylo lacks. Today: `app-login`, `live-access`, `changelog`, `collectibles`, `welcome-trigger`, `member-search`, `access-levels` and `app-connect`, plus `push` and `push-pigeon` when this instance can send notifications. See the list below |
+
+The feature strings:
+
+- `app-login`: the app sign-in above.
+- `live-access`: server access is checked live through the bot on every request.
+- `changelog`: `GET /api/v2/changelog`.
+- `collectibles`: the Economy shop's collectible items, their picture upload and the inventory.
+- `welcome-trigger`: the Welcome module's `trigger` setting (a member joins, or first gets a role).
+- `member-search`: `GET /api/v2/guilds/:id/members?q=`.
+- `access-levels`: the dashboard [access levels](#access-levels) (View, Inbox, Edit).
+- `app-connect`: [adding the other login](#adding-the-other-login). Only where sign-in is on and both Discord and Fluxer logins are set up.
+- `push`, `push-pigeon`: this instance can send notifications to signed-in apps.
 
 An older Sylo without this endpoint answers `404`, and the app says the server
-is too old for it.
+is too old for it. A Sylo that has the endpoint but lacks a string does not have
+that feature: the app hides the control.
 
 On a token request, "not signed in" and "not allowed" are JSON, never a
 redirect or an HTML page:
@@ -176,7 +273,8 @@ redirect or an HTML page:
 | `403` | `{ "error": "Restricted to Sylo's operators." }` |
 
 The usual per-IP rate limits apply. On top of them, per minute: 60 calls to
-`/api/mobile/info`, 30 to the `/auth/mobile` pages and 20 code exchanges.
+`/api/mobile/info`, 30 to the `/auth/mobile` pages and 20 code exchanges. Adding a login
+allows 10 codes and 10 completions per token and 10 visits to its two pages per client.
 Actions that post to the platform (test messages, publishing a message or role
 menu, locking or unlocking every channel) share a limit of 10 per minute per
 server and account, answered with `429` and an `{ "error" }`.
@@ -397,6 +495,27 @@ else.
   a link that signs in as you in your browser and delivers the code to an app on
   their side. Allow is a POST with a per-flow nonce, and the app rejects a
   callback whose `state` it did not send.
+- **Adding a login is finished by the app, not by the browser.** The link that opens the
+  sheet is made for one account by one app token, so anyone can make one for their own
+  account and send it to someone else. If the browser's login were linked on the spot,
+  that person's Discord or Fluxer login (and the servers they manage, and operator
+  rights if they have them) would end up on the attacker's account. So the callback
+  links nothing: it keeps the verified login under a result code bound to the account and
+  token of the connect code, and `sylo://connected?result=…` opens on the device of
+  whoever is in the browser. Only the app holding that very token can complete the link;
+  the victim's own app has another token and is refused. The confirmation page names the
+  account and warns when the browser is signed in as somebody else, as defence in depth.
+- **The codes.** Connect code and result code are 256 random bits each, stored only as a
+  SHA-256 hash, deleted in the statement that reads them (so they work once, also under
+  concurrency), and swept with expired tokens; a connect code lives 60 seconds, a result
+  code 120. One live connect code per account. Both stop working when the token is signed
+  out or revoked (checked when the sheet opens, at the callback and at completion), and
+  they are deleted with the account.
+- **No session, no open redirect.** The browser is never signed in or given a session; the
+  only places it is sent are the platform's own login and `sylo://connected`, with a
+  platform, result and error word that Sylo chose, never one from the request. One login
+  per platform and account is a database rule (a unique index), so two completions at
+  the same moment cannot give an account two logins; the loser gets `409`.
 - **Tokens only work on `/api/` paths.** The HTML dashboard stays cookie-only,
   and a request that presents a token is judged by the token alone (a bad token
   never falls back to a cookie).

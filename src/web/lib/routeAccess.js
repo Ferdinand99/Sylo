@@ -214,6 +214,7 @@ export const ROUTE_ACCESS = Object.freeze({
   'POST /guilds/:guildId/modules/events/events/:id/cancel': 'edit',
 
   // v2GuildData.js
+  'GET /guilds/:guildId/members': 'view',
   'GET /guilds/:guildId/audit': 'view',
   'GET /guilds/:guildId/export': 'view',
   'GET /guilds/:guildId/member-data': 'view',

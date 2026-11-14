@@ -1488,15 +1488,75 @@ export const MIGRATIONS = [
     `);
   },
 
-  // Dashboard access levels (src/db/guildSettings.js, which adds the same columns on Postgres with
-  // ADD COLUMN IF NOT EXISTS): the roles that may use the dashboard with Inbox or View access. The
-  // Edit roles are the bot-master roles (bot_master_roles). Planned as migration 80 in the 5.2
-  // dashboard work: it goes after the change-history (78) and import (79) migrations.
+  // One-time codes for connecting a second platform from the Sylo app (src/db/apiTokens.js, which
+  // bootstraps the same table on Postgres). Only the code's hash is stored.
   (database) => {
     database.exec(`
-      ALTER TABLE guild_settings ADD COLUMN dashboard_inbox_roles TEXT NOT NULL DEFAULT '[]';
-      ALTER TABLE guild_settings ADD COLUMN dashboard_view_roles TEXT NOT NULL DEFAULT '[]';
+      CREATE TABLE mobile_connect_codes (
+        code_hash  TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        platform   TEXT NOT NULL,
+        expires_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_mobile_connect_codes_account ON mobile_connect_codes (account_id);
     `);
+  },
+
+  // Adding a login from the app, second step (src/db/apiTokens.js and src/db/accounts.js, which carry
+  // the same changes for Postgres): a connect code names the app token that asked; the platform
+  // callback keeps the verified identity in a result code until that token completes the link; at
+  // most one live connect code per account; and one login per platform and account is enforced, not
+  // only checked (where two sign-ins at once left two, the one linked first stays).
+  (database) => {
+    database.exec(`
+      ALTER TABLE mobile_connect_codes ADD COLUMN token_id TEXT;
+      DELETE FROM mobile_connect_codes;
+      -- The unique index below answers the same lookups as the plain one from migration 76.
+      DROP INDEX idx_mobile_connect_codes_account;
+      CREATE UNIQUE INDEX idx_mobile_connect_codes_one ON mobile_connect_codes (account_id);
+      CREATE TABLE mobile_connect_results (
+        code_hash        TEXT PRIMARY KEY,
+        account_id       TEXT NOT NULL,
+        token_id         TEXT NOT NULL,
+        platform         TEXT NOT NULL,
+        platform_user_id TEXT NOT NULL,
+        username         TEXT NOT NULL DEFAULT '',
+        avatar           TEXT,
+        guild_ids        TEXT NOT NULL DEFAULT '[]',
+        expires_at       INTEGER NOT NULL
+      );
+    `);
+    const doubled = database
+      .prepare(
+        `DELETE FROM account_identities WHERE rowid NOT IN (
+           SELECT rowid FROM (
+             SELECT rowid, ROW_NUMBER() OVER (
+               PARTITION BY account_id, platform ORDER BY linked_at, platform_user_id
+             ) AS n FROM account_identities
+           ) WHERE n = 1
+         )`
+      )
+      .run().changes;
+    // The count only: which logins were dropped is not written down.
+    if (doubled > 0)
+      log.warn('db', `Migration 77 removed ${doubled} doubled login(s), keeping the first of each`);
+    database.exec(
+      'CREATE UNIQUE INDEX idx_account_identities_one ON account_identities (account_id, platform)'
+    );
+  },
+
+  // Dashboard access levels (src/db/guildSettings.js, which adds the same columns on Postgres with
+  // ADD COLUMN IF NOT EXISTS): the roles that may use the dashboard with Inbox or View access. The
+  // Edit roles are the bot-master roles (bot_master_roles). Meant as migration 79, after the change
+  // history's 78: whichever of the two merges second goes last. Each column is added only when it is
+  // missing, so a database that already ran this step under another number is not broken by it.
+  (database) => {
+    const has = new Set(database.prepare('PRAGMA table_info(guild_settings)').all().map((c) => c.name));
+    for (const column of ['dashboard_inbox_roles', 'dashboard_view_roles']) {
+      if (!has.has(column)) {
+        database.exec(`ALTER TABLE guild_settings ADD COLUMN ${column} TEXT NOT NULL DEFAULT '[]';`);
+      }
+    }
   },
 ];
 

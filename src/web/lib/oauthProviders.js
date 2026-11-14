@@ -109,7 +109,7 @@ export const discordAvatarUrl = (id, hash, size = 64) =>
  * @property {string} label
  * @property {() => boolean} enabled
  * @property {string} callbackPath
- * @property {(redirectUri: string, state: string) => string} authorizeUrl
+ * @property {(redirectUri: string, state: string, extra?: Record<string, string>) => string} authorizeUrl
  * @property {(code: string, redirectUri: string) => Promise<string>} exchange  -> access token
  * @property {(accessToken: string) => Promise<{ platform: string, platformUserId: string, username: string, avatar: string | null, guildIds: string[] }>} fetchIdentity
  */
@@ -121,13 +121,14 @@ export const providers = {
     label: 'Discord',
     enabled: () => config.discordAuthEnabled,
     callbackPath: '/auth/discord/callback',
-    authorizeUrl: (redirectUri, state) =>
+    authorizeUrl: (redirectUri, state, extra = {}) =>
       `https://discord.com/oauth2/authorize?${new URLSearchParams({
         client_id: config.discordClientId,
         redirect_uri: redirectUri,
         response_type: 'code',
         scope: OAUTH_SCOPES,
         state,
+        ...extra,
       })}`,
     exchange: (code, redirectUri) =>
       exchangeCode({
@@ -157,13 +158,14 @@ export const providers = {
     label: 'Fluxer',
     enabled: () => config.fluxerAuthEnabled,
     callbackPath: '/auth/fluxer/callback',
-    authorizeUrl: (redirectUri, state) =>
+    authorizeUrl: (redirectUri, state, extra = {}) =>
       `${fluxerOrigins().web}/oauth2/authorize?${new URLSearchParams({
         client_id: config.fluxerClientId,
         redirect_uri: redirectUri,
         response_type: 'code',
         scope: OAUTH_SCOPES,
         state,
+        ...extra,
       })}`,
     exchange: (code, redirectUri) =>
       exchangeCode({
