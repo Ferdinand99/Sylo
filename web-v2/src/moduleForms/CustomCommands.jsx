@@ -1,4 +1,5 @@
 import { useContext, useEffect, useState } from 'react';
+import PickerHealth from '../components/PickerHealth.jsx';
 import { useParams } from 'react-router-dom';
 import { getCustomCommands, saveCustomCommand, deleteCustomCommand, duplicateCustomCommand } from '../api.js';
 import { notify } from '../notify.js';
@@ -104,6 +105,7 @@ function ActionBlock({ action, index, count, roles, channels, tokens, onChange, 
               </option>
             ))}
           </select>
+          <PickerHealth kind="role" value={action.roleId} />
           <p className="v2-field-hint">Applied to whoever ran the command.</p>
         </div>
       ) : (
@@ -119,6 +121,7 @@ function ActionBlock({ action, index, count, roles, channels, tokens, onChange, 
                   </option>
                 ))}
               </select>
+              <PickerHealth kind="channel" value={action.channelId} />
             </div>
           ) : (
             <div className="v2-field">

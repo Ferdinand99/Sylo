@@ -1,4 +1,5 @@
 import AutoGrowTextarea from '../components/AutoGrowTextarea.jsx';
+import PickerHealth from '../components/PickerHealth.jsx';
 import HowItWorks from '../components/HowItWorks.jsx';
 import MentionTextarea from '../components/MentionTextarea.jsx';
 import PlaceholderBar from '../components/PlaceholderBar.jsx';
@@ -137,6 +138,7 @@ export default function YoutubeAlerts() {
                       </option>
                     ))}
                   </select>
+                  <PickerHealth kind="channel" value={a.discordChannelId} embed />
                 </div>
               </div>
 

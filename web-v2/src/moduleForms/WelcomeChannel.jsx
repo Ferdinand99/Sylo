@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import PickerHealth from '../components/PickerHealth.jsx';
 import { useParams } from 'react-router-dom';
 import {
   getWelcomeChannel,
@@ -262,6 +263,7 @@ export default function WelcomeChannel() {
               </option>
             ))}
           </select>
+          <PickerHealth kind="channel" value={channelId} />
         </div>
         <button type="button" className="v2-btn-ghost" disabled={busy} onClick={onCreateChannel}>
           Create read-only #welcome

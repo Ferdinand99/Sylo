@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import PickerHealth from './PickerHealth.jsx';
 import OverflowMenu from './OverflowMenu.jsx';
 import {
   createShopItem,
@@ -341,6 +342,7 @@ export default function EconomyShopAdmin({ guildId, currency }) {
                     </option>
                   ))}
                 </select>
+                <PickerHealth kind="role" value={form.roleId} />
               </div>
             ) : null}
             {form.type === 'temp_role' ? (

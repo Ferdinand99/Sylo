@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import PickerHealth from '../components/PickerHealth.jsx';
 import { useParams } from 'react-router-dom';
 import {
   getReminders,
@@ -147,6 +148,7 @@ function ReminderForm({
             </option>
           ))}
         </select>
+        <PickerHealth kind="channel" value={channelId} />
       </div>
 
       <div className="v2-field">

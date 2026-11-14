@@ -1,4 +1,5 @@
 import AutoGrowTextarea from '../components/AutoGrowTextarea.jsx';
+import PickerHealth from '../components/PickerHealth.jsx';
 import HowItWorks from '../components/HowItWorks.jsx';
 import MentionTextarea from '../components/MentionTextarea.jsx';
 import PlaceholderBar from '../components/PlaceholderBar.jsx';
@@ -148,6 +149,7 @@ export default function RssAlerts() {
                         </option>
                       ))}
                     </select>
+                    <PickerHealth kind="channel" value={row.channelId} embed />
                   </div>
                   <div className="v2-field">
                     <label>

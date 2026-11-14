@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import PickerHealth from '../components/PickerHealth.jsx';
 import { Link } from 'react-router-dom';
 import { getGuildSettings, saveGuildSettings, exportGuildConfig } from '../api.js';
 import LoadError from '../components/LoadError.jsx';
@@ -122,6 +123,7 @@ export default function Settings() {
             ))}
           </select>
         </Field>
+        <PickerHealth kind="channel" value={form.modlogChannelId} />
 
         {data.platform === 'fluxer' ? (
           <Field
