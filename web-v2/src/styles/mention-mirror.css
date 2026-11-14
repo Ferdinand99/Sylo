@@ -28,24 +28,37 @@
   overflow-wrap: break-word;
 }
 
-/* The stored token stays in the layer with its real width, so every letter keeps its place: the pill is
-   that width, and the name is drawn over its start. */
+/* The stored token stays in the layer with its real width, so every letter keeps its place: the tint is
+   that width, and the name is drawn over its start by the layer of names below. Only text and spans are
+   in the flow of the mirror: anything else (a pseudo-element, an inline box) is a place where a browser
+   may break the line, and the field's own text has none inside a word. */
 .v2-mm-token {
-  position: relative;
   color: transparent;
   border-radius: 5px;
   background: color-mix(in srgb, var(--accent) 22%, transparent);
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }
-.v2-mm-token::after {
-  content: attr(data-label);
+.v2-mm-token.is-missing {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+}
+
+/* The names: the same box as the mirror, scrolled with it, one label per token placed from where the
+   browser laid the token out. */
+.v2-mention-names {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 4px;
+  z-index: 1;
   box-sizing: border-box;
-  max-width: calc(100% - 8px);
+  margin: 0;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+.v2-mm-name {
+  position: absolute;
+  box-sizing: border-box;
+  display: block;
+  padding: 0 4px;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -53,10 +66,7 @@
   color: var(--text);
   font-weight: 500;
 }
-.v2-mm-token.is-missing {
-  background: color-mix(in srgb, var(--danger) 18%, transparent);
-}
-.v2-mm-token.is-missing::after {
+.v2-mm-name.is-missing {
   color: var(--danger);
 }
 
@@ -73,7 +83,8 @@
   .v2-mention-wrap > textarea.is-mirrored::selection {
     -webkit-text-fill-color: currentColor;
   }
-  .v2-mention-mirror {
+  .v2-mention-mirror,
+  .v2-mention-names {
     display: none;
   }
 }

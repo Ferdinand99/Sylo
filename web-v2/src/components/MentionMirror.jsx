@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { mirrorParts } from '../mentions.js';
 import '../styles/mention-mirror.css';
 
@@ -47,69 +47,96 @@ const COPIED = [
  * Lays the mirror over the field: same box, same text metrics, same scroll position. The mirror is
  * `box-sizing: border-box` with the field's padding and border widths, and the width a classic scrollbar
  * takes from the field's text is added to its right padding, so a line breaks at the same letter in both.
- * Exported for tests.
+ * With `bare` (the layer of names) there is no padding and no border, so its origin is the mirror's outer
+ * corner. Exported for tests.
  */
-export function syncMirror(field, mirror) {
+export function syncMirror(field, mirror, { bare = false } = {}) {
   if (!field || !mirror) return;
   const cs = window.getComputedStyle(field);
   for (const prop of COPIED) mirror.style[prop] = cs[prop];
-  // The box to the pixel fraction (a field can sit at 46.4px and be 87.5px tall; whole numbers would shift
-  // the letters by a fraction of a pixel and blur them against the field's own).
-  const parent = field.offsetParent;
-  const box = field.getBoundingClientRect();
-  if (parent && box.width > 0) {
-    const origin = parent.getBoundingClientRect();
-    mirror.style.left = `${box.left - origin.left - parent.clientLeft}px`;
-    mirror.style.top = `${box.top - origin.top - parent.clientTop}px`;
-    mirror.style.width = `${box.width}px`;
-    mirror.style.height = `${box.height}px`;
-  } else {
-    mirror.style.left = `${field.offsetLeft}px`;
-    mirror.style.top = `${field.offsetTop}px`;
-    mirror.style.width = `${field.offsetWidth}px`;
-    mirror.style.height = `${field.offsetHeight}px`;
-  }
+  // Whole pixels, like the field's own text: a box placed at a fraction of a pixel puts the letters on a
+  // different pixel row than the field's, and they blur against them.
+  mirror.style.left = `${field.offsetLeft}px`;
+  mirror.style.top = `${field.offsetTop}px`;
+  mirror.style.width = `${field.offsetWidth}px`;
+  mirror.style.height = `${field.offsetHeight}px`;
   const bars =
     field.offsetWidth -
     field.clientWidth -
     (parseFloat(cs.borderLeftWidth) || 0) -
     (parseFloat(cs.borderRightWidth) || 0);
   if (bars > 0) mirror.style.paddingRight = `${(parseFloat(cs.paddingRight) || 0) + bars}px`;
+  if (bare) {
+    mirror.style.padding = '0';
+    mirror.style.borderWidth = '0';
+  }
   mirror.scrollTop = field.scrollTop;
 }
 
+const same = (a, b) =>
+  a.length === b.length &&
+  a.every((s, i) => {
+    const t = b[i];
+    return s === t || (s && t && ['x', 'y', 'w', 'h'].every((k) => Math.abs(s[k] - t[k]) < 0.01));
+  });
+
 /**
- * The layer that draws the mentions of a message field as names. It sits over the field, never takes a
- * click, and repeats the field's text exactly (the field's own text is made see-through while it is
- * shown), but each stored token (<#id>, <@&id>, <@id>) is drawn as a pill with the name of the channel,
- * role or member. The raw token stays in the layer, invisible, so every letter keeps the width it has in
- * the field: the caret, a selection and the line breaks are the field's own and cannot drift.
+ * The layers that draw the mentions of a message field as names. They sit over the field, never take a
+ * click, and repeat the field's text exactly (the field's own text is made see-through while they are
+ * shown):
  *
- * Names come from the server and from people, so they are only ever rendered as text, never as markup:
- * a token's name is an attribute that the style sheet draws with `content: attr(...)`.
+ * - the mirror holds the text. Each stored token (<#id>, <@&id>, <@id>) stays in it as its raw text,
+ *   invisible, in a tinted span, so every letter keeps the width it has in the field: the caret, a
+ *   selection and the line breaks are the field's own and cannot drift. Nothing but text and spans is in
+ *   the flow, because anything else (a pseudo-element, an inline box) is a place where a browser may break
+ *   the line, and the field's own text has none inside a word.
+ * - the names sit in a second layer of the same box, each one placed over its token from where the
+ *   browser laid the token out. The layer scrolls with the mirror.
  *
- * It is hidden from assistive technology (the field is what is read) and is not drawn at all in forced
- * colours mode, where the field shows its text as it is.
+ * Names come from the server and from people, so they are only ever rendered as text, never as markup.
+ *
+ * Both are hidden from assistive technology (the field is what is read) and are not drawn at all in
+ * forced colours mode, where the field shows its text as it is.
  */
 export default function MentionMirror({ field, value, channels = [], roles = [], members = new Map() }) {
-  const ref = useRef(null);
+  const mirrorRef = useRef(null);
+  const namesRef = useRef(null);
+  const [spots, setSpots] = useState([]);
 
   const parts = useMemo(
     () => mirrorParts(value, { channels, roles, members }),
     [value, channels, roles, members]
   );
+  const mentions = parts.filter((p) => p.kind === 'mention');
+
+  /** Lay both layers over the field, then find where each token ended up. */
+  const lay = () => {
+    const mirror = mirrorRef.current;
+    syncMirror(field, mirror);
+    syncMirror(field, namesRef.current, { bare: true });
+    if (!mirror) return;
+    const origin = mirror.getBoundingClientRect();
+    const found = [...mirror.querySelectorAll('[data-token]')].map((el) => {
+      const r = el.getClientRects()[0];
+      return r
+        ? { x: r.left - origin.left, y: r.top - origin.top + mirror.scrollTop, w: r.width, h: r.height }
+        : null;
+    });
+    setSpots((prev) => (same(prev, found) ? prev : found));
+  };
 
   // Every render that can change what or where the text is (the text, the names, the field's class).
   useLayoutEffect(() => {
-    syncMirror(field, ref.current);
+    lay();
   });
 
   useEffect(() => {
     if (!field) return undefined;
     const onScroll = () => {
-      if (ref.current) ref.current.scrollTop = field.scrollTop;
+      if (mirrorRef.current) mirrorRef.current.scrollTop = field.scrollTop;
+      if (namesRef.current) namesRef.current.scrollTop = field.scrollTop;
     };
-    const onSize = () => syncMirror(field, ref.current);
+    const onSize = () => lay();
     field.addEventListener('scroll', onScroll, { passive: true });
     // A box that grows (an auto-growing field, the drag handle) or a width that changes (the window, a
     // sidebar) wraps the text differently.
@@ -129,34 +156,54 @@ export default function MentionMirror({ field, value, channels = [], roles = [],
       window.removeEventListener('resize', onSize);
       fonts?.removeEventListener?.('loadingdone', onSize);
     };
+    // `lay` reads the current props through the refs and the closure of the latest render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [field]);
 
   // A text that ends in a line break shows an empty last line in a field, but a block of text only
   // does when something follows the break.
   const endsInBreak = /\n$/.test(String(value ?? ''));
 
+  let n = -1;
   return (
-    <div className="v2-mention-mirror" aria-hidden="true" ref={ref} data-testid="mention-mirror">
-      {parts.map((part, i) => {
-        if (part.kind === 'text') return part.text;
-        if (part.kind === 'special') {
+    <>
+      <div className="v2-mention-mirror" aria-hidden="true" ref={mirrorRef} data-testid="mention-mirror">
+        {parts.map((part, i) => {
+          if (part.kind === 'text') return part.text;
+          if (part.kind === 'special') {
+            return (
+              <span key={i} className="v2-mm-pill is-special">
+                {part.text}
+              </span>
+            );
+          }
+          n += 1;
           return (
-            <span key={i} className="v2-mm-pill is-special">
+            <span
+              key={i}
+              className={`v2-mm-token is-${part.type}${part.missing ? ' is-missing' : ''}`}
+              data-token={n}
+            >
               {part.text}
             </span>
           );
-        }
-        return (
-          <span
-            key={i}
-            className={`v2-mm-token is-${part.type}${part.missing ? ' is-missing' : ''}`}
-            data-label={part.label}
-          >
-            {part.text}
-          </span>
-        );
-      })}
-      {endsInBreak ? '\u200b' : null}
-    </div>
+        })}
+        {endsInBreak ? '\u200b' : null}
+      </div>
+      <div className="v2-mention-names" aria-hidden="true" ref={namesRef} data-testid="mention-names">
+        {mentions.map((part, i) => {
+          const at = spots[i];
+          return (
+            <span
+              key={i}
+              className={`v2-mm-name is-${part.type}${part.missing ? ' is-missing' : ''}`}
+              style={at ? { left: at.x, top: at.y, width: at.w, height: at.h } : { visibility: 'hidden' }}
+            >
+              {part.label}
+            </span>
+          );
+        })}
+      </div>
+    </>
   );
 }

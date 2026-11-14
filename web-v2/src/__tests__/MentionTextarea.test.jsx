@@ -120,6 +120,8 @@ describe('MentionTextarea', () => {
 describe('mentions drawn as names inside the field', () => {
   const token = `<#${CH}>`;
   const mirrorOf = () => screen.queryByTestId('mention-mirror');
+  const namesOf = () => screen.queryByTestId('mention-names');
+  const nameTexts = () => [...namesOf().querySelectorAll('.v2-mm-name')].map((n) => n.textContent);
   /** Put the caret (or a range) in the field the way a click or a key would. */
   const caretAt = (el, start, end = start) => {
     el.focus();
@@ -136,11 +138,11 @@ describe('mentions drawn as names inside the field', () => {
     const value = `Hi ${token} and <@&${ROLE}> and <#999999999999999999> @everyone!`;
     render(<Harness start={value} />);
     const mirror = mirrorOf();
-    // The layer holds the same letters as the field: only the labels differ, and they are attributes.
+    // The layer holds exactly the letters of the field; the names are in a layer of their own.
     expect(mirror.textContent).toBe(value);
-    const labels = [...mirror.querySelectorAll('[data-label]')].map((n) => n.getAttribute('data-label'));
-    expect(labels).toEqual(['#welcome', '@Verified', '#deleted-channel']);
-    expect(mirror.querySelector('.is-missing').getAttribute('data-label')).toBe('#deleted-channel');
+    expect(nameTexts()).toEqual(['#welcome', '@Verified', '#deleted-channel']);
+    expect(namesOf().querySelector('.is-missing').textContent).toBe('#deleted-channel');
+    expect(mirror.querySelector('.is-missing')).not.toBeNull();
     expect(mirror.querySelector('.is-special').textContent).toBe('@everyone');
     expect(screen.getByLabelText('Message').className).toContain('is-mirrored');
     // The field's own value is never touched.
@@ -163,6 +165,7 @@ describe('mentions drawn as names inside the field', () => {
     const field = screen.getByRole('combobox', { name: 'Message' });
     expect(field.getAttribute('aria-expanded')).toBe('false');
     expect(mirrorOf().getAttribute('aria-hidden')).toBe('true');
+    expect(namesOf().getAttribute('aria-hidden')).toBe('true');
     // Nothing of the layer is in the accessibility tree: still exactly one text field.
     expect(screen.getAllByRole('combobox')).toHaveLength(1);
     expect(mirrorOf().querySelector('[tabindex],button,a,input')).toBeNull();
@@ -187,12 +190,12 @@ describe('mentions drawn as names inside the field', () => {
         </Routes>
       </MemoryRouter>
     );
-    const mirror = mirrorOf();
-    expect(mirror.querySelector('img, b, script')).toBeNull();
-    expect(mirror.innerHTML).not.toContain('<img');
-    expect(mirror.innerHTML).not.toContain('<script');
-    const labels = [...mirror.querySelectorAll('[data-label]')].map((n) => n.getAttribute('data-label'));
-    expect(labels).toEqual(['#</div><b>boom</b><img src=x onerror=alert(1)>', '@<script>alert(1)</script>']);
+    for (const layer of [mirrorOf(), namesOf()]) {
+      expect(layer.querySelector('img, b, script')).toBeNull();
+      expect(layer.innerHTML).not.toContain('<img');
+      expect(layer.innerHTML).not.toContain('<script');
+    }
+    expect(nameTexts()).toEqual(['#</div><b>boom</b><img src=x onerror=alert(1)>', '@<script>alert(1)</script>']);
   });
 
   it('takes its font, padding and wrapping from the field, so the lines break at the same letter', () => {
@@ -421,7 +424,8 @@ describe('mentions drawn as names inside the field', () => {
     );
     const forced = css.slice(css.indexOf('@media (forced-colors: active)'));
     expect(forced).toMatch(/text-fill-color: currentColor/);
-    expect(forced).toMatch(/\.v2-mention-mirror \{\s*display: none/);
+    expect(forced).toMatch(/\.v2-mention-mirror,\s*\.v2-mention-names \{\s*display: none/);
     expect(css).toMatch(/\.v2-mention-mirror \{[^}]*pointer-events: none/);
+    expect(css).toMatch(/\.v2-mention-names \{[^}]*pointer-events: none/);
   });
 });
