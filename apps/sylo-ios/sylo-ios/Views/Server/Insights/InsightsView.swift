@@ -7,6 +7,7 @@ import SyloKit
 /// web-v2/src/pages/Insights.jsx. Pull to refresh asks the bot to write what it has counted so far.
 struct InsightsView: View {
     @State private var model: InsightsModel
+    @Environment(\.dashboardAccess) private var access
 
     init(server: ServerID, session: AppSession) {
         _model = State(initialValue: InsightsModel(server: server, session: session))
@@ -38,7 +39,8 @@ struct InsightsView: View {
                     Button("Refresh Now", systemImage: "arrow.clockwise") {
                         Task { await model.refresh() }
                     }
-                    .disabled(model.report == nil)
+                    // Refreshing makes the bot write its counters: Edit (Sylo 5.2).
+                    .disabled(model.report == nil || !access.canEdit)
                 }
             }
         }
@@ -151,7 +153,9 @@ struct InsightsView: View {
         }
         .environment(\.timeZone, utcDays ? .gmt : .current)
         .environment(\.calendar, utcDays ? Self.utcCalendar : .current)
-        .refreshable { await model.refresh() }
+        .refreshable {
+            if access.canEdit { await model.refresh() } else { await model.load() }
+        }
     }
 
     private func windowLabel(_ report: InsightsReport) -> String {

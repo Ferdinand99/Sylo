@@ -179,6 +179,7 @@ struct AppealView: View {
     @State private var decision: AppealDecision = .accept
     @State private var isAsking = false
     @State private var isVisible = false
+    @Environment(\.dashboardAccess) private var access
 
     var body: some View {
         List {
@@ -249,7 +250,10 @@ struct AppealView: View {
         }
 
         Section("Answers") {
-            if appeal.answers.isEmpty {
+            if model.review?.contentHidden == true {
+                // Sylo 5.2: View access gets the list without the answers.
+                StatusMessage("You have view-only access, so the answers are hidden. Deciding needs Inbox access.", kind: .notice)
+            } else if appeal.answers.isEmpty {
                 Text("No answers.").foregroundStyle(.secondary)
             }
             ForEach(Array(appeal.answers.enumerated()), id: \.offset) { _, answer in
@@ -270,9 +274,9 @@ struct AppealView: View {
         if appeal.isOpen {
             Section {
                 Button("Accept and Unban", systemImage: "checkmark.circle") { ask(.accept) }
-                    .disabled(model.isDeciding)
+                    .disabled(model.isDeciding || !access.canActOnInbox)
                 Button("Deny", systemImage: "xmark.circle", role: .destructive) { ask(.deny) }
-                    .disabled(model.isDeciding)
+                    .disabled(model.isDeciding || !access.canActOnInbox)
             } footer: {
                 Text("The member is told by direct message, with your note if you add one.")
             }

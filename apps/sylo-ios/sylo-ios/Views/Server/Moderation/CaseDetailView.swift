@@ -9,6 +9,7 @@ struct CaseDetailView: View {
 
     @State private var state = CaseActionState()
     @State private var isVisible = false
+    @Environment(\.dashboardAccess) private var access
 
     var body: some View {
         List {
@@ -72,13 +73,13 @@ struct CaseDetailView: View {
 
         Section {
             Button("Edit Reason", systemImage: "pencil") { state.editing = moderationCase }
-                .disabled(model.isWorking)
+                .disabled(model.isWorking || !access.canEdit)
             if moderationCase.active {
                 Button("Delete Case", systemImage: "trash", role: .destructive) { state.toggling = moderationCase }
-                    .disabled(model.isWorking)
+                    .disabled(model.isWorking || !access.canEdit)
             } else {
                 Button("Restore Case", systemImage: "arrow.uturn.backward") { state.toggling = moderationCase }
-                    .disabled(model.isWorking)
+                    .disabled(model.isWorking || !access.canEdit)
             }
         } footer: {
             Text("A deleted case stays on record, marked as deleted, and can be restored. Both changes go to the server's mod log.")

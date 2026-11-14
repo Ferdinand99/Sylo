@@ -39,7 +39,8 @@ struct ModerationTabView: View {
             case .appeals:
                 AppealsReviewView(server: server, session: session, isEmbedded: true)
             case .commands:
-                CommandsView(server: server, session: session, isEmbedded: true)
+                // Changing a command's limits is Edit work (Sylo 5.2 access levels).
+                CommandsView(server: server, session: session, isEmbedded: true).disabledBelow()
             }
         }
     }

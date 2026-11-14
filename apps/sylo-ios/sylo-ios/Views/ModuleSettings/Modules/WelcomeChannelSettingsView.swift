@@ -11,6 +11,9 @@ struct WelcomeChannelSettingsView: View {
     @State private var isConfirmingRemove = false
     @State private var isConfirmingClear = false
     @State private var isConfirmingCreate = false
+    /// Whether the server has templates and message JSON (Sylo 5.2, P6).
+    @State private var hasMessageTools = false
+    @Environment(AppSession.self) private var session
 
     /// What the server fills in on the message text and in the embeds.
     private static let variables = [
@@ -55,6 +58,11 @@ struct WelcomeChannelSettingsView: View {
             } footer: {
                 Text("Optional, shown above the embeds. Placeholders: {server}, {memberCount}.")
             }
+
+            MessageToolsSection(
+                isAvailable: hasMessageTools, content: $settings.content, embeds: $settings.embeds, links: nil,
+                tokens: true, maxEmbeds: WelcomeChannelSettings.maxEmbeds,
+                contentLimit: WelcomeChannelSettings.maxContentLength)
 
             Section("Preview") {
                 MessagePreviewCard(content: settings.content, embeds: settings.embeds)
@@ -162,6 +170,7 @@ struct WelcomeChannelSettingsView: View {
         }
         .sensoryFeedback(.success, trigger: publisher.successCount)
         .task { await publisher.loadFeatures() }
+        .task { hasMessageTools = await session.hasImportRoutes(server: model.server) }
     }
 
     @ViewBuilder

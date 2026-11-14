@@ -8,6 +8,7 @@ struct ApplicationSubmissionsView: View {
     private let server: ServerID
     private let session: AppSession
     private let forms: [ApplicationForm]
+    @Environment(\.dashboardAccess) private var access
 
     /// What the list shows; a change loads it again.
     private struct Filter: Hashable {
@@ -26,6 +27,12 @@ struct ApplicationSubmissionsView: View {
         List {
             if let message = model.errorMessage, model.hasLoaded {
                 Section { StatusMessage(message, kind: .error) }
+            }
+            if !access.seesInboxContent {
+                // Sylo 5.2: View access lists the applications without their decision reasons, and cannot open one.
+                Section {
+                    StatusMessage("You have view-only access. Opening an application and its answers needs Inbox access.", kind: .notice)
+                }
             }
             Section {
                 Picker("Show", selection: $model.filter) {

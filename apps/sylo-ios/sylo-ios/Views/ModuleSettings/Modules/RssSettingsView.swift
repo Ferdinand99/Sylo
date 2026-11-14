@@ -32,6 +32,7 @@ struct RssSettingsView: View {
                     RolePicker(title: "Ping role", selection: $feed.roleId, roles: page.roles)
                     LimitedTextField(title: "Message template", text: $feed.template,
                                      limit: RssSettings.maxTemplateLength, lines: 2...6)
+                    TextTemplateMenu(field: .rss, text: $feed.template)
                     Button("Remove Feed", role: .destructive) {
                         settings.feeds.removeAll { $0.id == feed.id }
                     }

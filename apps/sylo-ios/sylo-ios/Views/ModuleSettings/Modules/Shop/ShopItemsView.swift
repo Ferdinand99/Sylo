@@ -8,6 +8,8 @@ struct ShopItemsView: View {
     @State private var model: ShopItemsModel
     @State private var editing: ShopEditorTarget?
     @State private var itemToDelete: ShopItem?
+    @State private var duplicates: DuplicateModel
+    @State private var canDuplicate = false
     private let server: ServerID
     private let session: AppSession
     private let currencyEmoji: String
@@ -19,6 +21,7 @@ struct ShopItemsView: View {
         self.currencyEmoji = currencyEmoji
         self.currencyName = currencyName
         _model = State(initialValue: ShopItemsModel(server: server, session: session))
+        _duplicates = State(initialValue: DuplicateModel(server: server, session: session))
     }
 
     var body: some View {
@@ -50,6 +53,7 @@ struct ShopItemsView: View {
                                systemImage: item.enabled ? "pause.circle" : "play.circle") {
                             Task { await model.setEnabled(item, !item.enabled) }
                         }
+                        DuplicateButton(model: duplicates, isAvailable: canDuplicate, kind: .shopItem, id: String(item.id))
                         Button("Delete", systemImage: "trash", role: .destructive) { itemToDelete = item }
                     }
                 }
@@ -58,14 +62,20 @@ struct ShopItemsView: View {
                 }
             } header: {
                 if model.hasLoaded {
-                    Text("Items (\(model.items.count))")
+                    Text(model.maxItems.map { "Items (\(model.items.count) / \($0))" } ?? "Items (\(model.items.count))")
                 }
             } footer: {
                 if model.hasLoaded {
-                    if model.items.isEmpty {
-                        Text("No items yet. Add the first one with the + button.")
-                    } else {
-                        Text("Members see the items that are not paused, in this order. Tap Edit, then drag to change the order. Buying a temporary role again while it runs adds the new time to what is left.")
+                    VStack(alignment: .leading, spacing: 4) {
+                        if model.items.isEmpty {
+                            Text("No items yet. Add the first one with the + button.")
+                        } else {
+                            Text("Members see the items that are not paused, in this order. Tap Edit, then drag to change the order. Buying a temporary role again while it runs adds the new time to what is left.")
+                        }
+                        // How much of the picture quota collectibles use (Sylo 5.2).
+                        if model.supportsCollectibles, let pictures = model.pictures {
+                            Text(verbatim: "Collectible pictures: \(pictures.summary)")
+                        }
                     }
                 }
             }
@@ -121,6 +131,7 @@ struct ShopItemsView: View {
             Text(message)
         }
         .sensoryFeedback(.success, trigger: model.changeCount)
+        .duplicating(duplicates, session: session, isAvailable: $canDuplicate) { await model.load() }
     }
 
     private var isDeleting: Binding<Bool> {

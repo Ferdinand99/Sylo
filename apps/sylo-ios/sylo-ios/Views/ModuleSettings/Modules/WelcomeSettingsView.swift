@@ -96,6 +96,7 @@ struct WelcomeSettingsView: View {
                                   noneTitle: "Choose a channel")
                     LimitedTextField(title: "Message", text: $settings.joinMessage,
                                      limit: WelcomeSettings.maxMessageLength, lines: 3...8)
+                    TextTemplateMenu(field: .welcome, text: $settings.joinMessage)
                     Toggle("Send as an embed", isOn: $settings.useEmbed)
                 }
             } header: {
@@ -132,6 +133,7 @@ struct WelcomeSettingsView: View {
                 if settings.dmEnabled {
                     LimitedTextField(title: "DM text", text: $settings.dmMessage,
                                      limit: WelcomeSettings.maxMessageLength, lines: 3...8)
+                    TextTemplateMenu(field: .welcomeDm, text: $settings.dmMessage)
                 }
             } header: {
                 Text("Direct message")

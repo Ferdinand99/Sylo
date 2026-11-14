@@ -17,8 +17,8 @@ private func object(_ json: String) throws -> [String: JSONValue] {
 struct ConfigDiffTests {
     @Test("A changed setting shows its readable name, before and after")
     func changed() throws {
-        let result = ConfigDiff.rows(before: try object(#"{"channelId":"1","enabled":false}"#),
-                                     after: try object(#"{"channelId":"2","enabled":false}"#))
+        let result = ConfigDiff.rows(before: try object(#"{"channelId":"1"}"#),
+                                     after: try object(#"{"channelId":"2"}"#))
         #expect(result.rows.count == 1)
         #expect(result.rows[0].pathText == "Channel")
         #expect(result.rows[0].kind == .changed(before: .string("1"), after: .string("2")))

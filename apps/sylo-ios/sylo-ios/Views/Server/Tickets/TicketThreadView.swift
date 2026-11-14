@@ -91,6 +91,8 @@ struct TicketThreadView: View {
             } message: { message in
                 Text(message)
             }
+            // Sylo 5.2: what a member wrote is for the Inbox level; View gets the list without it.
+            .inboxOnly()
     }
 
     @ViewBuilder

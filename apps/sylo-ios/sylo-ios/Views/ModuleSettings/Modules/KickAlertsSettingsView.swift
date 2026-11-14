@@ -33,6 +33,7 @@ struct KickAlertsSettingsView: View {
                     RolePicker(title: "Ping role", selection: $alert.roleId, roles: page.roles)
                     LimitedTextField(title: "Message", text: $alert.message,
                                      limit: KickAlertsSettings.maxMessageLength, lines: 2...6)
+                    TextTemplateMenu(field: .stream, text: $alert.message)
                     Picker("Post as", selection: $alert.plainText) {
                         Text("Embed").tag(false)
                         Text("Plain text (no embed)").tag(true)

@@ -9,7 +9,16 @@ import SyloKit
 struct OverviewView: View {
     let summary: ServerSummary
     let model: OverviewModel
+    /// The setup wizard of this server, offered here while few modules are set up (Sylo 5.2).
+    let wizard: SetupWizardModel
+    /// Moves the server screen to a tab (the Needs attention rows for tickets and appeals).
+    let openTab: (ServerView.ServerTab) -> Void
 
+    @Environment(\.dashboardAccess) private var access
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @State private var showsAllAttention = false
+    /// "Not now" on the setup offer, kept per server.
+    @State private var offerDismissed = false
     @State private var searchText = ""
     /// Select mode: pick modules, then switch them all on or off with one call.
     @State private var isSelecting = false
@@ -18,6 +27,14 @@ struct OverviewView: View {
     var body: some View {
         content
             .task { if model.overview == nil { await model.load() } }
+            .task { offerDismissed = UserDefaults.standard.bool(forKey: offerKey) }
+            // Read the wizard once the overview says the server is new, so the offer is only shown where it works.
+            .task(id: model.overview.map { SetupDraft.shouldOffer(overview: $0) } ?? false) {
+                let wanted = model.overview.map { SetupDraft.shouldOffer(overview: $0) } ?? false
+                if wanted, access.canEdit, wizard.draft == nil, wizard.isAvailable, !wizard.isLoading {
+                    await wizard.load()
+                }
+            }
             // Back from a module's settings or another tab: summary lines may have changed.
             .onAppear {
                 if model.overview != nil { Task { await model.load() } }
@@ -52,7 +69,10 @@ struct OverviewView: View {
                     OverviewHeader(summary: summary, overview: overview)
                 }
                 if !isSelecting, !isSearching {
-                    ServerToolsSection(server: summary.id) { startSelecting() }
+                    attentionSection(overview)
+                    setupOffer(overview)
+                    // Switching several modules at once is Edit work.
+                    ServerToolsSection(server: summary.id, selectModules: access.canEdit ? { startSelecting() } : nil)
                 }
                 ForEach(shownGroups(overview)) { group in
                     Section(group.title) {
@@ -152,8 +172,94 @@ struct OverviewView: View {
     private static let settingsCardID = "general"
 
     private func moduleRow(_ card: OverviewCard) -> some View {
-        ModuleRow(card: card, isPending: model.isPending(card.id)) { enabled in
+        // A person below Edit sees the switch but cannot use it.
+        ModuleRow(card: card, isPending: model.isPending(card.id) || !access.canEdit) { enabled in
             model.setModule(card.id, enabled: enabled)
+        }
+    }
+
+    // MARK: - Needs attention
+
+    /// The most rows shown on a phone before "Show all".
+    private static let phoneAttentionLimit = 3
+
+    /// What needs attention: waiting work, modules that are on but not set up, what Sylo cannot do in the channels
+    /// and roles a module uses (the health check), and the permissions Sylo lacks. Three rows on a phone, with
+    /// "Show all".
+    @ViewBuilder
+    private func attentionSection(_ overview: ServerOverview) -> some View {
+        let items = overview.attentionItems
+        if !items.isEmpty {
+            let limited = horizontalSizeClass == .compact && !showsAllAttention && items.count > Self.phoneAttentionLimit
+            let shown = limited ? Array(items.prefix(Self.phoneAttentionLimit)) : items
+            Section {
+                ForEach(shown) { item in
+                    attentionRow(item)
+                }
+                if limited {
+                    Button("Show All (\(items.count))") { showsAllAttention = true }
+                } else if showsAllAttention, items.count > Self.phoneAttentionLimit, horizontalSizeClass == .compact {
+                    Button("Show Fewer") { showsAllAttention = false }
+                }
+            } header: {
+                Text("Needs attention")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func attentionRow(_ item: AttentionItem) -> some View {
+        switch item.destination {
+        case .module(let id):
+            if ModuleScreens.hasScreen(id) {
+                NavigationLink(value: ModuleRoute(moduleID: id)) { AttentionRowView(item: item) }
+            } else if ServerPages.hasScreen(id) {
+                NavigationLink(value: ServerPageRoute(cardID: id)) { AttentionRowView(item: item) }
+            } else {
+                AttentionRowView(item: item)
+            }
+        case .tickets:
+            Button { openTab(.tickets) } label: { AttentionRowView(item: item) }
+                .foregroundStyle(.primary)
+        case .appeals:
+            Button { openTab(.moderation) } label: { AttentionRowView(item: item) }
+                .foregroundStyle(.primary)
+        case .none:
+            AttentionRowView(item: item)
+        }
+    }
+
+    // MARK: - Setup offer
+
+    private var offerKey: String { "setupOfferDismissed.\(summary.id.rawValue)" }
+
+    /// "Set up Sylo" on a server with fewer than three modules set up. The wizard is read in the background;
+    /// the offer shows once it answers (a Sylo without the wizard never shows it). "Not now" is remembered.
+    @ViewBuilder
+    private func setupOffer(_ overview: ServerOverview) -> some View {
+        if access.canEdit, !offerDismissed, SetupDraft.shouldOffer(overview: overview), wizard.isAvailable,
+           wizard.draft != nil {
+            Section {
+                NavigationLink {
+                    SetupWizardView(model: wizard)
+                } label: {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Set Up Sylo")
+                            Text("Sylo can look at your channels and roles and propose a setup. You choose what happens.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "wand.and.stars").foregroundStyle(.tint)
+                    }
+                }
+                Button("Not Now") {
+                    offerDismissed = true
+                    UserDefaults.standard.set(true, forKey: offerKey)
+                }
+                .font(.footnote)
+            }
         }
     }
 
@@ -199,10 +305,62 @@ private struct OverviewHeader: View {
     }
 }
 
+/// One row of Needs attention: an icon for how serious it is, the title, what is wrong and, for a health check,
+/// what to do about it.
+private struct AttentionRowView: View {
+    let item: AttentionItem
+
+    @ScaledMetric(relativeTo: .body) private var iconWidth = 28
+
+    var body: some View {
+        Label {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: item.title)
+                Text(verbatim: item.detail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                if item.kind == .health, let fix = item.lines.first?.fix, !fix.isEmpty {
+                    Text(verbatim: fix)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } icon: {
+            Image(systemName: symbol)
+                .symbolRenderingMode(.multicolor)
+                .foregroundStyle(tint)
+                .frame(width: iconWidth)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityHint(item.destination == .none ? "" : "Opens it")
+    }
+
+    private var symbol: String {
+        switch item.kind {
+        case .waiting: "tray.full"
+        case .setup: "wrench.and.screwdriver"
+        case .health: item.severity == .error ? "exclamationmark.octagon.fill" : "exclamationmark.triangle.fill"
+        case .info: "info.circle"
+        case .blocked: "lock.trianglebadge.exclamationmark"
+        case .permissions: "key"
+        }
+    }
+
+    private var tint: Color {
+        switch item.kind {
+        case .health: item.severity == .error ? .red : .orange
+        case .waiting, .info: .accentColor
+        case .setup, .blocked, .permissions: .orange
+        }
+    }
+}
+
 #Preview {
     let session = AppSession.preview(.signedIn)
     NavigationStack {
-        OverviewView(summary: PreviewData.servers[0], model: OverviewModel(server: PreviewData.servers[0].id, session: session))
+        OverviewView(
+            summary: PreviewData.servers[0], model: OverviewModel(server: PreviewData.servers[0].id, session: session),
+            wizard: SetupWizardModel(server: PreviewData.servers[0].id, session: session), openTab: { _ in })
     }
     .environment(session)
 }
@@ -210,7 +368,9 @@ private struct OverviewHeader: View {
 #Preview("Largest text, dark") {
     let session = AppSession.preview(.signedIn)
     NavigationStack {
-        OverviewView(summary: PreviewData.servers[0], model: OverviewModel(server: PreviewData.servers[0].id, session: session))
+        OverviewView(
+            summary: PreviewData.servers[0], model: OverviewModel(server: PreviewData.servers[0].id, session: session),
+            wizard: SetupWizardModel(server: PreviewData.servers[0].id, session: session), openTab: { _ in })
     }
     .environment(session)
     .dynamicTypeSize(.accessibility3)

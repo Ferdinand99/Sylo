@@ -8,6 +8,9 @@ struct MessageBuilderView: View {
     @State private var model: ComposedMessageBuilderModel
     @State private var isConfirmingDiscard = false
     @State private var pendingMove: PendingMove?
+    /// Whether the server has templates and message JSON (Sylo 5.2, P6).
+    @State private var hasMessageTools = false
+    @Environment(AppSession.self) private var session
 
     /// What was asked when a posted message is about to change channel.
     private enum PendingMove {
@@ -90,6 +93,7 @@ struct MessageBuilderView: View {
         .task {
             if !model.hasLoaded { await model.load() }
         }
+        .task { hasMessageTools = await session.hasImportRoutes(server: model.server) }
     }
 
     // MARK: - The form
@@ -124,6 +128,11 @@ struct MessageBuilderView: View {
             } footer: {
                 Text("To ping a role, write <@&ROLE_ID> in the message text. Mentions inside an embed don't notify anyone.")
             }
+
+            MessageToolsSection(
+                isAvailable: hasMessageTools, content: $model.spec.content, embeds: $model.spec.embeds,
+                links: $model.spec.links, tokens: false, maxEmbeds: ComposedMessageSpec.maxEmbeds,
+                contentLimit: ComposedMessageSpec.maxContentLength)
 
             Section("Preview") {
                 MessagePreviewCard(content: model.spec.content, embeds: model.spec.embeds, links: model.spec.links)

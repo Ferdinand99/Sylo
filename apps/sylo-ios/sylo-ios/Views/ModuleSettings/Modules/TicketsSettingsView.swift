@@ -1,7 +1,7 @@
 import SwiftUI
 import SyloKit
 
-/// Tickets (modmail): the greeting and close messages, the staff notification channel, staff
+/// Tickets: the greeting and close messages, the staff notification channel, staff
 /// roles, and how long closed tickets are kept. Mirrors web-v2/src/moduleForms/Tickets.jsx.
 struct TicketsSettingsView: View {
     @State private var model: ModuleSettingsModel<TicketsPage>

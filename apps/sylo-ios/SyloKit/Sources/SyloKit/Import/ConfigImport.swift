@@ -492,3 +492,9 @@ extension AppSession {
         }
     }
 }
+
+extension AppSession {
+    /// Whether a probe (``hasImportRoutes(server:)``) has found the P6 routes on this Sylo, without asking again. Every
+    /// server of one Sylo has the same routes, so one answer is enough. False until the server screen has asked.
+    public var knowsImportRoutes: Bool { importRoutes.values.contains(true) }
+}

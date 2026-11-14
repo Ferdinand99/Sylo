@@ -11,11 +11,14 @@ struct MessagesView: View {
     @State private var model: ComposedMessagesModel
     @State private var toUnpublish: ComposedMessageSummary?
     @State private var toDelete: ComposedMessageSummary?
+    @State private var duplicates: DuplicateModel
+    @State private var canDuplicate = false
 
     init(server: ServerID, session: AppSession) {
         self.server = server
         self.session = session
         _model = State(initialValue: ComposedMessagesModel(server: server, session: session))
+        _duplicates = State(initialValue: DuplicateModel(server: server, session: session))
     }
 
     var body: some View {
@@ -56,6 +59,9 @@ struct MessagesView: View {
                 Text(message)
             }
             .sensoryFeedback(.success, trigger: model.successCount)
+            .duplicating(duplicates, session: session, isAvailable: $canDuplicate) { await model.load() }
+            // Embed messages are Edit work.
+            .lockedBelow()
     }
 
     @ViewBuilder
@@ -87,6 +93,7 @@ struct MessagesView: View {
                             if item.published {
                                 Button("Unpublish", systemImage: "eye.slash") { toUnpublish = item }
                             }
+                            DuplicateButton(model: duplicates, isAvailable: canDuplicate, kind: .composedMessage, id: String(item.id))
                             Button("Delete", systemImage: "trash", role: .destructive) { toDelete = item }
                         }
                     }
