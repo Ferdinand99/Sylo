@@ -18,8 +18,13 @@ import Meta from './Meta.jsx';
 import { confirmDialog } from './ConfirmDialog.jsx';
 import { counter, limitOf, useModuleLimits } from './useModuleLimits.js';
 
-// "3.4 MB" for the storage a server's collectible pictures use.
-const formatMegabytes = (bytes) => `${(Number(bytes) / 1024 / 1024).toFixed(1).replace(/\.0$/, '')} MB`;
+// "3.4 MB" for the storage a server's collectible pictures use, and "340 KB" under a megabyte (a small
+// server would otherwise read "0 MB").
+function formatSize(bytes) {
+  const n = Number(bytes) || 0;
+  if (n < 1024 * 1024) return `${Math.ceil(n / 1024)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1).replace(/\.0$/, '')} MB`;
+}
 
 const TYPE_LABELS = {
   temp_role: 'Temporary role',
@@ -189,7 +194,7 @@ export default function EconomyShopAdmin({ guildId, currency }) {
         {data.pictures ? (
           <p className="v2-field-hint" data-testid="shop-pictures">
             Collectible pictures: {counter(data.pictures.count, data.pictures.maxCount)} ·{' '}
-            {formatMegabytes(data.pictures.bytes)} / {formatMegabytes(data.pictures.maxBytes)}
+            {formatSize(data.pictures.bytes)} / {formatSize(data.pictures.maxBytes)}
           </p>
         ) : null}
         <p className="v2-field-hint">

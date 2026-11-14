@@ -83,15 +83,27 @@ function Item({ item, busy, limits, onDecide, onMoveBack, onDelete }) {
   const [action, setAction] = useState(null);
   const [reason, setReason] = useState('');
   const actionsRef = useRef(null);
+  // Which control opened the reason form: 'approve', 'deny' or 'menu' (the "Set status" button). The buttons
+  // are gone while the form is open, so it is the new one of the same kind that gets the focus back.
+  const opener = useRef(null);
   const returnFocus = useRef(false);
 
-  // The reason form replaces the buttons; when it closes, focus goes back to the row's first button.
   useEffect(() => {
     if (!action && returnFocus.current) {
       returnFocus.current = false;
-      actionsRef.current?.querySelector('button')?.focus();
+      const row = actionsRef.current;
+      const target =
+        opener.current === 'menu'
+          ? row?.querySelector('[aria-haspopup="menu"]')
+          : row?.querySelector(`[data-opener="${opener.current}"]`);
+      (target ?? row?.querySelector('button'))?.focus();
     }
   }, [action]);
+
+  function openPanel(next, from) {
+    opener.current = from;
+    setAction(next);
+  }
 
   function closePanel() {
     returnFocus.current = true;
@@ -165,7 +177,8 @@ function Item({ item, busy, limits, onDecide, onMoveBack, onDelete }) {
                 className="v2-btn-ghost"
                 disabled={busy}
                 aria-label={`Approve suggestion #${item.number}`}
-                onClick={() => setAction('approve')}
+                data-opener="approve"
+                onClick={() => openPanel('approve', 'approve')}
               >
                 Approve
               </button>
@@ -174,7 +187,8 @@ function Item({ item, busy, limits, onDecide, onMoveBack, onDelete }) {
                 className="v2-btn-ghost"
                 disabled={busy}
                 aria-label={`Deny suggestion #${item.number}`}
-                onClick={() => setAction('deny')}
+                data-opener="deny"
+                onClick={() => openPanel('deny', 'deny')}
               >
                 Deny
               </button>
@@ -182,10 +196,11 @@ function Item({ item, busy, limits, onDecide, onMoveBack, onDelete }) {
           ) : null}
           <OverflowMenu
             text="Set status"
+            disabled={busy}
             label={`Set status of suggestion #${item.number}`}
             items={ACTIONS.filter(([, status]) => status !== item.status).map(([a, , label]) => ({
               label,
-              onClick: () => setAction(a),
+              onClick: () => openPanel(a, 'menu'),
               disabled: busy,
             }))}
           />

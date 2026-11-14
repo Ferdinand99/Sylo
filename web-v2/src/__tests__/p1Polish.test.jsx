@@ -7,13 +7,14 @@ import { fileURLToPath } from 'node:url';
 import { useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MentionTextarea from '../components/MentionTextarea.jsx';
 import PlaceholderBar from '../components/PlaceholderBar.jsx';
 import LoadError from '../components/LoadError.jsx';
 import EmptyList from '../components/EmptyList.jsx';
 import Overview from '../pages/Overview.jsx';
 import { counter } from '../components/useModuleLimits.js';
+import SaveBar, { keepFieldAboveBar } from '../components/SaveBar.jsx';
 import { renderAtGuild } from './routerHarness.jsx';
 
 vi.mock('../api.js', () => ({
@@ -158,6 +159,17 @@ describe('A8: the placeholder row on a phone', () => {
     { id: 'a', label: 'Welcome message', tokens: [{ token: '{user}' }, { token: '{server}' }] },
   ];
 
+  // The prototype's own descriptors, put back after each test so the widths never leak into another one.
+  const saved = {
+    scrollWidth: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollWidth'),
+    clientWidth: Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth'),
+  };
+  afterEach(() => {
+    for (const [name, descriptor] of Object.entries(saved)) {
+      if (descriptor) Object.defineProperty(HTMLElement.prototype, name, descriptor);
+      else delete HTMLElement.prototype[name];
+    }
+  });
   const widths = (scrollWidth, clientWidth) => {
     Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
       configurable: true,
@@ -201,15 +213,91 @@ describe('A8: the placeholder row on a phone', () => {
 });
 
 describe('A2: the save bar never covers the field being edited', () => {
-  it('leaves room for the bar under a form, and scrolls a focused field clear of it', () => {
+  const rect = (top, bottom) => ({ top, bottom, left: 0, right: 100, width: 100, height: bottom - top });
+
+  function Form({ dirty = true }) {
+    return (
+      <>
+        <form data-savebar>
+          <textarea aria-label="Message" />
+        </form>
+        <input aria-label="Outside" />
+        <SaveBar dirty={dirty} onSave={() => {}} onReset={() => {}} guard={false} />
+      </>
+    );
+  }
+  const scrolled = vi.fn();
+  beforeEach(() => {
+    scrolled.mockReset();
+    Element.prototype.scrollIntoView = scrolled;
+  });
+  afterEach(() => {
+    delete Element.prototype.scrollIntoView;
+  });
+
+  it('scrolls a field that the bar covers just clear of it, and leaves one that is clear alone', () => {
+    const field = document.createElement('textarea');
+    field.setAttribute('form', 'x');
+    const form = document.createElement('form');
+    form.setAttribute('data-savebar', '');
+    form.append(field);
+    const bar = document.createElement('div');
+    bar.getBoundingClientRect = () => rect(700, 760);
+    field.scrollIntoView = scrolled;
+    // the screenshot case: the field near the bottom of the window, the bar over it
+    field.getBoundingClientRect = () => rect(650, 740);
+    expect(keepFieldAboveBar(field, bar)).toBe(true);
+    expect(scrolled).toHaveBeenCalledWith({ block: 'nearest' });
+    // well above the bar, or below it: nothing to do
+    scrolled.mockClear();
+    field.getBoundingClientRect = () => rect(100, 300);
+    expect(keepFieldAboveBar(field, bar)).toBe(false);
+    field.getBoundingClientRect = () => rect(780, 820);
+    expect(keepFieldAboveBar(field, bar)).toBe(false);
+    expect(scrolled).not.toHaveBeenCalled();
+  });
+
+  it('does nothing for a field outside a settings form, or when there is no bar', () => {
+    const outside = document.createElement('input');
+    outside.getBoundingClientRect = () => rect(650, 740);
+    const bar = { getBoundingClientRect: () => rect(700, 760) };
+    expect(keepFieldAboveBar(outside, bar)).toBe(false);
+    expect(keepFieldAboveBar(null, bar)).toBe(false);
+    expect(keepFieldAboveBar(document.body, null)).toBe(false);
+  });
+
+  it('checks the focused field when the bar appears, and again as the person types', () => {
+    const bar = () => document.querySelector('.v2-savebar');
+    const { rerender } = render(<Form dirty={false} />);
+    const field = screen.getByLabelText('Message');
+    field.getBoundingClientRect = () => rect(650, 740);
+    field.scrollIntoView = scrolled;
+    HTMLElement.prototype.getBoundingClientRect = function () {
+      return this === field
+        ? rect(650, 740)
+        : this.classList?.contains('v2-savebar')
+          ? rect(700, 760)
+          : rect(0, 0);
+    };
+    field.focus();
+    expect(scrolled).not.toHaveBeenCalled();
+    // the first edit makes the form dirty: the bar appears over the field
+    rerender(<Form dirty />);
+    expect(bar().classList.contains('is-visible')).toBe(true);
+    expect(scrolled).toHaveBeenCalledWith({ block: 'nearest' });
+    scrolled.mockClear();
+    fireEvent.input(field);
+    expect(scrolled).toHaveBeenCalledTimes(1);
+    delete HTMLElement.prototype.getBoundingClientRect;
+  });
+
+  it('leaves room with a scroll margin on the fields, and no padding that comes and goes under the form', () => {
     const sheet = css('styles/p1-polish.css');
     expect(sheet).toMatch(/--savebar-h: 72px/);
     expect(sheet).toMatch(
-      /\.v2-page:has\(\.v2-savebar\.is-visible\) form\[data-savebar\] \{\s*padding-bottom: calc\(var\(--savebar-h\) \+ 24px\);/
+      /\.v2-page:has\(\.v2-savebar\.is-visible\) form\[data-savebar\] :is\([^)]*textarea[^)]*\) \{\s*scroll-margin-bottom: calc\(var\(--savebar-h\) \+ 24px\);/
     );
-    expect(sheet).toMatch(
-      /html:has\(\.v2-savebar\.is-visible\) \{\s*scroll-padding-bottom: calc\(var\(--savebar-h\) \+ 24px\);/
-    );
+    expect(sheet).not.toMatch(/form\[data-savebar\] \{\s*padding-bottom/);
   });
 });
 

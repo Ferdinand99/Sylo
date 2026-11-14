@@ -16,6 +16,7 @@ import {
   setSuggestionMessage,
   setSuggestionVote,
   suggestionCount,
+  suggestionCountsByStatus,
 } from '../src/db/suggestions.js';
 
 let app;
@@ -363,6 +364,15 @@ test('the list and the config carry the count of every status, for the filter ch
   await decideSuggestion(a.id, { status: 'approved' });
   await decideSuggestion(b.id, { status: 'denied' });
   await decideSuggestion(c.id, { status: 'considering' });
+  // another server's suggestions, in every status, change nothing here
+  const OTHER = '700000000000000999';
+  const others = [
+    await make({ guildId: OTHER }),
+    await make({ guildId: OTHER }),
+    await make({ guildId: OTHER }),
+  ];
+  await decideSuggestion(others[0].id, { status: 'approved' });
+  await decideSuggestion(others[1].id, { status: 'implemented' });
 
   const expected = { all: 4, open: 1, considering: 1, approved: 1, denied: 1, implemented: 0 };
   assert.deepEqual((await json(await api.get('/modules/suggestions/config'))).counts, expected);
@@ -370,4 +380,13 @@ test('the list and the config carry the count of every status, for the filter ch
   const filtered = await json(await api.get('/modules/suggestions/list?status=denied'));
   assert.equal(filtered.suggestions.length, 1);
   assert.deepEqual(filtered.counts, expected);
+  assert.equal(filtered.openCount, 2);
+  assert.deepEqual(
+    await suggestionCountsByStatus(OTHER),
+    { all: 3, open: 1, considering: 0, approved: 1, denied: 0, implemented: 1 },
+    'the other server keeps its own numbers'
+  );
+  await purgeGuild(OTHER);
 });
+
+// Keep this test last in the file: it purges the server's suggestions at the start.

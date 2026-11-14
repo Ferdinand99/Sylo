@@ -1,9 +1,11 @@
 /* ---- Fixes and polish of the 5.2 review: room for the save bar, the Needs attention cap on a phone, the
    start button of an empty list ----------------------------------------------------------------------- */
 
-/* The height of the floating save bar (components/SaveBar.jsx) with the gap under it. A form leaves this much
-   and a margin below its last field while the bar is up, and a field that takes the focus is scrolled clear of
-   the bar: without it the bar sat over the field being edited. */
+/* The height of the floating save bar (components/SaveBar.jsx) with the gap under it. While the bar is up, a
+   field of a settings form scrolls into view clear of it: SaveBar calls scrollIntoView on the focused field
+   when the bar appears and as the person types, and this margin is the room that scroll leaves. No padding
+   on the form: the bar sits in the flow after the page, so the end of the page needs none, and padding that
+   comes and goes would move the content under the form. */
 :root {
   --savebar-h: 72px;
 }
@@ -13,11 +15,8 @@
     --savebar-h: calc(60px + env(safe-area-inset-bottom, 0px));
   }
 }
-.v2-page:has(.v2-savebar.is-visible) form[data-savebar] {
-  padding-bottom: calc(var(--savebar-h) + 24px);
-}
-html:has(.v2-savebar.is-visible) {
-  scroll-padding-bottom: calc(var(--savebar-h) + 24px);
+.v2-page:has(.v2-savebar.is-visible) form[data-savebar] :is(input, select, textarea, button, [tabindex]) {
+  scroll-margin-bottom: calc(var(--savebar-h) + 24px);
 }
 
 /* ---- Needs attention: three rows on a phone, the rest behind "Show all (n)" ------------------------------ */

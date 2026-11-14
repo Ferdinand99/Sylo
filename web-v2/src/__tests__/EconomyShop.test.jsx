@@ -467,6 +467,17 @@ describe('Economy: the Shop tab', () => {
     );
   });
 
+  it('shows kilobytes under one megabyte instead of "0 MB"', async () => {
+    api.getShopItems.mockResolvedValue({
+      ...shopData([item()]),
+      pictures: { count: 1, bytes: 340 * 1024, maxCount: 200, maxBytes: 25 * 1024 * 1024 },
+    });
+    await openTab('Shop');
+    expect((await screen.findByTestId('shop-pictures')).textContent).toBe(
+      'Collectible pictures: 1 / 200 · 340 KB / 25 MB'
+    );
+  });
+
   it('an empty shop says what it gives and has one start button, not a second one under the list', async () => {
     api.getShopItems.mockResolvedValue(shopData([]));
     await openTab('Shop');

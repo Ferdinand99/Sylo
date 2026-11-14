@@ -21,9 +21,9 @@ const MENU_PADDING = 12;
  *
  * With `text` the button reads that word and a small arrow ("Set status ▾") instead of the "⋯": for a menu
  * that holds one kind of choice, where the word says more than the dots. `label` stays the accessible name
- * (it should start with the visible word).
+ * (it should start with the visible word). With `disabled` the button cannot be opened (a row that is busy).
  */
-export default function OverflowMenu({ label, items, text = null }) {
+export default function OverflowMenu({ label, items, text = null, disabled = false }) {
   const [open, setOpen] = useState(false);
   const [place, setPlace] = useState(null);
   const root = useRef(null);
@@ -99,6 +99,7 @@ export default function OverflowMenu({ label, items, text = null }) {
         type="button"
         className={`v2-btn-ghost v2-overflow-button${text ? ' has-text' : ''}`}
         aria-label={label}
+        disabled={disabled}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}

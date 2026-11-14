@@ -327,9 +327,17 @@ test('the items answer carries the picture quota of the server, with the limits'
   db.prepare(
     'INSERT INTO collectible_images (id, guild_id, mime, bytes, data, created_at) VALUES (?, ?, ?, ?, ?, ?)'
   ).run('a'.repeat(32), GID, 'image/webp', 1234, Buffer.alloc(1234), 1);
+  // another server's pictures do not count towards this one's quota
+  const OTHER = '700000000000000998';
+  for (const [i, bytes] of [4096, 8192].entries()) {
+    db.prepare(
+      'INSERT INTO collectible_images (id, guild_id, mime, bytes, data, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(String(i).repeat(32), OTHER, 'image/webp', bytes, Buffer.alloc(bytes), 1);
+  }
   const after = await json(await api.get('/modules/economy/shop/items'));
   assert.equal(after.pictures.count, 1);
   assert.equal(after.pictures.bytes, 1234);
+  db.prepare('DELETE FROM collectible_images WHERE guild_id = ?').run(OTHER);
   // every change answers with the numbers too, so the counter follows without another request
   const added = await json(await add({ name: 'Another' }));
   assert.equal(added.pictures.count, 1);

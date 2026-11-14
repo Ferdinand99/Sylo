@@ -24,7 +24,9 @@ export const CC_PLACEHOLDERS = ['{user}', '{username}', '{server}', '{channel}',
 export const CC_ACTION_TYPES = ['reply', 'send', 'add-role', 'remove-role'];
 /** Setting limits, served to the dashboard (modules/limits.js). */
 export const LIMITS = {
-  commands: { maxItems: 200 },
+  // Discord lets one server register at most 100 chat-input commands, and syncGuildCustomCommands replaces the
+  // whole list at once, so a longer list could never be registered.
+  commands: { maxItems: 100 },
   'commands[].name': { maxLength: 32 },
   'commands[].description': { maxLength: 100 },
   'commands[].actions': { maxItems: 10 },

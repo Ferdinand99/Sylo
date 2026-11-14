@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
+import EmptyList from '../components/EmptyList.jsx';
 import UnitInput from '../components/UnitInput.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
@@ -74,7 +75,10 @@ export default function Moderation() {
 
         <h2 className="v2-group-title">Warning actions</h2>
         {form.rules.length === 0 ? (
-          <p className="v2-field-hint">No rules yet — warnings alone have no effect.</p>
+          <EmptyList start={{ label: 'Add your first warning action', onClick: addRule }}>
+            Let warnings add up: at the warning number you choose, Sylo acts on its own, with a timeout, a
+            kick or a ban.
+          </EmptyList>
         ) : null}
         {form.rules.map((r) => (
           <div className="v2-rule-card" key={r.key}>

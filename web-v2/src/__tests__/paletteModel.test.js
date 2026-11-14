@@ -85,13 +85,15 @@ describe('paletteItems', () => {
       ...data,
       groups: data.groups.map((g) => ({
         ...g,
-        cards: g.cards.map((c) => (c.id === 'tickets' ? { ...c, name: 'Tickets (modmail)' } : c)),
+        cards: g.cards.map((c) => (c.id === 'tickets' ? { ...c, name: 'Support desk' } : c)),
       })),
     };
     const items = build({ data: renamed });
     expect(items.find((i) => i.key === 'module:tickets:settings').label).toBe('Ticket settings');
-    // The module's name still finds it.
-    expect(rankItems(items, 'modmail')[0].key).toBe('module:tickets:settings');
+    // The name it had before still finds it: a keyword of its own, not the card's name.
+    expect(rankItems(items, 'modmail').map((i) => i.key)).toEqual(
+      expect.arrayContaining(['page:tickets', 'module:tickets:settings'])
+    );
   });
 
   it('shows the bot pages only to the operator', () => {
