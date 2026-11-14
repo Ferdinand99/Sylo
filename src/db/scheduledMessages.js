@@ -60,6 +60,14 @@ const advanceStmt = prepare(
 const firedSingleStmt = prepare(
   'UPDATE scheduled_messages SET last_run_at = @now, enabled = 0 WHERE id = @id'
 );
+// The same two writes as a claim: they change the row only while it still holds the due state the
+// caller read, so of two ticks holding the same due row only one gets to post it.
+const claimAdvanceStmt = prepare(
+  'UPDATE scheduled_messages SET last_run_at = @now, next_run_at = @nextRunAt WHERE id = @id AND enabled = 1 AND next_run_at = @due'
+);
+const claimSingleStmt = prepare(
+  'UPDATE scheduled_messages SET last_run_at = @now, enabled = 0 WHERE id = @id AND enabled = 1 AND run_at = @due'
+);
 
 const ALL_DAYS = '0,1,2,3,4,5,6';
 
@@ -158,11 +166,23 @@ export async function setScheduledEnabled(guildId, id, enabled) {
   await setEnabledStmt.run(enabled ? 1 : 0, id, guildId);
 }
 
-/** Recurring reminder fired — bump next_run_at by one interval. */
-export async function advanceReminder(id, intervalMinutes, now = Date.now()) {
-  await advanceStmt.run({ id, now, nextRunAt: now + intervalMinutes * 60_000 });
+/**
+ * Recurring reminder fired — bump next_run_at by one interval. Pass `dueAt` (the next_run_at the
+ * caller read) to claim the occurrence: returns true only for the caller that changed the row.
+ */
+export async function advanceReminder(id, intervalMinutes, now = Date.now(), dueAt) {
+  const nextRunAt = now + intervalMinutes * 60_000;
+  if (dueAt === undefined) {
+    await advanceStmt.run({ id, now, nextRunAt });
+    return true;
+  }
+  return (await claimAdvanceStmt.run({ id, now, nextRunAt, due: dueAt })).changes === 1;
 }
-/** Single reminder fired — mark it done. */
-export async function markSingleFired(id, now = Date.now()) {
-  await firedSingleStmt.run({ id, now });
+/** Single reminder fired — mark it done. Pass `dueAt` (the run_at the caller read) to claim it: true for one caller only. */
+export async function markSingleFired(id, now = Date.now(), dueAt) {
+  if (dueAt === undefined) {
+    await firedSingleStmt.run({ id, now });
+    return true;
+  }
+  return (await claimSingleStmt.run({ id, now, due: dueAt })).changes === 1;
 }
