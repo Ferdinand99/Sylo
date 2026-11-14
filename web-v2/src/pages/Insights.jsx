@@ -5,6 +5,7 @@ import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
 import Reveal from '../components/Reveal.jsx';
+import { useAccess } from '../access.jsx';
 
 const num = (v) => (Number(v) || 0).toLocaleString('en');
 const signed = (v) => `${v >= 0 ? '+' : '−'}${num(Math.abs(v))}`;
@@ -90,6 +91,8 @@ export default function Insights() {
   const [range, setRange] = useState('30');
   const { data, error, setData } = useApiData(() => getInsights(guildId, range), [guildId, range]);
   const [refreshing, setRefreshing] = useState(false);
+  // Refreshing writes the counters out: Edit access (access.jsx).
+  const canRefresh = useAccess().can('edit');
 
   useEffect(() => setRange('30'), [guildId]);
 
@@ -121,7 +124,12 @@ export default function Insights() {
     <Reveal>
       <div className="v2-page-head">
         <h1 className="v2-section-title">Server insights</h1>
-        <button type="button" className="v2-btn-ghost" onClick={onRefresh} disabled={refreshing}>
+        <button
+          type="button"
+          className="v2-btn-ghost"
+          onClick={onRefresh}
+          disabled={refreshing || !canRefresh}
+        >
           {refreshing ? 'Refreshing…' : '↻ Refresh now'}
         </button>
       </div>

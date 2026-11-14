@@ -12,6 +12,7 @@ import { usePlatformInfo } from '../usePlatformInfo.js';
 import Reveal from '../components/Reveal.jsx';
 import MemberPicker, { parseMemberIds } from '../components/MemberPicker.jsx';
 import '../styles/wp1-members.css';
+import { AccessLock } from '../access.jsx';
 
 // Look up what Sylo stores about one member in this server and delete it on request.
 // Moderation cases and other safety records are kept.
@@ -147,20 +148,22 @@ function Lookup({ guildId, lookup, onForgotten }) {
             <Link to={`/guilds/${guildId}/moderation`}>Moderation</Link> page if it should go.
           </p>
 
-          <div className="v2-section-gap">
-            <Field label="Note to the member" labelNote="— optional, added to the DM">
-              <textarea
-                rows={2}
-                maxLength={500}
-                placeholder="e.g. Processed at your request."
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-              />
-            </Field>
-            <button type="button" className="v2-btn-danger" disabled={busy} onClick={onForget}>
-              {busy ? 'Deleting…' : 'Delete this member’s data'}
-            </button>
-          </div>
+          <AccessLock need="edit" note>
+            <div className="v2-section-gap">
+              <Field label="Note to the member" labelNote="— optional, added to the DM">
+                <textarea
+                  rows={2}
+                  maxLength={500}
+                  placeholder="e.g. Processed at your request."
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                />
+              </Field>
+              <button type="button" className="v2-btn-danger" disabled={busy} onClick={onForget}>
+                {busy ? 'Deleting…' : 'Delete this member’s data'}
+              </button>
+            </div>
+          </AccessLock>
         </>
       )}
     </div>

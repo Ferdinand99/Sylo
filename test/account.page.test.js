@@ -134,7 +134,7 @@ test('V2 offers to add a server on each platform', async () => {
 
 test('ticket pages: an account with no identity on the guild platform is denied without a member lookup', async () => {
   const { setGuildModule } = await import('../src/db/modules.js');
-  const { ticketAccessState } = await import('../src/web/middleware/ticketAccess.js');
+  const { ticketAccessLevel } = await import('../src/web/middleware/ticketAccess.js');
   await setGuildModule(`fluxer:${F_GUILD}`, 'tickets', {
     enabled: true,
     config: { staffRoles: ['888888888888888888'] },
@@ -148,6 +148,6 @@ test('ticket pages: an account with no identity on the guild platform is denied 
     params: { guildId: `fluxer:${F_GUILD}` },
   };
   memberFetches.length = 0;
-  assert.equal(await ticketAccessState(req), 'denied');
+  assert.equal(await ticketAccessLevel(req), null);
   assert.deepEqual(memberFetches, [], 'no members.fetch(null), which would page through every member');
 });
