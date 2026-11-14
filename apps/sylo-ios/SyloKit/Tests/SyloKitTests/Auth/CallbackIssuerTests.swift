@@ -59,7 +59,7 @@ struct CallbackIssuerTests {
                 _ = try code("sylo://auth?code=c&state=\(state)&iss=\(iss)")
                 return nil
             } catch {
-                return error
+                return error as? SignInError
             }
         }
         #expect(outcome("https://evil.example") == .issuerMismatch("https://evil.example"))
@@ -78,7 +78,7 @@ struct CallbackIssuerTests {
                 _ = try code("sylo://auth?code=c&state=\(state)&\(query)")
                 return nil
             } catch {
-                return error
+                return error as? SignInError
             }
         }
         // A user name never makes the host read as the chosen server, and is never shown.
