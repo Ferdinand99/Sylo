@@ -12,11 +12,13 @@ registerPostgresBootstrap(`
     answers         TEXT NOT NULL DEFAULT '[]',
     status          TEXT NOT NULL DEFAULT 'open',
     decided_by      TEXT,
+    decided_by_user_id TEXT,
     decision_reason TEXT,
     created_at      BIGINT NOT NULL,
     decided_at      BIGINT,
     invite_url      TEXT
   );
+  ALTER TABLE appeals ADD COLUMN IF NOT EXISTS decided_by_user_id TEXT;
   CREATE INDEX IF NOT EXISTS idx_appeals_guild_status ON appeals (guild_id, status, created_at DESC);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_appeals_open_user ON appeals (guild_id, user_id) WHERE status = 'open';
 `);
@@ -40,7 +42,7 @@ const stmts = {
   countOpen: prepare("SELECT COUNT(*) AS n FROM appeals WHERE guild_id = ? AND status = 'open'"),
   decide: prepare(`
     UPDATE appeals
-       SET status = @status, decided_by = @decidedBy, decision_reason = @reason, decided_at = @decidedAt
+       SET status = @status, decided_by = @decidedBy, decided_by_user_id = @decidedById, decision_reason = @reason, decided_at = @decidedAt
      WHERE guild_id = @guildId AND id = @id AND status = 'open'
   `),
   setInvite: prepare('UPDATE appeals SET invite_url = @url WHERE guild_id = @guildId AND id = @id'),
@@ -116,15 +118,18 @@ export async function countOpenAppeals(guildId) {
  * Resolve an open appeal.
  * @param {string} guildId
  * @param {number} id
- * @param {{ status: 'accepted' | 'denied', decidedBy: string, reason: string }} decision
+ * `decidedBy` is the name shown on the appeal; `decidedById` is the platform user id of the person who decided,
+ * kept so /forget can take that person off the appeal (null when there is none: open mode, or a system decision).
+ * @param {{ status: 'accepted' | 'denied', decidedBy: string, decidedById?: string | null, reason: string }} decision
  * @returns {Promise<boolean>} true if a row was updated
  */
-export async function decideAppeal(guildId, id, { status, decidedBy, reason }) {
+export async function decideAppeal(guildId, id, { status, decidedBy, decidedById = null, reason }) {
   const info = await stmts.decide.run({
     guildId,
     id: Number(id),
     status,
     decidedBy: String(decidedBy).slice(0, 100),
+    decidedById: decidedById ? String(decidedById).slice(0, 100) : null,
     reason: String(reason).slice(0, 1000),
     decidedAt: Date.now(),
   });

@@ -52,6 +52,7 @@ export async function execute(interaction) {
     keepIntroduction: !card.ok,
     keepApplicationIds: apps.failedIds,
     keepTempRoles: shopRoles.failed,
+    names: [interaction.user.username],
   });
   const embed = new EmbedBuilder()
     .setColor(0x58d68d)

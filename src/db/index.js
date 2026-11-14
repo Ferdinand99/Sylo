@@ -1580,6 +1580,20 @@ export const MIGRATIONS = [
       }
     }
   },
+
+  // Who decided a ban appeal, by platform user id (src/db/appeals.js, which adds the same column on
+  // Postgres with ADD COLUMN IF NOT EXISTS): decided_by is only a display name, so /forget could not find
+  // the staff member on appeals they decided. Added only when missing.
+  (database) => {
+    const has = new Set(
+      database
+        .prepare('PRAGMA table_info(appeals)')
+        .all()
+        .map((c) => c.name)
+    );
+    if (!has.has('decided_by_user_id'))
+      database.exec('ALTER TABLE appeals ADD COLUMN decided_by_user_id TEXT;');
+  },
 ];
 
 /** Highest schema version this build knows how to run. */
