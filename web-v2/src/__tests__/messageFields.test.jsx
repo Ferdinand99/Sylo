@@ -246,12 +246,13 @@ describe('Social alerts', () => {
       defaultMessage: '',
     });
     renderAtGuild(<KickAlerts />, GUILD);
-    expect(await screen.findByText('No streamers yet — add one below.')).toBeTruthy();
+    expect(await screen.findByText(/the moment a streamer goes live on Kick/)).toBeTruthy();
     expect(screen.queryByText('New streamer')).toBeNull();
     expect(screen.queryByPlaceholderText('e.g. streamer_name')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: '+ Add streamer' }));
+    // the empty state's primary button adds the first row, exactly like "+ Add streamer" under the list
+    fireEvent.click(screen.getByRole('button', { name: 'Add your first streamer' }));
     expect(screen.getByPlaceholderText('e.g. streamer_name')).toBeTruthy();
-    expect(screen.queryByText('No streamers yet — add one below.')).toBeNull();
+    expect(screen.queryByText(/the moment a streamer goes live on Kick/)).toBeNull();
   });
 });
 

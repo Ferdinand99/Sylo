@@ -33,7 +33,9 @@ const FORMAT = {
     return parts;
   },
   messages: (l) =>
-    num(l, 'Saved embeds') ? [noun(num(l, 'Saved embeds'), 'saved embed')] : ['No saved embeds yet'],
+    num(l, 'Saved embeds')
+      ? [`${num(l, 'Saved embeds')} saved`, `${num(l, 'Published')} published`]
+      : ['No saved embeds yet'],
   moderation: (l) => [
     isOn(l, 'Warning thresholds') ? `${value(l, 'Warning thresholds')} for warnings` : 'No warning rules yet',
     ...(isOn(l, 'DM on punishment') ? ['DMs members when punished'] : []),

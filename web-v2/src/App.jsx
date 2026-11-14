@@ -32,6 +32,7 @@ const TicketView = lazy(() => import('./pages/TicketView.jsx'));
 const ModerationHub = lazy(() => import('./pages/ModerationHub.jsx'));
 const AuditLog = lazy(() => import('./pages/AuditLog.jsx'));
 const Changelog = lazy(() => import('./pages/Changelog.jsx'));
+const SetupWizard = lazy(() => import('./pages/SetupWizard.jsx'));
 const MemberData = lazy(() => import('./pages/MemberData.jsx'));
 const Shop = lazy(() => import('./pages/Shop.jsx'));
 const Apply = lazy(() => import('./pages/Apply.jsx'));
@@ -66,6 +67,7 @@ const router = createBrowserRouter(
           <Route path="guilds/:guildId/leaderboard" element={<Leaderboard />} />
           <Route path="guilds/:guildId/settings" element={<Settings />} />
           <Route path="guilds/:guildId/audit" element={<AuditLog />} />
+          <Route path="guilds/:guildId/setup" element={<SetupWizard />} />
           <Route path="guilds/:guildId/member-data" element={<MemberData />} />
           <Route path="guilds/:guildId/m/:moduleId" element={<ModulePage />} />
           <Route path="guilds/:guildId/applications/:submissionId" element={<ApplicationDetail />} />

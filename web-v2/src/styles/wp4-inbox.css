@@ -1,13 +1,5 @@
 /* Inbox pages: queue first, consistent links (suggestions, applications, tickets, appeals). */
 
-/* "Set status" is a plain button until a status is picked; picked, it is a clear action, not a grey pill.
-   (The disabled look is the shared recessed one, so the two states differ.) */
-.wp4-set-status:not(:disabled) {
-  border-color: var(--text);
-  color: var(--text);
-  font-weight: 600;
-}
-
 /* The radio group that sits under the log channel hint gets room above it. */
 .wp4-log-mode {
   margin-top: 14px;

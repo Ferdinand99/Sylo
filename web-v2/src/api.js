@@ -475,6 +475,9 @@ export const duplicateReactionRole = (guildId, id) => duplicate(guildId, `module
 export const duplicateCustomCommand = (guildId, id) =>
   duplicate(guildId, `modules/custom-commands/cmd/${id}`);
 export const duplicateShopItem = (guildId, id) => duplicate(guildId, `modules/economy/shop/items/${id}`);
+// The setup wizard: what Sylo proposes for this server, and applying the ticked items.
+export const getSetupSuggestion = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/setup/suggest`);
+export const applySetup = (guildId, body) => postJson(`/api/v2/guilds/${gid(guildId)}/setup/apply`, body);
 export const getMemberData = (guildId, user) =>
   apiFetch(`/api/v2/guilds/${gid(guildId)}/member-data?user=${encodeURIComponent(user ?? '')}`);
 export const forgetMemberData = (guildId, userId, reason) =>

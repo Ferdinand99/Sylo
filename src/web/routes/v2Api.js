@@ -10,6 +10,7 @@ import {
   allGuilds,
   clientOfGuild,
   guildByKey,
+  guildSupports,
   platformOfGuild,
   primaryClient,
 } from '../../platform/platformOf.js';
@@ -61,6 +62,7 @@ import quotesRouter from './v2Quotes.js';
 import searchRouter from './v2Search.js';
 import introRouter from './v2Intro.js';
 import applicationsRouter from './v2Applications.js';
+import setupRouter from './v2Setup.js';
 import applyMemberRouter from './v2Apply.js';
 import economyRouter from './v2Economy.js';
 import shopRouter from './v2Shop.js';
@@ -174,7 +176,11 @@ import { recentHoneypotCatches } from '../../db/honeypotCatches.js';
 import { primeGuild as primeInviteCache } from '../../modules/inviteTracker.js';
 import { syncGuildAutomod } from '../../bot/lib/automodSync.js';
 import { TESTABLE, sendModuleTest } from '../../bot/lib/moduleTest.js';
-import { reservedCommandNames, syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
+import {
+  customCommandRoom,
+  reservedCommandNames,
+  syncGuildCustomCommands,
+} from '../../bot/lib/customCommandSync.js';
 import {
   WELCOME_PLACEHOLDERS,
   normaliseWelcomeConfig,
@@ -182,6 +188,7 @@ import {
   welcomeTrigger,
 } from '../../modules/welcome.js';
 import { MODULE_LIMITS } from '../../modules/limits.js';
+import { LIMITS as CEILINGS } from '../../lib/limits.js';
 import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
 import { normaliseAfkConfig } from '../../modules/afk.js';
 import { normaliseAppealsConfig } from '../../modules/appeals.js';
@@ -525,6 +532,8 @@ router.use('/guilds/:guildId', economyRouter);
 router.use('/guilds/:guildId', shopRouter);
 // Applications: settings, forms, the panel, submissions, export (v2Applications.js).
 router.use('/guilds/:guildId', applicationsRouter);
+// Setup wizard: the proposal for the server and applying it (v2Setup.js).
+router.use('/guilds/:guildId', setupRouter);
 // The command palette's lookup of an inbox item by number (v2Search.js).
 router.use('/guilds/:guildId', searchRouter);
 
@@ -3250,6 +3259,8 @@ router.get(
       weekdays: WEEKDAYS,
       minIntervalMinutes: MIN_INTERVAL_MINUTES,
       maxIntervalMinutes: MAX_INTERVAL_MINUTES,
+      // The most reminders one server may have (db/scheduledMessages.js refuses the next one), for the counter.
+      maxReminders: CEILINGS.reminders,
     });
   })
 );
@@ -3628,8 +3639,21 @@ router.get(
     const { commands } = normaliseCustomCommands(config);
     // A command made before a built-in of the same name existed is skipped at sync: flag it.
     const reserved = reservedCommandNames(clientOfGuild(req.guild));
+    // Discord registers only the first `room` commands, in list order (the same number the sync uses), and not
+    // the ones that are switched off by a built-in of the same name. Fluxer has no slash commands and so no
+    // such limit.
+    const limited = guildSupports(req.guild, 'slashCommands');
+    const room = limited ? customCommandRoom(req.guild) : null;
+    let registered = 0;
+    const flagged = commands.map((c) => {
+      const isReserved = reserved.has(c.name);
+      const beyondLimit = limited && !isReserved && ++registered > room;
+      return { ...c, reserved: isReserved, beyondLimit };
+    });
     res.json({
-      commands: commands.map((c) => ({ ...c, reserved: reserved.has(c.name) })),
+      commands: flagged,
+      registeredLimit: room,
+      overLimit: flagged.filter((c) => c.beyondLimit).length,
       channels: guildTextChannels(req.guild),
       roles: assignableRoles(req.guild),
       placeholders: CC_PLACEHOLDERS,

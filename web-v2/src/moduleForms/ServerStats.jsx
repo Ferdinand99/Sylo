@@ -4,6 +4,7 @@ import PlaceholderBar from '../components/PlaceholderBar.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
+import EmptyList from '../components/EmptyList.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import UnitInput from '../components/UnitInput.jsx';
@@ -60,7 +61,9 @@ export default function ServerStats() {
 
       <form onSubmit={save} data-savebar>
         {form.channels.length === 0 ? (
-          <p className="v2-field-hint">No stat channels yet — add one below.</p>
+          <EmptyList start={{ label: 'Add your first stat channel', onClick: addRow }}>
+            Show live numbers, such as the member count, in the name of a channel.
+          </EmptyList>
         ) : null}
         {form.channels.map((c) => (
           <div className="v2-rule-card" key={c.key}>

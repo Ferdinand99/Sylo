@@ -669,7 +669,10 @@ async function commandsCard(guild) {
 }
 
 async function messagesCard(guild) {
-  const n = (await listComposed(guild.id, 200)).length;
+  const saved = await listComposed(guild.id, 200);
+  const n = saved.length;
+  // A saved embed is published once it has a message in a channel.
+  const published = saved.filter((m) => m.message_id).length;
   return {
     kind: 'link',
     id: 'messages',
@@ -681,6 +684,10 @@ async function messagesCard(guild) {
     missingIntents: [],
     status: 'link',
     href: v2CardHref('messages', guild.id),
-    lines: [n ? on('Saved embeds', String(n)) : neutral('Saved embeds', 'none')],
+    lines: [
+      n ? on('Saved embeds', String(n)) : neutral('Saved embeds', 'none'),
+      // Added after the first line, so an app that reads only that one keeps working.
+      ...(n ? [on('Published', String(published))] : []),
+    ],
   };
 }

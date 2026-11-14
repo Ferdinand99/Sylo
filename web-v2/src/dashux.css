@@ -711,12 +711,29 @@ fieldset.v2-field > legend {
     flex-wrap: nowrap;
     overflow-x: auto;
     padding-bottom: 2px;
-    /* The right edge fades out as a hint that more placeholders are off screen; the padding lets the last
-       one scroll clear of the fade. */
     padding-right: 24px;
     scrollbar-width: thin;
+    overscroll-behavior-x: contain;
+  }
+  /* A fade on the edge that has more placeholders behind it (PlaceholderBar sets the classes while the row
+     overflows and tracks the scroll), so a row that fits has none and a person can tell it scrolls. */
+  .v2-ph-bar .v2-ph-chips.has-more-end {
     -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
     mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  }
+  .v2-ph-bar .v2-ph-chips.has-more-start {
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 24px);
+    mask-image: linear-gradient(to right, transparent, #000 24px);
+  }
+  .v2-ph-bar .v2-ph-chips.has-more-start.has-more-end {
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 24px,
+      #000 calc(100% - 24px),
+      transparent
+    );
+    mask-image: linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent);
   }
   .v2-ph-bar .v2-ph-chips > * {
     flex: none;
@@ -803,6 +820,13 @@ fieldset.v2-field > legend {
   padding-inline: 10px;
   font-weight: 700;
   letter-spacing: 0.1em;
+}
+/* A menu button that reads a word ("Set status ▾") is an ordinary button, not the dots. */
+.v2-overflow-button.has-text {
+  padding-inline: 14px;
+  font-weight: inherit;
+  letter-spacing: normal;
+  white-space: nowrap;
 }
 /* Drawn in a portal with a fixed position (OverflowMenu.jsx) so no list around the row clips it. */
 .v2-overflow-menu {

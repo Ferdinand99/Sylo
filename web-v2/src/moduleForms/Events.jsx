@@ -315,8 +315,9 @@ export default function Events() {
     <>
       <ListPageHead
         title="Events"
+        // With nothing in the list the empty state below carries the one accent button.
         action={
-          creating ? null : (
+          creating || upcoming.length === 0 ? null : (
             <button type="button" className="v2-btn-primary" onClick={() => setCreating(true)}>
               + New event
             </button>
@@ -425,15 +426,9 @@ export default function Events() {
         <h2 className="v2-group-title">Upcoming events ({upcoming.length})</h2>
         {upcoming.length === 0 ? (
           <EmptyList
-            action={
-              creating ? null : (
-                <button type="button" className="v2-btn-ghost" onClick={() => setCreating(true)}>
-                  + New event
-                </button>
-              )
-            }
+            start={creating ? null : { label: 'Schedule your first event', onClick: () => setCreating(true) }}
           >
-            None scheduled.
+            Post an event with Join, Maybe and Leave buttons, so members can sign up in one click.
           </EmptyList>
         ) : null}
         <div className="v2-list">

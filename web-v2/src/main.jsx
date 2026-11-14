@@ -12,11 +12,13 @@ import './dashux.css';
 // (a field row, a tab row), so they come with the entry and a page looks the same whichever one was opened first.
 import './styles/mention-mirror.css';
 import './styles/palette.css';
+import './styles/p1-polish.css';
 import './styles/wp1-members.css';
 import './styles/wp2-alerts.css';
 import './styles/wp4-inbox.css';
 import './styles/wp5-lists.css';
 import './styles/p6-import.css';
+import './styles/setup-wizard.css';
 import './styles/access.css';
 import './styles/history.css';
 import './styles/health.css';

@@ -213,8 +213,9 @@ export default function ChannelCleanup() {
     <>
       <ListPageHead
         title="Channel cleanup"
+        // With nothing in the list the empty state below carries the one accent button.
         action={
-          creating ? null : (
+          creating || d.schedules.length === 0 ? null : (
             <button type="button" className="v2-btn-primary" onClick={() => setCreating(true)}>
               + New schedule
             </button>
@@ -231,15 +232,9 @@ export default function ChannelCleanup() {
         <h2 className="v2-group-title">Your schedules ({d.schedules.length})</h2>
         {d.schedules.length === 0 ? (
           <EmptyList
-            action={
-              creating ? null : (
-                <button type="button" className="v2-btn-ghost" onClick={() => setCreating(true)}>
-                  + New schedule
-                </button>
-              )
-            }
+            start={creating ? null : { label: 'Add your first schedule', onClick: () => setCreating(true) }}
           >
-            None yet — create one to start cleaning up a channel.
+            Keep a channel tidy: Sylo deletes messages older than the age you choose, on the days you pick.
           </EmptyList>
         ) : (
           <div className="v2-list">

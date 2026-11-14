@@ -1091,15 +1091,28 @@ a.v2-stat.is-link:focus-visible {
 }
 
 /* ---------- Suggestions ---------- */
-/* "Show" and "Order" stay side by side, also on a phone. */
+/* The status chips (the same ones as the overview's) and the order of the list: chips first, the order
+   select beside them where there is room, under them on a phone. */
 .v2-sug-filters {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-bottom: 8px;
 }
-.v2-sug-filters .v2-field {
+.v2-sug-filters > .v2-status-filter {
+  flex: 1 1 auto;
+  margin: 0;
+}
+.v2-sug-filters > .v2-sug-order {
+  flex: 0 1 12rem;
   min-width: 0;
+}
+@media (max-width: 600px) {
+  .v2-sug-filters > .v2-sug-order {
+    flex-basis: 100%;
+  }
 }
 .v2-row-actions > select {
   width: auto;
