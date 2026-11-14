@@ -335,6 +335,8 @@ difference is how server access is checked:
   live check, plus the servers where the bot sees you holding an access role.
   Each entry carries `access`: `"edit"`, `"inbox"` or `"view"`. A server where
   you newly gained Manage Server shows up after the next sign-in.
+- Owner-only modules and bot-wide pages stay limited to `OWNER_IDS` /
+  `FLUXER_OWNER_IDS`, the same as in the browser.
 
 ### Access levels
 
@@ -343,19 +345,32 @@ Every per-server route needs one of three levels (`access-levels` in `features`)
 | Level | Who | May |
 | --- | --- | --- |
 | `edit` | The owner, Manage Server, Administrator, the bot-master roles | Everything, as before |
-| `inbox` | The server's Inbox roles | Read everything; reply to and close tickets, decide appeals, applications and suggestions |
-| `view` | The server's View roles | Read everything; change nothing |
+| `inbox` | The server's Inbox roles, and ticket staff roles for tickets | Read everything, including what the inboxes contain; reply to and close tickets, decide appeals, applications and suggestions |
+| `view` | The server's View roles | Read the pages, lists and settings; change nothing |
 
 A request above the person's level gets `403` with `access` (their level) and
-`required` (the level the route needs). `GET /api/v2/guilds/:id/access` answers
-`{ level, editRoleIds, inboxRoleIds, viewRoleIds, canChangeEditRoles }`.
-`POST` to the same path with any of `editRoleIds`, `inboxRoleIds` and
-`viewRoleIds` changes them; it needs `edit`, and changing `editRoleIds` (the
-bot-master roles) also needs Manage Server, as on the settings page. Ticket
-staff roles still let their members handle tickets, and ticket notifications go
-to `inbox` and `edit` only.
-- Owner-only modules and bot-wide pages stay limited to `OWNER_IDS` /
-  `FLUXER_OWNER_IDS`, the same as in the browser.
+`required` (the level the route needs).
+
+- What the inboxes contain needs `inbox`: `GET .../tickets/:id` (and its
+  `/messages` and `/transcript`), `GET .../applications/submissions/:id` and
+  `GET .../applications/export`. With `view`, the lists still answer, but
+  without that content, and with `contentHidden: true`: the tickets' `preview`
+  and `previewKind`, the appeals' `answers` and `decisionReason`, the
+  applications' `reason`, and the author of an anonymous suggestion are empty.
+- Settings that hold a secret show it only with `edit`: GitHub webhook secrets
+  and addresses are `null`, and RSS feed URLs show only their origin. The
+  configuration download (`GET .../export`) and the insights refresh need `edit`.
+- Deciding an application checks the person deciding: they must be able to hand
+  out every role the decision gives (as when saving the form), no such role may
+  give more dashboard access than their own, and nobody decides their own
+  application. With `inbox`, accepting an appeal (which lifts the ban) also needs
+  Ban Members.
+- `GET /api/v2/guilds/:id/access` answers
+  `{ level, editRoleIds, inboxRoleIds, viewRoleIds, canChangeEditRoles }`.
+  `POST` to the same path with any of `editRoleIds`, `inboxRoleIds` and
+  `viewRoleIds` changes them; it needs `edit`, and changing `editRoleIds` (the
+  bot-master roles) also needs Manage Server, as on the settings page.
+- Ticket notifications go to `inbox` and `edit` (and ticket staff) only.
 
 ---
 

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RouterProvider, createMemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AccessBadge, AccessLock, AccessProvider } from '../access.jsx';
+import { AccessBadge, AccessLock, AccessProvider, NeedsInbox, needsInbox } from '../access.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import Switch from '../components/Switch.jsx';
 import RowActions from '../components/RowActions.jsx';
@@ -183,5 +183,22 @@ describe('Server settings: dashboard access', () => {
     renderWithAccess(<Settings />);
     await screen.findByText(/View only: you can look at this/);
     expect(screen.getByLabelText('Default embed colour').closest('fieldset').disabled).toBe(true);
+  });
+});
+
+describe('inbox content for View', () => {
+  it('a refusal for content that needs Inbox is told apart from other errors', () => {
+    expect(needsInbox({ status: 403, required: 'inbox' })).toBe(true);
+    expect(needsInbox({ status: 403, required: 'edit' })).toBe(false);
+    expect(needsInbox({ status: 500 })).toBe(false);
+  });
+
+  it('says what is missing and why, for a page and for a list', () => {
+    const { rerender } = render(<NeedsInbox what="tickets" />);
+    expect(
+      screen.getByText('Reading tickets needs Inbox access. Your access in this server is View only.')
+    ).toBeTruthy();
+    rerender(<NeedsInbox what="appeals" list />);
+    expect(screen.getByText(/you see the appeals, not what they say/)).toBeTruthy();
   });
 });

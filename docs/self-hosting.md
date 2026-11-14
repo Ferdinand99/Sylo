@@ -175,9 +175,13 @@ With `DISCORD_CLIENT_SECRET` set, every page except the `/health` JSON and the
 require **Manage Server** (or Administrator / owner) in that server, or one of the
 roles set under *Dashboard access* on that server's *Settings* page: **Edit**
 (the bot-master roles: everything), **Inbox** (tickets, ban appeals, applications
-and suggestions, and reading the rest) or **View** (read only). Only the owner or
-someone with Manage Server can change the Edit roles; anyone with Edit can change
-the Inbox and View roles and save the rest of that page.
+and suggestions, and reading the rest) or **View** (the pages and settings, read
+only, without what the inboxes contain). Only the owner or someone with Manage
+Server can change the Edit roles; anyone with Edit can change the Inbox and View
+roles and save the rest of that page. With `INTENT_GUILD_MEMBERS=false` Sylo
+fetches a member from Discord before their role decides access (on every change,
+and at most once a minute for reading), because the bot is not told when roles
+change.
 
 `/health` (JSON) and `/metrics` stay unauthenticated so a monitor or Prometheus
 can reach them — keep them on your LAN, or restrict them at the reverse proxy if

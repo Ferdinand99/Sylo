@@ -2,7 +2,7 @@
 // classic dashboard chrome: no htmx, Alpine, sidebar, retirement banner or inline script. They are
 // standalone pages in the new dashboard's look (/public.css, /theme.js). This file runs with login
 // enabled; test/publicPagesOpen.test.js covers open mode.
-import { D_GUILD, browser, setProfiles, signIn, startOAuthApp } from './helpers/oauthApp.js';
+import { browser, setProfiles, signIn, startOAuthApp } from './helpers/oauthApp.js';
 import { SAMPLES, capture, plainProblems, renderError, renderSample } from './helpers/publicViews.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,7 +12,6 @@ await startOAuthApp();
 const { pkceChallenge } = await import('../src/db/apiTokens.js');
 const { createApp } = await import('../src/web/server.js');
 const { forbidOwner } = await import('../src/web/middleware/auth.js');
-const { requireTicketAccess } = await import('../src/web/middleware/ticketAccess.js');
 const { LimitError } = await import('../src/lib/limits.js');
 const { RoleGrantError } = await import('../src/web/middleware/roleGrants.js');
 
@@ -130,19 +129,6 @@ test('the error page from the operator guard (auth.js) is plain', async () => {
   assert.equal(owner.status, 403);
   assert.match(owner.html, /Not an operator/);
   assertPlain(owner.html, 'forbidOwner');
-});
-
-test('the error page from the ticket access guard (ticketAccess.js) is plain', async () => {
-  const out = await capture(app, (res) =>
-    requireTicketAccess(
-      { account: { id: 'acc-1', identities: [] }, params: { guildId: D_GUILD }, originalUrl: '/x' },
-      res,
-      () => assert.fail('must not pass')
-    )
-  );
-  assert.equal(out.status, 403);
-  assert.match(out.html, /No ticket access/);
-  assertPlain(out.html, 'ticketAccess');
 });
 
 test('the error page from the server error handler (server.js) is plain', async () => {
