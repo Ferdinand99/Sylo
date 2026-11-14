@@ -12,9 +12,10 @@ import { isDeepStrictEqual } from 'node:util';
 /** What a masked secret is stored as. Never a real value. */
 export const MASK = '••••••';
 
-// The history is capped by entries (500 a server, like the audit log) and by size: a settings save whose
-// changed part is larger than this keeps no copy, only the fact that it was too large.
-export const MAX_SNAPSHOT_CHARS = 96_000;
+// The history is capped by entries (500 a server, like the audit log), by size: a settings save whose
+// changed part is larger than this keeps no copy, only the fact that it was too large, and by a budget for all
+// the copies of a server (HISTORY_BUDGET_CHARS in src/db/audit.js, which drops the oldest copies).
+export const MAX_SNAPSHOT_CHARS = 32_000;
 
 /** Settings the server stamps itself on every save; a change to only these is not a change. */
 const SERVER_STAMPED = new Set(['triggerSince']);
@@ -23,9 +24,58 @@ const SECRET_KEY =
   /secret|token|passw(or)?d|passphrase|api[-_]?key|private[-_]?key|credential|authorization|webhook|hmac/i;
 // A Discord or Fluxer webhook link, wherever it sits in a text.
 const WEBHOOK_LINK = /\/api(?:\/v\d+)?\/webhooks\/\d+\/[\w-]+/i;
-// A link with a user name or password in front of the host, or a key, token or password in its query.
-const CREDENTIAL_LINK =
-  /^[a-z][a-z0-9+.-]*:\/\/[^\s/?#]*@|^[a-z][a-z0-9+.-]*:\/\/\S*[?&][^\s=&]*(?:key|token|secret|sig|auth|pass)[^\s=&]*=/i;
+// Where the secret of a link sits: a query parameter whose name says so (or is one of the short names that
+// are used for one), or a long token-like piece of a path. Links to the hosts below are secret whole.
+const SECRET_PARAM =
+  /^(?:k|key|code|hash|hm|h|sig|sign|signature|sid|ticket|jwt|bearer|auth|session)$|key|token|secret|passw|pwd|credential|apikey|access|signature|hmac/i;
+const WEBHOOK_HOSTS =
+  /(^|\.)(hooks\.slack\.com|hooks\.zapier\.com|maker\.ifttt\.com|webhook\.office\.com|outlook\.office\.com|discord(app)?\.com|api\.telegram\.org)$/i;
+
+// The links in a text, found from their "://" (a pattern that starts at every letter would take quadratic time on
+// a long text without spaces).
+const SCHEME_CHAR = /[a-z0-9+.-]/i;
+const LINK_END = /[\s"'<>)\]]/;
+function linksIn(text) {
+  const out = [];
+  let at = text.indexOf('://');
+  while (at !== -1 && out.length < 50) {
+    let start = at;
+    while (start > 0 && at - start < 16 && SCHEME_CHAR.test(text[start - 1])) start -= 1;
+    let end = at + 3;
+    while (end < text.length && !LINK_END.test(text[end])) end += 1;
+    if (start < at) out.push(text.slice(start, end));
+    at = text.indexOf('://', end);
+  }
+  return out;
+}
+
+/** True when a link in the text carries a credential: a user name or password, a secret parameter, a token in the path. */
+function secretLinkIn(text) {
+  for (const found of linksIn(text)) {
+    let url;
+    try {
+      url = new URL(found);
+    } catch {
+      continue;
+    }
+    if (url.username || url.password) return true;
+    for (const name of url.searchParams.keys()) if (SECRET_PARAM.test(name)) return true;
+    // A webhook-style host with a path beyond its root is a webhook (Slack, Zapier, a Telegram bot token ...).
+    if (
+      WEBHOOK_HOSTS.test(url.hostname) &&
+      url.pathname.length > 12 &&
+      /webhook|services|hooks|trigger|bot/i.test(url.pathname)
+    ) {
+      return true;
+    }
+    // A long run of letters and digits in the path is a token, not a word.
+    for (const part of url.pathname.split('/')) {
+      const run = part.replace(/\.[a-z0-9]{2,5}$/i, '');
+      if (/^[A-Za-z0-9_-]{32,}$/.test(run) && /\d/.test(run) && /[A-Za-z]/.test(run)) return true;
+    }
+  }
+  return false;
+}
 
 const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
@@ -35,7 +85,7 @@ export const isMask = (v) => v === MASK;
 function secretLeaf(key, value) {
   if (typeof value === 'string') {
     if (value === '') return false;
-    return SECRET_KEY.test(key) || WEBHOOK_LINK.test(value) || CREDENTIAL_LINK.test(value);
+    return SECRET_KEY.test(key) || WEBHOOK_LINK.test(value) || secretLinkIn(value);
   }
   // A list or a nested object under a secret-looking key. (A number or a flag is a setting, not a secret.)
   if (Array.isArray(value)) return value.length > 0 && SECRET_KEY.test(key);
@@ -123,14 +173,15 @@ export const changeKeys = (change) => [
   ...new Set([...Object.keys(change.before ?? {}), ...Object.keys(change.after ?? {})]),
 ];
 
-// The item of a saved list that stands for `item`: the one with the same id when items have ids, else the
-// one in the same place.
-function counterpart(list, item, index) {
+// The item of a saved list that stands for `item`: the one with the same id. An item without an id has no
+// counterpart (a place in a list is not an identity: the list may have been reordered or cut), so a masked
+// value in it is left out and reported, never taken from another item.
+function counterpart(list, item) {
   if (!Array.isArray(list)) return undefined;
   if (isPlainObject(item) && item.id !== undefined) {
     return list.find((c) => isPlainObject(c) && c.id === item.id);
   }
-  return list[index];
+  return undefined;
 }
 
 /**
@@ -141,20 +192,23 @@ function counterpart(list, item, index) {
  * @param {unknown} current
  * @returns {unknown} undefined when the whole value was a mask with nothing to keep
  */
-export function restoreMasked(value, current) {
-  if (isMask(value)) return current;
+export function restoreMasked(value, current, dropped = []) {
+  if (isMask(value)) {
+    if (current === undefined) dropped.push(true);
+    return current;
+  }
   if (Array.isArray(value)) {
     const out = [];
-    value.forEach((item, i) => {
-      const kept = restoreMasked(item, counterpart(current, item, i));
+    for (const item of value) {
+      const kept = restoreMasked(item, counterpart(current, item), dropped);
       if (kept !== undefined) out.push(kept);
-    });
+    }
     return out;
   }
   if (isPlainObject(value)) {
     const out = {};
     for (const [k, v] of Object.entries(value)) {
-      const kept = restoreMasked(v, isPlainObject(current) ? current[k] : undefined);
+      const kept = restoreMasked(v, isPlainObject(current) ? current[k] : undefined, dropped);
       if (kept !== undefined) out[k] = kept;
     }
     return out;
@@ -162,18 +216,31 @@ export function restoreMasked(value, current) {
   return value;
 }
 
+/** The change without some of its settings (the ones an undo leaves alone). */
+export function without(change, keys) {
+  const drop = new Set(keys);
+  const pick = (side) => Object.fromEntries(Object.entries(side ?? {}).filter(([k]) => !drop.has(k)));
+  return { before: pick(change.before), after: pick(change.after) };
+}
+
 /**
  * What an undo of `change` would save: the config as it is now, with every setting the change touched put
  * back to its earlier value (a setting that did not exist before is removed). Masked values keep what is
  * saved now.
+ * `keep` lists settings that are not restored (they stay as saved now). `droppedSecrets`, when given, receives
+ * the settings in which a masked value had nothing to be taken from and was left out.
  * @param {object} current
  * @param {{ before: object, after: object }} change
+ * @param {{ keep?: string[], droppedSecrets?: string[] }} [opts]
  */
-export function undoTarget(current, change) {
+export function undoTarget(current, change, { keep = [], droppedSecrets = [] } = {}) {
   const target = { ...current };
   for (const key of changeKeys(change)) {
+    if (keep.includes(key)) continue;
     if (key in change.before) {
-      const restored = restoreMasked(change.before[key], current[key]);
+      const dropped = [];
+      const restored = restoreMasked(change.before[key], current[key], dropped);
+      if (dropped.length) droppedSecrets.push(key);
       if (restored === undefined) continue; // the whole value was a secret: keep the saved one
       target[key] = restored;
     } else {

@@ -167,28 +167,31 @@ function EntryChange({ guildId, entry, onUndone }) {
   async function undo() {
     const state = load.data.undo;
     let confirm = false;
+    let token = '';
     if (state.state === 'changed') {
       if (!(await confirmLoss(state.laterChanges))) return;
       confirm = true;
+      token = state.token;
     }
     setBusy(true);
     setProblem('');
     try {
       let res;
       try {
-        res = await undoAuditChange(guildId, entry.id, { confirm });
+        res = await undoAuditChange(guildId, entry.id, { confirm, token });
       } catch (err) {
         // Changed again since the page loaded: the server asks for the confirmation the page did not know about.
         if (err.code !== 'changed-since' || confirm) throw err;
         if (!(await confirmLoss(err.laterChanges))) return;
-        res = await undoAuditChange(guildId, entry.id, { confirm: true });
+        res = await undoAuditChange(guildId, entry.id, { confirm: true, token: err.token });
       }
-      notify(
-        res.adjusted?.length
-          ? `Change undone. Some settings now follow today's limits: ${res.adjusted.map(labelFor).join(', ')}.`
-          : 'Change undone.',
-        'info'
-      );
+      const notes = [];
+      if (res.adjusted?.length) {
+        notes.push(`Some settings are not exactly as before: ${res.adjusted.map(labelFor).join(', ')}.`);
+      }
+      if (res.notRestored?.length)
+        notes.push(`Left as they are: ${res.notRestored.map(labelFor).join(', ')}.`);
+      notify(['Change undone.', ...notes].join(' '), 'info');
       onUndone();
     } catch (err) {
       setProblem(err.message || 'Could not undo the change.');
@@ -224,6 +227,18 @@ function EntryChange({ guildId, entry, onUndone }) {
             ) : (
               <ConfigDiff before={data.before} after={data.after} names={data.names} />
             )}
+            {data.undo.notRestored?.length ? (
+              <p className="v2-field-hint">
+                {data.undo.available ? 'An undo leaves these as they are: ' : 'Not restored: '}
+                {data.undo.notRestored.map((n) => `${labelFor(n.key)} (${n.reason})`).join(' ')}
+              </p>
+            ) : null}
+            {data.undo.droppedSecrets?.length ? (
+              <p className="v2-field-hint">
+                {data.undo.droppedSecrets.map(labelFor).join(', ')} holds a secret that is never stored in the
+                history, so an undo keeps the secret that is saved now and leaves out one that is gone.
+              </p>
+            ) : null}
             {data.undo.state === 'changed' && data.undo.available ? (
               <Callout tone="warning">
                 <p>
@@ -247,7 +262,7 @@ function EntryChange({ guildId, entry, onUndone }) {
                 </span>
               ) : null}
             </div>
-            {!data.tooLarge ? (
+            {data.kind === 'module' && data.undo.available ? (
               <p className="v2-field-hint">
                 Undo restores this module&apos;s settings. Lists kept on their own (reminders, shop items and
                 the like) are not part of it and are not restored.

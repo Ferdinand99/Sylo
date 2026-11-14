@@ -45,6 +45,7 @@ function boot(env) {
     timeout: 120_000,
   });
   assert.equal(run.status, 0, `the database did not boot:\n${run.stderr}\n${run.stdout}`.slice(0, 4000));
+  return run;
 }
 
 // --- SQLite ---------------------------------------------------------------------------------------------------
@@ -239,6 +240,101 @@ test('SQLite: a database from the 5.1 release with audit entries boots, keeps th
   }
 });
 
+// The test instance has run migrations 76 and 77 (the Sylo app's login linking) and not the change history,
+// which is entry 78: it runs alone, keeps the app's rows and the audit entries, and gains the two columns.
+// A database that already has the columns (the entry once ran earlier) boots without trying to add them again.
+test('SQLite: a database that ran migrations 1-77 boots, keeps its rows and gets the change-history columns as 78', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sylo-upgrade-'));
+  try {
+    const old = join(dir, 'old.db');
+    const db = new Database(old);
+    for (let v = 0; v < 77; v += 1) db.transaction(() => MIGRATIONS[v](db))();
+    db.pragma('user_version = 77');
+    db.exec(`
+      INSERT INTO accounts (id, created_at) VALUES ('acct', 1);
+      INSERT INTO mobile_connect_codes (code_hash, account_id, platform, expires_at, token_id)
+        VALUES ('h1', 'acct', 'fluxer', 9, 't1');
+      INSERT INTO mobile_connect_results (code_hash, account_id, token_id, platform, platform_user_id, expires_at)
+        VALUES ('r1', 'acct', 't1', 'fluxer', 'f1', 9);
+      INSERT INTO config_audit (guild_id, actor, action, detail, created_at) VALUES ('g', 'Ann', 'module:afk', 'x', 5);
+    `);
+    assert.ok(MIGRATIONS.length >= 78, 'the change history is the 78th entry');
+    db.close();
+
+    boot({ DATABASE_PATH: old });
+    const after = new Database(old, { readonly: true });
+    assert.equal(after.pragma('user_version', { simple: true }), MIGRATIONS.length);
+    assert.equal(after.prepare('SELECT COUNT(*) AS n FROM mobile_connect_codes').get().n, 1);
+    assert.equal(after.prepare('SELECT COUNT(*) AS n FROM mobile_connect_results').get().n, 1);
+    const row = after.prepare('SELECT action, change_json, reverts_id FROM config_audit').get();
+    assert.deepEqual({ ...row }, { action: 'module:afk', change_json: null, reverts_id: null });
+    after.close();
+
+    // the same database, with the columns already there, run through entry 78 again
+    const again = new Database(old);
+    assert.doesNotThrow(() => again.transaction(() => MIGRATIONS[77](again))());
+    again.close();
+    const fresh = join(dir, 'fresh.db');
+    boot({ DATABASE_PATH: fresh });
+    assert.deepEqual(sqliteShape(old).shape, sqliteShape(fresh).shape);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// Migration 77: one login per platform and account is enforced, and adding a login from the app keeps its
+// result in a table. A database that already holds two logins on one platform (the race that the old
+// check-then-insert allowed) must still boot: the one linked first stays.
+test('SQLite: a database from before migration 77 with a doubled login boots, keeps the first, and enforces one', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sylo-upgrade-'));
+  try {
+    const old = join(dir, 'old.db');
+    const db = new Database(old);
+    for (let v = 0; v < 76; v += 1) db.transaction(() => MIGRATIONS[v](db))();
+    db.pragma('user_version = 76');
+    db.exec(`
+      INSERT INTO accounts (id, created_at) VALUES ('acct', 1);
+      INSERT INTO account_identities (platform, platform_user_id, account_id, username, guild_ids, linked_at)
+        VALUES ('fluxer', 'f2', 'acct', 'second', '[]', 20), ('fluxer', 'f1', 'acct', 'first', '[]', 10),
+               ('discord', 'd1', 'acct', 'd', '[]', 5);
+      INSERT INTO mobile_connect_codes (code_hash, account_id, platform, expires_at)
+        VALUES ('h1', 'acct', 'fluxer', 1), ('h2', 'acct', 'fluxer', 2);
+    `);
+    db.close();
+
+    const run = boot({ DATABASE_PATH: old });
+    assert.match(run.stderr, /Migration 77 removed 1 doubled login\(s\)/, 'says how many were dropped');
+    assert.ok(!/\bf[12]\b|acct/.test(run.stderr), 'and not which');
+    const after = new Database(old, { readonly: true });
+    const kept = after
+      .prepare('SELECT platform, platform_user_id FROM account_identities ORDER BY platform')
+      .all();
+    assert.deepEqual(
+      kept.map((r) => ({ ...r })),
+      [
+        { platform: 'discord', platform_user_id: 'd1' },
+        { platform: 'fluxer', platform_user_id: 'f1' },
+      ],
+      'the login linked first stays'
+    );
+    assert.equal(
+      after.prepare('SELECT COUNT(*) AS n FROM mobile_connect_codes').get().n,
+      0,
+      'sixty-second codes are dropped'
+    );
+    assert.ok(
+      after.prepare("SELECT 1 FROM sqlite_master WHERE name = 'idx_account_identities_one'").get(),
+      'one login per platform is enforced'
+    );
+    after.close();
+    const fresh = join(dir, 'fresh.db');
+    boot({ DATABASE_PATH: fresh });
+    assert.deepEqual(sqliteShape(old).shape, sqliteShape(fresh).shape);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('SQLite: a database that already ran the branch up to migration 69 is backfilled by 70', () => {
   const dir = mkdtempSync(join(tmpdir(), 'sylo-upgrade-'));
   try {
@@ -302,6 +398,16 @@ const BACK_TO_5_0 = `
   ALTER TABLE config_audit DROP COLUMN IF EXISTS change_json, DROP COLUMN IF EXISTS reverts_id;
   ALTER TABLE guild_suggestions DROP COLUMN IF EXISTS log_channel_id,
     DROP COLUMN IF EXISTS log_message_id;
+  -- The app's connect step 2 (migration 77) taken back, with the doubled rows the old code could leave.
+  DROP INDEX IF EXISTS idx_account_identities_one;
+  DROP INDEX IF EXISTS idx_mobile_connect_codes_one;
+  CREATE INDEX IF NOT EXISTS idx_mobile_connect_codes_account ON mobile_connect_codes (account_id);
+  DROP TABLE IF EXISTS mobile_connect_results;
+  ALTER TABLE mobile_connect_codes DROP COLUMN IF EXISTS token_id;
+  INSERT INTO account_identities (platform, platform_user_id, account_id, linked_at)
+    VALUES ('fluxer', 'f2', 'acct', 20), ('fluxer', 'f1', 'acct', 10), ('discord', 'd1', 'acct', 5);
+  INSERT INTO mobile_connect_codes (code_hash, account_id, platform, expires_at)
+    VALUES ('h1', 'acct', 'fluxer', 1), ('h2', 'acct', 'fluxer', 2);
   DELETE FROM schema_migrations;
   INSERT INTO schema_migrations (version) VALUES (${RELEASE_5_0_MIGRATIONS});
 `;
@@ -378,6 +484,22 @@ test(
       const upgraded = await pgShape(b);
       assert.deepEqual(upgraded.columns, fresh.columns);
       assert.deepEqual(upgraded.indexes, fresh.indexes);
+      const logins =
+        await b`SELECT platform, platform_user_id FROM account_identities WHERE account_id = 'acct' ORDER BY platform`;
+      assert.deepEqual(
+        Array.from(logins, (r) => [r.platform, r.platform_user_id]),
+        [
+          ['discord', 'd1'],
+          ['fluxer', 'f1'],
+        ],
+        'a doubled login is cut to the one linked first, so the unique index can be made'
+      );
+      const codes = await b`SELECT code_hash FROM mobile_connect_codes WHERE account_id = 'acct'`;
+      assert.deepEqual(
+        Array.from(codes, (r) => r.code_hash),
+        ['h2'],
+        'one live connect code per account'
+      );
       const rows = await b`SELECT ended, prizes_paid FROM giveaways ORDER BY id`;
       assert.deepEqual(
         Array.from(rows, (r) => [Number(r.ended), Number(r.prizes_paid)]),
@@ -396,7 +518,7 @@ test(
       // migration 71 (the unknown added time) runs once on a database below it
       await b`INSERT INTO economy_inventory (guild_id, user_id, item_id, item_name, item_type, role_id, price_paid, source, status, created_at, updated_at)
         VALUES ('g', 'u', 1, 'x', 'temp_role', 'r', 0, 'purchase', 'active', 1, 1), ('g', 'u', 2, 'y', 'custom', NULL, 0, 'purchase', 'active', 1, 1)`;
-      await b`DELETE FROM schema_migrations WHERE version = 71`;
+      await b`DELETE FROM schema_migrations WHERE version >= 71`;
       pgBoot(oldDb);
       const added = await b`SELECT item_type, added_ms FROM economy_inventory ORDER BY id`;
       assert.deepEqual(

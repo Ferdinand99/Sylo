@@ -18,7 +18,8 @@ await startOAuthApp();
 
 const { recordAudit } = await import('../src/db/audit.js');
 const { getGuildModule, setGuildModule } = await import('../src/db/modules.js');
-const { getGuildSettings } = await import('../src/db/guildSettings.js');
+const { getGuildSettings, setEmbedColor, setModlogChannel } = await import('../src/db/guildSettings.js');
+const { runtime } = await import('../src/runtime.js');
 
 const OPERATOR_ID = '111111111111111111'; // OWNER_IDS in helpers/oauthApp.js
 
@@ -98,7 +99,7 @@ test('an undo restores the earlier settings, writes its own entry, and cannot be
 
   const undone = await s.post(guildPath(`/audit/${entry.id}/undo`), {});
   assert.equal(undone.status, 200, JSON.stringify(undone.body));
-  assert.deepEqual(undone.body, { ok: true, adjusted: [] });
+  assert.deepEqual(undone.body, { ok: true, adjusted: [], notRestored: [] });
   assert.deepEqual((await getGuildModule(D_GUILD, 'afk')).config, {
     setNickname: false,
     mentionReply: true,
@@ -152,7 +153,17 @@ test('settings changed again since need a confirmation, and without it nothing i
   assert.deepEqual(refused.body.laterChanges, ['setNickname']);
   assert.deepEqual((await getGuildModule(D_GUILD, 'afk')).config, before, 'nothing was restored');
 
-  const confirmed = await s.post(guildPath(`/audit/${second.id}/undo`), { confirm: true });
+  // a yes alone is not enough: it has to be for the state the page showed (the token)
+  const blank = await s.post(guildPath(`/audit/${second.id}/undo`), { confirm: true });
+  assert.equal(blank.status, 409);
+  assert.equal(blank.body.token, refused.body.token);
+  assert.equal(warned.undo.token, refused.body.token, 'the entry view gave the same one');
+  const stale = await s.post(guildPath(`/audit/${second.id}/undo`), { confirm: true, token: 'stale' });
+  assert.equal(stale.status, 409);
+  const confirmed = await s.post(guildPath(`/audit/${second.id}/undo`), {
+    confirm: true,
+    token: refused.body.token,
+  });
   assert.equal(confirmed.status, 200, JSON.stringify(confirmed.body));
   assert.equal((await getGuildModule(D_GUILD, 'afk')).config.setNickname, false);
 });
@@ -294,4 +305,78 @@ test('the history of an operator-only module is for operators', async () => {
   const view = await operator.get(guildPath(`/audit/${seen.id}/change`));
   assert.equal(view.status, 200);
   assert.equal(view.body.undo.available, false, 'not restorable from here');
+});
+
+test('a settings undo that cannot restore one setting changes nothing and writes no entry', async () => {
+  const s = await session({ tag: 'settings' });
+  // now: colour #445566, no mod-log channel. The entry: the colour was #112233 and a mod-log channel was set.
+  await setEmbedColor(D_GUILD, 0x445566);
+  await setModlogChannel(D_GUILD, null);
+  const GONE = '100000000000000555'; // a channel this server no longer has
+  await recordAudit(D_GUILD, {
+    actor: 'Ann',
+    action: 'settings:server',
+    detail: 'saved',
+    change: {
+      before: { modlogChannelId: GONE, embedColor: '#112233' },
+      after: { modlogChannelId: '', embedColor: '#445566' },
+    },
+  });
+  const entry = await newestEntry(s, 'settings:server');
+  const count = async () => (await s.get(guildPath('/audit?limit=100'))).body.entries.length;
+  const before = await count();
+  const res = await s.post(guildPath(`/audit/${entry.id}/undo`), {});
+  assert.equal(res.status, 400, JSON.stringify(res.body));
+  assert.match(res.body.error, /no longer exists/);
+  assert.equal((await getGuildSettings(D_GUILD)).embed_color, 0x445566, 'the colour was not written');
+  assert.equal((await getGuildSettings(D_GUILD)).modlog_channel_id, null);
+  assert.equal(await count(), before, 'and nothing was written to the audit log');
+});
+
+test('an undo cannot hand out a role the person could not hand out in the form', async () => {
+  const s = await session({ tag: 'grant' });
+  const ROLE = '200000000000000777';
+  runtime.clients.discord.guilds.cache.get(D_GUILD).roles.cache.set(ROLE, {
+    id: ROLE,
+    name: 'Staff',
+    position: 5,
+    permissions: { has: () => false },
+  });
+  await setGuildModule(D_GUILD, 'birthdays', { config: { roleId: '' } });
+  await recordAudit(D_GUILD, {
+    actor: 'Ann',
+    action: 'module:birthdays',
+    detail: 'saved',
+    change: { before: { roleId: ROLE }, after: { roleId: '' } },
+  });
+  const entry = await newestEntry(s, 'module:birthdays');
+  const res = await s.post(guildPath(`/audit/${entry.id}/undo`), {});
+  assert.equal(res.status, 403, JSON.stringify(res.body));
+  assert.equal((await getGuildModule(D_GUILD, 'birthdays')).config.roleId, '', 'the role was not handed out');
+});
+
+test('an undo asked twice at once is done once', async () => {
+  const s = await session({ tag: 'twice' });
+  await s.post(guildPath(AFK), afk(false));
+  await s.post(guildPath(AFK), afk(true));
+  const entry = await newestEntry(s, 'module:afk');
+  const [one, two] = await Promise.all([
+    s.post(guildPath(`/audit/${entry.id}/undo`), {}),
+    s.post(guildPath(`/audit/${entry.id}/undo`), {}),
+  ]);
+  assert.deepEqual([one.status, two.status].sort(), [200, 409]);
+  const { body } = await s.get(guildPath('/audit?limit=100&action=module:afk'));
+  assert.equal(body.entries.filter((e) => e.revertsId === entry.id).length, 1);
+});
+
+test('the leaderboard switch keeps its change and shows it without an undo', async () => {
+  const s = await session({ tag: 'board' });
+  assert.equal((await s.post(guildPath('/leaderboard/public'), { publicLeaderboard: true })).status, 200);
+  assert.equal((await s.post(guildPath('/leaderboard/public'), { publicLeaderboard: false })).status, 200);
+  const entry = await newestEntry(s, 'leveling:leaderboard');
+  assert.equal(entry.hasChange, true);
+  const view = (await s.get(guildPath(`/audit/${entry.id}/change`))).body;
+  assert.deepEqual(view.after, { publicLeaderboard: false });
+  assert.equal(view.undo.available, false);
+  assert.equal(view.kind, null);
 });

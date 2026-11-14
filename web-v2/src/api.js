@@ -13,6 +13,7 @@ export class ApiError extends Error {
     // A refusal the page can act on (the settings changed since an audit entry: confirm to undo anyway).
     this.code = body?.code;
     this.laterChanges = body?.laterChanges;
+    this.token = body?.token;
   }
 }
 
@@ -101,6 +102,9 @@ export const getMemberNames = (guildId, ids) =>
 // Members of the server by name (the ones Sylo has cached), for the @ suggestions in message fields.
 export const searchMembers = (guildId, q) =>
   apiFetch(`/api/v2/guilds/${gid(guildId)}/members/search?q=${encodeURIComponent(q)}`);
+// Inbox items of the server by number ("ticket 12", "#5"), for the command palette.
+export const searchInbox = (guildId, q) =>
+  apiFetch(`/api/v2/guilds/${gid(guildId)}/search/inbox?q=${encodeURIComponent(q)}`);
 export const getPlatformInfo = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/platform`);
 
 // The setting limits of every module (see components/useModuleLimits.js).
@@ -440,13 +444,14 @@ export const getAuditLog = (guildId, { action, before, limit } = {}) => {
   return apiFetch(`/api/v2/guilds/${gid(guildId)}/audit${qs ? `?${qs}` : ''}`);
 };
 // What one audit entry changed (before and after, with names for the ids) and whether it can be undone,
-// and the undo itself: `confirm: true` once the person has accepted that later changes are lost.
+// and the undo itself: `confirm: true` with the `token` of the view the person confirmed, once they have
+// accepted that later changes are lost.
 export const getAuditChange = (guildId, id) =>
   apiFetch(`/api/v2/guilds/${gid(guildId)}/audit/${encodeURIComponent(String(id))}/change`);
-export const undoAuditChange = (guildId, id, { confirm = false } = {}) =>
+export const undoAuditChange = (guildId, id, { confirm = false, token = '' } = {}) =>
   postJson(
     `/api/v2/guilds/${gid(guildId)}/audit/${encodeURIComponent(String(id))}/undo`,
-    confirm ? { confirm: true } : {}
+    confirm ? { confirm: true, token } : {}
   );
 export const exportGuildConfig = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/export`);
 export const getMemberData = (guildId, user) =>

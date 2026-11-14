@@ -115,7 +115,7 @@ export async function setGuildModule(guildId, moduleId, patch) {
     updatedAt: Date.now(),
   });
   // The change history of the dashboard request this write belongs to keeps what it changed.
-  if (patch.config) noteModuleWrite(moduleId, current.config ?? {}, patch.config);
+  if (patch.config) noteModuleWrite(guildId, moduleId, current.config ?? {}, patch.config);
 }
 
 function safeParse(json) {

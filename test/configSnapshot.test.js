@@ -12,6 +12,7 @@ import {
   restoreMasked,
   serialiseChange,
   undoState,
+  without,
   undoTarget,
 } from '../src/lib/configSnapshot.js';
 
@@ -103,4 +104,53 @@ test('says whether the saved settings still match the change, were put back, or 
   const added = { before: {}, after: { x: 1 } };
   assert.equal(undoState({ x: 1 }, added), 'clean');
   assert.equal(undoState({}, added), 'reverted');
+});
+
+test('masks credential links wherever they sit in a text, and tokens in a path or under short parameter names', () => {
+  const masked = maskSecrets({
+    a: 'see https://example.com/feed?code=abc123 for the feed',
+    b: 'https://example.com/a?hm=0f0f0f',
+    c: 'https://example.com/feeds/Zk3jQ9x2LmN8pR4sT6vW1yB5cD7eF0gH.rss',
+    d: 'post to https://hooks.slack.com/services/T000/B000/XXXX now',
+    e: 'https://api.telegram.org/bot123456:ABCdef/sendMessage',
+    f: 'read https://example.com/blog/a-long-article-title-about-nothing-secret-at-all-really-yes',
+    g: 'https://example.com/path?page=2&format=atom',
+    h: 'https://cdn.example.com/images/banner.png',
+  });
+  for (const k of 'abcde') assert.equal(masked[k], MASK, k);
+  assert.equal(
+    masked.f,
+    'read https://example.com/blog/a-long-article-title-about-nothing-secret-at-all-really-yes'
+  );
+  assert.equal(masked.g, 'https://example.com/path?page=2&format=atom');
+  assert.equal(masked.h, 'https://cdn.example.com/images/banner.png');
+});
+
+test('a masked value in an item without an id has nothing to be taken from: it is left out and reported', () => {
+  const dropped = [];
+  const restored = restoreMasked(
+    [{ name: 'A', webhookUrl: MASK }],
+    [{ name: 'B', webhookUrl: 'https://x/api/webhooks/1/y' }],
+    dropped
+  );
+  assert.deepEqual(
+    restored,
+    [{ name: 'A' }],
+    'not the secret of the item that happens to be in the same place'
+  );
+  assert.equal(dropped.length, 1);
+  const names = [];
+  undoTarget(
+    { alerts: [{ name: 'B', webhookUrl: 'secret' }] },
+    { before: { alerts: [{ name: 'A', webhookUrl: MASK }] }, after: {} },
+    { droppedSecrets: names }
+  );
+  assert.deepEqual(names, ['alerts']);
+});
+
+test('settings an undo leaves alone are not restored, and are not counted for the state', () => {
+  const change = { before: { a: 1, bot: 'old' }, after: { a: 2, bot: 'new' } };
+  assert.deepEqual(without(change, ['bot']), { before: { a: 1 }, after: { a: 2 } });
+  const target = undoTarget({ a: 2, bot: 'now' }, change, { keep: ['bot'] });
+  assert.deepEqual(target, { a: 1, bot: 'now' });
 });

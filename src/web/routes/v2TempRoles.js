@@ -10,6 +10,7 @@ import { actingUserId, currentUser } from '../middleware/auth.js';
 import { checkRoleGrants } from '../middleware/roleGrants.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { assignableRoles } from '../lib/guildContext.js';
+import { searchMembers } from '../lib/memberSearch.js';
 import { recordAudit } from '../../db/audit.js';
 import { getGuildModule, setGuildModule } from '../../db/modules.js';
 import { listTempRoles, tempRoleCount } from '../../db/tempRoles.js';
@@ -110,32 +111,7 @@ router.get(
 router.get(
   '/modules/temp-roles/members',
   asyncHandler(async (req, res) => {
-    const q = String(req.query.q ?? '')
-      .trim()
-      .toLowerCase()
-      .slice(0, 100);
-    if (!q) return res.json({ members: [] });
-    const found = [];
-    if (isId(q)) {
-      const m = req.guild.members.cache.get(q) ?? (await req.guild.members.fetch(q).catch(() => null));
-      if (m) found.push(m);
-    } else {
-      for (const m of req.guild.members.cache.values()) {
-        if (m.user?.bot) continue;
-        const names = [m.displayName, m.user?.username, m.user?.tag].map((v) =>
-          String(v ?? '').toLowerCase()
-        );
-        if (names.some((n) => n.includes(q))) found.push(m);
-        if (found.length >= SEARCH_SHOWN) break;
-      }
-    }
-    res.json({
-      members: found.slice(0, SEARCH_SHOWN).map((m) => ({
-        id: m.id,
-        name: m.displayName ?? m.user?.username ?? m.id,
-        username: m.user?.username ?? '',
-      })),
-    });
+    res.json({ members: await searchMembers(req.guild, req.query.q, { limit: SEARCH_SHOWN }) });
   })
 );
 

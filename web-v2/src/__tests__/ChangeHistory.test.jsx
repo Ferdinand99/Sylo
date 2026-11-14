@@ -63,6 +63,24 @@ describe('diffSettings', () => {
     ]);
   });
 
+  it('does not turn every later item into a change when one item without an id is removed', () => {
+    const before = {
+      responders: [
+        { name: 'a', text: '1' },
+        { name: 'b', text: '2' },
+        { name: 'c', text: '3' },
+      ],
+    };
+    const after = {
+      responders: [
+        { name: 'b', text: '2' },
+        { name: 'c', text: '3' },
+      ],
+    };
+    const { rows } = diffSettings(before, after);
+    expect(rows.map((r) => [r.path.join(' > '), r.kind])).toEqual([['responders > a', 'removed']]);
+  });
+
   it('says a value changed when only a hidden one did, and caps the rows', () => {
     expect(
       diffSettings({ feeds: [{ id: 'a', url: MASK }] }, { feeds: [{ id: 'a', url: MASK }] }).rows
@@ -119,7 +137,8 @@ describe('Audit log: show changes and undo', () => {
     before: { setNickname: false },
     after: { setNickname: true },
     names: {},
-    undo: { available: true, reason: null, state: 'clean', laterChanges: [], ...undo },
+    kind: 'module',
+    undo: { available: true, reason: null, state: 'clean', laterChanges: [], token: null, ...undo },
   });
   const list = (...entries) => ({ kept: 500, hasMore: false, actions: [], entries });
   const open = async () => {
@@ -165,20 +184,26 @@ describe('Audit log: show changes and undo', () => {
   it('undoes a clean change in one click, tells the person, and reads the log again', async () => {
     await open();
     fireEvent.click(await screen.findByRole('button', { name: 'Undo this change' }));
-    await waitFor(() => expect(api.undoAuditChange).toHaveBeenCalledWith(GUILD, 9, { confirm: false }));
+    await waitFor(() =>
+      expect(api.undoAuditChange).toHaveBeenCalledWith(GUILD, 9, { confirm: false, token: '' })
+    );
     expect(confirmDialog).not.toHaveBeenCalled();
     await waitFor(() => expect(notify).toHaveBeenCalledWith('Change undone.', 'info'));
     await waitFor(() => expect(api.getAuditLog).toHaveBeenCalledTimes(2));
   });
 
   it('warns that later changes are lost and asks before it undoes, naming the settings', async () => {
-    api.getAuditChange.mockResolvedValue(change({ state: 'changed', laterChanges: ['joinChannel'] }));
+    api.getAuditChange.mockResolvedValue(
+      change({ state: 'changed', laterChanges: ['joinChannel'], token: 'tok1' })
+    );
     await open();
     expect((await screen.findByRole('note')).textContent).toMatch(/changed again.*Welcome channel.*lose/s);
     fireEvent.click(screen.getByRole('button', { name: 'Undo this change' }));
     await waitFor(() => expect(confirmDialog).toHaveBeenCalled());
     expect(confirmDialog.mock.calls[0][0].confirmLabel).toBe('Undo and lose later changes');
-    await waitFor(() => expect(api.undoAuditChange).toHaveBeenCalledWith(GUILD, 9, { confirm: true }));
+    await waitFor(() =>
+      expect(api.undoAuditChange).toHaveBeenCalledWith(GUILD, 9, { confirm: true, token: 'tok1' })
+    );
   });
 
   it('does nothing when the confirmation is declined', async () => {
@@ -194,13 +219,40 @@ describe('Audit log: show changes and undo', () => {
     const refusal = Object.assign(new Error('These settings were changed again'), {
       code: 'changed-since',
       laterChanges: ['setNickname'],
+      token: 'fresh',
     });
     api.undoAuditChange.mockRejectedValueOnce(refusal).mockResolvedValueOnce({ ok: true, adjusted: [] });
     await open();
     fireEvent.click(await screen.findByRole('button', { name: 'Undo this change' }));
     await waitFor(() => expect(confirmDialog).toHaveBeenCalled());
-    await waitFor(() => expect(api.undoAuditChange).toHaveBeenLastCalledWith(GUILD, 9, { confirm: true }));
+    await waitFor(() =>
+      expect(api.undoAuditChange).toHaveBeenLastCalledWith(GUILD, 9, { confirm: true, token: 'fresh' })
+    );
     expect(api.undoAuditChange).toHaveBeenCalledTimes(2);
+  });
+
+  it('names the settings an undo leaves alone and the secrets it does not restore', async () => {
+    api.getAuditChange.mockResolvedValue(
+      change({
+        notRestored: [
+          { key: 'autoroleEnabled', reason: 'It goes together with the auto-roles of the Roles page.' },
+        ],
+        droppedSecrets: ['feeds'],
+      })
+    );
+    await open();
+    expect(
+      await screen.findByText(/An undo leaves these as they are: Give auto-roles \(It goes together/)
+    ).toBeTruthy();
+    expect(screen.getByText(/Feeds holds a secret|feeds holds a secret/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Undo this change' })).toBeTruthy();
+  });
+
+  it('shows no module hint on a server-settings entry', async () => {
+    api.getAuditChange.mockResolvedValue({ ...change(), kind: 'settings' });
+    await open();
+    await screen.findByRole('button', { name: 'Undo this change' });
+    expect(screen.queryByText(/Lists kept on their own/)).toBeNull();
   });
 
   it('shows why there is no undo, and a refusal from the server', async () => {

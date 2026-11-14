@@ -47,6 +47,7 @@ import eventsRouter from './v2Events.js';
 import suggestionsRouter from './v2Suggestions.js';
 import tempRolesRouter from './v2TempRoles.js';
 import quotesRouter from './v2Quotes.js';
+import searchRouter from './v2Search.js';
 import introRouter from './v2Intro.js';
 import applicationsRouter from './v2Applications.js';
 import applyMemberRouter from './v2Apply.js';
@@ -259,7 +260,6 @@ import {
 } from '../../db/guildSettings.js';
 import { recordAudit } from '../../db/audit.js';
 import { runWithCapture } from '../../db/auditCapture.js';
-import { readSettingsSnapshot } from '../lib/configUndo.js';
 import { recordBotAudit, listBotAudit } from '../../db/botAudit.js';
 import { platformInfo } from '../../platform/modulePlatformNotes.js';
 import { guildCommandPrefix } from '../../platform/commandPrefix.js';
@@ -480,6 +480,8 @@ router.use('/guilds/:guildId', economyRouter);
 router.use('/guilds/:guildId', shopRouter);
 // Applications: settings, forms, the panel, submissions, export (v2Applications.js).
 router.use('/guilds/:guildId', applicationsRouter);
+// The command palette's lookup of an inbox item by number (v2Search.js).
+router.use('/guilds/:guildId', searchRouter);
 
 // What the new dashboard needs to know about a server's platform: its capabilities (to hide
 // what the platform cannot do) and the per-module notes (what behaves differently there).
@@ -517,7 +519,14 @@ const MENTION_SHOWN = 8;
 const MENTION_MIN_QUERY = 2;
 const NAMES_MAX_IDS = 20;
 const NAMES_MAX_FETCH = 5;
-router.get('/guilds/:guildId/members/search', (req, res) => {
+// A scan of the member cache on every pause in typing (the @ suggestions, the member picker, the command
+// palette): a person never needs more than a couple a second, a script should not scan all day.
+const memberSearchLimit = rateLimit({
+  windowMs: 60_000,
+  max: 120,
+  message: 'Too many searches — wait a moment.',
+});
+router.get('/guilds/:guildId/members/search', memberSearchLimit, (req, res) => {
   const q = String(req.query.q ?? '')
     .trim()
     .toLowerCase()
@@ -2281,8 +2290,6 @@ router.post(
   '/guilds/:guildId/settings',
   asyncHandler(async (req, res) => {
     const guild = req.guild;
-    // What the history keeps as the change: the settings as they are before anything is saved.
-    const settingsBefore = await readSettingsSnapshot(guild);
     // Before anything is saved: a bot master may not change who the bot masters are.
     const botMasterRoleIds = [].concat(req.body.botMasterRoleIds ?? []);
     const saveBotMasters = await shouldSaveBotMasters(
@@ -2350,7 +2357,6 @@ router.post(
       actor: moderatorDisplayName(req),
       action: 'settings:server',
       detail,
-      change: { before: settingsBefore, after: await readSettingsSnapshot(guild) },
     });
     res.json({ ok: true });
   })

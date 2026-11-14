@@ -138,8 +138,17 @@ function walk(path, b, a, out) {
       });
       return;
     }
-    for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
-      walk([...path, `#${i + 1}`], b[i], a[i], out);
+    // Items without an id: the ones that are the same on both sides are not shown, so one item removed at the top
+    // does not turn every later item into a change. What is left is paired by place.
+    const removed = [...b];
+    const added = [];
+    for (const item of a) {
+      const i = removed.findIndex((x) => same(x, item));
+      if (i >= 0) removed.splice(i, 1);
+      else added.push(item);
+    }
+    for (let i = 0; i < Math.max(added.length, removed.length); i += 1) {
+      walk([...path, itemName(added[i] ?? removed[i], i)], removed[i], added[i], out);
     }
     return;
   }
