@@ -212,7 +212,12 @@ import {
   DEFAULT_LIVE_MESSAGE as YT_DEFAULT_LIVE_MSG,
 } from '../../modules/youtubeAlerts.js';
 import { syncSubscriptions as syncYoutubeWebsub } from '../../modules/youtubeWebsub.js';
-import { normaliseRssConfig, DEFAULT_TEMPLATE as RSS_DEFAULT_TPL, FEED_TYPES } from '../../modules/rss.js';
+import {
+  normaliseRssConfig,
+  maskFeedUrl,
+  DEFAULT_TEMPLATE as RSS_DEFAULT_TPL,
+  FEED_TYPES,
+} from '../../modules/rss.js';
 import { clearScope } from '../../db/postedKeys.js';
 import { deleteBoardEntries } from '../../db/starboard.js';
 import {
@@ -1721,22 +1726,6 @@ router.post(
     res.json({ config });
   })
 );
-
-/** A feed with its URL cut to the origin ("https://example.com/…"); feeds by name (Reddit) are kept. */
-function maskFeedUrl(feed) {
-  const mask = (u) => {
-    try {
-      return `${new URL(u).origin}/…`;
-    } catch {
-      return '…';
-    }
-  };
-  return {
-    ...feed,
-    ref: /^https?:\/\//i.test(feed.ref) ? mask(feed.ref) : feed.ref,
-    url: feed.url ? mask(feed.url) : feed.url,
-  };
-}
 
 router.get(
   '/guilds/:guildId/modules/rss/config',

@@ -4,7 +4,8 @@
 //
 // Mounted at /guilds/:guildId AFTER the admin guard in v2Api.js, so req.guild is set and the
 // caller manages this server.
-import { accessRouter } from '../middleware/access.js';
+import { accessRouter, requestCan } from '../middleware/access.js';
+import { maskFeedUrl } from '../../modules/rss.js';
 import { currentUser, isOwner } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { timeAgo } from '../lib/format.js';
@@ -139,10 +140,15 @@ router.get(
         undo: { available: false, reason: 'This change was too large to keep a copy of.' },
       });
     }
+    // A feed URL can carry a token: below Edit the stored copies show only each feed's origin, as the RSS page does.
+    const hideFeeds = (side) =>
+      target?.kind === 'module' && target.id === 'rss' && !requestCan(req, 'edit') && Array.isArray(side?.feeds)
+        ? { ...side, feeds: side.feeds.map(maskFeedUrl) }
+        : side;
     res.json({
       ...base,
-      before: entry.change.before,
-      after: entry.change.after,
+      before: hideFeeds(entry.change.before),
+      after: hideFeeds(entry.change.after),
       names: namesFor(req.guild, entry.change.before, entry.change.after),
       undo: await describeUndo(req.guild, target, entry.change),
     });

@@ -21,6 +21,7 @@ import { listItems } from '../../db/economyShop.js';
 import { listForms } from '../../db/applications.js';
 import { guildSupports, platformOfGuild, rawGuildId } from '../../platform/platformOf.js';
 import { healthFor } from '../../lib/healthCache.js';
+import { sourceLabel } from '../../modules/rss.js';
 import { v2CardHref } from './overviewSummary.js';
 import { log } from '../../lib/log.js';
 
@@ -389,8 +390,13 @@ export const NEEDS = {
     }),
   'youtube-alerts': (cfg) =>
     alertNeeds(cfg.alerts, { channelKey: 'discordChannelId', nameOf: (a) => a?.name || 'a YouTube channel' }),
+  // The report is cached and shown to every access level, and a feed URL can carry a token: label a feed by
+  // its name or its host, never its full address.
   rss: (cfg) =>
-    alertNeeds(cfg.feeds, { channelKey: 'channelId', nameOf: (f) => f?.name || f?.url || 'a feed' }),
+    alertNeeds(cfg.feeds, {
+      channelKey: 'channelId',
+      nameOf: (f) => f?.name || (f?.url || f?.ref ? sourceLabel(f ?? {}) : 'a feed'),
+    }),
   github: (_cfg, x) =>
     arr(x.githubWatches)
       .filter((w) => w.enabled === 1 || w.enabled === true)
