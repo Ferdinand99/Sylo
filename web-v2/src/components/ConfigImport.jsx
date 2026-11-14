@@ -26,9 +26,11 @@ const when = (iso) => {
  * would change, tick what to import, type the confirmation word. Nothing is written until the last step, and
  * every module goes through the same checks as saving its page does (the server does the work).
  *
- * @param {{ guildId: string }} props
+ * `disabled` is for a person whose access level may not change settings (the server refuses it anyway).
+ *
+ * @param {{ guildId: string, disabled?: boolean }} props
  */
-export default function ConfigImport({ guildId }) {
+export default function ConfigImport({ guildId, disabled = false }) {
   const inputId = useId();
   const input = useRef(null);
   const [stage, setStage] = useState('idle'); // idle | reading | review | applying | done
@@ -142,9 +144,13 @@ export default function ConfigImport({ guildId }) {
           accept=".json,application/json"
           className="v2-import-file"
           onChange={onFile}
-          disabled={stage === 'reading' || stage === 'applying'}
+          disabled={disabled || stage === 'reading' || stage === 'applying'}
         />
-        <label htmlFor={inputId} className="v2-btn-ghost v2-import-choose">
+        <label
+          htmlFor={inputId}
+          className={`v2-btn-ghost v2-import-choose${disabled ? ' is-disabled' : ''}`}
+          aria-disabled={disabled || undefined}
+        >
           {stage === 'reading' ? 'Reading…' : 'Choose file…'}
         </label>
       </div>

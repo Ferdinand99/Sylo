@@ -8,6 +8,7 @@ import Switch from '../components/Switch.jsx';
 import Meta, { plural } from '../components/Meta.jsx';
 import { formatCount } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
+import { AccessLock } from '../access.jsx';
 
 const PERIODS = [
   { key: 'all', label: 'All time' },
@@ -83,29 +84,31 @@ export default function Leaderboard() {
             />
           </div>
           {data.publicLeaderboard ? (
-            <form className="v2-row v2-row-stack" onSubmit={saveVanity}>
-              <div className="v2-row-main">
-                <h3>Vanity URL</h3>
-                <p className="v2-break is-wrap">sylobot.com/lb/{slugInput || '…'}</p>
-              </div>
-              <div className="v2-row-actions v2-vanity-actions">
-                <input
-                  className="v2-inline-input"
-                  aria-label="Vanity URL slug"
-                  value={slugInput}
-                  onChange={(e) => setSlugInput(e.target.value)}
-                  placeholder="my-server"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  autoComplete="off"
-                  spellCheck={false}
-                  enterKeyHint="done"
-                />
-                <button type="submit" className="v2-btn-ghost" disabled={saving}>
-                  Save
-                </button>
-              </div>
-            </form>
+            <AccessLock need="edit">
+              <form className="v2-row v2-row-stack" onSubmit={saveVanity}>
+                <div className="v2-row-main">
+                  <h3>Vanity URL</h3>
+                  <p className="v2-break is-wrap">sylobot.com/lb/{slugInput || '…'}</p>
+                </div>
+                <div className="v2-row-actions v2-vanity-actions">
+                  <input
+                    className="v2-inline-input"
+                    aria-label="Vanity URL slug"
+                    value={slugInput}
+                    onChange={(e) => setSlugInput(e.target.value)}
+                    placeholder="my-server"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    autoComplete="off"
+                    spellCheck={false}
+                    enterKeyHint="done"
+                  />
+                  <button type="submit" className="v2-btn-ghost" disabled={saving}>
+                    Save
+                  </button>
+                </div>
+              </form>
+            </AccessLock>
           ) : null}
         </div>
       </div>

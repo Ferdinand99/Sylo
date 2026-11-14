@@ -1561,6 +1561,25 @@ export const MIGRATIONS = [
     if (!have.has('change_json')) database.exec('ALTER TABLE config_audit ADD COLUMN change_json TEXT');
     if (!have.has('reverts_id')) database.exec('ALTER TABLE config_audit ADD COLUMN reverts_id INTEGER');
   },
+
+  // Dashboard access levels (src/db/guildSettings.js, which adds the same columns on Postgres with
+  // ADD COLUMN IF NOT EXISTS): the roles that may use the dashboard with Inbox or View access. The
+  // Edit roles are the bot-master roles (bot_master_roles). Migration 79, after the change history's 78
+  // (#342). Each column is added only when it is missing, so a database that already ran this step
+  // under another number is not broken by it.
+  (database) => {
+    const has = new Set(
+      database
+        .prepare('PRAGMA table_info(guild_settings)')
+        .all()
+        .map((c) => c.name)
+    );
+    for (const column of ['dashboard_inbox_roles', 'dashboard_view_roles']) {
+      if (!has.has(column)) {
+        database.exec(`ALTER TABLE guild_settings ADD COLUMN ${column} TEXT NOT NULL DEFAULT '[]';`);
+      }
+    }
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

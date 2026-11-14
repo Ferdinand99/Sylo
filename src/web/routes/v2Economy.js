@@ -6,7 +6,7 @@
 //
 // Mounted at /guilds/:guildId AFTER the admin guard in v2Api.js, so req.guild is set, the caller
 // manages this server and the state-changing calls have passed the CSRF check.
-import { Router } from 'express';
+import { accessRouter } from '../middleware/access.js';
 import { actingUserId, currentUser } from '../middleware/auth.js';
 import { platformActionLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -47,7 +47,7 @@ export function auditDetail(action, amount, member, userId) {
   return action === 'reset-user' ? `reset-user for ${who}` : `${action} ${amount} for ${who}`;
 }
 
-const router = Router({ mergeParams: true });
+const router = accessRouter('/guilds/:guildId', { mergeParams: true });
 
 /** Rows per page of the member list, and rows of one member's ledger shown. */
 const PAGE_SIZE = 25;

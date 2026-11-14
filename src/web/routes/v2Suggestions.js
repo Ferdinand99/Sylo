@@ -3,7 +3,7 @@
 //
 // Mounted at /guilds/:guildId AFTER the admin guard in v2Api.js, so req.guild is set, the caller
 // manages this server and the state-changing calls have passed the CSRF check.
-import { Router } from 'express';
+import { accessRouter, seesInboxContent } from '../middleware/access.js';
 import { actingUserId, currentUser } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { assignableRoles } from '../lib/guildContext.js';
@@ -33,14 +33,18 @@ import {
 /** How many suggestions the list returns at most. */
 const LIST_SHOWN = 100;
 
-const router = Router({ mergeParams: true });
+const router = accessRouter('/guilds/:guildId', { mergeParams: true });
 
 const actor = (req) => (currentUser(req)?.open ? 'Dashboard' : `${currentUser(req).name} (dashboard)`);
 const fail = (res, message, status = 400) => res.status(status).json({ error: message });
 
-/** What the list shows. Staff see who wrote an anonymous suggestion; members do not. */
-function view(row, guild, cfg) {
-  const member = row.author_id ? guild.members?.cache?.get?.(row.author_id) : null;
+/**
+ * What the list shows. Staff see who wrote an anonymous suggestion; members do not, and neither does
+ * someone with View access (`content: false`).
+ */
+function view(row, guild, cfg, { content = true } = {}) {
+  const hidden = row.anonymous && !content;
+  const member = row.author_id && !hidden ? guild.members?.cache?.get?.(row.author_id) : null;
   return {
     id: row.id,
     number: row.number,
@@ -51,8 +55,8 @@ function view(row, guild, cfg) {
     up: row.up ?? 0,
     down: row.down ?? 0,
     anonymous: row.anonymous,
-    authorId: row.author_id,
-    author: row.author_id ? (member?.displayName ?? row.author_id) : null,
+    authorId: hidden ? null : row.author_id,
+    author: row.author_id && !hidden ? (member?.displayName ?? row.author_id) : null,
     decidedBy: row.decided_by,
     decidedAt: row.decided_at,
     createdAt: row.created_at,
@@ -75,11 +79,11 @@ const settingsOf = async (guildId) =>
  * The list, how many suggestions in the whole server could be moved back (the list is cut), and how many
  * are still waiting for a decision (whatever the filter, for the "n open" on the page's tab).
  */
-async function listOf(guild, query) {
+async function listOf(guild, query, content) {
   const cfg = await settingsOf(guild.id);
   const rows = await listSuggestions(guild.id, { ...filterOf(query), limit: LIST_SHOWN });
   return {
-    suggestions: rows.map((r) => view(r, guild, cfg)),
+    suggestions: rows.map((r) => view(r, guild, cfg, { content })),
     outside: cfg.channel ? await countSuggestionsOutside(guild.id, cfg.channel) : 0,
     openCount: await openSuggestionCount(guild.id),
   };
@@ -92,7 +96,7 @@ router.get(
       config: await settingsOf(req.guild.id),
       channels: guildTextChannels(req.guild),
       roles: assignableRoles(req.guild),
-      ...(await listOf(req.guild, {})),
+      ...(await listOf(req.guild, {}, seesInboxContent(req))),
     });
   })
 );
@@ -123,7 +127,7 @@ router.post(
 router.get(
   '/modules/suggestions/list',
   asyncHandler(async (req, res) => {
-    res.json(await listOf(req.guild, req.query));
+    res.json(await listOf(req.guild, req.query, seesInboxContent(req)));
   })
 );
 
