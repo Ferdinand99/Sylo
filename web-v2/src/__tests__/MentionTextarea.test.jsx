@@ -209,6 +209,7 @@ describe('mentions drawn as names inside the field', () => {
     field.style.letterSpacing = '0.4px';
     field.style.lineHeight = '1.7';
     field.style.padding = '11px 13px';
+    field.style.borderStyle = 'solid';
     field.style.borderWidth = '3px';
     field.style.whiteSpace = 'pre-wrap';
     field.style.overflowWrap = 'anywhere';
