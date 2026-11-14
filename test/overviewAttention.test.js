@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import { PermissionsBitField } from 'discord.js';
 import { setGuildModule } from '../src/db/modules.js';
 import { buildAttention, moduleProblems } from '../src/web/lib/overviewAttention.js';
+import { missingOwnerKeys } from '../src/web/lib/overviewSummary.js';
+import { config } from '../src/config.js';
 
 const G = '700000000000000777';
 const CH = '111111111111111111';
@@ -157,4 +159,26 @@ test('counts and module rows the caller already has are used as given', async ()
   const out = await buildAttention(guild, { modules, openTickets: 7, openAppeals: 3 });
   assert.equal(out.waiting.tickets, 7);
   assert.equal(out.waiting.appeals, 0, 'appeals is not enabled in the rows given');
+});
+
+test('a module on that waits for API keys the bot owner has not added is listed as information, not as a setup problem', async () => {
+  const id = '700000000000000782';
+  const guild = stubGuild(id);
+  await setGuildModule(id, 'twitch-alerts', {
+    enabled: true,
+    config: { alerts: [{ login: 'a', channelId: CH }] },
+  });
+  await setGuildModule(id, 'kick-alerts', { enabled: false, config: {} });
+  // the test environment has no Twitch or Kick keys
+  assert.equal(config.twitchEnabled, false);
+  assert.equal(missingOwnerKeys('twitch-alerts'), 'Twitch API keys');
+  assert.equal(missingOwnerKeys('kick-alerts'), 'Kick API keys');
+  assert.equal(missingOwnerKeys('apple-connect'), 'App Store Connect API keys');
+  assert.equal(missingOwnerKeys('logging'), null);
+  const out = await buildAttention(guild);
+  assert.deepEqual(out.waitingForOwner, [
+    { id: 'twitch-alerts', name: 'Twitch alerts', keys: 'Twitch API keys' },
+  ]);
+  // it is information, not a setup problem with a fix link
+  assert.ok(!out.problems.some((p) => p.id === 'twitch-alerts'));
 });

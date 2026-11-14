@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import { PermissionsBitField } from 'discord.js';
 import { setGuildModule } from '../src/db/modules.js';
 import { buildOverview } from '../src/web/lib/overviewSummary.js';
-import { summaryParts } from '../src/web/lib/cardSummary.js';
+import { summaryInfo, summaryParts, waitsForOwnerKeys } from '../src/web/lib/cardSummary.js';
+import { config } from '../src/config.js';
 import { MODULES } from '../src/modules/registry.js';
 
 const G = '700000000000000555';
@@ -22,8 +23,10 @@ test('a module with nothing set says "Not set up yet"', () => {
   );
   assert.deepEqual(
     summaryParts('twitch-alerts', [line('Streamers', 'none', 'off'), line('API', 'x', 'off')]),
-    ['Not set up yet']
+    ['Waiting for the bot owner'],
+    'missing keys come first: nothing will ever post'
   );
+  assert.deepEqual(summaryParts('rss', [line('Feeds', 'none', 'off')]), ['No feeds yet']);
 });
 
 test('channels and roles read as #channel and "Name role"', () => {
@@ -119,4 +122,78 @@ test('every card of the overview has summary parts, and none says "Status: enabl
   // an empty server: a module that needs a channel says it is not set up
   const logging = cards.find((c) => c.id === 'logging');
   assert.deepEqual(logging.summaryParts, ['Not set up yet']);
+});
+
+test('a module whose bot-owner keys are missing says it waits for the bot owner, and still names what is set up', () => {
+  assert.deepEqual(
+    summaryParts('twitch-alerts', [
+      line('Streamers', '1', 'on'),
+      line('API', 'TWITCH_CLIENT_ID/SECRET not set', 'off'),
+    ]),
+    ['Waiting for the bot owner', '1 streamer']
+  );
+  assert.deepEqual(summaryParts('kick-alerts', [line('Streamers', '2', 'on'), line('API', 'x', 'off')]), [
+    'Waiting for the bot owner',
+    '2 streamers',
+  ]);
+  assert.deepEqual(
+    summaryParts('apple-connect', [line('Channel', '#releases', 'on'), line('API', 'x', 'off')]),
+    ['Waiting for the bot owner', '#releases']
+  );
+  // keys present: the ordinary summary, no waiting
+  assert.deepEqual(
+    summaryParts('twitch-alerts', [line('Streamers', '1', 'on'), line('API', 'connected', 'neutral')]),
+    ['1 streamer']
+  );
+  const info = summaryInfo('twitch-alerts', [line('Streamers', '1', 'on'), line('API', 'x', 'off')]);
+  assert.equal(info.waitingForOwner, true);
+  assert.equal(
+    summaryInfo('twitch-alerts', [line('Streamers', '1', 'on'), line('API', 'connected', 'neutral')])
+      .waitingForOwner,
+    false
+  );
+  assert.equal(
+    waitsForOwnerKeys('polls', [line('API', 'x', 'off')]),
+    false,
+    'only the three key-bound modules'
+  );
+});
+
+test('an empty module says what is missing, not just "On"', () => {
+  assert.deepEqual(summaryParts('auto-react', [line('Rules', 'none', 'off')]), ['No rules yet']);
+  assert.deepEqual(summaryParts('auto-react', [line('Rules', '2', 'on')]), ['2 rules']);
+  assert.deepEqual(summaryParts('auto-react', [line('Rules', '1', 'on')]), ['1 rule']);
+  assert.deepEqual(
+    summaryParts('honeypot', [line('Traps set', 'none', 'off'), line('Exempt roles', '0', 'neutral')]),
+    ['No traps yet']
+  );
+  assert.deepEqual(summaryParts('github', [line('Repositories', 'none', 'off')]), ['No repositories yet']);
+  assert.equal(summaryInfo('github', [line('Repositories', 'none', 'off')]).empty, true);
+  assert.equal(summaryInfo('github', [line('Repositories', '1', 'on')]).empty, false);
+});
+
+test('the overview card of Auto-react counts its rules, and flags a module that waits for keys', async () => {
+  const id = '700000000000000556';
+  const guild = {
+    id,
+    members: { me: { permissions: new PermissionsBitField(PermissionsBitField.All) } },
+    channels: { cache: { get: () => undefined } },
+  };
+  await setGuildModule(id, 'auto-react', { enabled: true, config: { rules: [] } });
+  await setGuildModule(id, 'twitch-alerts', { enabled: true, config: { alerts: [] } });
+  // the test environment has no Twitch keys
+  assert.equal(config.twitchEnabled, false);
+  {
+    const cards = (await buildOverview(guild)).groups.flatMap((g) => g.cards);
+    const react = cards.find((c) => c.id === 'auto-react');
+    assert.deepEqual(react.summaryParts, ['No rules yet']);
+    assert.equal(react.empty, true);
+    assert.deepEqual(react.lines[0], { label: 'Rules', value: 'none', state: 'off' });
+    const twitch = cards.find((c) => c.id === 'twitch-alerts');
+    assert.equal(twitch.waitingForOwner, true);
+    assert.equal(twitch.summaryParts[0], 'Waiting for the bot owner');
+    // the first two lines keep the "label: value" shape the iOS app reads
+    for (const c of cards)
+      for (const l of c.lines.slice(0, 2)) assert.ok(l.label && 'value' in l && l.state, c.id);
+  }
 });

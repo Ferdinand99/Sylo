@@ -191,6 +191,19 @@ describe('Economy settings', () => {
     expect(screen.getByText(/does not have the Message Content intent/)).toBeTruthy();
   });
 
+  it('shows the shop and leaderboard addresses as Copy link / Open buttons, not as printed URLs', async () => {
+    renderAtGuild(<Economy />, GUILD);
+    await screen.findByRole('heading', { name: 'Economy' });
+    expect(document.body.textContent).not.toContain(`/shop/${GUILD}`);
+    expect(document.body.textContent).not.toContain(`/economy/${GUILD}`);
+    expect(screen.getAllByRole('button', { name: /^Copy/ }).length).toBeGreaterThanOrEqual(2);
+    const open = screen.getByRole('link', { name: /Open shop link/ });
+    expect(open.getAttribute('href')).toBe(`${window.location.origin}/shop/${GUILD}`);
+    expect(open.getAttribute('rel')).toContain('noopener');
+    // The environment-variable name is for the bot owner only.
+    expect(screen.queryByText(/DASHBOARD_URL/)).toBeNull();
+  });
+
   it('warns that robbing is off by default and has it unchecked', async () => {
     renderAtGuild(<Economy />, GUILD);
     expect(await screen.findByText('Robbing is off by default')).toBeTruthy();

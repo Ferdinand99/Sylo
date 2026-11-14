@@ -1,14 +1,15 @@
 // What needs a server admin's attention on the dashboard overview: modules that are switched on but
 // cannot do their job yet (a channel or role that is missing or was deleted), the permissions Sylo is
-// missing, and the work that is waiting for a person (open tickets, appeals, applications and
-// suggestions). Every module item carries the dashboard address of the page where it is fixed.
+// missing, the modules that wait for API keys only the bot owner can add (information, not
+// something the admin can fix), and the work that is waiting for a person (open tickets, appeals,
+// applications and suggestions). Every module item carries the dashboard address of the page where it is fixed.
 import { MODULES, getModule } from '../../modules/registry.js';
 import { getGuildModules } from '../../db/modules.js';
 import { countOpenAppeals } from '../../db/appeals.js';
 import { openTicketCount } from '../../db/tickets.js';
 import { pendingCount } from '../../db/applications.js';
 import { openSuggestionCount } from '../../db/suggestions.js';
-import { missingPermissions, v2CardHref } from './overviewSummary.js';
+import { missingOwnerKeys, missingPermissions, v2CardHref } from './overviewSummary.js';
 import { platformOfGuild } from '../../platform/platformOf.js';
 import { validTriggerRoleIds, welcomeTrigger } from '../../modules/welcome.js';
 
@@ -102,10 +103,13 @@ export async function buildAttention(guild, { owner = true, modules, openTickets
     enabled('suggestions') ? openSuggestionCount(guild.id) : 0,
   ]);
   const problems = [];
+  const waitingForOwner = [];
   for (const def of MODULES) {
     if (!owner && def.ownerOnly) continue;
     const row = rows.get(def.id);
     if (!(row?.enabled ?? def.defaultEnabled)) continue;
+    const keys = missingOwnerKeys(def.id);
+    if (keys) waitingForOwner.push({ id: def.id, name: getModule(def.id).name, keys });
     const issues = moduleProblems(def.id, row?.config ?? {}, guild);
     if (issues.length) {
       problems.push({ id: def.id, name: getModule(def.id).name, href: v2CardHref(def.id, guild.id), issues });
@@ -113,6 +117,7 @@ export async function buildAttention(guild, { owner = true, modules, openTickets
   }
   return {
     problems,
+    waitingForOwner,
     platform: platformOfGuild(guild),
     missingPermissions: missingPermissions(guild),
     waiting: { tickets, appeals, applications, suggestions },

@@ -14,11 +14,12 @@ import {
   lookupProfile,
   MEMBER_DATA_UNAFFECTED,
 } from '../lib/guildData.js';
-import { listAudit } from '../../db/audit.js';
+import { listAuditActions, listAuditPage } from '../../db/audit.js';
 import { describeUserData } from '../../db/purge.js';
 
-// The audit page shows the newest 150 of the 500 kept per server.
-const AUDIT_SHOWN = 150;
+// The audit page loads 50 entries at a time (never more than 100) of the 500 kept per server.
+const AUDIT_PAGE = 50;
+const AUDIT_PAGE_MAX = 100;
 const AUDIT_KEPT = 500;
 
 const fail = (res, message, status = 400) => res.status(status).json({ error: message });
@@ -36,13 +37,23 @@ function parseUserId(raw) {
 
 const router = Router({ mergeParams: true });
 
-// Config change history.
+// Config change history of this server only: ?limit= (default 50, at most 100), ?before=<id of the last
+// entry already shown> for the next page, ?action=<key> for one kind of change. `actions` lists the kinds
+// recorded, for the filter.
 router.get(
   '/audit',
   asyncHandler(async (req, res) => {
-    const rows = await listAudit(req.guild.id, AUDIT_SHOWN);
+    const limit = Math.min(
+      Math.max(Number.parseInt(String(req.query.limit ?? ''), 10) || AUDIT_PAGE, 1),
+      AUDIT_PAGE_MAX
+    );
+    const before = Number.parseInt(String(req.query.before ?? ''), 10) || 0;
+    const action = String(req.query.action ?? '').slice(0, 80);
+    const { rows, hasMore } = await listAuditPage(req.guild.id, { limit, before, action });
     res.json({
       kept: AUDIT_KEPT,
+      hasMore,
+      actions: await listAuditActions(req.guild.id),
       entries: rows.map((a) => ({
         id: a.id,
         actor: a.actor,

@@ -25,7 +25,7 @@
         <% members.forEach(function (m) { %>
           <li class="lb-row<%= m.rank <= 3 ? ' lb-top' : '' %>">
             <span class="lb-rank">#<%= m.rank %></span>
-            <% if (m.avatar) { %><img class="lb-avatar" src="<%= m.avatar %>" alt="" /><% } else { %><span class="lb-avatar lb-avatar-blank"></span><% } %>
+            <% if (m.avatar) { %><img class="lb-avatar" src="<%= m.avatar %>" alt="" /><% } else { %><span class="lb-avatar lb-avatar-blank" aria-hidden="true"><%= (Array.from(String(m.name || '?'))[0] || '?').toUpperCase() %></span><% } %>
             <div class="lb-main">
               <div class="lb-name<%= m.left ? ' muted' : '' %>"><%= m.name %></div>
             </div>

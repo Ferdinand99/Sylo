@@ -48,6 +48,16 @@ afterEach(() => {
 });
 
 describe('Sidebar', () => {
+  it('leaves out the server groups until a server is chosen', () => {
+    useOverview.mockReturnValue({ data: null, dataGuildId: null });
+    renderAt('/', null);
+    expect(screen.getByRole('link', { name: 'Overview' })).toBeTruthy();
+    expect(screen.queryByRole('group', { name: 'Inbox' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Members & moderation' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Server' })).toBeNull();
+    expect(screen.getByRole('group', { name: 'More' })).toBeTruthy();
+  });
+
   it('opens with an Overview link that is active on the overview and nowhere else', () => {
     useOverview.mockReturnValue({ data: data('Welcome', 0), dataGuildId: A });
     const { unmount } = renderAt(`/guilds/${A}`, A);

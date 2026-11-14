@@ -29,3 +29,32 @@ export function toggled(titles, title) {
   else next.add(title);
   return next;
 }
+
+/** Whether the person has ever folded or opened a category here (before that, a phone starts folded by default). */
+export function hasStoredCollapse() {
+  try {
+    return globalThis.localStorage?.getItem(KEY) != null;
+  } catch {
+    return false;
+  }
+}
+
+const HINT_KEY = 'sylo:v2:overview-hint-seen';
+
+/** Whether the "Switch a module on or off here" hint was dismissed by the first switch. */
+export function hintSeen() {
+  try {
+    return globalThis.localStorage?.getItem(HINT_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** Remember that the person has used a switch, so the hint is not shown again. */
+export function markHintSeen() {
+  try {
+    globalThis.localStorage?.setItem(HINT_KEY, '1');
+  } catch {
+    // nothing to do: the hint just shows again next time
+  }
+}

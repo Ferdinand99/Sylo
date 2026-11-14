@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { welcomeCardPreviewUrl } from '../api.js';
 import ToggleSection from '../components/ToggleSection.jsx';
 import ChipPicker from '../components/ChipPicker.jsx';
+import HowItWorks from '../components/HowItWorks.jsx';
 import Callout from '../components/Callout.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import MentionTextarea from '../components/MentionTextarea.jsx';
@@ -93,19 +94,25 @@ export default function Welcome() {
                     onChange={(ids) => set({ triggerRoleIds: ids })}
                   />
                   <p className="v2-field-hint">
-                    The welcome is sent the first time a member gets any of these roles, once per member (a
-                    member who leaves and comes back can be welcomed again). Joining sends nothing, unless the
-                    member already has one of the roles when they join. This suits servers where a member only
-                    counts after a step: roles from{' '}
-                    <Link to={`/guilds/${guildId}/m/verification`}>Verification</Link> or an accepted{' '}
-                    <Link to={`/guilds/${guildId}/m/applications`}>application</Link> are typical.
+                    The welcome is sent the first time a member gets any of these roles. Joining on its own
+                    sends nothing.
                   </p>
-                  <p className="v2-field-hint">
-                    A member is welcomed once. Members who were welcomed on joining since Sylo 5.2, or who
-                    already have one of the roles when you switch from “When a member joins”, are not welcomed
-                    by a role: only members who get a role afterwards count. (Someone welcomed on joining
-                    before 5.2 has no record, so a role they get later can welcome them once.)
-                  </p>
+                  <HowItWorks>
+                    <p>
+                      The welcome is sent the first time a member gets any of these roles, once per member (a
+                      member who leaves and comes back can be welcomed again). Joining sends nothing, unless
+                      the member already has one of the roles when they join. This suits servers where a
+                      member only counts after a step: roles from{' '}
+                      <Link to={`/guilds/${guildId}/m/verification`}>Verification</Link> or an accepted{' '}
+                      <Link to={`/guilds/${guildId}/m/applications`}>application</Link> are typical.
+                    </p>
+                    <p>
+                      A member is welcomed once. Members who were welcomed on joining since Sylo 5.2, or who
+                      already have one of the roles when you switch from “When a member joins”, are not
+                      welcomed by a role: only members who get a role afterwards count. (Someone welcomed on
+                      joining before 5.2 has no record, so a role they get later can welcome them once.)
+                    </p>
+                  </HowItWorks>
                 </div>
                 {triggerRoleIds.length === 0 ? (
                   <Callout tone="warning">

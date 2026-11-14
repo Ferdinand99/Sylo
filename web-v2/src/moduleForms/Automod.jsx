@@ -5,6 +5,7 @@ import ChipPicker from '../components/ChipPicker.jsx';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
+import SectionIndex from '../components/SectionIndex.jsx';
 import UnitInput from '../components/UnitInput.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
@@ -108,7 +109,18 @@ export default function Automod() {
         {data.modlogChannelId ? '' : ' (not set — see Settings)'}. Sylo never acts on other bots.
       </p>
 
+      <SectionIndex
+        sections={[
+          ['am-filters', 'Filters'],
+          ...(capabilities.nativeAutomod ? [['am-native', 'Native AutoMod']] : []),
+          ['am-exempt', 'Exemptions'],
+        ]}
+      />
+
       <form onSubmit={save} data-savebar>
+        <h2 className="v2-group-title" id="am-filters">
+          Filters
+        </h2>
         <div className="v2-am-rules">
           {data.automodRules.map(([key, label, hint]) => {
             const off = mode(form.rules[key]) === 'off';
@@ -279,7 +291,9 @@ export default function Automod() {
 
         {capabilities.nativeAutomod ? (
           <>
-            <h2 className="v2-group-title">Native Discord AutoMod</h2>
+            <h2 className="v2-group-title" id="am-native">
+              Native Discord AutoMod
+            </h2>
             <p className="v2-field-hint">
               Push the mappable checks onto Discord's built-in AutoMod so they are enforced before a message
               is posted, and keep working while Sylo is offline. Needs the Manage Server permission. Sylo owns
@@ -338,7 +352,9 @@ export default function Automod() {
           </>
         ) : null}
 
-        <h2 className="v2-group-title">Exemptions</h2>
+        <h2 className="v2-group-title" id="am-exempt">
+          Exemptions
+        </h2>
         <div className="v2-field">
           <label htmlFor="am-exempt-channels">
             Exempt channels <span className="v2-field-hint">— automod never acts here</span>
