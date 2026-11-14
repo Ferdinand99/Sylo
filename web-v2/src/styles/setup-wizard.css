@@ -1,0 +1,246 @@
+/* The setup wizard (pages/SetupWizard.jsx) and the offer on the overview (components/SetupOffer.jsx). */
+
+.v2-setup-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  list-style: none;
+  margin: 14px 0 18px;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.v2-setup-steps li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.v2-setup-steps li.is-now {
+  color: var(--text);
+  font-weight: 600;
+}
+.v2-setup-step-n {
+  display: inline-grid;
+  place-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border-control);
+  border-radius: 50%;
+  font-size: var(--fs-xs);
+}
+.v2-setup-steps li.is-now .v2-setup-step-n {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--bg-main);
+}
+.v2-setup-steps li.is-past .v2-setup-step-n {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.v2-setup-facts {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.v2-setup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+/* Goals: one tappable card per goal. */
+.v2-setup-goals {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+.v2-setup-goal {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.v2-setup-goal.is-on {
+  border-color: var(--border-control);
+}
+.v2-setup-goal-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.v2-setup-goal-text span {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.v2-setup-done-tag {
+  align-self: flex-start;
+  padding: 0 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  line-height: 1.7;
+}
+
+/* Review: one card per item, switched off (and dimmed) until ticked. */
+.v2-setup-goalblock {
+  margin-top: 18px;
+}
+.v2-setup-goal-title {
+  margin: 0 0 8px;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+}
+.v2-setup-item {
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+}
+.v2-setup-item.is-on {
+  border-color: var(--border-control);
+}
+.v2-setup-item-head {
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.v2-setup-does {
+  margin: 0 0 10px;
+  padding-left: 18px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+.v2-setup-item:not(.is-on) .v2-setup-field {
+  opacity: 0.6;
+}
+.v2-setup-field {
+  margin-bottom: 12px;
+}
+.v2-setup-create {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+}
+.v2-setup-problems {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--warn);
+  font-size: var(--fs-sm);
+}
+
+.v2-setup-bulk {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border: 1px dashed var(--border-control);
+  border-radius: var(--radius);
+}
+.v2-setup-bulk p {
+  margin: 0;
+}
+
+.v2-setup-summary {
+  margin-top: 18px;
+  padding: 12px 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+}
+.v2-setup-summary p {
+  margin: 0;
+}
+
+/* Done: the result per item. */
+.v2-setup-results {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+}
+.v2-setup-result {
+  padding: 12px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.v2-setup-result:first-child {
+  border-top: 0;
+}
+.v2-setup-result p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.v2-setup-result-status {
+  margin-left: 10px;
+  color: var(--success);
+  font-size: var(--fs-sm);
+}
+.v2-setup-result.is-failed .v2-setup-result-status {
+  color: var(--danger);
+}
+.v2-setup-result.is-skipped .v2-setup-result-status {
+  color: var(--text-muted);
+}
+.v2-setup-result-link {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: var(--fs-sm);
+}
+
+/* The offer on the overview of a server with little set up. */
+.v2-setup-offer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 18px;
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  background: var(--bg-surface);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border-subtle));
+  border-radius: var(--radius);
+}
+.v2-setup-offer-text {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.v2-setup-offer-text strong {
+  display: block;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+}
+.v2-setup-offer-text span {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.v2-setup-offer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 600px) {
+  .v2-setup-offer-actions,
+  .v2-setup-actions {
+    width: 100%;
+  }
+  .v2-setup-actions > .v2-btn-primary,
+  .v2-setup-actions > .v2-btn-ghost,
+  .v2-setup-offer-actions > * {
+    flex: 1 1 100%;
+  }
+}
+
+/* A step heading takes focus when the step changes; it is not a control, so no ring. */
+.v2-group-title[tabindex='-1']:focus {
+  outline: none;
+}

@@ -51,6 +51,7 @@ import quotesRouter from './v2Quotes.js';
 import searchRouter from './v2Search.js';
 import introRouter from './v2Intro.js';
 import applicationsRouter from './v2Applications.js';
+import setupRouter from './v2Setup.js';
 import applyMemberRouter from './v2Apply.js';
 import economyRouter from './v2Economy.js';
 import shopRouter from './v2Shop.js';
@@ -476,6 +477,8 @@ router.use('/guilds/:guildId', economyRouter);
 router.use('/guilds/:guildId', shopRouter);
 // Applications: settings, forms, the panel, submissions, export (v2Applications.js).
 router.use('/guilds/:guildId', applicationsRouter);
+// Setup wizard: the proposal for the server and applying it (v2Setup.js).
+router.use('/guilds/:guildId', setupRouter);
 // The command palette's lookup of an inbox item by number (v2Search.js).
 router.use('/guilds/:guildId', searchRouter);
 
