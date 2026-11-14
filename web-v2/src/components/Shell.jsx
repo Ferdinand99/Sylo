@@ -135,26 +135,26 @@ function SignedInShell() {
         </header>
         <OverviewProvider guildId={lastGuildId}>
           <HealthProvider guildId={lastGuildId}>
-          <div className="v2-body">
-            <Sidebar
-              activeGuildId={lastGuildId}
-              open={mobileNavOpen}
-              onClose={() => setMobileNavOpen(false)}
-              returnFocusRef={navToggleRef}
+            <div className="v2-body">
+              <Sidebar
+                activeGuildId={lastGuildId}
+                open={mobileNavOpen}
+                onClose={() => setMobileNavOpen(false)}
+                returnFocusRef={navToggleRef}
+              />
+              <main className="v2-page">
+                <Announcement />
+                <Suspense fallback={<p className="v2-state">Loading…</p>}>
+                  <Outlet context={{ guilds, guildsLoading: loading, guildsError: error }} />
+                </Suspense>
+              </main>
+            </div>
+            <CommandPalette
+              open={paletteOpen}
+              onClose={() => setPaletteOpen(false)}
+              guildId={lastGuildId}
+              guilds={guilds}
             />
-            <main className="v2-page">
-              <Announcement />
-              <Suspense fallback={<p className="v2-state">Loading…</p>}>
-                <Outlet context={{ guilds, guildsLoading: loading, guildsError: error }} />
-              </Suspense>
-            </main>
-          </div>
-          <CommandPalette
-            open={paletteOpen}
-            onClose={() => setPaletteOpen(false)}
-            guildId={lastGuildId}
-            guilds={guilds}
-          />
           </HealthProvider>
         </OverviewProvider>
         <Toasts />
