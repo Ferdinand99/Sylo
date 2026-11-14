@@ -455,6 +455,36 @@ function CommandForm({ initial, title, channels, roles, placeholders, onSave, on
   );
 }
 
+/**
+ * How many of the commands Discord has, and what to do past its limit. Discord registers at most
+ * `registeredLimit` commands per server; a longer list is kept, but the commands after the first ones do not
+ * appear there. Nothing is shown where there is no such limit (Fluxer sends `registeredLimit: null`).
+ */
+export function DiscordLimit({ data, max }) {
+  const limit = data.registeredLimit;
+  if (!Number.isFinite(limit)) return null;
+  const over = data.overLimit ?? 0;
+  const registered = data.commands.filter((c) => !c.reserved).length - over;
+  return (
+    <>
+      <p className="v2-field-hint" data-testid="cc-registered">
+        {registered} / {limit} registered on Discord
+      </p>
+      {over > 0 ? (
+        <p className="v2-note v2-cc-warning" role="alert">
+          {plural(over, 'command')} after #{limit} won't appear on Discord: it takes at most {limit} commands
+          per server, in the order of this list. Delete the commands you no longer need to make room.
+        </p>
+      ) : registered >= limit ? (
+        <p className="v2-field-hint">
+          Discord takes at most {limit} commands per server. You can keep adding up to{' '}
+          {max ?? 'the saved maximum'}, but the ones past {limit} will not appear there.
+        </p>
+      ) : null}
+    </>
+  );
+}
+
 export default function CustomCommands() {
   const limits = useModuleLimits('custom-commands');
   const { platform } = useContext(PlatformContext);
@@ -554,6 +584,7 @@ export default function CustomCommands() {
         <h2 className="v2-group-title">
           Your commands ({counter(d.commands.length, limitOf(limits, 'commands').maxItems)})
         </h2>
+        <DiscordLimit data={d} max={limitOf(limits, 'commands').maxItems} />
         {d.commands.length === 0 ? (
           <EmptyList
             start={creating ? null : { label: 'Create your first command', onClick: () => setCreating(true) }}
@@ -577,6 +608,11 @@ export default function CustomCommands() {
                       ]}
                     />
                   </p>
+                  {c.beyondLimit ? (
+                    <p className="v2-note v2-cc-beyond">
+                      Not on Discord: only the first {d.registeredLimit} commands are registered there.
+                    </p>
+                  ) : null}
                   {c.reserved ? (
                     <p className="v2-note">
                       Rename needed: /{c.name} is now a built-in command, so this command is switched off

@@ -14,6 +14,7 @@ import LoadError from '../components/LoadError.jsx';
 import EmptyList from '../components/EmptyList.jsx';
 import Overview from '../pages/Overview.jsx';
 import { counter } from '../components/useModuleLimits.js';
+import { DiscordLimit } from '../moduleForms/CustomCommands.jsx';
 import SaveBar, { keepFieldAboveBar } from '../components/SaveBar.jsx';
 import { renderAtGuild } from './routerHarness.jsx';
 
@@ -397,5 +398,39 @@ describe('B5: counters', () => {
     expect(counter(0, 50)).toBe('0 / 50');
     expect(counter(3, undefined)).toBe('3');
     expect(counter(3, 0)).toBe('3');
+  });
+});
+
+describe('custom commands and the Discord limit', () => {
+  const cmds = (n) => Array.from({ length: n }, (_, i) => ({ name: `c${i}`, reserved: false }));
+
+  it('counts what Discord registers and shows nothing wrong while the list fits', () => {
+    render(<DiscordLimit data={{ commands: cmds(40), registeredLimit: 100, overLimit: 0 }} max={200} />);
+    expect(screen.getByTestId('cc-registered').textContent).toBe('40 / 100 registered on Discord');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('hints about the limit at 100, and warns past it with how many are left out', () => {
+    const { rerender } = render(
+      <DiscordLimit data={{ commands: cmds(100), registeredLimit: 100, overLimit: 0 }} max={200} />
+    );
+    expect(screen.getByText(/at most 100 commands per server/)).toBeTruthy();
+    expect(screen.getByText(/up to 200/)).toBeTruthy();
+    rerender(<DiscordLimit data={{ commands: cmds(130), registeredLimit: 100, overLimit: 30 }} max={200} />);
+    expect(screen.getByTestId('cc-registered').textContent).toBe('100 / 100 registered on Discord');
+    expect(screen.getByRole('alert').textContent).toMatch(/30 commands after #100 won't appear on Discord/);
+  });
+
+  it('a command that a built-in name switches off is not counted as registered', () => {
+    const list = [...cmds(3), { name: 'quote', reserved: true }];
+    render(<DiscordLimit data={{ commands: list, registeredLimit: 100, overLimit: 0 }} max={200} />);
+    expect(screen.getByTestId('cc-registered').textContent).toBe('3 / 100 registered on Discord');
+  });
+
+  it('renders nothing on a platform without the limit', () => {
+    const { container } = render(
+      <DiscordLimit data={{ commands: cmds(150), registeredLimit: null, overLimit: 0 }} max={200} />
+    );
+    expect(container.textContent).toBe('');
   });
 });

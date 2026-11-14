@@ -10,6 +10,7 @@ import {
   allGuilds,
   clientOfGuild,
   guildByKey,
+  guildSupports,
   platformOfGuild,
   primaryClient,
 } from '../../platform/platformOf.js';
@@ -127,7 +128,12 @@ import {
   reactionMessagesFull,
   LIMITS as ROLES_LIMITS,
 } from '../../modules/roles.js';
-import { normaliseCustomCommands, CC_PLACEHOLDERS, NAME_RE } from '../../modules/customCommands.js';
+import {
+  normaliseCustomCommands,
+  CC_PLACEHOLDERS,
+  DISCORD_COMMAND_LIMIT,
+  NAME_RE,
+} from '../../modules/customCommands.js';
 import { normaliseStickyConfig } from '../../modules/sticky.js';
 import { normaliseAutoThreadsConfig } from '../../modules/autoThreads.js';
 import {
@@ -3500,8 +3506,19 @@ router.get(
     const { commands } = normaliseCustomCommands(config);
     // A command made before a built-in of the same name existed is skipped at sync: flag it.
     const reserved = reservedCommandNames(clientOfGuild(req.guild));
+    // Discord registers only the first DISCORD_COMMAND_LIMIT commands, in list order, and not the ones that
+    // are switched off by a built-in of the same name. Fluxer has no slash commands and so no such limit.
+    const limited = guildSupports(req.guild, 'slashCommands');
+    let registered = 0;
+    const flagged = commands.map((c) => {
+      const isReserved = reserved.has(c.name);
+      const beyondLimit = limited && !isReserved && ++registered > DISCORD_COMMAND_LIMIT;
+      return { ...c, reserved: isReserved, beyondLimit };
+    });
     res.json({
-      commands: commands.map((c) => ({ ...c, reserved: reserved.has(c.name) })),
+      commands: flagged,
+      registeredLimit: limited ? DISCORD_COMMAND_LIMIT : null,
+      overLimit: flagged.filter((c) => c.beyondLimit).length,
       channels: guildTextChannels(req.guild),
       roles: assignableRoles(req.guild),
       placeholders: CC_PLACEHOLDERS,

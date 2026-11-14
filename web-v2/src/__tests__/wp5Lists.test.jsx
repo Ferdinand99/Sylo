@@ -368,6 +368,47 @@ describe('Custom commands', () => {
     expect(confirmDialog).toHaveBeenCalledTimes(1);
   });
 
+  it('over 100 commands: the count says how many Discord has, a warning names the rest, and rows beyond it say so', async () => {
+    const list = Array.from({ length: 102 }, (_, i) => ({
+      ...command,
+      id: `c${i + 1}`,
+      name: `cmd-${i + 1}`,
+      beyondLimit: i >= 100,
+    }));
+    api.getCustomCommands.mockResolvedValue({
+      commands: list,
+      channels: CHANNELS,
+      roles: ROLES,
+      placeholders: [],
+      registeredLimit: 100,
+      overLimit: 2,
+    });
+    renderAtGuild(<CustomCommands />, GUILD);
+    expect(await screen.findByRole('heading', { name: /Your commands \(102/ })).toBeTruthy();
+    expect(screen.getByTestId('cc-registered').textContent).toBe('100 / 100 registered on Discord');
+    const warning = screen.getByRole('alert');
+    expect(warning.textContent).toMatch(/2 commands after #100 won't appear on Discord/);
+    expect(warning.textContent).toMatch(/Delete the commands you no longer need/);
+    expect(
+      screen.getAllByText(/Not on Discord: only the first 100 commands are registered there/)
+    ).toHaveLength(2);
+  });
+
+  it('no Discord counter where the platform has no such limit', async () => {
+    api.getCustomCommands.mockResolvedValue({
+      commands: [command],
+      channels: CHANNELS,
+      roles: ROLES,
+      placeholders: [],
+      registeredLimit: null,
+      overLimit: 0,
+    });
+    renderAtGuild(<CustomCommands />, GUILD);
+    await screen.findByText('/hello');
+    expect(screen.queryByTestId('cc-registered')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('an empty list says what commands give and has one start button, not a second one in the header', async () => {
     load([]);
     const { container } = renderAtGuild(<CustomCommands />, GUILD);
