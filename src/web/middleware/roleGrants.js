@@ -184,12 +184,31 @@ async function checkNewGrants(before, after) {
   }
 }
 
+// Settings that make Sylo ping the whole server with its own right to, and how far each choice reaches.
+const PING_REACH = { giveaways: { field: 'ping', rank: { none: 0, here: 1, everyone: 2 } } };
+
+/**
+ * Making the bot ping @here or @everyone is its own right, so raising such a setting takes the server
+ * owner or a live Manage Server holder, not just a bot master (the same rule as the reminders ping setting).
+ * Keeping or lowering it is open to anyone who may save the module.
+ */
+async function checkPingRaise(moduleId, prev, next) {
+  const reach = PING_REACH[moduleId];
+  const req = actors.getStore();
+  if (!reach || !req?.guild) return;
+  const level = (cfg) => reach.rank[cfg?.[reach.field]] ?? 0;
+  if (level(next) <= level(prev)) return;
+  if (await holdsManageServerLive(guildKey(req.guild), userIdForGuild(req, req.guild.id))) return;
+  throw new RoleGrantError('Only the server owner or someone with Manage Server can make giveaways ping @here or @everyone.');
+}
+
 /**
  * The module write guard's check, for a route that must refuse before it does anything else
  * (publishing a role menu posts to the channel before the save reaches the guard).
  */
-export function checkModuleGrants(moduleId, prev, next) {
-  return checkNewGrants(moduleGrantSites(moduleId, prev), moduleGrantSites(moduleId, next));
+export async function checkModuleGrants(moduleId, prev, next) {
+  await checkPingRaise(moduleId, prev, next);
+  await checkNewGrants(moduleGrantSites(moduleId, prev), moduleGrantSites(moduleId, next));
 }
 
 /**
