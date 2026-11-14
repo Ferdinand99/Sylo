@@ -16,7 +16,7 @@ import Meta from '../components/Meta.jsx';
 import Time from '../components/Time.jsx';
 import { SubmissionRow, statusTone } from '../components/ApplicationsSubmissions.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
-import { useAccess } from '../access.jsx';
+import { NeedsInbox, needsInbox, useAccess } from '../access.jsx';
 
 const ACTION_TEXT = {
   submitted: 'Submitted',
@@ -44,6 +44,7 @@ export default function ApplicationDetail() {
   // Deciding, retrying the roles and deleting are inbox work (access.jsx).
   const mayAct = useAccess().can('inbox');
 
+  if (needsInbox(error)) return <NeedsInbox what="applications" />;
   if (error) return <LoadError error={error} what="This application" />;
   if (!data) return <p className="v2-state">Loading…</p>;
   const s = data.submission;

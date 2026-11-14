@@ -90,3 +90,21 @@ export function AccessBadge() {
     </span>
   );
 }
+
+/**
+ * In place of what the inboxes contain (a ticket's messages, an application's answers) for someone
+ * with View access: the server answers those with 403 and `required: 'inbox'`, and blanks the content
+ * in the lists (`contentHidden`). `list` is the wording for a list that is shown without it.
+ */
+export function NeedsInbox({ what, list = false }) {
+  return (
+    <p className="v2-note v2-access-note">
+      {list
+        ? `View only: you see the ${what}, not what they say. Reading them needs Inbox access.`
+        : `Reading ${what} needs Inbox access. Your access in this server is View only.`}
+    </p>
+  );
+}
+
+/** Is this error the server refusing because the content needs Inbox? */
+export const needsInbox = (error) => error?.status === 403 && error?.required === 'inbox';

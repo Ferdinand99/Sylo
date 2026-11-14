@@ -12,7 +12,7 @@ import Breadcrumb from '../components/Breadcrumb.jsx';
 import { copyText } from '../components/CopyButton.jsx';
 import OverflowMenu from '../components/OverflowMenu.jsx';
 import Time from '../components/Time.jsx';
-import { AccessLock } from '../access.jsx';
+import { AccessLock, NeedsInbox, needsInbox } from '../access.jsx';
 
 const POLL_MS = 6000;
 // Within this many px of the bottom counts as "reading the latest" — new
@@ -95,6 +95,7 @@ export default function TicketView() {
     }
   }, [messages.length]);
 
+  if (needsInbox(error)) return <NeedsInbox what="tickets" />;
   if (error) return <LoadError error={error} what="this ticket" />;
   if (!data) return <p className="v2-state">Loading…</p>;
   const { ticket } = data;

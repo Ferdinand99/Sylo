@@ -8,7 +8,7 @@ import LoadError from '../components/LoadError.jsx';
 import Meta from '../components/Meta.jsx';
 import { formatCount } from '../util.js';
 import Time from '../components/Time.jsx';
-import { AccessLock } from '../access.jsx';
+import { AccessLock, NeedsInbox } from '../access.jsx';
 
 const STATUS_LABEL = { open: 'Open', accepted: 'Accepted', denied: 'Denied' };
 
@@ -144,6 +144,7 @@ export default function AppealsReview() {
           Appeal settings →
         </Link>
       </div>
+      {data.contentHidden ? <NeedsInbox what="appeals" list /> : null}
       {!data.moduleEnabled || !data.configured ? (
         <p className="v2-note">
           {!data.moduleEnabled ? 'The Appeals module is off. ' : ''}

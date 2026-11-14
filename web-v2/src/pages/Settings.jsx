@@ -14,7 +14,7 @@ import { useModuleForm } from '../components/useModuleForm.js';
 import ChipPicker from '../components/ChipPicker.jsx';
 import { notify } from '../notify.js';
 import Reveal from '../components/Reveal.jsx';
-import { AccessLock } from '../access.jsx';
+import { AccessLock, useAccess } from '../access.jsx';
 
 const toForm = (data) => ({
   modlogChannelId: data.modlogChannelId,
@@ -72,6 +72,8 @@ function settingsBody(form, data) {
 export default function Settings() {
   // The Inbox and View roles as last saved, so a save only writes them (and logs it) when they changed.
   const savedAccess = useRef(null);
+  // The configuration download holds every setting as stored: Edit access (access.jsx).
+  const canExport = useAccess().can('edit');
   async function saveAll(guildId, body) {
     const { inboxRoleIds, viewRoleIds } = body;
     const result = await saveGuildSettings(guildId, settingsOnly(body));
@@ -298,7 +300,12 @@ export default function Settings() {
               </p>
             </div>
             <div className="v2-row-actions">
-              <button type="button" className="v2-btn-ghost" onClick={onExport} disabled={exporting}>
+              <button
+                type="button"
+                className="v2-btn-ghost"
+                onClick={onExport}
+                disabled={exporting || !canExport}
+              >
                 {exporting ? 'Exporting…' : 'Download JSON'}
               </button>
             </div>

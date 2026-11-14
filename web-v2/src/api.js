@@ -10,6 +10,8 @@ export class ApiError extends Error {
     this.reason = body?.reason;
     this.errors = body?.errors;
     this.view = body?.view;
+    // An access-level refusal (src/web/middleware/access.js): the level the request needed.
+    this.required = body?.required;
   }
 }
 

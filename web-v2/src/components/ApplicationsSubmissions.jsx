@@ -7,6 +7,7 @@ import Meta from './Meta.jsx';
 import Time from './Time.jsx';
 import LoadError from './LoadError.jsx';
 import MemberPicker from './MemberPicker.jsx';
+import { NeedsInbox, useAccess } from '../access.jsx';
 
 export const STATUS_OPTIONS = ['pending', 'accepted', 'denied', 'withdrawn'];
 export const statusTone = (status) =>
@@ -52,6 +53,8 @@ export default function ApplicationsSubmissions({ guildId, forms }) {
   const [page, setPage] = useState(1);
   const [exportForm, setExportForm] = useState('');
   const [exportStatus, setExportStatus] = useState('');
+  // The answers (and their export) are inbox content: View sees the list only (access.jsx).
+  const canRead = useAccess().can('inbox');
   const { data, error } = useApiData(
     () => getApplicationSubmissions(guildId, { formId, status, userId, page }),
     [guildId, formId, status, userId, page]
@@ -115,6 +118,7 @@ export default function ApplicationsSubmissions({ guildId, forms }) {
       {!error && !data ? <p className="v2-state">Loading…</p> : null}
       {data ? (
         <>
+          {data.contentHidden ? <NeedsInbox what="applications" list /> : null}
           {data.submissions.length === 0 ? <p className="v2-note">No applications match.</p> : null}
           <div className="v2-list">
             {data.submissions.map((s) => (
@@ -147,7 +151,7 @@ export default function ApplicationsSubmissions({ guildId, forms }) {
         </>
       ) : null}
 
-      {forms.length > 0 ? (
+      {forms.length > 0 && canRead ? (
         <div className="v2-group v2-section-gap">
           <h2 className="v2-group-title">Export answers</h2>
           <p className="v2-field-hint">

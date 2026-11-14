@@ -6,6 +6,7 @@ import LoadError from '../components/LoadError.jsx';
 import { formatCount } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
 import Time from '../components/Time.jsx';
+import { NeedsInbox } from '../access.jsx';
 
 function TicketRow({ ticket, guildId }) {
   const preview = `${ticket.previewKind === 'staff' ? 'You: ' : ''}${ticket.preview || '(no text)'}`;
@@ -48,6 +49,7 @@ export default function TicketsInbox() {
         Members open a ticket by sending the bot a DM. Replies you write here reach them as an anonymous
         "Staff" DM.
       </p>
+      {data.contentHidden ? <NeedsInbox what="tickets" list /> : null}
 
       <h2 className="v2-group-title">Open ({formatCount(data.open.length)})</h2>
       {data.open.some((t) => t.unread) ? (
