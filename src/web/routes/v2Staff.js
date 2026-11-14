@@ -13,7 +13,13 @@ import { currentUser, actingUserId } from '../middleware/auth.js';
 import { platformActionLimit } from '../middleware/rateLimit.js';
 import { config } from '../../config.js';
 import { ticketAccessLevel } from '../middleware/ticketAccess.js';
-import { accessRouter, requestCan } from '../middleware/access.js';
+import {
+  accessRouter,
+  actorHolds,
+  requestCan,
+  seesInboxContent,
+  useMiddleware,
+} from '../middleware/access.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { getGuild } from '../lib/guildContext.js';
 import { guildTextChannels, resolveUserTags } from '../lib/discord.js';
@@ -78,15 +84,17 @@ export const ticketsRouter = accessRouter('/guilds/:guildId/tickets', { mergePar
 
 // Access first: a 404 for a server Sylo is not in would otherwise tell anyone which servers it is in.
 // Sets req.access, which each route's guard checks against its level (src/web/lib/routeAccess.js).
-ticketsRouter.use(async (req, res, next) => {
-  const level = await ticketAccessLevel(req);
-  if (level === 'login') return fail(res, 'Not signed in', 401);
-  if (!level)
-    return fail(res, 'You need Manage Server, or a configured staff role, to view tickets here.', 403);
-  req.access = level;
-  next();
-});
-ticketsRouter.use(loadGuildJson);
+ticketsRouter.use(
+  useMiddleware(async function ticketLevel(req, res, next) {
+    const level = await ticketAccessLevel(req);
+    if (level === 'login') return fail(res, 'Not signed in', 401);
+    if (!level)
+      return fail(res, 'You need Manage Server, or a configured staff role, to view tickets here.', 403);
+    req.access = level;
+    next();
+  })
+);
+ticketsRouter.use(useMiddleware(loadGuildJson));
 
 const shapeTicketMessage = (m, ticketUserTag) => ({
   id: m.id,
@@ -114,17 +122,19 @@ ticketsRouter.get(
       clientOfGuild(req.guild),
       [...open, ...closed].map((t) => t.user_id)
     );
+    // The last message is ticket content: Inbox and more (View sees who and when).
+    const content = seesInboxContent(req);
     const shape = (t) => ({
       id: t.id,
       user: tags.get(t.user_id) ?? t.user_id,
       userId: t.user_id,
-      preview: t.preview,
-      previewKind: t.previewKind,
+      preview: content ? t.preview : null,
+      previewKind: content ? t.previewKind : null,
       ago: timeAgo(t.last_at),
       lastAt: t.last_at,
       unread: t.status === 'open' && t.last_at > t.staff_seen_at,
     });
-    res.json({ open: open.map(shape), closed: closed.map(shape) });
+    res.json({ open: open.map(shape), closed: closed.map(shape), contentHidden: !content });
   })
 );
 
@@ -221,15 +231,17 @@ staffRouter.get(
     const guild = req.guild;
     const rows = await listAppeals(guild.id, 100);
     const cfg = normaliseAppealsConfig((await getGuildModule(guild.id, 'appeals')).config);
+    // The answers and the note to the member are appeal content: Inbox and more.
+    const content = seesInboxContent(req);
     const appeals = rows.map((a) => ({
       id: a.id,
       user: a.user_tag || a.user_id,
       userId: a.user_id,
       banReason: a.ban_reason || '—',
-      answers: a.answers,
+      answers: content ? a.answers : [],
       status: a.status,
       decidedBy: a.decided_by,
-      decisionReason: a.decision_reason,
+      decisionReason: content ? a.decision_reason : null,
       ago: timeAgo(a.created_at),
       decidedAgo: a.decided_at ? timeAgo(a.decided_at) : null,
       // Epoch milliseconds, so the dashboard can write the date in its own format.
@@ -238,6 +250,7 @@ staffRouter.get(
     }));
     res.json({
       appeals,
+      contentHidden: !content,
       open: appeals.filter((a) => a.status === 'open').length,
       moduleEnabled: (await getGuildModule(guild.id, 'appeals')).enabled,
       configured: cfg.questions.length > 0,
@@ -255,6 +268,11 @@ staffRouter.post(
     const decision =
       req.body.decision === 'accept' ? 'accepted' : req.body.decision === 'deny' ? 'denied' : null;
     if (!decision) return fail(res, 'Choose accept or deny.');
+    // Accepting lifts the ban with the bot's rights. With Inbox access (less than Edit) the person must
+    // be able to lift it themselves: Ban Members, as /moderation/unban needs Edit.
+    if (decision === 'accepted' && !requestCan(req, 'edit') && !(await actorHolds(req, 'BanMembers'))) {
+      return fail(res, 'Accepting an appeal lifts the ban, so you need Ban Members in this server.', 403);
+    }
     const reason =
       String(req.body.reason ?? '')
         .trim()

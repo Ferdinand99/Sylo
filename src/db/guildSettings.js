@@ -125,15 +125,26 @@ export async function setDashboardAccessRoles(guildId, { inbox, view }) {
   };
   await put(guildId, 'dashboard_inbox_roles', JSON.stringify(clean.inbox));
   await put(guildId, 'dashboard_view_roles', JSON.stringify(clean.view));
+  dropAccessRolesCache();
   return clean;
 }
 
+// The server list asks guildsWithAccessRoles on every load, so its answer is kept in memory: a save of
+// any of the three lists here drops it, and the TTL covers a save by another process (a second replica).
+const ACCESS_ROLES_TTL_MS = 60_000;
+let accessRolesCache = null; // { at: number, value: Map<string, string[]> }
+const dropAccessRolesCache = () => {
+  accessRolesCache = null;
+};
+
 /**
  * Every server with at least one access role (bot-master, Inbox or View), with all its access roles
- * together: the roles that let someone in at all.
+ * together: the roles that let someone in at all. Cached (see above).
  * @returns {Promise<Map<string, string[]>>} guild key -> role ids
  */
 export async function guildsWithAccessRoles() {
+  if (accessRolesCache && Date.now() - accessRolesCache.at < ACCESS_ROLES_TTL_MS)
+    return accessRolesCache.value;
   const out = new Map();
   for (const row of await withAccessRolesStmt.all()) {
     const roles = [
@@ -143,6 +154,7 @@ export async function guildsWithAccessRoles() {
     ];
     if (roles.length) out.set(row.guild_id, roles);
   }
+  accessRolesCache = { at: Date.now(), value: out };
   return out;
 }
 /** The bot-master role list as setBotMasterRoles would store it (also the Inbox and View lists). */
@@ -153,6 +165,7 @@ export function normaliseBotMasterRoles(guildId, roleIds) {
 export async function setBotMasterRoles(guildId, roleIds) {
   const clean = normaliseBotMasterRoles(guildId, roleIds);
   await put(guildId, 'bot_master_roles', JSON.stringify(clean));
+  dropAccessRolesCache();
   return clean;
 }
 
@@ -207,4 +220,5 @@ export async function setCommandPrefix(guildId, prefix) {
 export async function deleteGuildSettings(guildId) {
   await deleteStmt.run(guildId);
   prefixCache.delete(guildId);
+  dropAccessRolesCache();
 }

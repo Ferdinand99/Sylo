@@ -39,6 +39,7 @@ import {
 import {
   accessRouter,
   requestCan,
+  useMiddleware,
   requireGuildAccess,
   roleAccessGuildKeys,
   accountGuildAccess,
@@ -480,7 +481,12 @@ router.use('/shop/:guildId', shopMemberRouter);
 // The web form of an application (/apply/<server>/<form>): the same kind of page, the same access rule.
 router.use('/apply/:guildId', applyMemberRouter);
 router.use('/guilds/:guildId/tickets', ticketsRouter);
-router.use('/guilds/:guildId', requireGuildAccess, loadGuildJson, guardRoleGrants);
+router.use(
+  '/guilds/:guildId',
+  requireGuildAccess,
+  useMiddleware(loadGuildJson),
+  useMiddleware(guardRoleGrants)
+);
 // Appeals review, command limits and the moderation hub (v2Staff.js).
 router.use('/guilds/:guildId', staffRouter);
 // Audit log, config export and member data (v2GuildData.js).
@@ -1688,12 +1694,30 @@ router.post(
   })
 );
 
+/** A feed with its URL cut to the origin ("https://example.com/…"); feeds by name (Reddit) are kept. */
+function maskFeedUrl(feed) {
+  const mask = (u) => {
+    try {
+      return `${new URL(u).origin}/…`;
+    } catch {
+      return '…';
+    }
+  };
+  return {
+    ...feed,
+    ref: /^https?:\/\//i.test(feed.ref) ? mask(feed.ref) : feed.ref,
+    url: feed.url ? mask(feed.url) : feed.url,
+  };
+}
+
 router.get(
   '/guilds/:guildId/modules/rss/config',
   asyncHandler(async (req, res) => {
     const { config: cfg } = await getGuildModule(req.guild.id, 'rss');
+    const config = normaliseRssConfig(cfg);
     res.json({
-      config: normaliseRssConfig(cfg),
+      // A feed URL can carry a token (src/modules/rss.js): below Edit only its address's origin shows.
+      config: requestCan(req, 'edit') ? config : { ...config, feeds: config.feeds.map(maskFeedUrl) },
       channels: guildTextChannels(req.guild),
       roles: assignableRoles(req.guild),
       feedTypes: FEED_TYPES,

@@ -1551,7 +1551,12 @@ export const MIGRATIONS = [
   // history's 78: whichever of the two merges second goes last. Each column is added only when it is
   // missing, so a database that already ran this step under another number is not broken by it.
   (database) => {
-    const has = new Set(database.prepare('PRAGMA table_info(guild_settings)').all().map((c) => c.name));
+    const has = new Set(
+      database
+        .prepare('PRAGMA table_info(guild_settings)')
+        .all()
+        .map((c) => c.name)
+    );
     for (const column of ['dashboard_inbox_roles', 'dashboard_view_roles']) {
       if (!has.has(column)) {
         database.exec(`ALTER TABLE guild_settings ADD COLUMN ${column} TEXT NOT NULL DEFAULT '[]';`);

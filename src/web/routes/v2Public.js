@@ -3,7 +3,7 @@
 // /api/v2 sits behind it), with its own rate limit. Each answer
 // carries only what the public pages show (see lib/roadmapView.js and
 // lib/commandReference.js); nothing here may return user ids, guilds or settings.
-import { accessRouter } from '../middleware/access.js';
+import { accessRouter, useMiddleware } from '../middleware/access.js';
 import { config } from '../../config.js';
 import { primaryClient } from '../../platform/platformOf.js';
 import { isOwner, sessionUserId } from '../middleware/auth.js';
@@ -36,6 +36,6 @@ router.get(
 );
 
 // Nothing else is public: an unknown path here is a 404, never a fall-through to the dashboard.
-router.use((req, res) => res.status(404).json({ error: 'Not found' }));
+router.use(useMiddleware((req, res) => res.status(404).json({ error: 'Not found' })));
 
 export default router;

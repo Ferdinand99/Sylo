@@ -1,6 +1,6 @@
 // Access guard for the tickets pages: anyone with dashboard access to the server (View may read,
 // Inbox and Edit may also reply and close, see access.js), or a member holding one of the module's
-// configured staff roles, who may handle tickets like Inbox. Pass-through in open mode.
+// configured staff roles, who may handle tickets like Inbox. Edit in open mode.
 import { guildByKey } from '../../platform/platformOf.js';
 import { config } from '../../config.js';
 import { splitPlatformGuildId } from '../../lib/platformId.js';
@@ -10,14 +10,6 @@ import { accountGuildAccessDetail, atLeast, checksLive } from './access.js';
 import { getGuildModule } from '../../db/modules.js';
 import { withoutEveryone } from '../../db/guildSettings.js';
 
-function deny(res) {
-  res.status(403).render('error', {
-    title: 'Forbidden',
-    heading: 'No ticket access',
-    message: 'You need Manage Server, or a configured staff role, to view tickets here.',
-  });
-}
-
 /**
  * The account's level for a server's tickets: its dashboard access level (src/web/middleware/
  * access.js), raised to inbox for a member with one of the tickets module's staff roles. `live` is
@@ -25,8 +17,16 @@ function deny(res) {
  * token's sign-in snapshot of guilds is never refreshed and must not outlast lost rights.
  * @returns {Promise<import('./access.js').AccessLevel | null>}
  */
-export async function accountTicketAccess(account, guildId, { live, fetchMember = fetchMemberFromGuild }) {
-  const { level, member: known } = await accountGuildAccessDetail(account, guildId, { live, fetchMember });
+export async function accountTicketAccess(
+  account,
+  guildId,
+  { live, fetchMember = fetchMemberFromGuild, write = false }
+) {
+  const { level, member: known } = await accountGuildAccessDetail(account, guildId, {
+    live,
+    fetchMember,
+    write,
+  });
   if (atLeast(level, 'inbox')) return level;
 
   const platform = splitPlatformGuildId(guildId)?.platform ?? 'discord';
@@ -58,35 +58,16 @@ export async function accountMaySeeTickets(account, guildId, options) {
 }
 
 /**
- * The request's level for the tickets pages, or 'login' when not signed in. Shared by the HTML
- * guard below and the V2 JSON API (v2Staff.js).
+ * The request's level for the tickets pages, or 'login' when not signed in. Used by the tickets
+ * router of the V2 JSON API (v2Staff.js), whose routes each check their own level against it.
  * @returns {Promise<import('./access.js').AccessLevel | 'login' | null>}
  */
 export async function ticketAccessLevel(req) {
   if (!config.authEnabled) return 'edit';
   if (!req.account) return 'login';
   const key = req.params.guildId;
-  return accountTicketAccess(req.account, key, { live: checksLive(req, key) });
-}
-
-/**
- * Whether the request may use the tickets pages: 'ok' (View or more), 'login' (not signed in),
- * or 'denied'.
- * @returns {Promise<'ok' | 'login' | 'denied'>}
- */
-export async function ticketAccessState(req) {
-  const level = await ticketAccessLevel(req);
-  if (level === 'login') return 'login';
-  return level ? 'ok' : 'denied';
-}
-
-/** @type {import('express').RequestHandler} */
-export async function requireTicketAccess(req, res, next) {
-  const state = await ticketAccessState(req);
-  if (state === 'ok') return next();
-  if (state === 'login') {
-    req.session.returnTo = req.originalUrl;
-    return res.redirect('/auth/login');
-  }
-  deny(res);
+  return accountTicketAccess(req.account, key, {
+    live: checksLive(req, key),
+    write: req.method !== 'GET' && req.method !== 'HEAD',
+  });
 }

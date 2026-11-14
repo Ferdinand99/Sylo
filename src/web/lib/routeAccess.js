@@ -14,9 +14,10 @@
 //   public    no sign-in (/api/v2/public)
 //
 // A route that is not listed here needs edit, and test/v2.accessLevels.test.js fails until it is
-// listed: a new route has to say which level it needs. A POST that only reads (insights refresh) may
-// say view; a GET never needs more than view, except where a page shows a secret (GitHub webhook
-// secrets are left out below edit, in the route itself).
+// listed: a new route has to say which level it needs. A GET needs view, except the GETs that return
+// what the inboxes contain (a ticket's messages, an application's answers), which need inbox and are
+// listed by name in test/v2.accessLevels.test.js. Lists View may open blank that content (seesInboxContent, access.js),
+// and settings that hold a secret (GitHub webhook secrets, RSS feed URLs) blank it below edit.
 
 /** @type {Readonly<Record<string, 'view'|'inbox'|'edit'|'self'|'operator'|'member'|'public'>>} */
 export const ROUTE_ACCESS = Object.freeze({
@@ -115,7 +116,7 @@ export const ROUTE_ACCESS = Object.freeze({
   'GET /guilds/:guildId/access': 'view',
   'POST /guilds/:guildId/access': 'edit',
   'GET /guilds/:guildId/insights': 'view',
-  'POST /guilds/:guildId/insights/refresh': 'view',
+  'POST /guilds/:guildId/insights/refresh': 'edit',
   'GET /personalizer': 'operator',
   'GET /personalizer/presence': 'operator',
   'POST /personalizer/identity': 'operator',
@@ -186,12 +187,12 @@ export const ROUTE_ACCESS = Object.freeze({
   'POST /guilds/:guildId/applications/panel/publish': 'edit',
   'POST /guilds/:guildId/applications/panel/unpublish': 'edit',
   'GET /guilds/:guildId/applications/submissions': 'view',
-  'GET /guilds/:guildId/applications/submissions/:id': 'view',
+  'GET /guilds/:guildId/applications/submissions/:id': 'inbox',
   'POST /guilds/:guildId/applications/submissions/:id/decide': 'inbox',
   'POST /guilds/:guildId/applications/submissions/:id/retry-roles': 'inbox',
   'POST /guilds/:guildId/applications/submissions/:id/delete': 'inbox',
   'GET /guilds/:guildId/applications/members/:userId': 'view',
-  'GET /guilds/:guildId/applications/export': 'view',
+  'GET /guilds/:guildId/applications/export': 'inbox',
 
   // v2Apply.js
   'GET /apply/:guildId/:formId': 'member',
@@ -216,7 +217,7 @@ export const ROUTE_ACCESS = Object.freeze({
   // v2GuildData.js
   'GET /guilds/:guildId/members': 'view',
   'GET /guilds/:guildId/audit': 'view',
-  'GET /guilds/:guildId/export': 'view',
+  'GET /guilds/:guildId/export': 'edit',
   'GET /guilds/:guildId/member-data': 'view',
   'POST /guilds/:guildId/member-data/forget': 'edit',
 
@@ -259,9 +260,9 @@ export const ROUTE_ACCESS = Object.freeze({
 
   // v2Staff.js
   'GET /guilds/:guildId/tickets': 'view',
-  'GET /guilds/:guildId/tickets/:ticketId': 'view',
-  'GET /guilds/:guildId/tickets/:ticketId/messages': 'view',
-  'GET /guilds/:guildId/tickets/:ticketId/transcript': 'view',
+  'GET /guilds/:guildId/tickets/:ticketId': 'inbox',
+  'GET /guilds/:guildId/tickets/:ticketId/messages': 'inbox',
+  'GET /guilds/:guildId/tickets/:ticketId/transcript': 'inbox',
   'POST /guilds/:guildId/tickets/:ticketId/reply': 'inbox',
   'POST /guilds/:guildId/tickets/:ticketId/close': 'inbox',
   'GET /guilds/:guildId/appeals': 'view',

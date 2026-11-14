@@ -21,7 +21,14 @@ import { allGuildKeys, guildByKey } from '../../platform/platformOf.js';
 import { getDashboardAccessRoles, guildsWithAccessRoles } from '../../db/guildSettings.js';
 import { adminKeysOf, identityFor } from '../lib/accountAuth.js';
 import { ROUTE_ACCESS } from '../lib/routeAccess.js';
-import { fetchMemberFromGuild, requireOwner, serverRightsLive, snapshotIsFresh } from './auth.js';
+import {
+  fetchMemberFromGuild,
+  requireOwner,
+  serverRightsLive,
+  snapshotIsFresh,
+  userIdForGuild,
+} from './auth.js';
+import { RoleGrantError } from './roleGrants.js';
 
 /** @typedef {'view' | 'inbox' | 'edit'} AccessLevel */
 
@@ -36,6 +43,13 @@ export function atLeast(have, need) {
 /** May this request do what `need` allows in the server it is about (req.access)? */
 export const requestCan = (req, need) => !config.authEnabled || atLeast(req.access, need);
 
+/**
+ * May this request see what the inboxes contain (ticket messages, appeal answers, decision reasons,
+ * who wrote an anonymous suggestion)? Inbox and Edit may; View sees the lists without it. Lists that
+ * View may open blank those fields with this; `contentHidden` tells the client why they are empty.
+ */
+export const seesInboxContent = (req) => requestCan(req, 'inbox');
+
 /** The highest level a member's roles give, or null. */
 function levelFromRoles(member, roles) {
   const holds = (list) => list.length > 0 && Boolean(member?.roles?.cache?.hasAny?.(...list));
@@ -47,6 +61,30 @@ function levelFromRoles(member, roles) {
 
 const NONE = Object.freeze({ level: null, member: null });
 
+// Without the Server Members intent (INTENT_GUILD_MEMBERS=false, Discord), the bot is not told when a
+// member's roles change or they leave, so its cached member could keep a role that was taken away.
+// Then the member is fetched from Discord before a role decides access: on every write, and for reads
+// at most once a minute per person and server.
+const REFRESH_MS = 60_000;
+const refreshedAt = new Map(); // `${guild key}|${user id}` -> when
+
+async function refreshStaleMember(key, userId, { write }) {
+  if (config.intentGuildMembers || !userId) return;
+  if ((splitPlatformGuildId(key)?.platform ?? 'discord') !== 'discord') return;
+  const id = `${key}|${userId}`;
+  const now = Date.now();
+  if (!write && now - (refreshedAt.get(id) ?? 0) < REFRESH_MS) return;
+  if (refreshedAt.size > 10_000) refreshedAt.clear();
+  refreshedAt.set(id, now);
+  const guild = guildByKey(key);
+  if (!guild) return;
+  try {
+    await guild.members.fetch({ user: userId, force: true });
+  } catch (err) {
+    if (err?.code === 10007) guild.members.cache.delete(userId); // Unknown Member: they left
+  }
+}
+
 /**
  * The account's level in a server, and the member the answer was read from (null when none was
  * needed), so a caller that checks more roles (ticket staff) does not look the member up twice.
@@ -57,7 +95,11 @@ const NONE = Object.freeze({ level: null, member: null });
  * otherwise any signed-in token could make the bot look people up in every server it is in.
  * @returns {Promise<{ level: AccessLevel | null, member: object | null }>}
  */
-export async function accountGuildAccessDetail(account, key, { live, fetchMember = fetchMemberFromGuild }) {
+export async function accountGuildAccessDetail(
+  account,
+  key,
+  { live, fetchMember = fetchMemberFromGuild, write = false }
+) {
   const platform = splitPlatformGuildId(key)?.platform ?? 'discord';
   const userId = identityFor(account, platform)?.platformUserId ?? null;
   const inSnapshot = adminKeysOf(account, allGuildKeys()).has(key);
@@ -67,6 +109,7 @@ export async function accountGuildAccessDetail(account, key, { live, fetchMember
   const anyRoles = roles.edit.length + roles.inbox.length + roles.view.length > 0;
   if (live) {
     if (!inSnapshot && !anyRoles) return NONE;
+    await refreshStaleMember(key, userId, { write });
     const rights = await serverRightsLive(key, userId, fetchMember);
     if (!rights) return NONE;
     if (rights.right) return { level: 'edit', member: rights.member };
@@ -75,6 +118,7 @@ export async function accountGuildAccessDetail(account, key, { live, fetchMember
 
   // A fresh snapshot without this server: only a role can let the person in.
   if (!anyRoles || !userId) return NONE;
+  await refreshStaleMember(key, userId, { write });
   const guild = guildByKey(key);
   if (!guild) return NONE;
   const member = guild.members.cache.get(userId) ?? (await fetchMember(guild, userId).catch(() => null));
@@ -97,7 +141,59 @@ export const checksLive = (req, key) => Boolean(req.viaToken) || !snapshotIsFres
 export async function requestGuildAccess(req, key) {
   if (!config.authEnabled) return 'edit';
   if (!req.account) return null;
-  return accountGuildAccess(req.account, key, { live: checksLive(req, key) });
+  return accountGuildAccess(req.account, key, {
+    live: checksLive(req, key),
+    write: req.method !== 'GET' && req.method !== 'HEAD',
+  });
+}
+
+/**
+ * Does the acting person hold `permission` in this server (req.guild) on the platform? The owner and
+ * Administrator hold every one. For an Inbox action that does with the bot's rights what the person
+ * could otherwise not do on the platform (accepting an appeal lifts a ban). Open mode: yes.
+ */
+export async function actorHolds(req, permission) {
+  if (!config.authEnabled) return true;
+  const guild = req.guild;
+  const userId = guild ? userIdForGuild(req, req.params.guildId) : null;
+  if (!userId) return false;
+  if (guild.ownerId === userId) return true;
+  await refreshStaleMember(req.params.guildId, userId, { write: true });
+  const member =
+    guild.members.cache.get(userId) ?? (await fetchMemberFromGuild(guild, userId).catch(() => null));
+  try {
+    return Boolean(member?.permissions?.has('Administrator') || member?.permissions?.has(permission));
+  } catch {
+    return false; // a permission this platform does not know
+  }
+}
+
+const LEVEL_WORD = { view: 'View', inbox: 'Inbox', edit: 'Edit' };
+
+/**
+ * Throw a RoleGrantError (403) when one of `roleIds` gives dashboard access above the acting person's
+ * own level in this server: an Inbox user handing out an Edit (bot-master) role through an application,
+ * say. The platform's own rule (roleGrants.js) only compares positions and permissions; this closes
+ * the step from Inbox to Edit even when the person outranks the role on the platform.
+ */
+export async function checkAccessRoleGrants(req, roleIds) {
+  if (!config.authEnabled || !roleIds.length) return;
+  const roles = await getDashboardAccessRoles(req.params.guildId);
+  for (const id of roleIds) {
+    const gives = roles.edit.includes(id)
+      ? 'edit'
+      : roles.inbox.includes(id)
+        ? 'inbox'
+        : roles.view.includes(id)
+          ? 'view'
+          : null;
+    if (gives && !atLeast(req.access, gives)) {
+      const name = req.guild?.roles?.cache?.get?.(id)?.name ?? id;
+      throw new RoleGrantError(
+        `${name} gives ${LEVEL_WORD[gives]} access to the dashboard, more than yours, so you can't hand it out.`
+      );
+    }
+  }
 }
 
 const notSignedIn = (res) =>
@@ -109,7 +205,7 @@ const noAccess = (res) => res.status(403).json({ error: 'You do not manage this 
  * and answers 403 when they have none. The level each route needs is checked by accessRouter.
  * @type {import('express').RequestHandler}
  */
-export function requireGuildAccess(req, res, next) {
+export const requireGuildAccess = useMiddleware(function requireGuildAccess(req, res, next) {
   if (!config.authEnabled) {
     req.access = 'edit';
     return next();
@@ -122,7 +218,7 @@ export function requireGuildAccess(req, res, next) {
       next();
     })
     .catch(() => noAccess(res));
-}
+});
 
 const LEVEL_NAME = { view: 'View only', inbox: 'Inbox only' };
 
@@ -182,6 +278,16 @@ function guardFor(key, level, handlers) {
 const METHODS = ['get', 'post', 'put', 'patch', 'delete'];
 
 /**
+ * Mark a handler that may be mounted with router.use on an access router: one that only prepares a
+ * request or refuses it (sets req.access, loads req.guild, answers 404), never one that does what a
+ * route does. Anything mounted with use runs without a route's level guard, so nothing else may be.
+ */
+export function useMiddleware(fn) {
+  fn.accessMiddleware = true;
+  return fn;
+}
+
+/**
  * A Router whose routes each start with the guard for their access level. `prefix` is where the
  * router is mounted under /api/v2 ('' for the main router, '/guilds/:guildId' for a per-server one),
  * so a route's key in ROUTE_ACCESS is its full path. Paths must be strings, and router.all /
@@ -208,6 +314,18 @@ export function accessRouter(prefix, options) {
       return router;
     };
   }
+  // router.use takes routers (themselves access routers, which the tree test checks) and handlers
+  // marked with useMiddleware; anything else would answer without a level guard.
+  const use = router.use.bind(router);
+  router.use = (...args) => {
+    for (const handler of args.flat(Infinity)) {
+      if (typeof handler !== 'function' || Array.isArray(handler.stack) || handler.accessMiddleware) continue;
+      throw new Error(
+        `router.use on ${prefix || '/'}: mount routers or useMiddleware() handlers only (${handler.name || 'anonymous'})`
+      );
+    }
+    return use(...args);
+  };
   for (const name of ['all', 'route']) {
     router[name] = () => {
       throw new Error(`router.${name} is not available on an access router: register each method`);
