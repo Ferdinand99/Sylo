@@ -212,7 +212,8 @@ describe('mentions drawn as names inside the field', () => {
     expect(m.fontFamily).toContain('Georgia');
     expect(m.fontSize).toBe('17px');
     expect(m.letterSpacing).toBe('0.4px');
-    expect(m.lineHeight).toBe('1.7');
+    expect(m.lineHeight).toBe(window.getComputedStyle(field).lineHeight);
+    expect(m.lineHeight).not.toBe('');
     expect(m.paddingLeft).toBe('13px');
     expect(m.paddingTop).toBe('11px');
     expect(m.borderLeftWidth).toBe('3px');
@@ -231,7 +232,7 @@ describe('mentions drawn as names inside the field', () => {
 
   it('adds a zero-width letter after a final line break, so the empty last line exists in the layer too', () => {
     render(<Harness start={`${token}\n`} />);
-    expect(mirrorOf().textContent).toBe(`${token}\n​`);
+    expect(mirrorOf().textContent).toBe(`${token}\n\u200b`);
   });
 
   it('is not used for a single-line input', () => {

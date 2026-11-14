@@ -144,7 +144,7 @@ export default function MentionMirror({ field, value, channels = [], roles = [],
           </span>
         );
       })}
-      {endsInBreak ? '​' : null}
+      {endsInBreak ? '\u200b' : null}
     </div>
   );
 }

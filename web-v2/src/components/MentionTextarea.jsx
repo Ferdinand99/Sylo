@@ -224,8 +224,6 @@ export default function MentionTextarea({
     };
     field.addEventListener('beforeinput', onBeforeInput);
     return () => field.removeEventListener('beforeinput', onBeforeInput);
-    // removeRange only uses its arguments and the document
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [field]);
 
   function pick(s) {
