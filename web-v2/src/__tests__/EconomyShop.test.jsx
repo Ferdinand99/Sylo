@@ -648,7 +648,9 @@ describe('Economy: the Activity tab', () => {
     api.getShopActivity.mockResolvedValue(activity([], { total: 0 }));
     await openTab('Activity');
     // no filter set: the page is empty, not "no match"
-    expect(await screen.findByText(/No purchases yet\. Purchases made with \/buy or in the web shop/)).toBeTruthy();
+    expect(
+      await screen.findByText(/No purchases yet\. Purchases made with \/buy or in the web shop/)
+    ).toBeTruthy();
     api.getShopActivity.mockResolvedValue(activity([invRow()], { pages: 3, total: 60 }));
     fireEvent.change(screen.getByLabelText('Member'), { target: { value: ALICE } });
     fireEvent.mouseDown(await screen.findByRole('option', { name: `Use the member id ${ALICE}` }));
