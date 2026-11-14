@@ -156,6 +156,12 @@ test('the error page from the ticket access guard (ticketAccess.js) is plain', a
   assertPlain(out.html, 'ticketAccess');
 });
 
+test('a failed ticket access lookup goes to the error handler instead of hanging the request', async () => {
+  let passed;
+  await requireTicketAccess({ account: { id: 'acc-1', identities: [] } }, {}, (err) => (passed = err));
+  assert.ok(passed instanceof Error, 'next(err)');
+});
+
 test('the error page from the server error handler (server.js) is plain', async () => {
   const handler = app.router.stack.map((l) => l.handle).find((h) => h.length === 4);
   assert.ok(handler, 'the central error handler');
