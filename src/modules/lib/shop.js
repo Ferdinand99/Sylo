@@ -37,6 +37,7 @@
 // fulfilment note.
 import { EmbedBuilder } from 'discord.js';
 import { abort, transact } from './economy.js';
+import { transaction } from '../../db/driver.js';
 import { formatMoney, isRoleItemType } from './economyConfig.js';
 import { announcePurchase } from './collectibles.js';
 import { releaseImageTx } from '../../db/collectibleImages.js';
@@ -232,6 +233,8 @@ export function shopRefusalText(result, config) {
       return 'There is no such inventory entry.';
     case 'member_gone':
       return 'That person is not in this server.';
+    case 'erased':
+      return 'Your data was erased while this was going through, so nothing was kept.';
     default:
       return 'That did not work.';
   }
@@ -384,14 +387,44 @@ export async function purchase({
   const account = out.accounts.get(userId);
   if (!isRoleItemType(item.type)) {
     const row = await getInventoryRow(guildId, box.rowId);
+    if (!row) return erasedMeanwhile({ guildId, userId, item, box });
     if (item.type === 'custom') await notifyStaff({ guildId, config, item, member, row });
     else await announcePurchase({ guildId, config, item, userId });
     return { ok: true, row, item, account };
   }
   return trackGrant(box.rowId, async () => {
     const row = await getInventoryRow(guildId, box.rowId);
+    if (!row) return erasedMeanwhile({ guildId, userId, item, box });
     return finishRoleGrant({ guild, member, item, row, account, box, config, now, refundOnFailure: true });
   });
+}
+
+/**
+ * The row of a purchase or grant that just committed is gone: the member ran /forget (or staff erased
+ * them) in the gap between that commit and this read. /forget is several statements, not one
+ * transaction, so it can land there. The member asked for their data to go, so nothing is given, nobody is
+ * told, and the temp-role record the transaction wrote is put back as it was (the account, the ledger and
+ * the inventory went with the /forget). The caller gets a refusal, never a row to dereference.
+ */
+async function erasedMeanwhile({ guildId, userId, item, box }) {
+  if (item.type === 'temp_role' && item.roleId) {
+    await transaction(function* (tx) {
+      if (box.previous) {
+        yield* writeTempRoleRow(tx, {
+          guildId,
+          userId,
+          roleId: item.roleId,
+          expiresAt: box.previous.expiresAt,
+          addedBy: box.previous.addedBy,
+          reason: box.previous.reason,
+          createdAt: box.previous.createdAt,
+        });
+      } else {
+        yield* deleteTempRoleRow(tx, guildId, userId, item.roleId);
+      }
+    });
+  }
+  return { ok: false, reason: 'erased' };
 }
 
 /** Inside a transaction: refuse (`already_has_role`) when the member holds a permanent role item for this role. */
@@ -569,10 +602,13 @@ export async function grantItem({ guild, member, itemId, by = null, reason = '',
   if (!out.ok) return out;
   const account = out.accounts.get(userId);
   if (!isRoleItemType(item.type)) {
-    return { ok: true, row: await getInventoryRow(guildId, box.rowId), item, account };
+    const row = await getInventoryRow(guildId, box.rowId);
+    if (!row) return erasedMeanwhile({ guildId, userId, item, box });
+    return { ok: true, row, item, account };
   }
   return trackGrant(box.rowId, async () => {
     const row = await getInventoryRow(guildId, box.rowId);
+    if (!row) return erasedMeanwhile({ guildId, userId, item, box });
     return finishRoleGrant({ guild, member, item, row, account, box, config, now, refundOnFailure: false });
   });
 }

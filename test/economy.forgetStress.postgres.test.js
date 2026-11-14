@@ -116,14 +116,19 @@ test(
         purge.forgetUser(G, D),
         purge.forgetUser(G, C),
       ];
-      for (const r of await Promise.allSettled(jobs)) {
+      for (const [job, r] of (await Promise.allSettled(jobs)).entries()) {
         if (r.status === 'rejected') {
-          // the statement and the lock detail, so a deadlock can be read from the CI log
+          // the statement and the lock detail, so a deadlock can be read from the CI log, and the top of
+          // the stack, so a stray TypeError can be placed
           const why = r.reason ?? {};
           failures.push(
-            `round ${round}: ${why.code ?? ''} ${why.message} | ${String(why.query ?? '')
+            `round ${round} job ${job}: ${why.code ?? ''} ${why.message} | ${String(why.query ?? '')
               .replace(/\s+/g, ' ')
-              .slice(0, 160)} | ${String(why.detail ?? '').replace(/\s+/g, ' ')}`
+              .slice(0, 160)} | ${String(why.detail ?? '').replace(/\s+/g, ' ')} | ${String(why.stack ?? '')
+              .split('\n')
+              .slice(1, 6)
+              .map((l) => l.trim())
+              .join(' <- ')}`
           );
         }
       }

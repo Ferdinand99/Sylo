@@ -895,3 +895,80 @@ test('a purchase that added no time (added_ms 0, capped at 365 days) leaves the 
   assert.equal((await record(m)).expires_at, before, 'no time came off');
   assert.equal(m.roles.cache.has(ROLE_A), true);
 });
+
+// --- /forget that commits between a purchase's commit and the read of its row ---------------------------
+// The purchase transaction commits, and only then is the inventory row read again to put the role on (or to
+// tell staff). A /forget of the same member can commit in that gap (it is several statements, not one
+// transaction): the row is gone and the read returns null. The trigger below plays that /forget at the
+// worst moment, deterministically: it deletes the new row inside the transaction that inserted it, so
+// the row is gone right after the commit, as if the /forget had committed a moment later.
+
+/** Make every new inventory row of `userId` vanish as soon as it is inserted (a /forget landing at once). */
+function forgetOnInsert(userId) {
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS forget_on_insert AFTER INSERT ON economy_inventory
+    WHEN NEW.user_id = '${userId}'
+    BEGIN
+      DELETE FROM economy_inventory WHERE id = NEW.id;
+    END
+  `);
+  return () => db.exec('DROP TRIGGER IF EXISTS forget_on_insert');
+}
+
+for (const [label, make] of [
+  ['a role', () => item({ name: 'Legend', type: 'role', roleId: ROLE_B, price: 50 })],
+  ['a temporary role', () => tempItem()],
+  ['a custom item with a shop channel', () => item({ price: 50 })],
+]) {
+  test(`${label} bought while the member's /forget lands: a refusal, nothing granted, no TypeError`, async () => {
+    const m = await buyer(90);
+    const id = await make();
+    const undo = forgetOnInsert(m.id);
+    try {
+      const out = await buy(m, id, { config: cfg() });
+      assert.deepEqual([out.ok, out.reason], [false, 'erased']);
+      assert.match(shopRefusalText(out, cfg()), /erased/);
+    } finally {
+      undo();
+    }
+    assert.deepEqual([m.adds, m.roles.cache.size], [[], 0], 'no role was put on the member');
+    assert.equal(await record(m, ROLE_A), null, 'no temp-role record of the erased member is left');
+    assert.equal(ctx.sent.length, 0, 'staff were not told about a purchase that no longer exists');
+  });
+}
+
+test('a free grant while the member /forget lands is also a refusal, and takes its temp-role record back', async () => {
+  const m = await buyer(91, 0);
+  const id = await tempItem();
+  const undo = forgetOnInsert(m.id);
+  try {
+    const out = await grantItem({ guild: ctx.guild, member: m, itemId: id, config: cfg() });
+    assert.deepEqual([out.ok, out.reason], [false, 'erased']);
+  } finally {
+    undo();
+  }
+  assert.deepEqual(m.adds, []);
+  assert.equal(await record(m), null);
+});
+
+test('an earlier temp-role record is put back as it was when the purchase that extended it is erased', async () => {
+  const m = await buyer(92);
+  const id = await tempItem({ durationHours: 24 });
+  const t0 = Date.now();
+  await putTempRole({
+    guildId: G,
+    userId: m.id,
+    roleId: ROLE_A,
+    expiresAt: t0 + HOUR,
+    addedBy: 'staff',
+    reason: 'earlier',
+  });
+  const undo = forgetOnInsert(m.id);
+  try {
+    assert.equal((await buy(m, id, { config: cfg() })).reason, 'erased');
+  } finally {
+    undo();
+  }
+  const rec = await record(m);
+  assert.deepEqual([rec.expires_at, rec.added_by, rec.reason], [t0 + HOUR, 'staff', 'earlier']);
+});
