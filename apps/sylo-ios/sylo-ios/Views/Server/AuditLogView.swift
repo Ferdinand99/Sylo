@@ -281,6 +281,8 @@ private struct AuditChangeDetail: View {
 struct DiffRowView: View {
     let row: ConfigDiff.Row
     let names: [String: String]
+    /// Shows every value in full (the import review) instead of the short form of the history.
+    var full = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -312,7 +314,7 @@ struct DiffRowView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .frame(minWidth: 52, alignment: .leading)
-            Text(verbatim: ConfigDiff.format(value, names: names))
+            Text(verbatim: ConfigDiff.format(value, names: names, full: full))
                 .font(.footnote)
                 .textSelection(.enabled)
         }

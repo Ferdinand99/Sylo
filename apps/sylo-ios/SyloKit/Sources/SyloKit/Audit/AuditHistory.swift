@@ -152,6 +152,9 @@ public struct AuditChange: Decodable, Sendable, Equatable {
 
     /// The rows to show.
     public var diff: (rows: [ConfigDiff.Row], more: Int) { ConfigDiff.rows(before: before, after: after) }
+
+    /// Every row, for the import review: nothing is left out for being too many.
+    public var fullDiff: [ConfigDiff.Row] { ConfigDiff.rows(before: before, after: after, limit: nil).rows }
 }
 
 /// `POST .../audit/:id/undo`: `adjusted` are the settings that ended up different from the earlier ones

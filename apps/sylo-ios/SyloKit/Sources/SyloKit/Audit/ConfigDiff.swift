@@ -190,8 +190,11 @@ public enum ConfigDiff {
     }
 
     /// The rows that differ between the two sides of a stored change (only the settings that changed, a
-    /// missing key meaning "did not exist"). `more` is how many rows were left out (over ``maxRows``).
-    public static func rows(before: [String: JSONValue], after: [String: JSONValue]) -> (rows: [Row], more: Int) {
+    /// missing key meaning "did not exist"). `more` is how many rows were left out (over `limit`; a nil
+    /// limit leaves none out).
+    public static func rows(
+        before: [String: JSONValue], after: [String: JSONValue], limit: Int? = maxRows
+    ) -> (rows: [Row], more: Int) {
         var all: [Found] = []
         for key in Set(before.keys).union(after.keys).sorted() {
             var found: [Found] = []
@@ -202,8 +205,9 @@ public enum ConfigDiff {
                 all += found
             }
         }
-        let shown = all.prefix(maxRows).enumerated().map { Row(index: $0.offset, path: $0.element.path, kind: $0.element.kind) }
-        return (shown, max(0, all.count - maxRows))
+        let cap = limit ?? all.count
+        let shown = all.prefix(cap).enumerated().map { Row(index: $0.offset, path: $0.element.path, kind: $0.element.kind) }
+        return (shown, max(0, all.count - cap))
     }
 
     // MARK: Values as text
@@ -215,7 +219,12 @@ public enum ConfigDiff {
 
     /// A value as text. `names` maps channel and role ids to "#general" or "@Moderators". A missing value
     /// reads "(not set)".
-    public static func format(_ value: JSONValue?, names: [String: String] = [:]) -> String {
+    ///
+    /// With `full`, nothing is cut: a long text, a long list and a whole item are shown in full, and an item
+    /// reads as one "Setting: value" line per field, with the ids in it named like the top-level ones. The
+    /// import review uses it, because a person has to judge everything that would be written. The history
+    /// keeps the short form.
+    public static func format(_ value: JSONValue?, names: [String: String] = [:], full: Bool = false) -> String {
         guard let value else { return "(not set)" }
         switch value {
         case .null: return "(empty)"
@@ -226,12 +235,18 @@ public enum ConfigDiff {
             if text.isEmpty { return "(empty)" }
             if text == mask { return "\(mask) (hidden)" }
             if let name = names[text] { return name }
+            if full { return text }
             return text.count > maxText ? String(text.prefix(maxText)) + "\u{2026}" : text
         case .array(let list):
             if list.isEmpty { return "(empty list)" }
+            if full {
+                if list.allSatisfy(isScalar) { return list.map { format($0, names: names, full: true) }.joined(separator: ", ") }
+                return lines(of: value, names: names, depth: 0).joined(separator: "\n")
+            }
             let shown = list.prefix(6).map { format($0, names: names) }
             return list.count > 6 ? "\(shown.joined(separator: ", ")) and \(list.count - 6) more" : shown.joined(separator: ", ")
         case .object:
+            if full { return lines(of: value, names: names, depth: 0).joined(separator: "\n") }
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
             let text = (try? encoder.encode(value)).flatMap { String(data: $0, encoding: .utf8) } ?? ""
@@ -239,8 +254,46 @@ public enum ConfigDiff {
         }
     }
 
+    /// An item or a list of items as readable lines: "Role: @Moderators", nested items indented.
+    private static func lines(of value: JSONValue, names: [String: String], depth: Int) -> [String] {
+        let pad = String(repeating: "  ", count: depth)
+        switch value {
+        case .object(let fields):
+            var out: [String] = []
+            for key in fields.keys.sorted() {
+                guard let field = fields[key] else { continue }
+                let name = label(for: key)
+                switch field {
+                case .object(let inner) where !inner.isEmpty:
+                    out.append("\(pad)\(name):")
+                    out += lines(of: field, names: names, depth: depth + 1)
+                case .array(let list) where !list.isEmpty && !list.allSatisfy(isScalar):
+                    out.append("\(pad)\(name):")
+                    out += lines(of: field, names: names, depth: depth + 1)
+                default:
+                    out.append("\(pad)\(name): \(format(field, names: names, full: true))")
+                }
+            }
+            return out
+        case .array(let list):
+            var out: [String] = []
+            for item in list {
+                if isScalar(item) {
+                    out.append("\(pad)\u{2022} \(format(item, names: names, full: true))")
+                } else {
+                    let inner = lines(of: item, names: names, depth: depth + 1)
+                    out.append("\(pad)\u{2022}")
+                    out += inner
+                }
+            }
+            return out
+        default:
+            return ["\(pad)\(format(value, names: names, full: true))"]
+        }
+    }
+
     /// The text of a list of values (the added or the removed of a ``Row/Kind/list`` row).
-    public static func format(list: [JSONValue], names: [String: String] = [:]) -> String {
-        format(.array(list), names: names)
+    public static func format(list: [JSONValue], names: [String: String] = [:], full: Bool = false) -> String {
+        format(.array(list), names: names, full: full)
     }
 }

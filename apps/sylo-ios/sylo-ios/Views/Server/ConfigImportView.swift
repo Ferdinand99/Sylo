@@ -196,13 +196,11 @@ private struct ImportItemRow: View {
                 }
             }
             if let change = item.change {
-                let diff = change.diff
+                // Everything that would be written is shown, in full: no cut-off text, no "and n more", and
+                // the ids in an added item are named like the ones in a changed one.
                 DisclosureGroup("Show What Changes") {
-                    ForEach(diff.rows) { row in
-                        DiffRowView(row: row, names: change.names)
-                    }
-                    if diff.more > 0 {
-                        Text("and \(diff.more) more changed.").font(.footnote).foregroundStyle(.secondary)
+                    ForEach(change.fullDiff) { row in
+                        DiffRowView(row: row, names: change.names, full: true)
                     }
                 }
                 .font(.subheadline)

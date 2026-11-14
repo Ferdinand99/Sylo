@@ -426,3 +426,79 @@ struct DuplicateTests {
         #expect(session.has(.health))
     }
 }
+
+@Suite("Import review shows added items in full")
+struct ConfigImportFullReviewTests {
+    private static let padding = String(repeating: "word ", count: 80)
+
+    private func plan() throws -> ImportPlan {
+        let json = """
+            {"items":[{"key":"module:levelling","kind":"module","label":"Levelling","status":"change","notes":[],
+              "change":{"before":{"rewards":[{"id":"a","level":1,"roleId":"100"}]},
+                        "after":{"rewards":[{"id":"a","level":1,"roleId":"100"},
+                                            {"id":"b","content":"\(Self.padding)@everyone https://example.com/x","roleId":"200","channelId":"300"}]},
+                        "names":{"100":"@Members","200":"@Moderators","300":"#rewards"}}}]}
+            """
+        return try decode(ImportPlan.self, json)
+    }
+
+    @Test("An added item shows its role and channel by name and its whole text")
+    func addedItemInFull() throws {
+        let change = try #require(try plan().items.first?.change)
+        let row = try #require(change.fullDiff.first)
+        guard case .added(let item) = row.kind else {
+            Issue.record("expected an added row")
+            return
+        }
+        let text = ConfigDiff.format(item, names: change.names, full: true)
+        #expect(text.contains("Role: @Moderators"))
+        #expect(text.contains("Channel: #rewards"))
+        #expect(!text.contains("200"))
+        #expect(!text.contains("300"))
+        // Past the old 200-character cut: the mention and the link are shown.
+        #expect(text.contains("@everyone https://example.com/x"))
+        #expect(!text.contains("\u{2026}"))
+    }
+
+    @Test("The short form of the history is unchanged")
+    func historyStaysShort() throws {
+        let change = try #require(try plan().items.first?.change)
+        guard case .added(let item) = try #require(change.diff.rows.first).kind else {
+            Issue.record("expected an added row")
+            return
+        }
+        let text = ConfigDiff.format(item, names: change.names)
+        #expect(text.hasSuffix("\u{2026}"))
+        #expect(text.count == 201)
+    }
+
+    @Test("A long list is listed whole, not counted")
+    func longList() {
+        let list = JSONValue.array((1...9).map { .int($0) })
+        #expect(ConfigDiff.format(list, full: true) == "1, 2, 3, 4, 5, 6, 7, 8, 9")
+    }
+
+    @Test("More than sixty changed rows are all shown for the review")
+    func allRows() throws {
+        var before: [String: JSONValue] = [:]
+        var after: [String: JSONValue] = [:]
+        for index in 0..<70 {
+            before["k\(index)"] = .int(1)
+            after["k\(index)"] = .int(2)
+        }
+        let change = AuditChange(before: before, after: after)
+        #expect(change.diff.rows.count == ConfigDiff.maxRows)
+        #expect(change.diff.more == 10)
+        #expect(change.fullDiff.count == 70)
+    }
+
+    @Test("A nested item reads as indented lines with its ids named")
+    func nested() {
+        let value = JSONValue.object([
+            "enabled": .bool(true),
+            "rules": .array([.object(["roleId": .string("200"), "name": .string("Boost")])]),
+        ])
+        let text = ConfigDiff.format(value, names: ["200": "@Moderators"], full: true)
+        #expect(text == "Enabled: On\nRules:\n  \u{2022}\n    Name: Boost\n    Role: @Moderators")
+    }
+}
