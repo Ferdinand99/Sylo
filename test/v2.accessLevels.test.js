@@ -31,8 +31,8 @@ const { accountMaySeeTickets } = await import('../src/web/middleware/ticketAcces
 const access = await import('../src/web/middleware/access.js');
 const { ROUTE_ACCESS } = await import('../src/web/lib/routeAccess.js');
 // Every router the API is built from (v2Api.js imports the per-server ones).
-await import('../src/web/routes/v2Api.js');
-await import('../src/web/routes/v2Public.js');
+const { default: v2ApiRouter } = await import('../src/web/routes/v2Api.js');
+const { default: v2PublicRouter } = await import('../src/web/routes/v2Public.js');
 
 const dGuild = runtime.clients.discord.guilds.cache.get(D_GUILD);
 const fGuild = runtime.clients.fluxer.guilds.cache.get(F_GUILD);
@@ -170,6 +170,26 @@ test('every /api/v2 route declares its access level, and every declaration has a
   }
   assert.equal(ROUTE_ACCESS[`GET /guilds/:guildId/access`], 'view');
   assert.equal(ROUTE_ACCESS[`POST /guilds/:guildId/access`], 'edit');
+});
+
+// A router made with a plain Router() and mounted under the API would give its routes no level
+// guard at all (only the "any level" check of requireGuildAccess): every route anywhere in the tree
+// must start with an access guard.
+test('every route in the API tree starts with its access guard', () => {
+  const unguarded = [];
+  const walk = (router, where) => {
+    for (const layer of router.stack) {
+      if (layer.route) {
+        const first = layer.route.stack[0]?.handle;
+        if (!first?.accessLevel) unguarded.push(`${where} ${layer.route.path}`);
+      } else if (Array.isArray(layer.handle?.stack)) {
+        walk(layer.handle, `${where} > ${layer.name}`);
+      }
+    }
+  };
+  walk(v2ApiRouter, '/api/v2');
+  walk(v2PublicRouter, '/api/v2/public');
+  assert.deepEqual(unguarded, [], 'build these routers with accessRouter (src/web/middleware/access.js)');
 });
 
 test('a route left out of the list needs edit, and an access router refuses what it cannot check', async () => {
