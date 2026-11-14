@@ -166,7 +166,13 @@ function Item({ item, busy, limits, onDecide, onMoveBack, onDelete }) {
             label={`More actions for suggestion #${item.number}`}
             items={[
               ...(item.canMoveBack
-                ? [{ label: 'Move back to the suggestions channel', onClick: () => onMoveBack(item), disabled: busy }]
+                ? [
+                    {
+                      label: 'Move back to the suggestions channel',
+                      onClick: () => onMoveBack(item),
+                      disabled: busy,
+                    },
+                  ]
                 : []),
               { label: 'Delete', danger: true, onClick: () => onDelete(item), disabled: busy },
             ]}
@@ -322,7 +328,8 @@ export default function Suggestions() {
   const cooldown = limitOf(limits, 'cooldownSeconds');
   // How many are waiting in the whole server; an older server does not send it, then the shown list counts.
   const waiting =
-    data.openCount ?? data.suggestions.filter((i) => i.status === 'open' || i.status === 'considering').length;
+    data.openCount ??
+    data.suggestions.filter((i) => i.status === 'open' || i.status === 'considering').length;
 
   function openTab(next) {
     setParams(next === 'queue' ? {} : { tab: next }, { replace: true, preventScrollReset: true });
@@ -348,195 +355,193 @@ export default function Suggestions() {
             className={`v2-tab${tab === key ? ' is-active' : ''}`}
             onClick={() => openTab(key)}
           >
-            {key === 'queue'
-              ? waiting > 0
-                ? `Suggestions · ${waiting} open`
-                : 'Suggestions'
-              : 'Settings'}
+            {key === 'queue' ? (waiting > 0 ? `Suggestions · ${waiting} open` : 'Suggestions') : 'Settings'}
           </button>
         ))}
       </TabRow>
 
       <div id="sug-panel" role="tabpanel" aria-labelledby={`sug-tab-${tab}`}>
-      {tab === 'settings' ? (
-      <form onSubmit={save} data-savebar>
-        <div className="v2-field">
-          <label htmlFor="channel">Suggestions channel</label>
-          <select id="channel" value={form.channel} onChange={(e) => set({ channel: e.target.value })}>
-            <option value="">— the channel the command is used in —</option>
-            {data.channels.map((c) => (
-              <option key={c.id} value={c.id}>
-                #{c.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        {tab === 'settings' ? (
+          <form onSubmit={save} data-savebar>
+            <div className="v2-field">
+              <label htmlFor="channel">Suggestions channel</label>
+              <select id="channel" value={form.channel} onChange={(e) => set({ channel: e.target.value })}>
+                <option value="">— the channel the command is used in —</option>
+                {data.channels.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    #{c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        <div className="v2-field">
-          <label htmlFor="logChannel">
-            Log channel <span className="v2-field-hint">— optional</span>
-          </label>
-          <select
-            id="logChannel"
-            value={form.logChannel}
-            onChange={(e) => set({ logChannel: e.target.value })}
-          >
-            <option value="">— decided suggestions only change status where they are —</option>
-            {data.channels.map((c) => (
-              <option key={c.id} value={c.id}>
-                #{c.name}
-              </option>
-            ))}
-          </select>
-          <p className="v2-field-hint">
-            Where a suggestion that is approved, denied or implemented is also posted. Pick how below.
-          </p>
-          <fieldset className="v2-field wp4-log-mode" disabled={!form.logChannel}>
-            <legend className="v2-field-hint">When a suggestion is decided</legend>
-            <label className="v2-check">
-              <input
-                type="radio"
-                name="logMode"
-                checked={form.logMode === 'copy'}
-                onChange={() => set({ logMode: 'copy' })}
+            <div className="v2-field">
+              <label htmlFor="logChannel">
+                Log channel <span className="v2-field-hint">— optional</span>
+              </label>
+              <select
+                id="logChannel"
+                value={form.logChannel}
+                onChange={(e) => set({ logChannel: e.target.value })}
+              >
+                <option value="">— decided suggestions only change status where they are —</option>
+                {data.channels.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    #{c.name}
+                  </option>
+                ))}
+              </select>
+              <p className="v2-field-hint">
+                Where a suggestion that is approved, denied or implemented is also posted. Pick how below.
+              </p>
+              <fieldset className="v2-field wp4-log-mode" disabled={!form.logChannel}>
+                <legend className="v2-field-hint">When a suggestion is decided</legend>
+                <label className="v2-check">
+                  <input
+                    type="radio"
+                    name="logMode"
+                    checked={form.logMode === 'copy'}
+                    onChange={() => set({ logMode: 'copy' })}
+                  />
+                  Copy to the log channel and keep the original
+                </label>
+                <label className="v2-check">
+                  <input
+                    type="radio"
+                    name="logMode"
+                    checked={form.logMode === 'move'}
+                    onChange={() => set({ logMode: 'move' })}
+                  />
+                  Move to the log channel (delete the original)
+                </label>
+              </fieldset>
+              {form.logChannel ? (
+                <p className="v2-field-hint">
+                  {form.logMode === 'move'
+                    ? 'The original is deleted and the suggestion lives in the log channel from then on.'
+                    : 'The original stays in the suggestions channel and shows its status. The copy in the log channel is updated if the status changes again and removed if the suggestion is reopened.'}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="v2-field">
+              <label className="v2-check">
+                <input
+                  type="checkbox"
+                  checked={form.anonymous}
+                  onChange={(e) => set({ anonymous: e.target.checked })}
+                />
+                Anonymous suggestions
+              </label>
+              <p className="v2-field-hint">
+                New posts do not show who wrote them. Staff still see the author on this page.
+              </p>
+            </div>
+
+            <div className="v2-field">
+              <label className="v2-check">
+                <input
+                  type="checkbox"
+                  checked={form.dmAuthor}
+                  onChange={(e) => set({ dmAuthor: e.target.checked })}
+                />
+                DM the author when staff decide
+              </label>
+              <p className="v2-field-hint">Members with DMs closed are skipped quietly.</p>
+            </div>
+
+            <div className="v2-field">
+              <label className="v2-check">
+                <input
+                  type="checkbox"
+                  checked={form.messagesToSuggestions}
+                  onChange={(e) => set({ messagesToSuggestions: e.target.checked })}
+                />
+                Turn messages in the channel into suggestions
+              </label>
+              <p className="v2-field-hint">
+                Sylo deletes the message and posts it as a suggestion. Needs the suggestions channel above and
+                the Manage Messages permission. It also has to be allowed to read message text, which only the
+                bot owner can switch on. Messages with attachments are left alone.
+              </p>
+            </div>
+
+            <div className="v2-field">
+              <label htmlFor="cooldownSeconds">Cooldown between suggestions</label>
+              <UnitInput
+                id="cooldownSeconds"
+                unit="seconds"
+                min={cooldown.min}
+                max={cooldown.max}
+                value={form.cooldownSeconds}
+                onChange={(e) =>
+                  set({ cooldownSeconds: e.target.value === '' ? '' : Number(e.target.value) })
+                }
               />
-              Copy to the log channel and keep the original
-            </label>
-            <label className="v2-check">
-              <input
-                type="radio"
-                name="logMode"
-                checked={form.logMode === 'move'}
-                onChange={() => set({ logMode: 'move' })}
+              <p className="v2-field-hint">Per member. 0 turns it off.</p>
+            </div>
+
+            <div className="v2-field">
+              <label>
+                Staff roles <span className="v2-field-hint">— may decide without Manage Server</span>
+              </label>
+              <ChipPicker
+                kind="role"
+                items={data.roles}
+                value={form.staffRoles}
+                onChange={(staffRoles) => set({ staffRoles })}
               />
-              Move to the log channel (delete the original)
-            </label>
-          </fieldset>
-          {form.logChannel ? (
-            <p className="v2-field-hint">
-              {form.logMode === 'move'
-                ? 'The original is deleted and the suggestion lives in the log channel from then on.'
-                : 'The original stays in the suggestions channel and shows its status. The copy in the log channel is updated if the status changes again and removed if the suggestion is reopened.'}
-            </p>
-          ) : null}
-        </div>
-
-        <div className="v2-field">
-          <label className="v2-check">
-            <input
-              type="checkbox"
-              checked={form.anonymous}
-              onChange={(e) => set({ anonymous: e.target.checked })}
-            />
-            Anonymous suggestions
-          </label>
-          <p className="v2-field-hint">
-            New posts do not show who wrote them. Staff still see the author on this page.
-          </p>
-        </div>
-
-        <div className="v2-field">
-          <label className="v2-check">
-            <input
-              type="checkbox"
-              checked={form.dmAuthor}
-              onChange={(e) => set({ dmAuthor: e.target.checked })}
-            />
-            DM the author when staff decide
-          </label>
-          <p className="v2-field-hint">Members with DMs closed are skipped quietly.</p>
-        </div>
-
-        <div className="v2-field">
-          <label className="v2-check">
-            <input
-              type="checkbox"
-              checked={form.messagesToSuggestions}
-              onChange={(e) => set({ messagesToSuggestions: e.target.checked })}
-            />
-            Turn messages in the channel into suggestions
-          </label>
-          <p className="v2-field-hint">
-            Sylo deletes the message and posts it as a suggestion. Needs the suggestions channel above and the
-            Manage Messages permission. It also has to be allowed to read message text, which only the bot
-            owner can switch on. Messages with attachments are left alone.
-          </p>
-        </div>
-
-        <div className="v2-field">
-          <label htmlFor="cooldownSeconds">Cooldown between suggestions</label>
-          <UnitInput
-            id="cooldownSeconds"
-            unit="seconds"
-            min={cooldown.min}
-            max={cooldown.max}
-            value={form.cooldownSeconds}
-            onChange={(e) => set({ cooldownSeconds: e.target.value === '' ? '' : Number(e.target.value) })}
-          />
-          <p className="v2-field-hint">Per member. 0 turns it off.</p>
-        </div>
-
-        <div className="v2-field">
-          <label>
-            Staff roles <span className="v2-field-hint">— may decide without Manage Server</span>
-          </label>
-          <ChipPicker
-            kind="role"
-            items={data.roles}
-            value={form.staffRoles}
-            onChange={(staffRoles) => set({ staffRoles })}
-          />
-        </div>
-      </form>
-      ) : (
-      <div className="v2-group">
-        <h2 className="v2-group-title">Suggestions ({data.suggestions.length})</h2>
-        {data.outside > 0 ? (
-          <div className="v2-field-row">
-            <p className="v2-field-hint">
-              {data.outside} {data.outside === 1 ? 'suggestion is' : 'suggestions are'} not in the suggestions
-              channel (for example after an earlier move to the log channel).
-            </p>
-            <button type="button" className="v2-btn-ghost" disabled={busy} onClick={onMoveAllBack}>
-              Move all back
-            </button>
-          </div>
-        ) : null}
-        <div className="v2-field-row v2-sug-filters">
-          <div className="v2-field">
-            <label htmlFor="sug-filter">Show</label>
-            <select id="sug-filter" value={filter} onChange={(e) => setFilter(e.target.value)}>
-              {FILTERS.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
+            </div>
+          </form>
+        ) : (
+          <div className="v2-group">
+            <h2 className="v2-group-title">Suggestions ({data.suggestions.length})</h2>
+            {data.outside > 0 ? (
+              <div className="v2-field-row">
+                <p className="v2-field-hint">
+                  {data.outside} {data.outside === 1 ? 'suggestion is' : 'suggestions are'} not in the
+                  suggestions channel (for example after an earlier move to the log channel).
+                </p>
+                <button type="button" className="v2-btn-ghost" disabled={busy} onClick={onMoveAllBack}>
+                  Move all back
+                </button>
+              </div>
+            ) : null}
+            <div className="v2-field-row v2-sug-filters">
+              <div className="v2-field">
+                <label htmlFor="sug-filter">Show</label>
+                <select id="sug-filter" value={filter} onChange={(e) => setFilter(e.target.value)}>
+                  {FILTERS.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="v2-field">
+                <label htmlFor="sug-sort">Order</label>
+                <select id="sug-sort" value={sort} onChange={(e) => setSort(e.target.value)}>
+                  <option value="new">Newest first</option>
+                  <option value="top">Most votes first</option>
+                </select>
+              </div>
+            </div>
+            {data.suggestions.length === 0 ? <p className="v2-note">Nothing here yet.</p> : null}
+            <div className="v2-list">
+              {data.suggestions.map((item) => (
+                <Item
+                  key={item.id}
+                  item={item}
+                  busy={busy}
+                  limits={limits}
+                  onDecide={onDecide}
+                  onMoveBack={onMoveBack}
+                  onDelete={onDelete}
+                />
               ))}
-            </select>
+            </div>
           </div>
-          <div className="v2-field">
-            <label htmlFor="sug-sort">Order</label>
-            <select id="sug-sort" value={sort} onChange={(e) => setSort(e.target.value)}>
-              <option value="new">Newest first</option>
-              <option value="top">Most votes first</option>
-            </select>
-          </div>
-        </div>
-        {data.suggestions.length === 0 ? <p className="v2-note">Nothing here yet.</p> : null}
-        <div className="v2-list">
-          {data.suggestions.map((item) => (
-            <Item
-              key={item.id}
-              item={item}
-              busy={busy}
-              limits={limits}
-              onDecide={onDecide}
-              onMoveBack={onMoveBack}
-              onDelete={onDelete}
-            />
-          ))}
-        </div>
-      </div>
-      )}
+        )}
       </div>
       <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
     </>

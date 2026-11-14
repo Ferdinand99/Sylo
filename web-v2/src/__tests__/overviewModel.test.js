@@ -186,7 +186,8 @@ describe('navModel', () => {
   });
 
   it('opens the Applications entry on the queue when applications wait, and on the page default when none do', () => {
-    const href = (d) => navModel({ guildId: G, data: d, operator: false }).inbox.find((i) => i.key === 'applications').href;
+    const href = (d) =>
+      navModel({ guildId: G, data: d, operator: false }).inbox.find((i) => i.key === 'applications').href;
     expect(href(data)).toBe(`/guilds/${G}/m/applications?tab=submissions`);
     const none = { ...data, attention: { waiting: { ...data.attention.waiting, applications: 0 } } };
     expect(href(none)).toBe(`/guilds/${G}/m/applications`);

@@ -167,7 +167,10 @@ export default function TicketView() {
 
   return (
     <>
-      <Breadcrumb parents={[{ label: 'Tickets', to: `/guilds/${guildId}/tickets` }]} current={`#${ticket.id}`} />
+      <Breadcrumb
+        parents={[{ label: 'Tickets', to: `/guilds/${guildId}/tickets` }]}
+        current={`#${ticket.id}`}
+      />
       <div className="wp4-ticket-head">
         <h1 className="v2-section-title v2-ticket-title">
           Ticket #{ticket.id}
