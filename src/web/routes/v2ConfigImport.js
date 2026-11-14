@@ -5,7 +5,7 @@
 // Mounted at /guilds/:guildId AFTER the admin guard in v2Api.js, so req.guild is set, the caller
 // manages this server, the CSRF check has passed and the role-grant guard knows who is saving.
 import { accessRouter } from '../middleware/access.js';
-import { currentUser } from '../middleware/auth.js';
+import { currentUser, isOwner } from '../middleware/auth.js';
 import { platformActionLimit, rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import {
@@ -60,7 +60,7 @@ router.post(
   '/import/preview',
   importLimit,
   guarded(async (req, res) => {
-    res.json(publicPlan(await planImport(req.guild, req.body?.export)));
+    res.json(publicPlan(await planImport(req.guild, req.body?.export, { owner: isOwner(req) })));
   })
 );
 
@@ -78,7 +78,9 @@ router.post(
     }
     const keys = items.filter((k) => typeof k === 'string' && k.length <= 100);
     if (!withinPlatformLimit(req, res)) return undefined;
-    res.json(await applyImport(req.guild, req.body?.export, keys, { actor: actor(req) }));
+    res.json(
+      await applyImport(req.guild, req.body?.export, keys, { actor: actor(req), owner: isOwner(req) })
+    );
   })
 );
 
