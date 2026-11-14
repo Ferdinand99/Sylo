@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import ChipPicker from '../components/ChipPicker.jsx';
+import MentionTextarea from '../components/MentionTextarea.jsx';
+import MessagePreview from '../components/MessagePreview.jsx';
+import PlaceholderBar from '../components/PlaceholderBar.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
@@ -14,6 +17,7 @@ import {
 import UnitInput from '../components/UnitInput.jsx';
 import { channelTitle } from '../util.js';
 import { tokensFor } from '../placeholders.js';
+import '../styles/wp2-alerts.css';
 
 const ARCHIVE_LABELS = { 60: '1 hour', 1440: '24 hours', 4320: '3 days', 10080: '7 days' };
 const SAMPLE_AUTHOR = 'Alex';
@@ -120,6 +124,16 @@ export default function AutoThreads() {
                 </select>
               </div>
 
+              <PlaceholderBar
+                fields={[
+                  { id: `at-name-${r.key}`, label: 'Thread name', tokens: tokensFor('autoThreadsName') },
+                  {
+                    id: `at-first-${r.key}`,
+                    label: 'First message',
+                    tokens: tokensFor('autoThreadsFirstReply'),
+                  },
+                ]}
+              />
               <div className="v2-field">
                 <label htmlFor={`at-name-${r.key}`}>Thread name</label>
                 <input
@@ -131,6 +145,7 @@ export default function AutoThreads() {
                 />
                 <PlaceholderHint
                   fieldId={`at-name-${r.key}`}
+                  chips={false}
                   tokens={tokensFor('autoThreadsName')}
                   value={r.nameTemplate}
                   onChange={(nameTemplate) => updateRule(r.key, { nameTemplate })}
@@ -139,9 +154,25 @@ export default function AutoThreads() {
                 <p className="v2-field-hint">
                   {'{words}'} is the poster's name if the post has no words. Names are cut at 100 characters.
                 </p>
-                <p className="v2-field-hint" data-testid={`at-preview-${i}`}>
-                  Preview: <strong>{preview}</strong> ({[...preview].length}/100)
-                </p>
+                <p className="v2-field-hint v2-thread-label">Preview</p>
+                <div className="v2-thread-card">
+                  <p className="v2-thread-head" data-testid={`at-preview-${i}`}>
+                    <span className="v2-thread-icon" aria-hidden="true">
+                      🧵
+                    </span>{' '}
+                    <strong>{preview}</strong>{' '}
+                    <span className="v2-field-hint">({[...preview].length}/100)</span>
+                  </p>
+                  {r.firstMessage.trim() ? (
+                    <MessagePreview
+                      content={r.firstMessage}
+                      lookup={{ channels: data.channels, roles: data.roles }}
+                      samples={{ '{author}': { type: 'mention', text: `@${SAMPLE_AUTHOR}` } }}
+                    />
+                  ) : (
+                    <p className="v2-field-hint">No first message: the thread starts empty.</p>
+                  )}
+                </div>
               </div>
 
               <div className="v2-field">
@@ -224,7 +255,9 @@ export default function AutoThreads() {
                 <label htmlFor={`at-first-${r.key}`}>
                   First message in the thread <span className="v2-field-hint">— optional</span>
                 </label>
-                <textarea
+                <MentionTextarea
+                  channels={data.channels}
+                  roles={data.roles}
                   id={`at-first-${r.key}`}
                   rows={3}
                   maxLength={firstMessage.maxLength}
@@ -234,6 +267,7 @@ export default function AutoThreads() {
                 />
                 <PlaceholderHint
                   fieldId={`at-first-${r.key}`}
+                  chips={false}
                   tokens={tokensFor('autoThreadsFirstReply')}
                   ignoreCase
                   value={r.firstMessage}

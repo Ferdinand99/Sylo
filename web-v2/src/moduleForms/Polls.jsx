@@ -21,7 +21,8 @@ const EMBED_OPTS = {
   defaultColor: '#5b7cfa',
 };
 
-const toVars = (placeholders) => placeholders.map((t) => ({ token: t, label: t.replace(/[{}]/g, '') }));
+// The chip shows the token as it is written in the text, braces included, like the other forms.
+const toVars = (placeholders) => placeholders.map((t) => ({ token: t, label: t }));
 
 function PollBodyPreview() {
   return (
