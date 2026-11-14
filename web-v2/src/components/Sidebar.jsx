@@ -104,8 +104,8 @@ export default function Sidebar({ activeGuildId, open, onClose, returnFocusRef }
     };
   }, [drawerOpen, returnFocusRef]);
 
-  // Guild-scoped links need a selected server. Without one (a fresh visit to the picker) they are
-  // shown but disabled, rather than all pointing at "/".
+  // Guild-scoped links need a selected server. Without one (a fresh visit to the picker) their groups
+  // are left out.
   const operator = useOperator();
   const nav = navModel({ guildId: activeGuildId, data, operator });
 
@@ -128,9 +128,15 @@ export default function Sidebar({ activeGuildId, open, onClose, returnFocusRef }
         inert={isDrawer && !open}
       >
         <NavLinks items={nav.top} pathname={pathname} onClose={onClose} />
-        <NavLinks items={nav.inbox} pathname={pathname} onClose={onClose} title="Inbox" />
-        <NavLinks items={nav.people} pathname={pathname} onClose={onClose} title="Members & moderation" />
-        <NavLinks items={nav.server} pathname={pathname} onClose={onClose} title="Server" />
+        {/* The groups that belong to a server only exist once one is chosen: before that they would be a
+            long column of greyed-out links. */}
+        {activeGuildId ? (
+          <>
+            <NavLinks items={nav.inbox} pathname={pathname} onClose={onClose} title="Inbox" />
+            <NavLinks items={nav.people} pathname={pathname} onClose={onClose} title="Members & moderation" />
+            <NavLinks items={nav.server} pathname={pathname} onClose={onClose} title="Server" />
+          </>
+        ) : null}
 
         {activeGuildId && nav.modules.length ? (
           <div className="v2-sidebar-modules">

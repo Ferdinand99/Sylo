@@ -1035,3 +1035,29 @@ fieldset.v2-fieldset > legend {
   flex: none;
   color: var(--text-muted);
 }
+
+/* Insights: on a phone a long channel name wraps onto two lines instead of being cut off. */
+@media (max-width: 600px) {
+  .v2-ins-bars li {
+    grid-template-columns: minmax(96px, 38%) 1fr auto;
+  }
+  .v2-ins-bar-label {
+    white-space: normal;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+}
+
+/* "Add Sylo to another server" at the end of the server grid: the same card, quieter. */
+.v2-guild-add {
+  border-style: dashed;
+  background: transparent;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.v2-guild-add h3 {
+  color: inherit;
+}

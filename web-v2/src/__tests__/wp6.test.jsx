@@ -11,6 +11,8 @@ import SectionIndex from '../components/SectionIndex.jsx';
 import TabRow from '../components/TabRow.jsx';
 import SetupCallout from '../components/SetupCallout.jsx';
 import Health from '../pages/Health.jsx';
+import GuildPicker from '../pages/GuildPicker.jsx';
+import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom';
 import {
   attentionItems,
   cardSummaryParts,
@@ -24,6 +26,7 @@ import { renderAtGuild } from './routerHarness.jsx';
 vi.mock('../api.js', () => ({
   ApiError: class ApiError extends Error {},
   getAuditLog: vi.fn(),
+  getInvites: vi.fn(),
   getMemberNames: vi.fn(),
   getAccount: vi.fn(),
   setModuleEnabled: vi.fn(),
@@ -429,5 +432,37 @@ describe('Health: module adoption uses the overview icons', () => {
     const heading = await screen.findByRole('heading', { name: 'Starboard' });
     expect(heading.textContent).not.toContain('⭐');
     expect(heading.querySelector('svg')).toBeTruthy();
+  });
+});
+
+describe('Choose a server', () => {
+  const guilds = [{ id: GUILD, name: 'Hedgerow', icon: null, platform: 'discord' }];
+  const renderPicker = () =>
+    render(
+      <MemoryRouter>
+        <Routes>
+          <Route element={<Outlet context={{ guilds, guildsLoading: false, guildsError: null }} />}>
+            <Route path="*" element={<GuildPicker />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+
+  it('ends the grid with an "Add Sylo to another server" card', async () => {
+    api.getInvites.mockResolvedValue([
+      { platform: 'discord', label: 'Discord', url: 'https://example.test/add' },
+    ]);
+    renderPicker();
+    const add = await screen.findByRole('link', { name: /Add Sylo to another server/ });
+    expect(add.getAttribute('href')).toBe('https://example.test/add');
+    expect(add.getAttribute('rel')).toContain('noopener');
+    expect(screen.getByRole('link', { name: /Hedgerow/ })).toBeTruthy();
+  });
+
+  it('still shows the servers when no invite link can be had', async () => {
+    api.getInvites.mockRejectedValue(new Error('no'));
+    renderPicker();
+    expect(await screen.findByRole('link', { name: /Hedgerow/ })).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /Add Sylo/ })).toBeNull();
   });
 });

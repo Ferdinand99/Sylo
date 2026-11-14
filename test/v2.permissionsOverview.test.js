@@ -41,6 +41,7 @@ test('the admin of the server gets the overview, with the attention data', async
     'platform',
     'problems',
     'waiting',
+    'waitingForOwner',
   ]);
   assert.ok(body.groups.flatMap((g) => g.cards).every((c) => Array.isArray(c.summaryParts)));
 });
