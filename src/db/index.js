@@ -1545,10 +1545,27 @@ export const MIGRATIONS = [
     );
   },
 
+  // Change history (src/db/audit.js, which adds the same columns on Postgres with ADD COLUMN IF NOT EXISTS):
+  // an audit entry for a settings save keeps the settings that changed, before and after, as JSON with the
+  // secrets masked (change_json); an entry written by an undo says which entry it undoes (reverts_id).
+  // Entries from before this migration have neither. The 500-entries-per-server cap and the purge that goes
+  // with the server are the audit log's own. Each column is added only if it is missing, so a database that
+  // already has them (this entry once ran at another position) still boots.
+  (database) => {
+    const have = new Set(
+      database
+        .prepare('PRAGMA table_info(config_audit)')
+        .all()
+        .map((c) => c.name)
+    );
+    if (!have.has('change_json')) database.exec('ALTER TABLE config_audit ADD COLUMN change_json TEXT');
+    if (!have.has('reverts_id')) database.exec('ALTER TABLE config_audit ADD COLUMN reverts_id INTEGER');
+  },
+
   // Dashboard access levels (src/db/guildSettings.js, which adds the same columns on Postgres with
   // ADD COLUMN IF NOT EXISTS): the roles that may use the dashboard with Inbox or View access. The
-  // Edit roles are the bot-master roles (bot_master_roles). Meant as migration 79, after the change
-  // history's 78: whichever of the two merges second goes last. Each column is added only when it is
+  // Edit roles are the bot-master roles (bot_master_roles). Migration 79, after the change history's 78
+  // (#342). Each column is added only when it is
   // missing, so a database that already ran this step under another number is not broken by it.
   (database) => {
     const has = new Set(

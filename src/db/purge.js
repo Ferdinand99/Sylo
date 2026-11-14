@@ -38,7 +38,7 @@ import './countingPenalties.js';
 import './githubWatches.js';
 import './scheduledMessages.js';
 import './leveling.js';
-import './audit.js';
+import { countMemberInHistory, memberHistoryRows, scrubMemberFromHistory } from './audit.js';
 import './afk.js';
 import './postedKeys.js';
 import './appeals.js';
@@ -247,7 +247,8 @@ const userStmts = {
 /**
  * Erase a single member's data within one guild. Covers the tables that key on
  * a Discord user id. A completed giveaway's winner list and the config audit log (which
- * records a display name, not an id) are guild records, only removed by {@link purgeGuild};
+ * records a display name) are guild records, only removed by {@link purgeGuild} (the entries; /forget does take
+ * the member's id out of the settings they saved and out of their text);
  * so is `infractions.moderator_id`, the staff side of a moderation case (the cases are kept).
  * test/purge.test.js lists every column that holds a user id and fails for a new one that
  * is neither handled here nor kept on purpose.
@@ -256,7 +257,7 @@ const userStmts = {
  * honeypot catches and counting penalties. They exist to protect the server, so a member
  * cannot erase them (or reset their warning count) with /forget; staff can remove a case in
  * the dashboard. `keptCases` says how many cases stayed.
- * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, eventsHosted: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, introductions: number, welcomeSent: number, applications: number, applicationsDecided: number, economyAccounts: number, economyTransactions: number, economyNames: number, economyInventory: number, economyFulfilled: number, invites: number, pollsCreated: number, giveawaysHosted: number, tempVoiceOwned: number, verificationKicks: number, ticketsClosed: number, appealsDecided: number }}
+ * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, eventsHosted: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, introductions: number, welcomeSent: number, applications: number, applicationsDecided: number, economyAccounts: number, economyTransactions: number, economyNames: number, economyInventory: number, economyFulfilled: number, invites: number, pollsCreated: number, giveawaysHosted: number, tempVoiceOwned: number, verificationKicks: number, ticketsClosed: number, appealsDecided: number, configHistory: number }}
  */
 // `keepIntroduction`: leave the introduction row (the card message could not be deleted, so the row
 // is what lets it be removed later). `keepTempRoles`: role ids whose temporary-role record stays
@@ -332,6 +333,8 @@ export async function forgetUser(
   const verificationKicks = (await userStmts.verificationKicks.run(guildId, userId)).changes;
   const ticketsClosed = (await userStmts.ticketsClosed.run(guildId, userId)).changes;
   const appealsDecided = (await userStmts.appealsDecided.run(guildId, userId)).changes;
+  // A saved setting in the change history can name the member (who an auto-reaction targets): the id comes out.
+  const configHistory = await scrubMemberFromHistory(guildId, userId);
   return {
     keptCases,
     leveling,
@@ -366,6 +369,7 @@ export async function forgetUser(
     verificationKicks,
     ticketsClosed,
     appealsDecided,
+    configHistory,
   };
 }
 
@@ -736,13 +740,22 @@ const USER_DATA_SOURCES = [
     rowsSql: 'SELECT * FROM invite_personal WHERE guild_id = ? AND user_id = ?',
   },
   {
+    key: 'configHistory',
+    label: 'Entries of the settings history that name you (/forget takes your id out)',
+    order: 'gu',
+    // An exact match of the id as a whole number (audit.js), in what an entry changed or in its text. The rows
+    // say that the entry exists and what kind it is, not the saved values: those are the server's settings.
+    countFn: countMemberInHistory,
+    rowsFn: memberHistoryRows,
+  },
+  {
     key: 'countingLast',
     label: 'Named as the last counter',
     order: 'gu',
     countSql: 'SELECT COUNT(*) AS n FROM counting WHERE guild_id = ? AND last_user_id = ?',
     rowsSql: 'SELECT * FROM counting WHERE guild_id = ? AND last_user_id = ?',
   },
-].map((s) => ({ ...s, countStmt: prepare(s.countSql), rowsStmt: prepare(s.rowsSql) }));
+].map((s) => (s.countFn ? s : { ...s, countStmt: prepare(s.countSql), rowsStmt: prepare(s.rowsSql) }));
 
 const bindArgs = (order, guildId, userId) => (order === 'ug' ? [userId, guildId] : [guildId, userId]);
 
@@ -753,9 +766,11 @@ const bindArgs = (order, guildId, userId) => (order === 'ug' ? [userId, guildId]
  */
 export async function describeUserData(guildId, userId) {
   const items = [];
-  for (const { key, label, countStmt, order, kept = false } of USER_DATA_SOURCES) {
-    const row = await countStmt.get(...bindArgs(order, guildId, userId));
-    items.push({ key, label, count: Number(row.n) || 0, kept });
+  for (const { key, label, countStmt, countFn, order, kept = false } of USER_DATA_SOURCES) {
+    const count = countFn
+      ? await countFn(guildId, userId)
+      : Number((await countStmt.get(...bindArgs(order, guildId, userId))).n) || 0;
+    items.push({ key, label, count, kept });
   }
   return {
     items,
@@ -776,8 +791,10 @@ export async function describeUserData(guildId, userId) {
 export async function exportUserData(guildId, userId) {
   const data = {};
   const summary = [];
-  for (const { key, label, rowsStmt, order } of USER_DATA_SOURCES) {
-    const rows = await rowsStmt.all(...bindArgs(order, guildId, userId));
+  for (const { key, label, rowsStmt, rowsFn, order } of USER_DATA_SOURCES) {
+    const rows = rowsFn
+      ? await rowsFn(guildId, userId)
+      : await rowsStmt.all(...bindArgs(order, guildId, userId));
     data[key] = rows;
     summary.push({ key, label, count: rows.length });
   }

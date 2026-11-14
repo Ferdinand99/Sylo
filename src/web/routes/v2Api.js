@@ -270,6 +270,7 @@ import {
   withoutEveryone,
 } from '../../db/guildSettings.js';
 import { recordAudit } from '../../db/audit.js';
+import { runWithCapture } from '../../db/auditCapture.js';
 import { recordBotAudit, listBotAudit } from '../../db/botAudit.js';
 import { platformInfo } from '../../platform/modulePlatformNotes.js';
 import { guildCommandPrefix } from '../../platform/commandPrefix.js';
@@ -482,12 +483,19 @@ router.use('/shop/:guildId', shopMemberRouter);
 // The web form of an application (/apply/<server>/<form>): the same kind of page, the same access rule.
 router.use('/apply/:guildId', applyMemberRouter);
 router.use('/guilds/:guildId/tickets', ticketsRouter);
+// A dashboard save runs inside a capture of the module configs it writes (src/db/auditCapture.js), which is
+// what the audit entry it writes keeps as the change: the settings before and after, for the history view.
+function captureConfigChanges(req, res, next) {
+  if (req.method === 'GET' || req.method === 'HEAD') return next();
+  runWithCapture(next);
+}
 router.use(
   '/guilds/:guildId',
   requireGuildAccess,
   useMiddleware(loadGuildJson),
   useMiddleware(guardRoleGrants),
-  useMiddleware(dropHealthOnWrite)
+  useMiddleware(dropHealthOnWrite),
+  useMiddleware(captureConfigChanges)
 );
 // Appeals review, command limits and the moderation hub (v2Staff.js).
 router.use('/guilds/:guildId', staffRouter);

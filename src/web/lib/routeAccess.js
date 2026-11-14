@@ -217,6 +217,8 @@ export const ROUTE_ACCESS = Object.freeze({
   // v2GuildData.js
   'GET /guilds/:guildId/members': 'view',
   'GET /guilds/:guildId/audit': 'view',
+  'GET /guilds/:guildId/audit/:id/change': 'view',
+  'POST /guilds/:guildId/audit/:id/undo': 'edit',
   'GET /guilds/:guildId/export': 'edit',
   'GET /guilds/:guildId/member-data': 'view',
   'POST /guilds/:guildId/member-data/forget': 'edit',
