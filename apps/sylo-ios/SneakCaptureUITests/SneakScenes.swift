@@ -10,6 +10,9 @@ final class SneakScenes: XCTestCase {
     }
 
     // MARK: Scenes
+    //
+    // The simulator is slow: every lookup and tap costs a second or two on its own, and the screen
+    // stays as it is meanwhile. The pauses below are therefore short.
 
     /// 1. The server list, then the overview with its module cards and Needs attention.
     @MainActor func testScene01Overview() throws {
@@ -17,14 +20,14 @@ final class SneakScenes: XCTestCase {
         let harbor = find(app, "Pixel Harbor")
         XCTAssertTrue(harbor.waitForExistence(timeout: 30), "server list did not load")
         mark("01", "start")
-        pause(1.4)
+        pause(0.8)
         harbor.tap()
         XCTAssertTrue(find(app, "open suggestions").waitForExistence(timeout: 20), "overview did not load")
-        pause(2.4)
-        scroll(app)
-        pause(1.6)
-        scroll(app)
         pause(1.0)
+        scroll(app)
+        pause(0.8)
+        scroll(app)
+        pause(1.4)
         mark("01", "end")
         pause(0.8)
     }
@@ -36,20 +39,18 @@ final class SneakScenes: XCTestCase {
         let row = find(app, "do everything it needs")
         scrollTo(app, row)
         mark("02", "start")
-        pause(1.8)
+        pause(0.6)
         row.tap()
         let banner = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "do everything this module needs")).firstMatch
         XCTAssertTrue(banner.waitForExistence(timeout: 20), "module screen did not open")
-        pause(1.0)
+        pause(0.4)
         banner.tap()
-        pause(3.2)
+        pause(1.8)
         banner.tap()
-        pause(0.6)
-        let note = find(app, "give this role")
-        scrollTo(app, note)
-        pause(2.6)
+        pause(2.2)
         mark("02", "end")
         pause(0.8)
+        XCTAssertTrue(find(app, "give this role").exists, "the role note is missing")
     }
 
     /// 3. Change history: a diff and the Undo button.
@@ -60,17 +61,15 @@ final class SneakScenes: XCTestCase {
         let auditRow = find(app, "Audit Log")
         scrollTo(app, auditRow)
         mark("03", "start")
-        pause(1.2)
+        pause(0.6)
         auditRow.tap()
         let show = app.buttons["Show Changes"].firstMatch
         XCTAssertTrue(show.waitForExistence(timeout: 20), "audit log did not load")
-        pause(1.6)
+        pause(0.6)
         show.tap()
         let undo = app.buttons["Undo This Change"].firstMatch
         XCTAssertTrue(undo.waitForExistence(timeout: 20), "change did not load")
-        pause(1.2)
-        scrollTo(app, undo)
-        pause(2.6)
+        pause(2.4)
         mark("03", "end")
         pause(0.8)
     }
@@ -87,19 +86,24 @@ final class SneakScenes: XCTestCase {
         // One more drag when the suggestion sits at the bottom edge, so the whole card is in view.
         if approve.frame.midY > app.frame.height * 0.6 { scroll(app) }
         mark("04", "start")
-        pause(1.6)
+        pause(0.6)
         approve.tap()
         let alert = app.alerts.firstMatch
         XCTAssertTrue(alert.waitForExistence(timeout: 10), "reason alert did not show")
-        pause(0.8)
         let field = alert.textFields.firstMatch
         field.tap()
-        dismissKeyboardTip(app)
-        field.typeText("Great idea, let's start this Saturday.")
-        pause(1.2)
+        // Typed a key at a time (typeText on a whole string shows it at once); the workflow plays this
+        // stretch faster, so it reads at about eleven characters a second.
+        let reason = "Great idea, let's start this Saturday."
+        mark("04", "typestart")
+        for character in reason {
+            field.typeText(String(character))
+        }
+        mark("04", "typeend", extra: String(reason.count))
+        pause(0.8)
         alert.buttons["Approved"].tap()
         XCTAssertTrue(find(app, "Great idea").waitForExistence(timeout: 15), "decision did not show")
-        pause(2.2)
+        pause(1.6)
         mark("04", "end")
         pause(0.8)
     }
@@ -112,20 +116,20 @@ final class SneakScenes: XCTestCase {
         let row = find(app, "Setup Wizard")
         scrollTo(app, row)
         mark("05", "start")
-        pause(1.2)
+        pause(0.6)
         row.tap()
         let choose = app.buttons["Choose What to Set Up"]
         XCTAssertTrue(choose.waitForExistence(timeout: 20), "wizard did not load")
-        pause(1.8)
+        pause(0.8)
         choose.tap()
         XCTAssertTrue(find(app, "Welcome new members").waitForExistence(timeout: 10), "goals did not show")
-        pause(1.4)
+        pause(0.6)
         // The switch itself sits at the right edge of its row.
         let toggles = app.switches
-        if toggles.count > 0 { toggles.element(boundBy: 0).coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap() }
-        pause(0.9)
-        if toggles.count > 2 { toggles.element(boundBy: 2).coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap() }
-        pause(1.8)
+        toggles.element(boundBy: 0).coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        pause(0.4)
+        toggles.element(boundBy: 2).coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        pause(1.6)
         mark("05", "end")
         pause(0.8)
     }
@@ -174,16 +178,10 @@ final class SneakScenes: XCTestCase {
         XCTAssertTrue(element.exists, "element not found after scrolling")
     }
 
-    /// The keyboard's one-time tip (slide to type) would cover the scene.
-    @MainActor private func dismissKeyboardTip(_ app: XCUIApplication) {
-        let tip = app.buttons["Continue"]
-        if tip.waitForExistence(timeout: 1.0) { tip.tap() }
-    }
-
     /// Tells the workflow when a scene starts and ends, as seconds since 1970.
-    private func mark(_ scene: String, _ name: String) {
+    private func mark(_ scene: String, _ name: String, extra: String = "") {
         guard let folder = ProcessInfo.processInfo.environment["SNEAK_MARKER_DIR"] else { return }
-        let line = "\(name) \(Date().timeIntervalSince1970)\n"
+        let line = "\(name) \(Date().timeIntervalSince1970) \(extra)\n"
         let url = URL(fileURLWithPath: folder).appendingPathComponent("\(scene).txt")
         if let handle = try? FileHandle(forWritingTo: url) {
             handle.seekToEndOfFile()

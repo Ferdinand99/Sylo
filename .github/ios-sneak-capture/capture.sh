@@ -84,14 +84,30 @@ for ENTRY in 01:overview:testScene01Overview 02:health:testScene02Health 03:hist
 
   START="$(awk '$1=="start"{print $2}' "$MARK/$ID.txt" 2>/dev/null | head -n 1 || true)"
   END="$(awk '$1=="end"{print $2}' "$MARK/$ID.txt" 2>/dev/null | tail -n 1 || true)"
+  TYPE_START="$(awk '$1=="typestart"{print $2}' "$MARK/$ID.txt" 2>/dev/null | head -n 1 || true)"
+  TYPE_END="$(awk '$1=="typeend"{print $2}' "$MARK/$ID.txt" 2>/dev/null | tail -n 1 || true)"
+  TYPE_CHARS="$(awk '$1=="typeend"{print $3}' "$MARK/$ID.txt" 2>/dev/null | tail -n 1 || true)"
   RAWFILE="$RAW/$ID-$NAME.mp4"
   CLIP="$OUT/$ID-$NAME.mp4"
   if [ -n "$START" ] && [ -n "$END" ] && [ -s "$RAWFILE" ]; then
-    SS="$(awk -v s="$START" -v t="$T0" 'BEGIN { v = s - t - 1.0; if (v < 0) v = 0; printf "%.2f", v }')"
-    # One second before the start and 0.4 s after the end marker; the test holds the last screen 0.8 s more.
-    DUR="$(awk -v s="$START" -v e="$END" 'BEGIN { printf "%.2f", e - s + 1.4 }')"
-    echo "Cut $CLIP from $SS s for $DUR s"
-    ffmpeg -y -loglevel error -ss "$SS" -i "$RAWFILE" -t "$DUR" -vf "fps=30" -c:v libx264 -pix_fmt yuv420p -crf 17 -an "$CLIP"
+    # Seconds into the recording: the markers are wall-clock times, T0 is when recording began.
+    # The recorder only writes a frame when the screen changes, so the video is first made a steady
+    # 30 fps (a still screen repeats its last frame) and only then cut.
+    FROM="$(awk -v s="$START" -v t="$T0" 'BEGIN { v = s - t - 0.5; if (v < 0) v = 0; printf "%.3f", v }')"
+    TO="$(awk -v e="$END" -v t="$T0" 'BEGIN { printf "%.3f", e - t + 0.5 }')"
+    ENC="-c:v libx264 -preset veryfast -pix_fmt yuv420p -crf 18 -movflags +faststart -an"
+    if [ -n "$TYPE_START" ] && [ -n "$TYPE_END" ] && [ -n "$TYPE_CHARS" ]; then
+      # Typing is done a key at a time by the test, far slower than a person. That part is played
+      # faster, so the text appears at about eleven characters a second.
+      TA="$(awk -v s="$TYPE_START" -v t="$T0" 'BEGIN { printf "%.3f", s - t }')"
+      TB="$(awk -v e="$TYPE_END" -v t="$T0" 'BEGIN { printf "%.3f", e - t }')"
+      FACTOR="$(awk -v a="$TYPE_START" -v b="$TYPE_END" -v n="$TYPE_CHARS" 'BEGIN { f = (b - a) * 11 / n; if (f < 1) f = 1; printf "%.3f", f }')"
+      echo "Cut $CLIP from $FROM s to $TO s, typing $TA-$TB s played $FACTOR times faster"
+      ffmpeg -y -loglevel error -i "$RAWFILE" -filter_complex         "[0:v]fps=30,split=3[a][b][c];[a]trim=start=$FROM:end=$TA,setpts=PTS-STARTPTS[v1];[b]trim=start=$TA:end=$TB,setpts=(PTS-STARTPTS)/$FACTOR[v2];[c]trim=start=$TB:end=$TO,setpts=PTS-STARTPTS[v3];[v1][v2][v3]concat=n=3:v=1:a=0,fps=30[out]"         -map "[out]" $ENC "$CLIP"
+    else
+      echo "Cut $CLIP from $FROM s to $TO s"
+      ffmpeg -y -loglevel error -i "$RAWFILE"         -vf "fps=30,trim=start=$FROM:end=$TO,setpts=PTS-STARTPTS" $ENC "$CLIP"
+    fi
   elif [ -s "$RAWFILE" ]; then
     echo "No markers for scene $ID: keeping the whole recording"
     cp "$RAWFILE" "$CLIP"
