@@ -307,17 +307,28 @@ public enum SearchIndex {
     /// The most results a typed text shows.
     public static let maxShown = 30
 
+    private struct Match {
+        let index: Int
+        let score: Int
+        let item: SearchItem
+    }
+
     /// The list to show: with nothing typed, the pages; with a text, the items that match, best first. The
     /// `found` items (members, inbox items by number) come first, because the person typed their name or number.
     public static func ranked(_ items: [SearchItem], query: String, found: [SearchItem] = []) -> [SearchItem] {
         let typed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if typed.isEmpty { return items.filter { $0.group == .pages } }
-        let scored = items.enumerated()
-            .map { (index: $0.offset, item: $0.element, score: score($0.element, query: typed)) }
-            .filter { $0.score > 0 }
-            .sorted { $0.score != $1.score ? $0.score > $1.score : $0.index < $1.index }
-            .prefix(maxShown)
-            .map(\.item)
+        var matches: [Match] = []
+        for (index, item) in items.enumerated() {
+            let value = score(item, query: typed)
+            if value > 0 { matches.append(Match(index: index, score: value, item: item)) }
+        }
+        matches.sort { left, right in
+            if left.score != right.score { return left.score > right.score }
+            return left.index < right.index
+        }
+        var scored: [SearchItem] = []
+        for match in matches.prefix(maxShown) { scored.append(match.item) }
         return found + scored
     }
 }

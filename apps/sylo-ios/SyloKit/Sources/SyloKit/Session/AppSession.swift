@@ -38,6 +38,8 @@ public final class AppSession {
     private var client: (any APIClient)?
     private var cachedLimits: AllModuleLimits?
     private var cachedFeatures: Set<ServerFeature>?
+    /// Whether a server has the import routes (see ``hasImportRoutes(server:)``), kept for the sign-in.
+    var importRoutes: [ServerID: Bool] = [:]
     /// Files handed out by ``download(_:)`` in this sign-in; deleted at sign-out.
     private var issuedFiles: [DownloadedFile] = []
     /// Which member search this server has, learned by the first search and kept for the sign-in.
@@ -342,6 +344,7 @@ public final class AppSession {
         client = makeClient(server, token)
         cachedLimits = nil
         cachedFeatures = nil
+        importRoutes = [:]
         memberSearchRoute = .general
         phase = .signedIn(server)
     }
@@ -352,6 +355,7 @@ public final class AppSession {
         client = nil
         cachedLimits = nil
         cachedFeatures = nil
+        importRoutes = [:]
         memberSearchRoute = .general
         for file in issuedFiles { file.discard() }
         issuedFiles = []
