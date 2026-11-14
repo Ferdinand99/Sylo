@@ -238,6 +238,9 @@ public struct ShopItemList: Decodable, Sendable, Equatable {
     public let maxItems: Int?
     /// nil on a server before Sylo 5.2, which has no collectibles.
     public let rarities: [ShopRarity]?
+    /// How much of the server's collectible-picture quota is used (Sylo 5.2, for the counter); nil on a
+    /// server that does not say.
+    public let pictures: ShopPictureUsage?
 
     /// Whether the server has collectibles, as far as this answer shows: only a 5.2 answer names
     /// the `rarities`, and only a 5.2 server has a collectible or an item with a rarity.
@@ -245,14 +248,16 @@ public struct ShopItemList: Decodable, Sendable, Equatable {
         rarities != nil || items.contains { $0.type.isCollectible || $0.rarity != nil }
     }
 
-    public init(items: [ShopItem] = [], roles: [RoleOption] = [], maxItems: Int? = nil, rarities: [ShopRarity]? = nil) {
+    public init(items: [ShopItem] = [], roles: [RoleOption] = [], maxItems: Int? = nil, rarities: [ShopRarity]? = nil,
+                pictures: ShopPictureUsage? = nil) {
         self.items = items
         self.roles = roles
         self.maxItems = maxItems
         self.rarities = rarities
+        self.pictures = pictures
     }
 
-    private enum CodingKeys: String, CodingKey { case items, roles, maxItems, rarities }
+    private enum CodingKeys: String, CodingKey { case items, roles, maxItems, rarities, pictures }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -260,7 +265,47 @@ public struct ShopItemList: Decodable, Sendable, Equatable {
             items: try c.decodeLossyArray(of: ShopItem.self, forKey: .items),
             roles: try c.decodeLossyArray(of: RoleOption.self, forKey: .roles),
             maxItems: try c.decodeIfPresent(Int.self, forKey: .maxItems),
-            rarities: try c.decodeLossyArrayIfPresent(of: ShopRarity.self, forKey: .rarities))
+            rarities: try c.decodeLossyArrayIfPresent(of: ShopRarity.self, forKey: .rarities),
+            pictures: try? c.decodeIfPresent(ShopPictureUsage.self, forKey: .pictures))
+    }
+}
+
+/// The collectible pictures a server stores against its quota: `{count, bytes, maxCount, maxBytes}`.
+public struct ShopPictureUsage: Decodable, Sendable, Equatable {
+    public let count: Int
+    public let bytes: Int
+    public let maxCount: Int
+    public let maxBytes: Int
+
+    public init(count: Int, bytes: Int = 0, maxCount: Int = 200, maxBytes: Int = 25 * 1024 * 1024) {
+        self.count = count
+        self.bytes = bytes
+        self.maxCount = maxCount
+        self.maxBytes = maxBytes
+    }
+
+    private enum CodingKeys: String, CodingKey { case count, bytes, maxCount, maxBytes }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(count: c.lenientCount(.count), bytes: c.lenientCount(.bytes),
+                  maxCount: max(1, c.lenientCount(.maxCount)), maxBytes: max(1, c.lenientCount(.maxBytes)))
+    }
+
+    /// "3 / 200 pictures · 5 MB / 25 MB", sizes under one megabyte in KB.
+    public var summary: String {
+        "\(count) / \(maxCount) pictures \u{00B7} \(Self.size(bytes)) / \(Self.size(maxBytes))"
+    }
+
+    /// Whether either part of the quota is used up.
+    public var isFull: Bool { count >= maxCount || bytes >= maxBytes }
+
+    static func size(_ bytes: Int) -> String {
+        if bytes < 1024 * 1024 {
+            return "\(Int((Double(bytes) / 1024).rounded())) KB"
+        }
+        let megabytes = Double(bytes) / 1024 / 1024
+        return megabytes == megabytes.rounded() ? "\(Int(megabytes)) MB" : String(format: "%.1f MB", megabytes)
     }
 }
 
@@ -270,21 +315,25 @@ public struct ShopItemsAnswer: Decodable, Sendable, Equatable {
     public let items: [ShopItem]
     public let id: Int?
     public let held: Int?
+    /// The picture quota after the change (Sylo 5.2); nil from a server that does not say.
+    public let pictures: ShopPictureUsage?
 
-    public init(items: [ShopItem] = [], id: Int? = nil, held: Int? = nil) {
+    public init(items: [ShopItem] = [], id: Int? = nil, held: Int? = nil, pictures: ShopPictureUsage? = nil) {
         self.items = items
         self.id = id
         self.held = held
+        self.pictures = pictures
     }
 
-    private enum CodingKeys: String, CodingKey { case items, id, held }
+    private enum CodingKeys: String, CodingKey { case items, id, held, pictures }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
             items: try c.decodeLossyArray(of: ShopItem.self, forKey: .items),
             id: try c.decodeIfPresent(Int.self, forKey: .id),
-            held: try c.decodeIfPresent(Int.self, forKey: .held))
+            held: try c.decodeIfPresent(Int.self, forKey: .held),
+            pictures: try? c.decodeIfPresent(ShopPictureUsage.self, forKey: .pictures))
     }
 }
 

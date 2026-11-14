@@ -27,10 +27,16 @@ public struct ServerSummary: Decodable, Sendable, Hashable, Identifiable {
     public let memberCount: Int?
     /// Messages counted today by Server insights; nil when that module is off or the server is older.
     public let messagesToday: Int?
+    /// The person's dashboard level in this server (Sylo 5.2); nil from an older server, which has no
+    /// levels (everyone who can open the server has Edit).
+    public let access: DashboardAccess?
+
+    /// The level to act on: the server's, or Edit when it sent none.
+    public var effectiveAccess: DashboardAccess { access ?? .edit }
 
     public init(
         id: ServerID, name: String, iconURL: URL? = nil, platform: Platform, openTickets: Int = 0,
-        unreadTickets: Int = 0, memberCount: Int? = nil, messagesToday: Int? = nil
+        unreadTickets: Int = 0, memberCount: Int? = nil, messagesToday: Int? = nil, access: DashboardAccess? = nil
     ) {
         self.id = id
         self.name = name
@@ -40,10 +46,11 @@ public struct ServerSummary: Decodable, Sendable, Hashable, Identifiable {
         self.unreadTickets = unreadTickets
         self.memberCount = memberCount
         self.messagesToday = messagesToday
+        self.access = access
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, icon, platform, openTickets, unreadTickets, memberCount, messagesToday
+        case id, name, icon, platform, openTickets, unreadTickets, memberCount, messagesToday, access
     }
 
     public init(from decoder: any Decoder) throws {
@@ -57,6 +64,8 @@ public struct ServerSummary: Decodable, Sendable, Hashable, Identifiable {
         unreadTickets = try c.decodeIfPresent(Int.self, forKey: .unreadTickets) ?? 0
         memberCount = try c.decodeIfPresent(Int.self, forKey: .memberCount)
         messagesToday = try c.decodeIfPresent(Int.self, forKey: .messagesToday)
+        // `try?`: a level of an odd shape reads as none (Edit; the server enforces what it means).
+        access = try? c.decodeIfPresent(DashboardAccess.self, forKey: .access)
     }
 
     /// The line under the server's name in the list: "24 members · 2 open tickets · 312 messages

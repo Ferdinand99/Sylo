@@ -124,7 +124,7 @@ public final class OverviewModel {
         }
         self.overview = ServerOverview(
             server: overview.server, openTickets: overview.openTickets, openAppeals: overview.openAppeals,
-            groups: groups)
+            groups: groups, attention: overview.attention)
     }
 }
 

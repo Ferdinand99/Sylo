@@ -10,16 +10,24 @@ public struct AuditEntry: Decodable, Sendable, Hashable, Identifiable {
     public let action: String
     public let detail: String?
     public let date: Date
+    /// The settings this entry changed were kept, so "Show changes" and an undo are possible (Sylo 5.2;
+    /// false from an older server and for an entry written before that).
+    public let hasChange: Bool
+    /// The entry this one undid, when it is an undo.
+    public let revertsID: String?
 
-    public init(id: String, actor: String, action: String, detail: String? = nil, date: Date) {
+    public init(id: String, actor: String, action: String, detail: String? = nil, date: Date,
+                hasChange: Bool = false, revertsID: String? = nil) {
         self.id = id
         self.actor = actor
         self.action = action
         self.detail = detail
         self.date = date
+        self.hasChange = hasChange
+        self.revertsID = revertsID
     }
 
-    private enum CodingKeys: String, CodingKey { case id, actor, action, detail, at }
+    private enum CodingKeys: String, CodingKey { case id, actor, action, detail, at, hasChange, revertsId }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -34,6 +42,36 @@ public struct AuditEntry: Decodable, Sendable, Hashable, Identifiable {
         let detail = try c.decodeIfPresent(String.self, forKey: .detail)
         self.detail = (detail?.isEmpty ?? true) ? nil : detail
         date = try c.decodeEpochMilliseconds(forKey: .at)
+        hasChange = (try? c.decodeIfPresent(Bool.self, forKey: .hasChange)) ?? false
+        // A row id like the entry's own: a number or a string; anything else is none.
+        if let number = try? c.decodeIfPresent(Int.self, forKey: .revertsId) {
+            revertsID = String(number)
+        } else if let text = try? c.decodeIfPresent(String.self, forKey: .revertsId), !text.isEmpty {
+            revertsID = text
+        } else {
+            revertsID = nil
+        }
+    }
+}
+
+/// One kind of change the log has entries of, for the filter (`actions` of the audit answer).
+public struct AuditActionCount: Decodable, Sendable, Hashable, Identifiable {
+    public let action: String
+    public let count: Int
+
+    public var id: String { action }
+
+    public init(action: String, count: Int) {
+        self.action = action
+        self.count = count
+    }
+
+    private enum CodingKeys: String, CodingKey { case action, count }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        action = try c.decode(String.self, forKey: .action)
+        count = c.lenientCount(.count)
     }
 }
 
@@ -42,18 +80,33 @@ public struct AuditLogPage: Decodable, Sendable, Equatable {
     /// How many entries the server keeps per server; older ones are dropped.
     public let kept: Int
     public let entries: [AuditEntry]
+    /// There are older entries than these (Sylo 5.2 shows 50 at a time); false from an older server.
+    public let hasMore: Bool
+    /// The kinds of change recorded, for the filter; empty from an older server.
+    public let actions: [AuditActionCount]
 
-    public init(kept: Int = 500, entries: [AuditEntry]) {
+    public init(kept: Int = 500, entries: [AuditEntry], hasMore: Bool = false, actions: [AuditActionCount] = []) {
         self.kept = kept
         self.entries = entries
+        self.hasMore = hasMore
+        self.actions = actions
     }
 
-    private enum CodingKeys: String, CodingKey { case kept, entries }
+    private enum CodingKeys: String, CodingKey { case kept, entries, hasMore, actions }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         kept = c.lenientCount(.kept)
         entries = try c.decodeLossyArray(of: AuditEntry.self, forKey: .entries)
+        hasMore = (try? c.decodeIfPresent(Bool.self, forKey: .hasMore)) ?? false
+        actions = try c.decodeLossyArray(of: AuditActionCount.self, forKey: .actions)
+    }
+
+    /// This page with an older page's entries added after its own (a "show more").
+    public func appending(_ older: AuditLogPage) -> AuditLogPage {
+        let known = Set(entries.map(\.id))
+        return AuditLogPage(kept: kept, entries: entries + older.entries.filter { !known.contains($0.id) },
+                            hasMore: older.hasMore, actions: actions)
     }
 
     /// The entries grouped by calendar day, newest day first and newest entry first inside a day.
@@ -133,14 +186,28 @@ public enum AuditAction {
 // MARK: - Endpoint
 
 extension Endpoints {
-    /// `GET /api/v2/guilds/:id/audit`: the newest 150 configuration changes of a server.
+    /// `GET /api/v2/guilds/:id/audit`: the newest configuration changes of a server. A Sylo 5.2 sends 50
+    /// at a time: `before` (the id of the last entry shown) asks for the next ones, and `action` for one
+    /// kind of change. Neither is sent unless set, so an older server gets the plain call it knows.
     public struct AuditLog: APIEndpoint {
         public typealias Response = AuditLogPage
         public let server: ServerID
+        public let before: String?
+        public let action: String?
 
-        public init(server: ServerID) { self.server = server }
+        public init(server: ServerID, before: String? = nil, action: String? = nil) {
+            self.server = server
+            self.before = before
+            self.action = (action?.isEmpty ?? true) ? nil : action
+        }
 
         public var path: String { "/api/v2/guilds/\(server.pathComponent)/audit" }
+        public var query: [URLQueryItem] {
+            var items: [URLQueryItem] = []
+            if let before, !before.isEmpty { items.append(URLQueryItem(name: "before", value: before)) }
+            if let action { items.append(URLQueryItem(name: "action", value: action)) }
+            return items
+        }
     }
 }
 
@@ -158,8 +225,15 @@ public final class AuditLogModel {
     public private(set) var isLoading = false
     /// Why the log could not be loaded.
     public var errorMessage: String?
+    /// One kind of change to show ("module:starboard"); "" shows all.
+    public var filter = ""
+    public private(set) var isLoadingMore = false
+    /// Why "show more" did not work.
+    public var moreError: String?
 
     private let session: AppSession
+    /// Goes up with every first-page read, so a slow answer for an old filter is dropped.
+    private var newest = 0
 
     public init(server: ServerID, session: AppSession) {
         self.server = server
@@ -172,19 +246,53 @@ public final class AuditLogModel {
         AuditAction.title(for: entry.action, moduleNames: moduleNames)
     }
 
+    /// The kinds of change to filter by, from the server's own list (plus the one picked).
+    public var filterChoices: [AuditActionCount] {
+        var choices = page?.actions ?? []
+        if !filter.isEmpty, !choices.contains(where: { $0.action == filter }) {
+            choices.append(AuditActionCount(action: filter, count: 0))
+        }
+        return choices
+    }
+
+    /// Reads the first page (for the filter, if one is picked).
     public func load() async {
+        newest += 1
+        let mine = newest
         isLoading = true
-        defer { isLoading = false }
+        defer { if mine == newest { isLoading = false } }
         async let names = loadModuleNames()
         do {
-            page = try await session.send(Endpoints.AuditLog(server: server))
-            errorMessage = nil
+            let loaded = try await session.send(Endpoints.AuditLog(server: server, action: filter))
+            if mine == newest {
+                page = loaded
+                moreError = nil
+                errorMessage = nil
+            }
         } catch {
             let error = NetworkError(error)
-            if error != .cancelled, error != .unauthorized { errorMessage = error.userMessage }
+            if mine == newest, error != .cancelled, error != .unauthorized { errorMessage = error.userMessage }
         }
-        let loaded = await names
-        if !loaded.isEmpty { moduleNames = loaded }
+        let known = await names
+        if !known.isEmpty { moduleNames = known }
+    }
+
+    /// Adds the next older entries ("Show 50 more").
+    public func loadMore() async {
+        guard let current = page, current.hasMore, let last = current.entries.last, !isLoadingMore else { return }
+        let mine = newest
+        isLoadingMore = true
+        moreError = nil
+        defer { isLoadingMore = false }
+        do {
+            let older = try await session.send(Endpoints.AuditLog(server: server, before: last.id, action: filter))
+            // The filter changed or the list was read again while this ran.
+            guard mine == newest else { return }
+            page = current.appending(older)
+        } catch {
+            let error = NetworkError(error)
+            if mine == newest, error != .cancelled, error != .unauthorized { moreError = error.userMessage }
+        }
     }
 
     /// The module names, best effort: the audit log itself does not depend on them.

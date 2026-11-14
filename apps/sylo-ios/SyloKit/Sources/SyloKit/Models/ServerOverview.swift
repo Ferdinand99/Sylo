@@ -7,15 +7,20 @@ public struct ServerOverview: Decodable, Sendable, Equatable {
     public let openTickets: Int
     public let openAppeals: Int
     public let groups: [OverviewGroup]
+    /// What needs attention (Sylo 5.1 and later send parts of it; the health check is 5.2). nil from a
+    /// server that sends none. See ``attentionItems``.
+    public let attention: OverviewAttention?
 
-    public init(server: OverviewServer, openTickets: Int = 0, openAppeals: Int = 0, groups: [OverviewGroup]) {
+    public init(server: OverviewServer, openTickets: Int = 0, openAppeals: Int = 0, groups: [OverviewGroup],
+                attention: OverviewAttention? = nil) {
         self.server = server
         self.openTickets = openTickets
         self.openAppeals = openAppeals
         self.groups = groups
+        self.attention = attention
     }
 
-    private enum CodingKeys: String, CodingKey { case guild, openTickets, openAppeals, groups }
+    private enum CodingKeys: String, CodingKey { case guild, openTickets, openAppeals, groups, attention }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -23,6 +28,8 @@ public struct ServerOverview: Decodable, Sendable, Equatable {
         openTickets = try c.decodeIfPresent(Int.self, forKey: .openTickets) ?? 0
         openAppeals = try c.decodeIfPresent(Int.self, forKey: .openAppeals) ?? 0
         groups = try c.decodeLossyArray(of: OverviewGroup.self, forKey: .groups)
+        // `try?`: an attention block of an odd shape must never empty the overview.
+        attention = try? c.decodeIfPresent(OverviewAttention.self, forKey: .attention)
     }
 }
 

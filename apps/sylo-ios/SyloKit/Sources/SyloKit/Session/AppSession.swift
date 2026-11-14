@@ -37,6 +37,7 @@ public final class AppSession {
     public private(set) var generation = 0
     private var client: (any APIClient)?
     private var cachedLimits: AllModuleLimits?
+    private var cachedFeatures: Set<ServerFeature>?
     /// Files handed out by ``download(_:)`` in this sign-in; deleted at sign-out.
     private var issuedFiles: [DownloadedFile] = []
     /// Which member search this server has, learned by the first search and kept for the sign-in.
@@ -300,6 +301,27 @@ public final class AppSession {
         return loaded
     }
 
+    /// What this server's app API supports (`features` of `GET /api/mobile/info`), asked once per sign-in
+    /// and kept. Empty when the server cannot be asked right now (asked again next time); the sign-in
+    /// screen's copy is the fallback. A feature an older Sylo lacks is simply not in the set.
+    public func serverFeatures() async -> Set<ServerFeature> {
+        if let cachedFeatures { return cachedFeatures }
+        let generation = self.generation
+        do {
+            let info = try await send(Endpoints.ServerInfo())
+            let features = Set(info.features)
+            if generation == self.generation { cachedFeatures = features }
+            return features
+        } catch {
+            return Set(serverInfo?.features ?? [])
+        }
+    }
+
+    /// Whether this server announces `feature` (see ``serverFeatures()``).
+    public func supports(_ feature: ServerFeature) async -> Bool {
+        await serverFeatures().contains(feature)
+    }
+
     /// Sends a call that needs no sign-in to another server (the notification relay), with a
     /// client that has no token: the Sylo server's token never goes anywhere else.
     public func send<E: APIEndpoint>(_ endpoint: E, to server: ServerURL) async throws -> E.Response {
@@ -319,6 +341,7 @@ public final class AppSession {
         generation += 1
         client = makeClient(server, token)
         cachedLimits = nil
+        cachedFeatures = nil
         memberSearchRoute = .general
         phase = .signedIn(server)
     }
@@ -328,6 +351,7 @@ public final class AppSession {
         try? tokens.delete(for: key(server))
         client = nil
         cachedLimits = nil
+        cachedFeatures = nil
         memberSearchRoute = .general
         for file in issuedFiles { file.discard() }
         issuedFiles = []

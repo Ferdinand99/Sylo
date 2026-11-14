@@ -104,18 +104,23 @@ public struct TicketSummary: Decodable, Sendable, Hashable, Identifiable {
 public struct TicketList: Decodable, Sendable, Equatable {
     public let open: [TicketSummary]
     public let closed: [TicketSummary]
+    /// The previews are blank because the person has View access, which does not include what the
+    /// inboxes contain (Sylo 5.2); false from an older server.
+    public let contentHidden: Bool
 
-    public init(open: [TicketSummary], closed: [TicketSummary] = []) {
+    public init(open: [TicketSummary], closed: [TicketSummary] = [], contentHidden: Bool = false) {
         self.open = open
         self.closed = closed
+        self.contentHidden = contentHidden
     }
 
-    private enum CodingKeys: String, CodingKey { case open, closed }
+    private enum CodingKeys: String, CodingKey { case open, closed, contentHidden }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         open = try c.decodeLossyArray(of: TicketSummary.self, forKey: .open)
         closed = try c.decodeLossyArray(of: TicketSummary.self, forKey: .closed)
+        contentHidden = (try? c.decodeIfPresent(Bool.self, forKey: .contentHidden)) ?? false
     }
 }
 
