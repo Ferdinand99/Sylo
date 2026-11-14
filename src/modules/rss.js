@@ -255,31 +255,50 @@ export async function runFeed(guildId, feed) {
   }
 }
 
+// Where the next tick starts: the guild the previous tick ran out of budget at. The walk used to
+// begin at the first guild every time, so with more than MAX_FETCHES_PER_TICK feeds in total the
+// guilds at the end of the list (every Fluxer guild, which comes after the Discord ones) were never
+// polled. Resuming here makes every guild's turn come round.
+let resumeAt = null;
+
+/** The guilds in the order this tick visits them: from `resumeAt` to the end, then the start. */
+function guildsFrom(cursor, guilds) {
+  const at = cursor == null ? -1 : guilds.findIndex((g) => guildKey(g) === cursor);
+  return at <= 0 ? guilds : [...guilds.slice(at), ...guilds.slice(0, at)];
+}
+
 async function tick() {
   if (!allClientsReady()) return;
   let budget = MAX_FETCHES_PER_TICK;
+  let stoppedAt = null;
 
-  for (const guild of allGuilds()) {
+  for (const guild of guildsFrom(resumeAt, allGuilds())) {
     if (!(await isModuleEnabled(guildKey(guild), 'rss'))) continue;
     const cfg = normaliseRssConfig((await getGuildModule(guildKey(guild), 'rss')).config);
     for (const feed of cfg.feeds) {
-      if (budget-- <= 0) return;
+      if (budget-- <= 0) {
+        stoppedAt = guildKey(guild);
+        break;
+      }
       try {
         await runFeed(guildKey(guild), feed);
       } catch (err) {
         log.error('rss', `${hostOf(feed.url)}: ${err.message}`);
       }
     }
+    if (stoppedAt) break;
   }
+  resumeAt = stoppedAt; // null once every guild has had its turn: the next tick starts over
 
   await pruneScopePrefixOlderThan('rss:', KEEP_MS);
 }
 
-every(
-  'rss',
-  POLL_MS,
-  () => {
-    tick().catch((err) => log.error('rss', 'tick failed:', err.message));
-  },
-  { firstDelayMs: 45_000 }
-);
+/** For tests. */
+export const _tick = tick;
+export const _resetResumeAt = () => {
+  resumeAt = null;
+};
+
+every('rss', POLL_MS, () => tick().catch((err) => log.error('rss', 'tick failed:', err.message)), {
+  firstDelayMs: 45_000,
+});
