@@ -385,14 +385,14 @@ async function moduleLines(id, guild, cfg) {
       const alerts = Array.isArray(cfg.alerts) ? cfg.alerts.filter((a) => a.login && a.channelId) : [];
       return [
         alerts.length ? on('Streamers', String(alerts.length)) : off('Streamers', 'none'),
-        config.twitchEnabled ? neutral('API', 'connected') : off('API', 'TWITCH_CLIENT_ID/SECRET not set'),
+        config.twitchEnabled ? neutral('API', 'connected') : off('API', 'not added by the bot owner'),
       ];
     }
     case 'kick-alerts': {
       const alerts = Array.isArray(cfg.alerts) ? cfg.alerts.filter((a) => a.slug && a.channelId) : [];
       return [
         alerts.length ? on('Streamers', String(alerts.length)) : off('Streamers', 'none'),
-        config.kickEnabled ? neutral('API', 'connected') : off('API', 'KICK_CLIENT_ID/SECRET not set'),
+        config.kickEnabled ? neutral('API', 'connected') : off('API', 'not added by the bot owner'),
       ];
     }
     case 'apple-connect': {
@@ -401,9 +401,7 @@ async function moduleLines(id, guild, cfg) {
         : off('Channel', 'not set');
       return [
         watching,
-        config.appleEnabled
-          ? neutral('API', 'connected')
-          : off('API', 'APPLE_KEY_ID / APPLE_PRIVATE_KEY not set'),
+        config.appleEnabled ? neutral('API', 'connected') : off('API', 'not added by the bot owner'),
       ];
     }
     case 'rss': {

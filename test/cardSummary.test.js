@@ -128,7 +128,7 @@ test('a module whose bot-owner keys are missing says it waits for the bot owner,
   assert.deepEqual(
     summaryParts('twitch-alerts', [
       line('Streamers', '1', 'on'),
-      line('API', 'TWITCH_CLIENT_ID/SECRET not set', 'off'),
+      line('API', 'not added by the bot owner', 'off'),
     ]),
     ['Waiting for the bot owner', '1 streamer']
   );
