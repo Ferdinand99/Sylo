@@ -1,4 +1,5 @@
 import EmbedEditor from '../components/EmbedEditor.jsx';
+import PickerHealth from '../components/PickerHealth.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import EmptyList from '../components/EmptyList.jsx';
@@ -87,6 +88,7 @@ export default function Sticky() {
                   </option>
                 ))}
               </select>
+              <PickerHealth kind="channel" value={s.channelId} />
             </div>
 
             <div className="v2-field">

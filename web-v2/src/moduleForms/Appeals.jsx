@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import PickerHealth from '../components/PickerHealth.jsx';
 import AutoGrowTextarea from '../components/AutoGrowTextarea.jsx';
 import Callout from '../components/Callout.jsx';
 import HowItWorks from '../components/HowItWorks.jsx';
@@ -165,6 +166,7 @@ export default function Appeals() {
               </option>
             ))}
           </select>
+          <PickerHealth kind="channel" value={form.reviewChannelId} embed />
         </div>
 
         <div className="v2-field">

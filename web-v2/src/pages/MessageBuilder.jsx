@@ -11,6 +11,7 @@ import AppTag from '../components/AppTag.jsx';
 import AutoGrowTextarea from '../components/AutoGrowTextarea.jsx';
 import MentionTextarea from '../components/MentionTextarea.jsx';
 import EmbedCard, { newKey } from '../components/EmbedCard.jsx';
+import { AccessLock } from '../access.jsx';
 
 const HEX_RE = /^#[0-9a-f]{6}$/i;
 const MAX_EMBEDS = 10;
@@ -210,144 +211,151 @@ export default function MessageBuilder() {
 
   return (
     <form onSubmit={(e) => e.preventDefault()}>
-      <Breadcrumb
-        parents={[{ label: 'Embed messages', to: `/guilds/${guildId}/messages` }]}
-        current={name.trim() || (messageId ? 'Untitled embed' : 'New embed message')}
-      />
-      <div className="v2-page-head">
-        <input
-          type="text"
-          className="v2-mb-name"
-          maxLength={100}
-          placeholder="Untitled embed"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
+      <AccessLock need="edit" note>
+        <Breadcrumb
+          parents={[{ label: 'Embed messages', to: `/guilds/${guildId}/messages` }]}
+          current={name.trim() || (messageId ? 'Untitled embed' : 'New embed message')}
         />
-        <div className="v2-field-row v2-composer-actions">
-          <span className="v2-composer-status" aria-live="polite">
-            {dirty ? 'Unsaved changes' : ''}
-          </span>
-          {dirty ? (
-            <button type="button" className="v2-btn-ghost" onClick={onDiscard}>
-              Discard
+        <div className="v2-page-head">
+          <input
+            type="text"
+            className="v2-mb-name"
+            maxLength={100}
+            placeholder="Untitled embed"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <div className="v2-field-row v2-composer-actions">
+            <span className="v2-composer-status" aria-live="polite">
+              {dirty ? 'Unsaved changes' : ''}
+            </span>
+            {dirty ? (
+              <button type="button" className="v2-btn-ghost" onClick={onDiscard}>
+                Discard
+              </button>
+            ) : null}
+            <button type="button" className="v2-btn-ghost" disabled={busy} onClick={() => submit('save')}>
+              Save draft
             </button>
-          ) : null}
-          <button type="button" className="v2-btn-ghost" disabled={busy} onClick={() => submit('save')}>
-            Save draft
-          </button>
-          <button type="button" className="v2-btn-primary" disabled={busy} onClick={() => submit('publish')}>
-            {messageId ? 'Update published' : 'Publish'}
-          </button>
-        </div>
-      </div>
-
-      <div className="v2-field v2-section-gap">
-        <label htmlFor="channelId">Channel</label>
-        <select id="channelId" value={channelId} onChange={(e) => setChannelId(e.target.value)}>
-          <option value="">— select a channel —</option>
-          {channels.map((c) => (
-            <option key={c.id} value={c.id}>
-              #{c.name}
-            </option>
-          ))}
-        </select>
-        {messageId ? (
-          <p className="v2-field-hint">
-            Published — "Update published" edits the posted message; changing the channel posts a fresh one.
-          </p>
-        ) : null}
-      </div>
-
-      <h2 className="v2-group-title v2-section-gap">Message</h2>
-      <p className="v2-field-hint">
-        This is a live preview — click straight into any part of it to edit. To ping a role, type @ in the
-        message text and pick it; mentions placed inside an embed don't notify anyone.
-      </p>
-
-      <div className="v2-msg-preview">
-        <div className="v2-msg-head">
-          <div className="v2-msg-avatar">S</div>
-          <div className="v2-msg-head-text">
-            <span className="v2-msg-botname">Sylo</span>
-            <AppTag />
-            <span className="v2-msg-time">Today</span>
+            <button
+              type="button"
+              className="v2-btn-primary"
+              disabled={busy}
+              onClick={() => submit('publish')}
+            >
+              {messageId ? 'Update published' : 'Publish'}
+            </button>
           </div>
         </div>
-        <MentionTextarea
-          as={AutoGrowTextarea}
-          channels={channels}
-          roles={roles}
-          className="v2-msg-content"
-          aria-label="Message text"
-          maxLength={2000}
-          placeholder="Write your message here!"
-          value={form.content}
-          onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
-        />
 
-        {form.embeds.map((embed, i) => (
-          <EmbedCard
-            key={embed.key}
-            embed={embed}
-            onChange={(next) => updateEmbed(i, next)}
-            toolbar={{
-              index: i,
-              count: form.embeds.length,
-              onMove: (d) => moveEmbed(i, d),
-              onDuplicate: () => duplicateEmbed(i),
-              onRemove: () => removeEmbed(i),
-            }}
-          />
-        ))}
+        <div className="v2-field v2-section-gap">
+          <label htmlFor="channelId">Channel</label>
+          <select id="channelId" value={channelId} onChange={(e) => setChannelId(e.target.value)}>
+            <option value="">— select a channel —</option>
+            {channels.map((c) => (
+              <option key={c.id} value={c.id}>
+                #{c.name}
+              </option>
+            ))}
+          </select>
+          {messageId ? (
+            <p className="v2-field-hint">
+              Published — "Update published" edits the posted message; changing the channel posts a fresh one.
+            </p>
+          ) : null}
+        </div>
 
-        <button
-          type="button"
-          className="v2-embed-add"
-          disabled={form.embeds.length >= MAX_EMBEDS}
-          onClick={addEmbed}
-        >
-          + Add embed
-        </button>
-      </div>
+        <h2 className="v2-group-title v2-section-gap">Message</h2>
+        <p className="v2-field-hint">
+          This is a live preview — click straight into any part of it to edit. To ping a role, type @ in the
+          message text and pick it; mentions placed inside an embed don't notify anyone.
+        </p>
 
-      <h2 className="v2-group-title v2-section-gap">
-        Link buttons <span className="v2-field-hint">— optional, up to {MAX_LINKS}</span>
-      </h2>
-      {form.links.map((link, i) => (
-        <div className="v2-field-row v2-section-gap-sm" key={i}>
-          <input
-            type="text"
-            placeholder="Label"
-            maxLength={80}
-            value={link.label}
-            onChange={(e) => updateLink(i, { label: e.target.value })}
+        <div className="v2-msg-preview">
+          <div className="v2-msg-head">
+            <div className="v2-msg-avatar">S</div>
+            <div className="v2-msg-head-text">
+              <span className="v2-msg-botname">Sylo</span>
+              <AppTag />
+              <span className="v2-msg-time">Today</span>
+            </div>
+          </div>
+          <MentionTextarea
+            as={AutoGrowTextarea}
+            channels={channels}
+            roles={roles}
+            className="v2-msg-content"
+            aria-label="Message text"
+            maxLength={2000}
+            placeholder="Write your message here!"
+            value={form.content}
+            onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
           />
-          <input
-            type="text"
-            placeholder="emoji"
-            maxLength={64}
-            value={link.emoji}
-            onChange={(e) => updateLink(i, { emoji: e.target.value })}
-          />
-          <input
-            type="text"
-            placeholder="https://…"
-            value={link.url}
-            onChange={(e) => updateLink(i, { url: e.target.value })}
-          />
-          <button type="button" className="v2-btn-ghost" onClick={() => removeLink(i)}>
-            ✕
+
+          {form.embeds.map((embed, i) => (
+            <EmbedCard
+              key={embed.key}
+              embed={embed}
+              onChange={(next) => updateEmbed(i, next)}
+              toolbar={{
+                index: i,
+                count: form.embeds.length,
+                onMove: (d) => moveEmbed(i, d),
+                onDuplicate: () => duplicateEmbed(i),
+                onRemove: () => removeEmbed(i),
+              }}
+            />
+          ))}
+
+          <button
+            type="button"
+            className="v2-embed-add"
+            disabled={form.embeds.length >= MAX_EMBEDS}
+            onClick={addEmbed}
+          >
+            + Add embed
           </button>
         </div>
-      ))}
-      <button
-        type="button"
-        className="v2-btn-ghost v2-section-gap-sm"
-        disabled={form.links.length >= MAX_LINKS}
-        onClick={addLink}
-      >
-        + Add link button
-      </button>
+
+        <h2 className="v2-group-title v2-section-gap">
+          Link buttons <span className="v2-field-hint">— optional, up to {MAX_LINKS}</span>
+        </h2>
+        {form.links.map((link, i) => (
+          <div className="v2-field-row v2-section-gap-sm" key={i}>
+            <input
+              type="text"
+              placeholder="Label"
+              maxLength={80}
+              value={link.label}
+              onChange={(e) => updateLink(i, { label: e.target.value })}
+            />
+            <input
+              type="text"
+              placeholder="emoji"
+              maxLength={64}
+              value={link.emoji}
+              onChange={(e) => updateLink(i, { emoji: e.target.value })}
+            />
+            <input
+              type="text"
+              placeholder="https://…"
+              value={link.url}
+              onChange={(e) => updateLink(i, { url: e.target.value })}
+            />
+            <button type="button" className="v2-btn-ghost" onClick={() => removeLink(i)}>
+              ✕
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          className="v2-btn-ghost v2-section-gap-sm"
+          disabled={form.links.length >= MAX_LINKS}
+          onClick={addLink}
+        >
+          + Add link button
+        </button>
+      </AccessLock>
     </form>
   );
 }

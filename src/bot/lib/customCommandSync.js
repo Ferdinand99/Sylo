@@ -46,6 +46,27 @@ export function collidingCommands(client, cfg) {
   return (cfg?.commands ?? []).filter((c) => reserved.has(c.name));
 }
 
+/**
+ * The built-in commands that are registered for this guild alone (dev mode, DISCORD_GUILD_ID), as the JSON
+ * Discord takes. `guild.commands.set` replaces the guild's whole list, so they go in the payload with the
+ * custom commands, and they use some of the room.
+ */
+function guildScopedBuiltins(guild) {
+  return config.discordGuildIds.includes(guildKey(guild))
+    ? [...(guild.client.commands?.values() ?? []), ...(guild.client.contextMenus?.values() ?? [])].map((c) =>
+        c.data.toJSON()
+      )
+    : [];
+}
+
+/**
+ * How many custom commands Discord takes for this guild: its limit of chat-input commands less the
+ * guild-scoped built-ins in the same list. The sync and the dashboard use this one number.
+ */
+export function customCommandRoom(guild, builtins = guildScopedBuiltins(guild)) {
+  return Math.max(0, DISCORD_COMMAND_LIMIT - builtins.filter((b) => (b.type ?? 1) === 1).length);
+}
+
 const warned = new Set(); // `${guild}:${name}`, so a sync logs each collision once
 const warnedOver = new Set(); // guild keys whose list is longer than Discord takes, warned once until it fits again
 
@@ -69,17 +90,13 @@ export async function syncGuildCustomCommands(guild) {
 
   if (!guildSupports(guild, 'slashCommands')) return;
 
-  const builtins = config.discordGuildIds.includes(key)
-    ? [...(guild.client.commands?.values() ?? []), ...(guild.client.contextMenus?.values() ?? [])].map((c) =>
-        c.data.toJSON()
-      )
-    : [];
+  const builtins = guildScopedBuiltins(guild);
   const builtinNames = reservedCommandNames(guild.client);
 
   const eligible = enabled ? (cfg.commands ?? []).filter((c) => !builtinNames.has(c.name)) : [];
   // Discord refuses the whole overwrite past its limit, which would register nothing: keep the first ones in
   // list order (the built-ins that are guild-scoped in dev mode use some of the room) and say so once.
-  const room = Math.max(0, DISCORD_COMMAND_LIMIT - builtins.filter((b) => (b.type ?? 1) === 1).length);
+  const room = customCommandRoom(guild, builtins);
   const customs = eligible.slice(0, room).map(toSlashJSON);
   if (eligible.length > room) {
     if (!warnedOver.has(key)) {

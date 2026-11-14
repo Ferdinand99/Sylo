@@ -28,6 +28,7 @@ import Reveal from '../components/Reveal.jsx';
 import Time from '../components/Time.jsx';
 import MemberPicker from '../components/MemberPicker.jsx';
 import OverflowMenu from '../components/OverflowMenu.jsx';
+import { AccessLock } from '../access.jsx';
 import '../styles/wp1-members.css';
 import { PlatformContext } from '../platformContext.jsx';
 import { usePlatformInfo } from '../usePlatformInfo.js';
@@ -224,7 +225,10 @@ function InfractionsTab() {
 
   return (
     <>
-      <WarnPanel guildId={guildId} run={run} busy={busy} />
+      {/* Warning, editing cases, unbanning and unlocking change things: Edit only (access.jsx). */}
+      <AccessLock need="edit" note>
+        <WarnPanel guildId={guildId} run={run} busy={busy} />
+      </AccessLock>
 
       <TabRow role="tablist" activeKey={tab}>
         {SUB_TABS.map(([key, label]) => (
@@ -241,152 +245,154 @@ function InfractionsTab() {
         ))}
       </TabRow>
 
-      {tab === 'cases' ? (
-        data.cases.length ? (
+      <AccessLock need="edit">
+        {tab === 'cases' ? (
+          data.cases.length ? (
+            <>
+              <p className="v2-field-hint">
+                Showing the newest {formatCount(data.cases.length)} of {formatCount(data.caseTotal)}.
+              </p>
+              <div className="v2-list">
+                {data.cases.map((c) => (
+                  <CaseRow key={c.caseNumber} c={c} guildId={guildId} run={run} busy={busy} />
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="v2-field-hint">No cases yet.</p>
+          )
+        ) : null}
+
+        {tab === 'bans' ? (
           <>
-            <p className="v2-field-hint">
-              Showing the newest {formatCount(data.cases.length)} of {formatCount(data.caseTotal)}.
-            </p>
-            <div className="v2-list">
-              {data.cases.map((c) => (
-                <CaseRow key={c.caseNumber} c={c} guildId={guildId} run={run} busy={busy} />
-              ))}
-            </div>
+            {data.bansError ? <p className="v2-note">{data.bansError}</p> : null}
+            <h2 className="v2-group-title">Banned ({formatCount(data.bansTotal)})</h2>
+            {data.bans.length ? (
+              <div className="v2-list">
+                {data.bans.map((b) => (
+                  <div className="v2-row" key={b.id}>
+                    <div className="v2-row-main">
+                      <h3 className="v2-break">{b.tag}</h3>
+                      <p title={b.reason || undefined}>
+                        <Meta items={[b.id, b.reason]} />
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="v2-btn-ghost"
+                      disabled={busy}
+                      onClick={() => run(() => unbanMember(guildId, b.id), `${b.tag} unbanned.`)}
+                    >
+                      Unban
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : !data.bansError ? (
+              <p className="v2-field-hint">Nobody is banned.</p>
+            ) : null}
+            {data.bansTotal > data.bans.length ? (
+              <p className="v2-field-hint">Showing the first {plural(data.banLimit, 'ban')}.</p>
+            ) : null}
+
+            <h2 className="v2-group-title v2-section-gap">Temporary bans ({data.tempBans.length})</h2>
+            {data.tempBans.length ? (
+              <div className="v2-list">
+                {data.tempBans.map((t) => (
+                  <div className="v2-row" key={t.userId}>
+                    <div className="v2-row-main">
+                      <h3 className="v2-break">{t.tag}</h3>
+                      <p title={t.reason || undefined}>
+                        <Meta items={[`unbanned in ${t.remaining}`, t.reason]} />
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="v2-btn-ghost"
+                      disabled={busy}
+                      onClick={() => run(() => unbanMember(guildId, t.userId), `${t.tag} unbanned.`)}
+                    >
+                      Unban now
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="v2-field-hint">No scheduled unbans.</p>
+            )}
           </>
-        ) : (
-          <p className="v2-field-hint">No cases yet.</p>
-        )
-      ) : null}
+        ) : null}
 
-      {tab === 'bans' ? (
-        <>
-          {data.bansError ? <p className="v2-note">{data.bansError}</p> : null}
-          <h2 className="v2-group-title">Banned ({formatCount(data.bansTotal)})</h2>
-          {data.bans.length ? (
-            <div className="v2-list">
-              {data.bans.map((b) => (
-                <div className="v2-row" key={b.id}>
-                  <div className="v2-row-main">
-                    <h3 className="v2-break">{b.tag}</h3>
-                    <p title={b.reason || undefined}>
-                      <Meta items={[b.id, b.reason]} />
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="v2-btn-ghost"
-                    disabled={busy}
-                    onClick={() => run(() => unbanMember(guildId, b.id), `${b.tag} unbanned.`)}
-                  >
-                    Unban
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : !data.bansError ? (
-            <p className="v2-field-hint">Nobody is banned.</p>
-          ) : null}
-          {data.bansTotal > data.bans.length ? (
-            <p className="v2-field-hint">Showing the first {plural(data.banLimit, 'ban')}.</p>
-          ) : null}
-
-          <h2 className="v2-group-title v2-section-gap">Temporary bans ({data.tempBans.length})</h2>
-          {data.tempBans.length ? (
-            <div className="v2-list">
-              {data.tempBans.map((t) => (
-                <div className="v2-row" key={t.userId}>
-                  <div className="v2-row-main">
-                    <h3 className="v2-break">{t.tag}</h3>
-                    <p title={t.reason || undefined}>
-                      <Meta items={[`unbanned in ${t.remaining}`, t.reason]} />
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="v2-btn-ghost"
-                    disabled={busy}
-                    onClick={() => run(() => unbanMember(guildId, t.userId), `${t.tag} unbanned.`)}
-                  >
-                    Unban now
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="v2-field-hint">No scheduled unbans.</p>
-          )}
-        </>
-      ) : null}
-
-      {tab === 'locks' ? (
-        <>
-          <div className="v2-field-row v2-wrap-row">
-            <button
-              type="button"
-              className="v2-btn-danger"
-              disabled={busy}
-              onClick={async () => {
-                const ok = await confirmDialog({
-                  title: 'Lock every text channel?',
-                  body: "Members can't send messages in any text channel until you end the lockdown.",
-                  confirmLabel: 'Lock all channels',
-                });
-                if (ok)
+        {tab === 'locks' ? (
+          <>
+            <div className="v2-field-row v2-wrap-row">
+              <button
+                type="button"
+                className="v2-btn-danger"
+                disabled={busy}
+                onClick={async () => {
+                  const ok = await confirmDialog({
+                    title: 'Lock every text channel?',
+                    body: "Members can't send messages in any text channel until you end the lockdown.",
+                    confirmLabel: 'Lock all channels',
+                  });
+                  if (ok)
+                    run(
+                      () => lockAllChannels(guildId),
+                      (r) => `Locked ${plural(r.locked, 'channel')}.`
+                    );
+                }}
+              >
+                Lock all channels
+              </button>
+              <button
+                type="button"
+                className="v2-btn-ghost"
+                disabled={busy || !data.lockdownActive}
+                onClick={() =>
                   run(
-                    () => lockAllChannels(guildId),
-                    (r) => `Locked ${plural(r.locked, 'channel')}.`
-                  );
-              }}
-            >
-              Lock all channels
-            </button>
-            <button
-              type="button"
-              className="v2-btn-ghost"
-              disabled={busy || !data.lockdownActive}
-              onClick={() =>
-                run(
-                  () => unlockAllChannels(guildId),
-                  (r) => `Unlocked ${plural(r.unlocked, 'channel')}.`
-                )
-              }
-            >
-              End lockdown
-            </button>
-          </div>
-          <h2 className="v2-group-title v2-section-gap">Locked channels ({data.channelLocks.length})</h2>
-          {data.channelLocks.length ? (
-            <div className="v2-list">
-              {data.channelLocks.map((l) => (
-                <div className="v2-row" key={l.channelId}>
-                  <div className="v2-row-main">
-                    <h3 className="v2-break">#{l.name ?? 'deleted channel'}</h3>
-                    <p>
-                      <Meta
-                        items={[
-                          l.lockdown ? 'part of a lockdown' : 'locked on its own',
-                          `by ${l.lockedBy}`,
-                          <Time key="t" value={l.at} relative fallback={l.ago} />,
-                        ]}
-                      />
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="v2-btn-ghost"
-                    disabled={busy}
-                    onClick={() => run(() => unlockChannel(guildId, l.channelId), 'Channel unlocked.')}
-                  >
-                    Unlock
-                  </button>
-                </div>
-              ))}
+                    () => unlockAllChannels(guildId),
+                    (r) => `Unlocked ${plural(r.unlocked, 'channel')}.`
+                  )
+                }
+              >
+                End lockdown
+              </button>
             </div>
-          ) : (
-            <p className="v2-field-hint">No channels are locked.</p>
-          )}
-        </>
-      ) : null}
+            <h2 className="v2-group-title v2-section-gap">Locked channels ({data.channelLocks.length})</h2>
+            {data.channelLocks.length ? (
+              <div className="v2-list">
+                {data.channelLocks.map((l) => (
+                  <div className="v2-row" key={l.channelId}>
+                    <div className="v2-row-main">
+                      <h3 className="v2-break">#{l.name ?? 'deleted channel'}</h3>
+                      <p>
+                        <Meta
+                          items={[
+                            l.lockdown ? 'part of a lockdown' : 'locked on its own',
+                            `by ${l.lockedBy}`,
+                            <Time key="t" value={l.at} relative fallback={l.ago} />,
+                          ]}
+                        />
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="v2-btn-ghost"
+                      disabled={busy}
+                      onClick={() => run(() => unlockChannel(guildId, l.channelId), 'Channel unlocked.')}
+                    >
+                      Unlock
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="v2-field-hint">No channels are locked.</p>
+            )}
+          </>
+        ) : null}
+      </AccessLock>
     </>
   );
 }
@@ -441,7 +447,13 @@ export default function ModerationHub() {
       {/* Outside the keyed tab content, so the entrance plays on the first
           visit only — not again on a tab or server switch. */}
       <Reveal className="v2-embedded" id="moderation-panel" role="tabpanel">
-        <Content key={guildId} />
+        {active === 'infractions' ? (
+          <Content key={guildId} />
+        ) : (
+          <AccessLock need="edit" note>
+            <Content key={guildId} />
+          </AccessLock>
+        )}
       </Reveal>
     </PlatformContext.Provider>
   );

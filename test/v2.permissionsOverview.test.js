@@ -37,6 +37,7 @@ test('the admin of the server gets the overview, with the attention data', async
   const body = await res.json();
   assert.ok(Array.isArray(body.groups));
   assert.deepEqual(Object.keys(body.attention).sort(), [
+    'health',
     'missingPermissions',
     'platform',
     'problems',

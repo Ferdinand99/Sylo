@@ -15,7 +15,8 @@ export default function LoadError({ error, what }) {
       <div className="v2-state v2-route-error v2-no-access" role="status">
         <p>You don't have access to this server</p>
         <p className="v2-field-hint">
-          Only people who manage a server, or hold one of its bot-master roles, can open its dashboard.
+          Only people with dashboard access to a server can open it. Ask the people who manage it to give you
+          a role with access.
         </p>
         <p className="v2-route-error-actions">
           <Link className="v2-btn-primary" to="/">

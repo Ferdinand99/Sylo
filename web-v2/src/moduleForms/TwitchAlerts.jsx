@@ -1,4 +1,5 @@
 import AutoGrowTextarea from '../components/AutoGrowTextarea.jsx';
+import PickerHealth from '../components/PickerHealth.jsx';
 import MentionTextarea from '../components/MentionTextarea.jsx';
 import PlaceholderBar from '../components/PlaceholderBar.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
@@ -123,6 +124,7 @@ export default function TwitchAlerts() {
                       </option>
                     ))}
                   </select>
+                  <PickerHealth kind="channel" value={a.channelId} embed={!a.plainText} />
                 </div>
                 <div className="v2-field">
                   <label>

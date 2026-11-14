@@ -195,6 +195,93 @@ test('SQLite: a database from the 5.1 release with shop rows boots and gets the 
   }
 });
 
+test('SQLite: a database from the 5.1 release with audit entries boots, keeps them and gets the change-history columns', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sylo-upgrade-'));
+  try {
+    const old = join(dir, 'old.db');
+    const db = new Database(old);
+    for (let v = 0; v < RELEASE_5_1_MIGRATIONS; v += 1) {
+      db.transaction(() => MIGRATIONS[v](db))();
+    }
+    db.pragma(`user_version = ${RELEASE_5_1_MIGRATIONS}`);
+    const columns = () =>
+      db
+        .prepare('PRAGMA table_info(config_audit)')
+        .all()
+        .map((c) => c.name);
+    assert.equal(columns().includes('change_json'), false, '5.1 audit entries keep no change');
+    db.exec(
+      "INSERT INTO config_audit (guild_id, actor, action, detail, created_at) VALUES ('g', 'Ann (dashboard)', 'module:afk', 'settings saved', 5)"
+    );
+    db.close();
+
+    boot({ DATABASE_PATH: old });
+    const after = new Database(old, { readonly: true });
+    const row = after.prepare('SELECT * FROM config_audit').get();
+    after.close();
+    assert.deepEqual(
+      { ...row },
+      {
+        id: 1,
+        guild_id: 'g',
+        actor: 'Ann (dashboard)',
+        action: 'module:afk',
+        detail: 'settings saved',
+        created_at: 5,
+        change_json: null,
+        reverts_id: null,
+      }
+    );
+    const fresh = join(dir, 'fresh.db');
+    boot({ DATABASE_PATH: fresh });
+    assert.deepEqual(sqliteShape(old).shape, sqliteShape(fresh).shape);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// The test instance has run migrations 76 and 77 (the Sylo app's login linking) and not the change history,
+// which is entry 78: it runs alone, keeps the app's rows and the audit entries, and gains the two columns.
+// A database that already has the columns (the entry once ran earlier) boots without trying to add them again.
+test('SQLite: a database that ran migrations 1-77 boots, keeps its rows and gets the change-history columns as 78', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sylo-upgrade-'));
+  try {
+    const old = join(dir, 'old.db');
+    const db = new Database(old);
+    for (let v = 0; v < 77; v += 1) db.transaction(() => MIGRATIONS[v](db))();
+    db.pragma('user_version = 77');
+    db.exec(`
+      INSERT INTO accounts (id, created_at) VALUES ('acct', 1);
+      INSERT INTO mobile_connect_codes (code_hash, account_id, platform, expires_at, token_id)
+        VALUES ('h1', 'acct', 'fluxer', 9, 't1');
+      INSERT INTO mobile_connect_results (code_hash, account_id, token_id, platform, platform_user_id, expires_at)
+        VALUES ('r1', 'acct', 't1', 'fluxer', 'f1', 9);
+      INSERT INTO config_audit (guild_id, actor, action, detail, created_at) VALUES ('g', 'Ann', 'module:afk', 'x', 5);
+    `);
+    assert.ok(MIGRATIONS.length >= 78, 'the change history is the 78th entry');
+    db.close();
+
+    boot({ DATABASE_PATH: old });
+    const after = new Database(old, { readonly: true });
+    assert.equal(after.pragma('user_version', { simple: true }), MIGRATIONS.length);
+    assert.equal(after.prepare('SELECT COUNT(*) AS n FROM mobile_connect_codes').get().n, 1);
+    assert.equal(after.prepare('SELECT COUNT(*) AS n FROM mobile_connect_results').get().n, 1);
+    const row = after.prepare('SELECT action, change_json, reverts_id FROM config_audit').get();
+    assert.deepEqual({ ...row }, { action: 'module:afk', change_json: null, reverts_id: null });
+    after.close();
+
+    // the same database, with the columns already there, run through entry 78 again
+    const again = new Database(old);
+    assert.doesNotThrow(() => again.transaction(() => MIGRATIONS[77](again))());
+    again.close();
+    const fresh = join(dir, 'fresh.db');
+    boot({ DATABASE_PATH: fresh });
+    assert.deepEqual(sqliteShape(old).shape, sqliteShape(fresh).shape);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // Migration 77: one login per platform and account is enforced, and adding a login from the app keeps its
 // result in a table. A database that already holds two logins on one platform (the race that the old
 // check-then-insert allowed) must still boot: the one linked first stays.
@@ -308,6 +395,7 @@ const BACK_TO_5_0 = `
     DROP COLUMN IF EXISTS cancelled, DROP COLUMN IF EXISTS prizes_paid,
     DROP COLUMN IF EXISTS drawn_at, DROP COLUMN IF EXISTS sweep_at;
   ALTER TABLE giveaway_entries DROP COLUMN IF EXISTS refunded;
+  ALTER TABLE config_audit DROP COLUMN IF EXISTS change_json, DROP COLUMN IF EXISTS reverts_id;
   ALTER TABLE guild_suggestions DROP COLUMN IF EXISTS log_channel_id,
     DROP COLUMN IF EXISTS log_message_id;
   -- The app's connect step 2 (migration 77) taken back, with the doubled rows the old code could leave.
@@ -487,6 +575,9 @@ test(
       ALTER TABLE economy_items DROP COLUMN IF EXISTS image_id, DROP COLUMN IF EXISTS rarity,
         DROP COLUMN IF EXISTS announce;
       ALTER TABLE economy_inventory DROP COLUMN IF EXISTS image_id, DROP COLUMN IF EXISTS rarity;
+      ALTER TABLE config_audit DROP COLUMN IF EXISTS change_json, DROP COLUMN IF EXISTS reverts_id;
+      INSERT INTO config_audit (guild_id, actor, action, detail, created_at)
+        VALUES ('g', 'Ann (dashboard)', 'module:afk', 'settings saved', 5);
       INSERT INTO economy_items (guild_id, name, type, price, created_at, updated_at)
         VALUES ('g', 'Shout-out', 'custom', 10, 1, 1);
       INSERT INTO economy_inventory (guild_id, user_id, item_id, item_name, item_type, price_paid, source, status, created_at, updated_at)
@@ -509,6 +600,15 @@ test(
     const b = postgres(urlFor(oldDb));
     try {
       assert.deepEqual(await pgShape(b), await pgShape(a));
+      // the audit entry of 5.1 is untouched and keeps no change; the new columns take a copy
+      const [entry] = await b`SELECT actor, detail, change_json, reverts_id FROM config_audit`;
+      assert.deepEqual(
+        [entry.actor, entry.detail, entry.change_json, entry.reverts_id],
+        ['Ann (dashboard)', 'settings saved', null, null]
+      );
+      await b`UPDATE config_audit SET change_json = '{"before":{},"after":{}}', reverts_id = 7`;
+      const [kept] = await b`SELECT change_json, reverts_id FROM config_audit`;
+      assert.deepEqual([kept.change_json, Number(kept.reverts_id)], ['{"before":{},"after":{}}', 7]);
       // the shop rows of 5.1 are untouched and have the defaults of the new columns
       const [item] = await b`SELECT name, image_id, rarity, announce FROM economy_items`;
       assert.deepEqual(

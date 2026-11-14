@@ -3,6 +3,7 @@
 // wording and the grouping are tested without rendering anything.
 import { plural } from './components/Meta.jsx';
 import { v2Href } from './moduleForms/index.js';
+import { healthItems } from './healthModel.js';
 
 const hrefOf = (id, guildId) => v2Href({ id }, guildId);
 
@@ -142,7 +143,14 @@ export function attentionItems(data, guildId) {
       href: hrefOf(p.id, guildId),
     });
   }
-  // Modules that wait for API keys only the bot owner can add: for information, no "Fix" link.
+  // What Sylo cannot do in the channels and roles a module uses (a role above Sylo's, a channel it cannot
+  // post in): one item per module, with a "Fix" link to the module's page.
+  for (const item of healthItems(a.health, guildId, a.missingPermissions ?? [])) {
+    if (byId.get(item.moduleId) && byId.get(item.moduleId).enabled === false) continue;
+    items.push(item);
+  }
+  // Modules that wait for API keys only the bot operator can add (the server sends them to an operator
+  // only): for information, no "Fix" link.
   for (const w of a.waitingForOwner ?? []) {
     if (byId.get(w.id) && byId.get(w.id).enabled === false) continue;
     items.push({

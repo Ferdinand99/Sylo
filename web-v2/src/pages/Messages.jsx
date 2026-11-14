@@ -10,9 +10,12 @@ import Meta from '../components/Meta.jsx';
 import ListPageHead from '../components/ListPageHead.jsx';
 import RowActions from '../components/RowActions.jsx';
 import EmptyList from '../components/EmptyList.jsx';
+import { useAccess } from '../access.jsx';
 
 export default function Messages() {
   const { guildId } = useParams();
+  // Creating a message needs Edit access (access.jsx); the list is for everyone who may look.
+  const canEdit = useAccess().can('edit');
   const { data, loading, error, setData } = useApiData(() => getComposedMessages(guildId), [guildId]);
 
   if (error) return <LoadError error={error} what="Embed messages" />;
@@ -57,11 +60,11 @@ export default function Messages() {
         title="Embed messages"
         // With nothing saved the empty state below carries the one accent button.
         action={
-          data.items.length === 0 ? null : (
+          canEdit && data.items.length > 0 ? (
             <Link className="v2-btn-primary" to={`/guilds/${guildId}/messages/new`}>
               + New embed message
             </Link>
-          )
+          ) : null
         }
       >
         <p className="v2-field-hint">
@@ -73,7 +76,11 @@ export default function Messages() {
       <h2 className="v2-group-title v2-section-gap">Your embed messages ({data.items.length} / 200)</h2>
       {data.items.length === 0 ? (
         <EmptyList
-          start={{ label: 'Create your first embed message', to: `/guilds/${guildId}/messages/new` }}
+          start={
+            canEdit
+              ? { label: 'Create your first embed message', to: `/guilds/${guildId}/messages/new` }
+              : null
+          }
         >
           Build a rich message with a live preview, then publish it to a channel as Sylo.
         </EmptyList>

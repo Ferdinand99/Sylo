@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import PickerHealth from '../components/PickerHealth.jsx';
 import { useParams } from 'react-router-dom';
 import { getRoles, saveAutoroles, saveReactionRole, deleteReactionRole } from '../api.js';
 import Badge from '../components/Badge.jsx';
@@ -119,6 +120,7 @@ function ReactionRoleForm({ initial, channels, roles, onSave, onCancel, saving }
             </option>
           ))}
         </select>
+        <PickerHealth kind="channel" value={channelId} />
       </div>
 
       <div className="v2-field">
@@ -216,6 +218,7 @@ function ReactionRoleForm({ initial, channels, roles, onSave, onCancel, saving }
                 </option>
               ))}
             </select>
+            <PickerHealth kind="role" value={row.roleId} />
             {style === 'buttons' ? (
               <select value={row.btnStyle} onChange={(e) => updateRow(row.key, { btnStyle: e.target.value })}>
                 {BTN_STYLES.map((b) => (
@@ -439,7 +442,13 @@ export default function Roles() {
           members" in Welcome &amp; leave.
         </p>
         <form onSubmit={onSaveAutoroles} data-savebar>
-          <ChipPicker kind="role" items={d.roles} value={autoroles.form} onChange={autoroles.setForm} />
+          <ChipPicker
+            kind="role"
+            items={d.roles}
+            value={autoroles.form}
+            health="role"
+            onChange={autoroles.setForm}
+          />
         </form>
       </div>
       <SaveBar

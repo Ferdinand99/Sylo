@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import OverflowMenu from './OverflowMenu.jsx';
+import { useAccess } from '../access.jsx';
 import '../styles/wp5-lists.css';
 
 /**
@@ -14,8 +15,12 @@ import '../styles/wp5-lists.css';
  *
  * `edit` may carry a `label` (default "Edit") and `disabled`. A destructive item still asks for its own
  * confirmation in its onClick; the menu only picks the action. Without `items` there is no "⋯".
+ * `need` is the dashboard access level the actions need (default 'edit', see access.jsx): below it
+ * the button is disabled and the menu is left out. An Edit link (`edit.to`) still opens the item.
  */
-export default function RowActions({ edit, menuLabel, items = [] }) {
+export default function RowActions({ edit, menuLabel, items = [], need = 'edit' }) {
+  const { can } = useAccess();
+  const allowed = can(need);
   return (
     <div className="v2-row-actions v2-row-actions-menu">
       {edit?.to ? (
@@ -23,11 +28,16 @@ export default function RowActions({ edit, menuLabel, items = [] }) {
           {edit.label ?? 'Edit'}
         </Link>
       ) : edit ? (
-        <button type="button" className="v2-btn-ghost" disabled={edit.disabled} onClick={edit.onClick}>
+        <button
+          type="button"
+          className="v2-btn-ghost"
+          disabled={edit.disabled || !allowed}
+          onClick={edit.onClick}
+        >
           {edit.label ?? 'Edit'}
         </button>
       ) : null}
-      {items.length ? <OverflowMenu label={menuLabel} items={items} /> : null}
+      {items.length && allowed ? <OverflowMenu label={menuLabel} items={items} /> : null}
     </div>
   );
 }

@@ -301,9 +301,11 @@ export const mobileApiRouter = Router();
 // can through Postal Pigeon. An app that knows Pigeon uses it when it is the official one.
 // `collectibles` is the collectible picture upload and inventory of the Economy shop,
 // `welcome-trigger` the Welcome module's `trigger` setting (a member joins, or first gets a role),
-// `member-search` GET /api/v2/guilds/:id/members?q=. `app-connect` is added when the app can add
+// `member-search` GET /api/v2/guilds/:id/members?q=, `health` GET /api/v2/guilds/:id/health. `app-connect` is added when the app can add
 // the other login to its account (POST /api/mobile/connect/:platform, then /connect/complete):
-// sign-in is on and both Discord and Fluxer logins are set up.
+// sign-in is on and both Discord and Fluxer logins are set up. `access-levels`: View / Inbox / Edit
+// dashboard access, with `access` on each GET /api/v2/guilds entry and GET/POST
+// /api/v2/guilds/:id/access.
 const FEATURES = Object.freeze([
   'app-login',
   'live-access',
@@ -311,6 +313,8 @@ const FEATURES = Object.freeze([
   'collectibles',
   'welcome-trigger',
   'member-search',
+  'access-levels',
+  'health',
 ]);
 
 // Public and ahead of the open-mode guard: the app calls it before anyone signs in, and an open-mode

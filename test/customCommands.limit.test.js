@@ -9,7 +9,8 @@ import assert from 'node:assert/strict';
 import { log } from '../src/lib/log.js';
 import { getGuildModule, setGuildModule } from '../src/db/modules.js';
 import { DISCORD_COMMAND_LIMIT, LIMITS, normaliseCustomCommands } from '../src/modules/customCommands.js';
-import { syncGuildCustomCommands } from '../src/bot/lib/customCommandSync.js';
+import { customCommandRoom, syncGuildCustomCommands } from '../src/bot/lib/customCommandSync.js';
+import { config } from '../src/config.js';
 
 const reply = (name) => ({
   name,
@@ -119,4 +120,32 @@ test('the list answer tells how many are registered and which commands are beyon
   } finally {
     await app.close();
   }
+});
+
+test('on a dev guild the guild-scoped built-ins use some of the room, and the room is one number for the sync and the dashboard', async () => {
+  const id = '900000000000000803';
+  const builtin = (name, type) => ({ data: { toJSON: () => ({ name, ...(type ? { type } : {}) }) } });
+  const client = {
+    // two chat-input built-ins and one context menu (type 2, which has a limit of its own)
+    commands: new Map([
+      ['ping', builtin('ping')],
+      ['help', builtin('help')],
+    ]),
+    contextMenus: new Map([['Report', builtin('Report', 2)]]),
+  };
+  const sets = [];
+  const guild = { id, client, commands: { set: async (list) => sets.push(list) } };
+  config.discordGuildIds.push(id);
+  try {
+    assert.equal(customCommandRoom(guild), 98, '100 less the two chat-input built-ins');
+    await setGuildModule(id, 'custom-commands', { enabled: true, config: { commands: many(120) } });
+    await syncGuildCustomCommands(guild);
+    const customs = sets[0].filter((c) => c.name.startsWith('cmd-'));
+    assert.equal(customs.length, customCommandRoom(guild), 'the sync registers exactly the room');
+    assert.equal(sets[0].length, 98 + 3, 'with the built-ins in the same list');
+  } finally {
+    config.discordGuildIds.splice(config.discordGuildIds.indexOf(id), 1);
+  }
+  // not a dev guild: no built-ins in the list, the full 100
+  assert.equal(customCommandRoom({ id: 'x', client }), 100);
 });

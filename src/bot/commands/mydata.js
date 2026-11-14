@@ -74,6 +74,7 @@ const render = {
   invitedOthers: (r) => plural(r.length, 'member'),
   invitePersonal: (r) => `code \`${r[0].code}\``,
   countingLast: () => 'you are the last counter',
+  configHistory: (r) => plural(r.length, 'saved settings change'),
 };
 
 export const data = new SlashCommandBuilder()

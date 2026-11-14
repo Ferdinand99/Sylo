@@ -39,6 +39,7 @@ test('GET /api/mobile/info describes a server with login on, without a cookie or
   assert.ok(info.features.includes('welcome-trigger'), 'the Welcome trigger');
   assert.ok(info.features.includes('member-search'), 'GET /api/v2/guilds/:id/members');
   assert.ok(info.features.includes('app-connect'), 'both logins are set up, so one can be added');
+  assert.ok(info.features.includes('health'), 'GET /api/v2/guilds/:id/health');
   assert.ok(info.features.every((f) => typeof f === 'string'));
 });
 

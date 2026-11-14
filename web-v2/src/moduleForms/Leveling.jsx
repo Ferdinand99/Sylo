@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import PickerHealth from '../components/PickerHealth.jsx';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../api.js';
 import ChipPicker from '../components/ChipPicker.jsx';
@@ -196,6 +197,7 @@ export default function Leveling() {
                   </option>
                 ))}
               </select>
+              <PickerHealth kind="channel" value={form.announceChannel} />
             </div>
             <div className="v2-field">
               <label htmlFor="announceMessage">Level-up message</label>
@@ -282,6 +284,7 @@ export default function Leveling() {
                     </option>
                   ))}
                 </select>
+                <PickerHealth kind="role" value={r.roleId} />
                 <button type="button" className="v2-btn-danger-ghost" onClick={() => removeReward(r.key)}>
                   Remove
                 </button>

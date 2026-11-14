@@ -182,3 +182,31 @@ test('a module on that waits for API keys the bot owner has not added is listed 
   // it is information, not a setup problem with a fix link
   assert.ok(!out.problems.some((p) => p.id === 'twitch-alerts'));
 });
+
+test("the modules that wait for the operator's keys are shown to an operator only", async () => {
+  const id = '700000000000000783';
+  const guild = stubGuild(id);
+  await setGuildModule(id, 'twitch-alerts', {
+    enabled: true,
+    config: { alerts: [{ login: 'a', channelId: CH }] },
+  });
+  const forOperator = await buildAttention(guild, { owner: true });
+  const forAdmin = await buildAttention(guild, { owner: false });
+  assert.equal(forOperator.waitingForOwner.length, 1);
+  assert.deepEqual(forAdmin.waitingForOwner, [], 'an admin has nothing to do about it');
+  assert.ok(Array.isArray(forAdmin.waitingForOwner), 'the field stays, for the apps');
+});
+
+test('buildAttention carries the permission health of the enabled modules, without the picker data', async () => {
+  const id = '700000000000000784';
+  const guild = stubGuild(id);
+  guild.channels.cache.get(CH).permissionsFor = () => new PermissionsBitField(['ViewChannel']);
+  guild.channels.cache.get(CH).isTextBased = () => true;
+  await setGuildModule(id, 'logging', { enabled: true, config: { channel: CH } });
+  const { health } = await buildAttention(guild);
+  assert.equal(health.available, true);
+  assert.equal(health.summary.errors, 1);
+  assert.equal(health.checks[0].module, 'logging');
+  assert.equal(health.checks[0].code, 'missing-channel-permission');
+  assert.ok(!('targets' in health));
+});
