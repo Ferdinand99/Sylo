@@ -10,6 +10,10 @@ export class ApiError extends Error {
     this.reason = body?.reason;
     this.errors = body?.errors;
     this.view = body?.view;
+    // A refusal the page can act on (the settings changed since an audit entry: confirm to undo anyway).
+    this.code = body?.code;
+    this.laterChanges = body?.laterChanges;
+    this.token = body?.token;
   }
 }
 
@@ -442,6 +446,16 @@ export const getAuditLog = (guildId, { action, before, limit } = {}) => {
   const qs = q.toString();
   return apiFetch(`/api/v2/guilds/${gid(guildId)}/audit${qs ? `?${qs}` : ''}`);
 };
+// What one audit entry changed (before and after, with names for the ids) and whether it can be undone,
+// and the undo itself: `confirm: true` with the `token` of the view the person confirmed, once they have
+// accepted that later changes are lost.
+export const getAuditChange = (guildId, id) =>
+  apiFetch(`/api/v2/guilds/${gid(guildId)}/audit/${encodeURIComponent(String(id))}/change`);
+export const undoAuditChange = (guildId, id, { confirm = false, token = '' } = {}) =>
+  postJson(
+    `/api/v2/guilds/${gid(guildId)}/audit/${encodeURIComponent(String(id))}/undo`,
+    confirm ? { confirm: true, token } : {}
+  );
 export const exportGuildConfig = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/export`);
 // Import of an export file: the preview changes nothing; apply needs `confirm` to be the word the preview names.
 export const previewConfigImport = (guildId, file) =>

@@ -1544,6 +1544,23 @@ export const MIGRATIONS = [
       'CREATE UNIQUE INDEX idx_account_identities_one ON account_identities (account_id, platform)'
     );
   },
+
+  // Change history (src/db/audit.js, which adds the same columns on Postgres with ADD COLUMN IF NOT EXISTS):
+  // an audit entry for a settings save keeps the settings that changed, before and after, as JSON with the
+  // secrets masked (change_json); an entry written by an undo says which entry it undoes (reverts_id).
+  // Entries from before this migration have neither. The 500-entries-per-server cap and the purge that goes
+  // with the server are the audit log's own. Each column is added only if it is missing, so a database that
+  // already has them (this entry once ran at another position) still boots.
+  (database) => {
+    const have = new Set(
+      database
+        .prepare('PRAGMA table_info(config_audit)')
+        .all()
+        .map((c) => c.name)
+    );
+    if (!have.has('change_json')) database.exec('ALTER TABLE config_audit ADD COLUMN change_json TEXT');
+    if (!have.has('reverts_id')) database.exec('ALTER TABLE config_audit ADD COLUMN reverts_id INTEGER');
+  },
 ];
 
 /** Highest schema version this build knows how to run. */
