@@ -10,6 +10,8 @@ import { plural } from '../components/Meta.jsx';
 import { formatCount, initial } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
 import BlockedNote from '../components/BlockedNote.jsx';
+import SetupOffer from '../components/SetupOffer.jsx';
+import { needsSetupOffer } from '../setupModel.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { Icon } from '../components/icons.jsx';
 import {
@@ -345,6 +347,7 @@ export default function Overview() {
         </div>
       </div>
 
+      {needsSetupOffer(groups, problemIds) ? <SetupOffer guildId={guildId} /> : null}
       <NeedsAttention items={attention} />
 
       <div className="v2-field-row v2-search-row">

@@ -36,6 +36,18 @@ note.
 - **A server selection follows you** onto bot-wide pages (Bot Personalizer,
   Health) that aren't scoped to any one server, instead of clearing when you
   navigate there.
+- **A setup wizard for new servers.** A server with fewer than three modules
+  set up gets a "Set up Sylo" card on its Overview; the wizard can also be run
+  again any time from **Settings → Server data → Setup wizard**. Sylo looks at
+  the server's channels and roles, you pick goals (welcome, verification,
+  moderation and logging, tickets, community), and Sylo proposes the channels
+  and roles by name (`welcome`, `rules`, `mod-log`, `logs`, `tickets`,
+  `support` …). You review it, then apply. A channel or role is only created
+  when you tick **Create** for it, and only if Sylo has Manage Channels or
+  Manage Roles; channels for logs and ticket alerts are made private. A module
+  that is already set up is left alone unless you tick it. Each module is saved
+  like its own settings page saves it and gets its own audit entry. It works
+  the same way on Fluxer.
 - **Mobile gets a real off-canvas menu** (hamburger button, slide-in sidebar)
   below ~860px, rather than the sidebar just disappearing.
 

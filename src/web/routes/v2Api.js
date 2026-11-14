@@ -49,6 +49,7 @@ import tempRolesRouter from './v2TempRoles.js';
 import quotesRouter from './v2Quotes.js';
 import introRouter from './v2Intro.js';
 import applicationsRouter from './v2Applications.js';
+import setupRouter from './v2Setup.js';
 import applyMemberRouter from './v2Apply.js';
 import economyRouter from './v2Economy.js';
 import shopRouter from './v2Shop.js';
@@ -472,6 +473,8 @@ router.use('/guilds/:guildId', economyRouter);
 router.use('/guilds/:guildId', shopRouter);
 // Applications: settings, forms, the panel, submissions, export (v2Applications.js).
 router.use('/guilds/:guildId', applicationsRouter);
+// Setup wizard: the proposal for the server and applying it (v2Setup.js).
+router.use('/guilds/:guildId', setupRouter);
 
 // What the new dashboard needs to know about a server's platform: its capabilities (to hide
 // what the platform cannot do) and the per-module notes (what behaves differently there).
