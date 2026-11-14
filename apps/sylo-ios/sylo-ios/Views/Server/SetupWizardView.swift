@@ -329,7 +329,10 @@ struct SetupWizardView: View {
             }
             Section {
                 Button("Set Up More") { Task { await model.restart() } }
-                Button("Done") { dismiss() }
+                Button("Done") {
+                    model.reset()
+                    dismiss()
+                }
             }
         }
     }

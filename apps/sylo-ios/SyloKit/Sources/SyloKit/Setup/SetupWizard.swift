@@ -399,11 +399,17 @@ public struct SetupDraft: Sendable, Equatable {
     /// A server with fewer modules set up than this is offered the wizard on its overview.
     public static let offerBelow = 3
 
-    /// Whether the overview offers "Set up Sylo": fewer than three modules are on and without a problem.
+    /// Whether the overview offers "Set up Sylo": fewer than three modules are set up. A module counts as set up by
+    /// the web's `cardTone` rule: it is on, it is not blocked, the server reports no problem for it, it does not
+    /// wait for the bot owner's keys, and its status lines are not all "off".
     public static func shouldOffer(overview: ServerOverview) -> Bool {
         let problems = Set(overview.attention?.problems.map(\.id) ?? [])
+        let waitingForOwner = Set(overview.attention?.waitingForOwner.map(\.id) ?? [])
         let healthy = overview.groups.flatMap(\.cards).filter { card in
-            card.hasToggle && card.isEnabled == true && card.status == .on && !problems.contains(card.id)
+            guard card.hasToggle, card.isEnabled == true else { return false }
+            if card.status == .blocked || problems.contains(card.id) || waitingForOwner.contains(card.id) { return false }
+            if !card.lines.isEmpty, card.lines.allSatisfy({ $0.state == .off }) { return false }
+            return true
         }
         return healthy.count < offerBelow
     }
@@ -807,7 +813,8 @@ public final class SetupWizardModel {
         isLoading = true
         defer { isLoading = false }
         guard await session.supports(.setupWizard) else {
-            isAvailable = false
+            // Only a Sylo that answered without the string lacks the wizard; an unanswered read is asked again later.
+            if session.featuresKnown { isAvailable = false }
             return
         }
         do {
@@ -873,5 +880,14 @@ public final class SetupWizardModel {
         results = []
         step = .look
         await load()
+    }
+
+    /// Forgets the last run (after "Done"): the next time the wizard opens it looks at the server afresh, with no
+    /// old results or choices. The proposal is read again when the wizard appears.
+    public func reset() {
+        results = []
+        step = .look
+        draft = nil
+        errorMessage = nil
     }
 }

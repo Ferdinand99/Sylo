@@ -125,7 +125,7 @@ struct RolesView: View {
 
             Section {
                 MultiPicker(title: "Roles", selection: $model.autoroles, options: model.roles, prefix: "@",
-                            limit: model.maxAutoroles)
+                            limit: model.maxAutoroles, health: true)
             } header: {
                 Text("Autoroles on join")
             } footer: {

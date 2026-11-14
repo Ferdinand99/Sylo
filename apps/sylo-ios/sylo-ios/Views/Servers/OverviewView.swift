@@ -14,6 +14,7 @@ struct OverviewView: View {
     /// Moves the server screen to a tab (the Needs attention rows for tickets and appeals).
     let openTab: (ServerView.ServerTab) -> Void
 
+    @Environment(AppSession.self) private var session
     @Environment(\.dashboardAccess) private var access
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var showsAllAttention = false
@@ -28,13 +29,6 @@ struct OverviewView: View {
         content
             .task { if model.overview == nil { await model.load() } }
             .task { offerDismissed = UserDefaults.standard.bool(forKey: offerKey) }
-            // Read the wizard once the overview says the server is new, so the offer is only shown where it works.
-            .task(id: model.overview.map { SetupDraft.shouldOffer(overview: $0) } ?? false) {
-                let wanted = model.overview.map { SetupDraft.shouldOffer(overview: $0) } ?? false
-                if wanted, access.canEdit, wizard.draft == nil, wizard.isAvailable, !wizard.isLoading {
-                    await wizard.load()
-                }
-            }
             // Back from a module's settings or another tab: summary lines may have changed.
             .onAppear {
                 if model.overview != nil { Task { await model.load() } }
@@ -233,12 +227,11 @@ struct OverviewView: View {
 
     private var offerKey: String { "setupOfferDismissed.\(summary.id.rawValue)" }
 
-    /// "Set up Sylo" on a server with fewer than three modules set up. The wizard is read in the background;
-    /// the offer shows once it answers (a Sylo without the wizard never shows it). "Not now" is remembered.
+    /// "Set up Sylo" on a server with fewer than three modules set up, on a Sylo that announces `setup-wizard`. The
+    /// proposal is read when the wizard opens, not for the offer. "Not now" is remembered.
     @ViewBuilder
     private func setupOffer(_ overview: ServerOverview) -> some View {
-        if access.canEdit, !offerDismissed, SetupDraft.shouldOffer(overview: overview), wizard.isAvailable,
-           wizard.draft != nil {
+        if access.canEdit, !offerDismissed, session.has(.setupWizard), SetupDraft.shouldOffer(overview: overview) {
             Section {
                 NavigationLink {
                     SetupWizardView(model: wizard)

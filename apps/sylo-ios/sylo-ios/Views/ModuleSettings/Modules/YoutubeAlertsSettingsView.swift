@@ -32,7 +32,7 @@ struct YoutubeAlertsSettingsView: View {
                         }
                     }
                     ChannelPicker(title: "Announce in", selection: $alert.discordChannelId,
-                                  channels: page.channels, noneTitle: "Choose a channel")
+                                  channels: page.channels, noneTitle: "Choose a channel", embed: true, health: true)
                     Picker("Notify on", selection: $alert.notify) {
                         ForEach(YoutubeAlertsNotify.allCases, id: \.self) { notify in
                             Text(notify.title).tag(notify)

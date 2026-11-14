@@ -98,7 +98,7 @@ struct ReminderEditorView: View {
         Section {
             LimitedTextField(title: "Name", text: $draft.name, limit: nameLimit, prompt: Text("my new reminder"))
             ChannelPicker(title: "Channel", selection: $draft.channelId, channels: model.channels,
-                          noneTitle: "Select a channel")
+                          noneTitle: "Select a channel", health: true)
         } footer: {
             Text("The name is only for finding the reminder in the app and the dashboard. Sylo needs Send Messages and Embed Links in the channel.")
         }

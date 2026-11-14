@@ -93,7 +93,7 @@ struct WelcomeSettingsView: View {
                 Toggle(joinToggleTitle(settings), isOn: $settings.joinEnabled)
                 if settings.joinEnabled {
                     ChannelPicker(title: "Channel", selection: $settings.joinChannel, channels: page.channels,
-                                  noneTitle: "Choose a channel", embed: settings.useEmbed)
+                                  noneTitle: "Choose a channel", embed: settings.useEmbed, health: true)
                     LimitedTextField(title: "Message", text: $settings.joinMessage,
                                      limit: WelcomeSettings.maxMessageLength, lines: 3...8)
                     TextTemplateMenu(field: .welcome, text: $settings.joinMessage)
@@ -143,7 +143,7 @@ struct WelcomeSettingsView: View {
                 Toggle("Message when a member leaves", isOn: $settings.leaveEnabled)
                 if settings.leaveEnabled {
                     ChannelPicker(title: "Channel", selection: $settings.leaveChannel, channels: page.channels,
-                                  noneTitle: "Choose a channel")
+                                  noneTitle: "Choose a channel", embed: settings.useEmbed, health: true)
                     LimitedTextField(title: "Message", text: $settings.leaveMessage,
                                      limit: WelcomeSettings.maxMessageLength, lines: 3...8)
                 }
@@ -154,7 +154,7 @@ struct WelcomeSettingsView: View {
             Section {
                 Toggle("Give roles to new members", isOn: $settings.autoroleEnabled)
                 if settings.autoroleEnabled {
-                    MultiPicker(title: "Roles", selection: $settings.autoroles, options: page.roles, prefix: "@")
+                    MultiPicker(title: "Roles", selection: $settings.autoroles, options: page.roles, prefix: "@", health: true)
                 }
             } header: {
                 Text("Roles on join")

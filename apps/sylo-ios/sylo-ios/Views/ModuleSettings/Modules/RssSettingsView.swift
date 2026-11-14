@@ -28,7 +28,7 @@ struct RssSettingsView: View {
                         .autocorrectionDisabled()
                         .keyboardType(feed.type == .url ? .URL : .default)
                     ChannelPicker(title: "Post in", selection: $feed.channelId, channels: page.channels,
-                                  noneTitle: "Choose a channel")
+                                  noneTitle: "Choose a channel", embed: true, health: true)
                     RolePicker(title: "Ping role", selection: $feed.roleId, roles: page.roles)
                     LimitedTextField(title: "Message template", text: $feed.template,
                                      limit: RssSettings.maxTemplateLength, lines: 2...6)

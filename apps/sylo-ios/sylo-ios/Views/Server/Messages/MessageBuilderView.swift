@@ -108,7 +108,7 @@ struct MessageBuilderView: View {
 
             Section {
                 ChannelPicker(title: "Channel", selection: $model.channelId, channels: model.channels,
-                              noneTitle: "Choose a channel", embed: true)
+                              noneTitle: "Choose a channel")
                 Button {
                     publish()
                 } label: {

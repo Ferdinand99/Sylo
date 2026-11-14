@@ -42,8 +42,9 @@ struct ConfigImportView: View {
             message: "This replaces the settings of the ticked items on this server with the ones in the file. Each change is written to the audit log. The file can turn modules on, so check the list before you confirm.",
             word: model.plan?.confirmWord ?? ImportPlan.defaultConfirmWord, isPresented: $isConfirming,
             confirmTitle: "Import"
-        ) {
-            model.typedWord = model.plan?.confirmWord ?? ImportPlan.defaultConfirmWord
+        ) { typed in
+            // What was typed goes to the model, which checks it against the word again before it sends anything.
+            model.typedWord = typed
             Task { await model.apply() }
         }
     }

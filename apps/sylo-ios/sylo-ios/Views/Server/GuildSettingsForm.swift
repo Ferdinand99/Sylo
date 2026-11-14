@@ -33,12 +33,6 @@ struct GuildSettingsForm: View {
         .task {
             if model.page == nil { await model.load() }
         }
-        // The setup wizard and the import exist from Sylo 5.2 (`setup-wizard`, `config-import`) and change the
-        // server: Edit only. The wizard is read here so its row is shown only where it works.
-        .task {
-            guard access.canEdit else { return }
-            if wizard.draft == nil, wizard.isAvailable, !wizard.isLoading { await wizard.load() }
-        }
     }
 
     private func form(_ page: GuildSettingsPage) -> some View {
@@ -48,7 +42,7 @@ struct GuildSettingsForm: View {
             Group {
             Section {
                 ChannelPicker(title: "Mod-log channel", selection: settings.modlogChannelId,
-                              channels: page.channels, noneTitle: "Off")
+                              channels: page.channels, noneTitle: "Off", health: true)
             } footer: {
                 Text("Every moderation action posts an embed here.")
             }
@@ -136,7 +130,9 @@ struct GuildSettingsForm: View {
     /// it stores about a member.
     private var serverDataSection: some View {
         Section {
-            if access.canEdit, wizard.draft != nil, wizard.isAvailable {
+            // The setup wizard and the import exist when the Sylo announces `setup-wizard` and `config-import`, and
+            // change the server: Edit only. The row needs no read of the server: the wizard reads its own proposal.
+            if access.canEdit, session.has(.setupWizard) {
                 NavigationLink {
                     SetupWizardView(model: wizard)
                 } label: {

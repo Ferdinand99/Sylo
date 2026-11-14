@@ -13,6 +13,7 @@ struct ServerView: View {
     @Binding var tab: ServerTab
 
     @Environment(AppSession.self) private var session
+    @Environment(\.scenePhase) private var scenePhase
     @State private var overview: OverviewModel
     @State private var tickets: TicketsModel
     @State private var settings: GuildSettingsModel
@@ -126,6 +127,15 @@ struct ServerView: View {
         .task { await health.load() }
         // What this Sylo announces (`setup-wizard`, `config-import`, `duplicate`, ...): views show a control only for it.
         .task { _ = await session.serverFeatures() }
+        // A read of the features that failed (an offline start) is asked again when the app comes back, so the 5.2
+        // controls do not stay hidden.
+        .onChange(of: scenePhase) {
+            guard scenePhase == .active, !session.featuresKnown else { return }
+            Task {
+                _ = await session.serverFeatures()
+                await health.load()
+            }
+        }
     }
 
     /// The pages the search can open: those of the app, and the wizard and the import where this server has them.
@@ -134,7 +144,7 @@ struct ServerView: View {
         if ServerPages.hasScreen("commands") { pages.append(.commands) }
         if ServerPages.hasScreen("messages") { pages.append(.messages) }
         if summary.effectiveAccess.canEdit {
-            if wizard.isAvailable, wizard.draft != nil { pages.append(.setupWizard) }
+            if session.has(.setupWizard) { pages.append(.setupWizard) }
             if session.has(.configImport) { pages.append(.importConfig) }
         }
         return pages

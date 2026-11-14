@@ -34,7 +34,7 @@ struct TicketsSettingsView: View {
 
             Section {
                 ChannelPicker(title: "Notification channel", selection: $settings.notifyChannel,
-                              channels: page.channels)
+                              channels: page.channels, embed: true, health: true)
                 Toggle("Include the opening message", isOn: $settings.showMessageInAlert)
             } header: {
                 Text("Staff notifications")

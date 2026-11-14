@@ -173,6 +173,28 @@ public struct HealthTargets: Decodable, Sendable, Equatable {
             return names[id].map { "#\($0): \(text)" } ?? text
         }
     }
+
+    /// What a role or channel picker points at, for its note.
+    public enum Pick: Sendable, Equatable {
+        case role(String)
+        /// `embed`: the module posts an embed there, so a channel without Embed Links is a problem too.
+        case channel(String, embed: Bool)
+        case roles([String], names: [String: String])
+        case channels([String], names: [String: String], embed: Bool)
+    }
+
+    /// The notes under a picker. Only a picker that is opted in has any: the web puts the note (`PickerHealth`)
+    /// where the module gives or takes away the role or posts in the channel, and nowhere else. A role Sylo
+    /// does not give (an access role, a staff role, an ignore list) must never say "move Sylo's role above it".
+    public func notes(for pick: Pick, optedIn: Bool) -> [String] {
+        guard optedIn else { return [] }
+        switch pick {
+        case .role(let id): return roleWarning(id).map { [$0] } ?? []
+        case .channel(let id, let embed): return channelWarning(id, embed: embed).map { [$0] } ?? []
+        case .roles(let ids, let names): return warnings(forRoles: ids, names: names)
+        case .channels(let ids, let names, let embed): return warnings(forChannels: ids, names: names, embed: embed)
+        }
+    }
 }
 
 /// The answer of `GET .../health` (and `attention.health` of the overview, which has no `targets`).
@@ -284,7 +306,8 @@ public final class ServerHealthModel {
     public func load() async {
         guard isSupported else { return }
         guard await session.supports(.health) else {
-            isSupported = false
+            // Only a Sylo that answered without the string lacks the check; an unanswered read is asked again later.
+            if session.featuresKnown { isSupported = false }
             return
         }
         _ = await read(refresh: false)

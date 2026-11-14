@@ -298,3 +298,33 @@ struct AttentionItemTests {
         #expect(overview.attentionItems.map(\.id) == ["tickets"])
     }
 }
+
+@Suite("Picker notes are opt-in")
+struct PickerHealthOptInTests {
+    private let targets = try! decode(ServerHealthReport.self, healthJSON).targets
+
+    @Test("A picker that is not opted in shows no note, whatever Sylo cannot do")
+    func notOptedIn() {
+        // An access role, a staff role or an ignore list: Sylo does not give it, so it must not say "move Sylo's role".
+        #expect(targets.notes(for: .role("200"), optedIn: false).isEmpty)
+        #expect(targets.notes(for: .channel("300", embed: true), optedIn: false).isEmpty)
+        #expect(targets.notes(for: .roles(["200", "201"], names: ["200": "Admins"]), optedIn: false).isEmpty)
+        #expect(targets.notes(for: .channels(["300"], names: [:], embed: false), optedIn: false).isEmpty)
+    }
+
+    @Test("A role Sylo cannot give shows no note on a picker that is not opted in, even when Sylo lacks Manage Roles")
+    func manageRolesMissing() throws {
+        let none = try decode(HealthTargets.self, #"{"roles":{"blockedAll":"Sylo can't give roles: it is missing Manage Roles.","blocked":{}}}"#)
+        #expect(none.notes(for: .role("5"), optedIn: false).isEmpty)
+        #expect(none.notes(for: .role("5"), optedIn: true) == ["Sylo can't give roles: it is missing Manage Roles."])
+    }
+
+    @Test("An opted-in picker gets the same notes as before")
+    func optedIn() {
+        #expect(targets.notes(for: .role("200"), optedIn: true).count == 1)
+        #expect(targets.notes(for: .channel("300", embed: false), optedIn: true).count == 1)
+        #expect(targets.notes(for: .channel("301", embed: false), optedIn: true).isEmpty)
+        #expect(targets.notes(for: .channel("301", embed: true), optedIn: true).count == 1)
+        #expect(targets.notes(for: .roles(["200", "999"], names: ["200": "Verified"]), optedIn: true).count == 1)
+    }
+}

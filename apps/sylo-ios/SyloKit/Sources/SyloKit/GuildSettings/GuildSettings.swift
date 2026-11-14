@@ -354,6 +354,7 @@ public final class GuildSettingsModel {
         isSaving = true
         defer { isSaving = false }
         saveError = nil
+        var settingsSaved = false
         if let draft = draft?.normalised, draft != saved?.normalised {
             do {
                 _ = try await session.send(Endpoints.SaveGuildSettings(server: server, settings: draft))
@@ -365,6 +366,7 @@ public final class GuildSettingsModel {
             // Saved: the draft is what the server has now, so the reload replaces it.
             saved = draft
             self.draft = draft
+            settingsSaved = true
         }
         if let roles = accessDraft, accessHasChanges {
             do {
@@ -375,9 +377,12 @@ public final class GuildSettingsModel {
             } catch {
                 let error = NetworkError(error)
                 if error != .cancelled, error != .unauthorized {
-                    saveError = "The settings were saved, but the dashboard access roles were not. \(error.userMessage)"
+                    // Only say the settings were saved when they were sent. A failed save is no success haptic.
+                    saveError = settingsSaved
+                        ? "The settings were saved, but the dashboard access roles were not. \(error.userMessage)"
+                        : error.userMessage
                 }
-                saveCount += 1
+                if settingsSaved { await load() }
                 return false
             }
         }

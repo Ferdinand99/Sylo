@@ -62,7 +62,7 @@ struct ShopItemEditorView: View {
                 Section {
                     kindPicker
                     if draft.type.isRole {
-                        RolePicker(title: "Role", selection: $draft.roleId, roles: model.roles, noneTitle: "Pick a role")
+                        RolePicker(title: "Role", selection: $draft.roleId, roles: model.roles, noneTitle: "Pick a role", health: true)
                     }
                     if draft.type == .tempRole {
                         NumberField(title: "Lasts", value: $draft.durationHours,

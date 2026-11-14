@@ -81,12 +81,12 @@ struct SuggestionsSettingsView: View {
             Group {
             Section {
                 ChannelPicker(title: "Suggestions channel", selection: $settings.channel, channels: page.channels,
-                              noneTitle: "Where the command is used")
+                              noneTitle: "Where the command is used", embed: true, health: true)
             }
 
             Section {
                 ChannelPicker(title: "Log channel", selection: $settings.logChannel, channels: page.channels,
-                              noneTitle: "Decided ones stay")
+                              noneTitle: "Decided ones stay", embed: true, health: true)
                 Picker("When decided", selection: $settings.logMode) {
                     Text("Copy, keep the original").tag(SuggestionsLogMode.copy)
                     Text("Move, delete the original").tag(SuggestionsLogMode.move)

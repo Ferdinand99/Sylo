@@ -147,7 +147,8 @@ public struct DashboardAccessRoles: Encodable, Sendable, Equatable {
     }
 
     /// Why this choice is not sensible, or nil: a role that is in two lists (the strongest one wins on
-    /// the server) or that has Edit already. The form says it and keeps Save off.
+    /// the server) or that has Edit already. The form shows the note and leaves Save on, as the web does: the server
+    /// accepts overlapping lists, so this is advice and never a block.
     public func conflict(editRoleIds: [String]) -> String? {
         let edit = Set(editRoleIds)
         let inbox = Set(inboxRoleIds)

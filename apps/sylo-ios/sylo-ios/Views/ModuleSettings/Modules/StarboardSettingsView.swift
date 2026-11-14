@@ -22,7 +22,7 @@ struct StarboardSettingsView: View {
                 Section {
                     TextField("Name", text: $board.name, prompt: Text("Starboard"))
                     ChannelPicker(title: "Starboard channel", selection: $board.channelId, channels: page.channels,
-                                  noneTitle: "Choose a channel")
+                                  noneTitle: "Choose a channel", embed: true, health: true)
                     TextField("Emoji", text: $board.emojiText, prompt: Text(verbatim: "⭐"))
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()

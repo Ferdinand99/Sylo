@@ -8,15 +8,10 @@ import SyloKit
 
 /// The warning under a picker: Sylo cannot give this role, or cannot post in this channel.
 struct HealthNote: View {
-    enum Subject {
-        case role(String)
-        /// `embed`: the picker is for a message with an embed, so a channel Sylo cannot send embeds in is a problem too.
-        case channel(String, embed: Bool = false)
-        case roles([String], names: [String: String])
-        case channels([String], names: [String: String])
-    }
-
-    let subject: Subject
+    let subject: HealthTargets.Pick
+    /// Whether the picker is one the web puts the note under: a role Sylo gives or takes away, a channel it posts
+    /// in. Off by default: every other picker (access roles, staff roles, ignore lists) shows nothing.
+    let isOn: Bool
     @Environment(ServerHealthModel.self) private var health: ServerHealthModel?
 
     var body: some View {
@@ -33,13 +28,8 @@ struct HealthNote: View {
     }
 
     private var notes: [String] {
-        guard let targets = health?.targets else { return [] }
-        switch subject {
-        case .role(let id): return targets.roleWarning(id).map { [$0] } ?? []
-        case .channel(let id, let embed): return targets.channelWarning(id, embed: embed).map { [$0] } ?? []
-        case .roles(let ids, let names): return targets.warnings(forRoles: ids, names: names)
-        case .channels(let ids, let names): return targets.warnings(forChannels: ids, names: names)
-        }
+        guard isOn, let targets = health?.targets else { return [] }
+        return targets.notes(for: subject, optedIn: isOn)
     }
 }
 
@@ -112,7 +102,10 @@ struct CheckAgainButton: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Button {
-                Task { await health.recheck() }
+                Task {
+                    await health.recheck()
+                    announceResult()
+                }
             } label: {
                 if health.isRechecking {
                     HStack(spacing: 6) {
@@ -125,12 +118,25 @@ struct CheckAgainButton: View {
             }
             .font(.footnote.weight(.semibold))
             .disabled(health.isRechecking)
-            // Always there, so VoiceOver announces the notice when it appears.
             Text(verbatim: health.notice ?? "")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-                .accessibilityAddTraits(.updatesFrequently)
         }
+    }
+
+    /// Says what "Check again" found, so VoiceOver users hear the result: the notice when it was too soon or
+    /// failed, otherwise whether anything is left to fix. Posted from here, not from a view that may be gone once
+    /// the problems are fixed.
+    private func announceResult() {
+        let message: String
+        if let notice = health.notice {
+            message = notice
+        } else if let count = health.report?.checks.count, count > 0 {
+            message = count == 1 ? "Checked. 1 problem is left to fix." : "Checked. \(count) problems are left to fix."
+        } else {
+            message = "Checked. Nothing to fix."
+        }
+        AccessibilityNotification.Announcement(message).post()
     }
 }
 

@@ -31,7 +31,7 @@ struct WelcomeChannelSettingsView: View {
 
             Section {
                 ChannelPicker(title: "Channel", selection: $settings.channelId, channels: page.channels,
-                              noneTitle: "Choose a channel", embed: true)
+                              noneTitle: "Choose a channel", health: true)
                 Button("Create Read-Only #welcome", systemImage: "plus.bubble") {
                     isConfirmingCreate = true
                 }

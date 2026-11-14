@@ -68,7 +68,7 @@ struct ReactionRoleEditorView: View {
                 styleSection
                 Section {
                     ChannelPicker(title: "Channel", selection: $draft.channelId, channels: model.channels,
-                                  noneTitle: "Choose a channel")
+                                  noneTitle: "Choose a channel", health: true)
                 } footer: {
                     channelFooter
                 }
@@ -242,7 +242,7 @@ struct ReactionRoleEditorView: View {
                 if draft.style != "reaction" {
                     LimitedTextField(title: "Button label (optional)", text: $pair.label, limit: model.labelLimit)
                 }
-                RolePicker(title: "Role", selection: $pair.roleId, roles: model.roles, noneTitle: "Select a role")
+                RolePicker(title: "Role", selection: $pair.roleId, roles: model.roles, noneTitle: "Select a role", health: true)
                 if draft.style == "buttons" {
                     Picker("Button colour", selection: $pair.buttonStyle) {
                         ForEach(ReactionRolePair.buttonStyles, id: \.self) { style in

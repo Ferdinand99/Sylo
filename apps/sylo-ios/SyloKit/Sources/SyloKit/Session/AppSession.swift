@@ -38,6 +38,8 @@ public final class AppSession {
     private var client: (any APIClient)?
     private var cachedLimits: AllModuleLimits?
     private var cachedFeatures: Set<ServerFeature>?
+    /// The read of `/api/mobile/info` that is on its way, so concurrent callers share it.
+    private var featuresRead: Task<Set<ServerFeature>?, Never>?
     /// Files handed out by ``download(_:)`` in this sign-in; deleted at sign-out.
     private var issuedFiles: [DownloadedFile] = []
     /// Which member search this server has, learned by the first search and kept for the sign-in.
@@ -304,23 +306,39 @@ public final class AppSession {
     /// What this server's app API supports (`features` of `GET /api/mobile/info`), asked once per sign-in
     /// and kept. Empty when the server cannot be asked right now (asked again next time); the sign-in
     /// screen's copy is the fallback. A feature an older Sylo lacks is simply not in the set.
+    ///
+    /// Calls that arrive while one read is on its way wait for it, so a server screen that asks from several
+    /// places sends one request. A read that failed is not kept: the next call (a screen appearing, the app
+    /// coming back to the foreground) asks again, so the 5.2 controls do not stay hidden after an offline start.
     public func serverFeatures() async -> Set<ServerFeature> {
         if let cachedFeatures { return cachedFeatures }
+        let fallback = Set(serverInfo?.features ?? [])
+        if let reading = featuresRead { return await reading.value ?? fallback }
         let generation = self.generation
-        do {
-            let info = try await send(Endpoints.ServerInfo())
-            let features = Set(info.features)
-            if generation == self.generation { cachedFeatures = features }
-            return features
-        } catch {
-            return Set(serverInfo?.features ?? [])
+        let reading = Task { () -> Set<ServerFeature>? in
+            do {
+                let info = try await self.send(Endpoints.ServerInfo())
+                let features = Set(info.features)
+                if generation == self.generation { self.cachedFeatures = features }
+                return features
+            } catch {
+                return nil
+            }
         }
+        featuresRead = reading
+        let result = await reading.value
+        if featuresRead == reading { featuresRead = nil }
+        return result ?? fallback
     }
 
     /// Whether this server announces `feature` (see ``serverFeatures()``).
     public func supports(_ feature: ServerFeature) async -> Bool {
         await serverFeatures().contains(feature)
     }
+
+    /// Whether the server has answered `/api/mobile/info` in this sign-in. Until it has, a missing feature may only
+    /// mean "not asked yet, or the read failed", so nothing is concluded from it.
+    public var featuresKnown: Bool { cachedFeatures != nil }
 
     /// Whether this server announces `feature`, from what ``serverFeatures()`` has already read (false until it
     /// has). For a view's body: it re-reads when the features arrive, so a control for a feature an older Sylo
@@ -349,6 +367,7 @@ public final class AppSession {
         client = makeClient(server, token)
         cachedLimits = nil
         cachedFeatures = nil
+        featuresRead = nil
         memberSearchRoute = .general
         phase = .signedIn(server)
     }
@@ -359,6 +378,7 @@ public final class AppSession {
         client = nil
         cachedLimits = nil
         cachedFeatures = nil
+        featuresRead = nil
         memberSearchRoute = .general
         for file in issuedFiles { file.discard() }
         issuedFiles = []

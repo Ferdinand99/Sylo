@@ -369,7 +369,7 @@ private struct GithubWatchEditorView: View {
 
                 Section {
                     ChannelPicker(title: "Announce in", selection: $draft.channelId, channels: model.channels,
-                                  noneTitle: "Select a channel")
+                                  noneTitle: "Select a channel", embed: true, health: true)
                     RolePicker(title: "Ping role", selection: $draft.roleId, roles: model.roles)
                 } footer: {
                     Text("The role is optional. It is pinged with every post.")
