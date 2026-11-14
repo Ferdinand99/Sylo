@@ -29,8 +29,10 @@ import {
   normaliseReason,
   refusalText,
   resetEconomy,
+  soldRoleIds,
   staffAdjust,
 } from '../../modules/economy.js';
+import { checkRoleGrants } from '../middleware/roleGrants.js';
 
 /**
  * The audit-log line of one staff change: "add 330 for Alice (…1234)". The member's name is stored with the
@@ -251,6 +253,10 @@ router.post(
       return fail(res, 'That person is not in this server and has no account.');
     }
     if (!withinPostLimit(req, res, config)) return undefined;
+
+    // Money buys the shop's role items: crediting it is a grant of every role the shop sells, so it is
+    // refused for someone who could not hand those roles out themselves (a 403). Taking money is not.
+    if (action !== 'remove') await checkRoleGrants(await soldRoleIds(guild.id));
 
     const by = actingUserId(req, guild.id, null);
     const out = await staffAdjust({

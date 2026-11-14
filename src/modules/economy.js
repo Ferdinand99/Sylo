@@ -13,6 +13,7 @@ import { EmbedBuilder } from 'discord.js';
 import { on } from './dispatch.js';
 import { every } from './schedule.js';
 import { getGuildModule } from '../db/modules.js';
+import { listItems } from '../db/economyShop.js';
 import {
   accountCount,
   getAccount,
@@ -43,6 +44,7 @@ import {
   WORK_LINES,
   formatMoney,
   formatNumber,
+  isRoleItemType,
   normaliseEconomyConfig,
   normaliseReason,
 } from './lib/economyConfig.js';
@@ -532,6 +534,19 @@ export async function memberPage(guildId, { sort = 'total', dir = 'desc', page =
 }
 
 // --- staff: add, remove, set, reset ----------------------------------------------------------------
+
+/**
+ * The roles the shop sells (role and temporary-role items that are on sale). Money buys them, so giving
+ * a member money is giving them the chance to be handed each of these: the person who credits must be
+ * able to hand every one out themselves (src/web/middleware/roleGrants.js).
+ * @returns {Promise<string[]>}
+ */
+export async function soldRoleIds(guildId) {
+  const ids = (await listItems(guildId))
+    .filter((i) => i.enabled && isRoleItemType(i.type) && i.roleId)
+    .map((i) => String(i.roleId));
+  return [...new Set(ids)];
+}
 
 /**
  * A staff change to one member, through the money API (so the ledger has it). `action` is `add`,

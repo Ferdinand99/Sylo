@@ -3,7 +3,15 @@
 // posted to the Economy log channel when the server has set one. The code checks the permission
 // itself, so it holds on Fluxer too, where the platform has no access control for commands.
 import { InteractionContextType, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
-import { LIMITS, MAX_BALANCE, formatMoney, refusalText, staffAdjust } from '../../modules/economy.js';
+import {
+  LIMITS,
+  MAX_BALANCE,
+  formatMoney,
+  refusalText,
+  soldRoleIds,
+  staffAdjust,
+} from '../../modules/economy.js';
+import { grantRefusal } from '../../web/middleware/roleGrants.js';
 import { economyGate, reply } from '../lib/economyCmd.js';
 
 const user = (s) => s.addUserOption((o) => o.setName('user').setDescription('The member').setRequired(true));
@@ -62,6 +70,14 @@ export async function execute(interaction) {
   const action = interaction.options.getSubcommand();
   const target = interaction.options.getUser('user', true);
   if (target.bot) return reply(interaction, 'Bots do not have an account.');
+  // Money buys the shop's role items, so giving it needs the right to hand those roles out (as in the dashboard).
+  if (action !== 'remove') {
+    for (const roleId of await soldRoleIds(interaction.guildId)) {
+      const role = interaction.guild?.roles?.cache?.get(roleId);
+      const why = role ? grantRefusal(interaction.guild, interaction.member, role) : null;
+      if (why) return reply(interaction, why);
+    }
+  }
 
   const out = await staffAdjust({
     guildId: interaction.guildId,
