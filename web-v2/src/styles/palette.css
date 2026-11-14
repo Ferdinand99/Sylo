@@ -1,0 +1,267 @@
+/* Command palette (components/CommandPalette.jsx, opened with Ctrl+K or ⌘K or the search button of the top bar)
+   and the quiet "free" line (components/FreeLine.jsx). */
+
+/* ---------- The top-bar button ---------- */
+.v2-topbar .v2-palette-trigger {
+  margin-left: auto;
+}
+/* The theme button no longer starts the right-hand group: the search button does. */
+.v2-palette-trigger + .v2-theme-toggle {
+  margin-left: 0;
+}
+.v2-palette-trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  height: 32px;
+  padding: 0 8px 0 10px;
+  background: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition:
+    color var(--dur-ui) ease,
+    border-color var(--dur-ui) ease,
+    transform var(--dur-press) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .v2-palette-trigger:hover {
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+}
+.v2-palette-trigger:active {
+  transform: scale(0.97);
+}
+.v2-palette-trigger-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.v2-palette-trigger-key {
+  font-family: var(--font);
+  font-size: var(--fs-xs);
+  padding: 1px 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-muted);
+}
+/* Narrow screens: just the magnifier, as round as the theme button beside it. There is no keyboard
+   shortcut to point at on a phone. */
+@media (max-width: 860px) {
+  .v2-palette-trigger {
+    width: 32px;
+    padding: 0;
+    justify-content: center;
+  }
+  .v2-palette-trigger-text,
+  .v2-palette-trigger-key {
+    display: none;
+  }
+}
+@media (pointer: coarse) {
+  .v2-palette-trigger::before {
+    content: '';
+    position: absolute;
+    inset: -7px;
+  }
+}
+
+/* ---------- The dialog ---------- */
+.v2-palette-dialog {
+  width: min(640px, calc(100vw - 24px));
+  max-width: none;
+  margin: min(12vh, 110px) auto auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  overflow: visible;
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+  transition:
+    opacity 150ms var(--ease-out),
+    transform 150ms var(--ease-out);
+}
+.v2-palette-dialog.is-open {
+  opacity: 1;
+  transform: none;
+  transition-duration: var(--dur-ui);
+}
+.v2-palette-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+  opacity: 0;
+  transition: opacity 150ms var(--ease-out);
+}
+.v2-palette-dialog.is-open::backdrop {
+  opacity: 1;
+  transition-duration: var(--dur-ui);
+}
+:root[data-theme='light'] .v2-palette-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.32);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .v2-palette-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.65);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .v2-palette-dialog,
+  .v2-palette-dialog::backdrop {
+    transition: none;
+    transform: none;
+  }
+}
+
+.v2-palette {
+  display: flex;
+  flex-direction: column;
+  max-height: min(560px, calc(100dvh - 24px - min(12vh, 110px)));
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+}
+.v2-palette-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.v2-palette-field-icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: var(--text-muted);
+}
+.v2-palette-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: none;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  /* 16px: a smaller field makes iOS zoom the page when it takes focus. */
+  font-size: 1rem;
+  padding: 6px 0;
+}
+.v2-palette-input::placeholder {
+  color: var(--text-muted);
+}
+.v2-palette-input:focus-visible {
+  outline: none;
+}
+.v2-palette-field:focus-within {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.v2-palette-close {
+  flex: none;
+  background: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--fs-sm);
+  padding: 4px 12px;
+  cursor: pointer;
+}
+@media (hover: hover) and (pointer: fine) {
+  /* A mouse has the backdrop and Esc; the button is for a phone. */
+  .v2-palette-close {
+    display: none;
+  }
+}
+
+.v2-palette-results {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+}
+.v2-palette-heading {
+  padding: 10px 10px 4px;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.v2-palette-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--fs-md);
+}
+.v2-palette-option.is-active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.v2-palette-option-icon {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  color: var(--text-muted);
+}
+.v2-palette-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.v2-palette-hint {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.v2-palette-empty {
+  margin: 0;
+  padding: 22px 10px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--fs-md);
+  overflow-wrap: anywhere;
+}
+.v2-palette-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  padding: 9px 14px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+.v2-palette-foot kbd {
+  font-family: var(--font);
+  padding: 1px 5px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+}
+/* The hints name keys: nothing to say on a touch screen. */
+@media (pointer: coarse) {
+  .v2-palette-foot {
+    display: none;
+  }
+}
+
+/* ---------- The "free" line ---------- */
+.v2-free-line {
+  margin: 28px 0 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  text-wrap: balance;
+}

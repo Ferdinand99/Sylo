@@ -47,6 +47,7 @@ import eventsRouter from './v2Events.js';
 import suggestionsRouter from './v2Suggestions.js';
 import tempRolesRouter from './v2TempRoles.js';
 import quotesRouter from './v2Quotes.js';
+import searchRouter from './v2Search.js';
 import introRouter from './v2Intro.js';
 import applicationsRouter from './v2Applications.js';
 import applyMemberRouter from './v2Apply.js';
@@ -472,6 +473,8 @@ router.use('/guilds/:guildId', economyRouter);
 router.use('/guilds/:guildId', shopRouter);
 // Applications: settings, forms, the panel, submissions, export (v2Applications.js).
 router.use('/guilds/:guildId', applicationsRouter);
+// The command palette's lookup of an inbox item by number (v2Search.js).
+router.use('/guilds/:guildId', searchRouter);
 
 // What the new dashboard needs to know about a server's platform: its capabilities (to hide
 // what the platform cannot do) and the per-module notes (what behaves differently there).
