@@ -4,6 +4,7 @@ import { setModuleEnabled, setModulesEnabledBulk } from '../api.js';
 import { useOverview } from '../OverviewContext.jsx';
 import { v2Href } from '../moduleForms/index.js';
 import { notify } from '../notify.js';
+import FreeLine from '../components/FreeLine.jsx';
 import LoadError from '../components/LoadError.jsx';
 import Switch from '../components/Switch.jsx';
 import { plural } from '../components/Meta.jsx';
@@ -463,6 +464,7 @@ export default function Overview() {
           {query.trim() ? `No modules match "${query}".` : 'No modules with this status.'}
         </p>
       ) : null}
+      <FreeLine />
     </Reveal>
   );
 }
