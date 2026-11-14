@@ -11,7 +11,12 @@ import {
   recordAudit,
   scrubMemberFromHistory,
 } from '../src/db/audit.js';
-import { setBotMasterRoles, setEmbedColor, setModlogChannel } from '../src/db/guildSettings.js';
+import {
+  setBotMasterRoles,
+  setDashboardAccessRoles,
+  setEmbedColor,
+  setModlogChannel,
+} from '../src/db/guildSettings.js';
 import { runWithCapture } from '../src/db/auditCapture.js';
 import { setGuildModule } from '../src/db/modules.js';
 import { describeUserData, exportUserData, forgetUser, purgeGuild } from '../src/db/purge.js';
@@ -248,6 +253,25 @@ test('server settings written in a request are kept as the change of its "settin
   await setEmbedColor(S, 0x000001);
   await recordAudit(S, { actor: 'Ann', action: 'settings:server', detail: 'no request' });
   assert.equal(Number((await listAuditPage(S, { limit: 1 })).rows[0].has_change), 0);
+});
+
+test('saving the dashboard access roles keeps both lists, each under its own name', async () => {
+  const A = '910000000000000008';
+  const [R1, R2, R3] = ['200000000000000011', '200000000000000012', '200000000000000013'];
+  await setDashboardAccessRoles(A, { inbox: [R1], view: [R2] });
+  await runWithCapture(async () => {
+    await setDashboardAccessRoles(A, { inbox: [R1, R3], view: [] });
+    await recordAudit(A, { actor: 'Ann', action: 'settings:access', detail: 'saved' });
+    // the same lists again: nothing changed
+    await setDashboardAccessRoles(A, { inbox: [R1, R3], view: [] });
+    await recordAudit(A, { actor: 'Ann', action: 'settings:access', detail: 'again' });
+  });
+  const [again, saved] = (await listAuditPage(A, { limit: 2 })).rows;
+  const { change } = await getAuditEntry(A, saved.id);
+  assert.deepEqual(change.before, { inboxRoleIds: [R1], viewRoleIds: [R2] });
+  assert.deepEqual(change.after, { inboxRoleIds: [R1, R3], viewRoleIds: [] });
+  assert.ok(!('undefined' in change.before) && !('undefined' in change.after));
+  assert.equal(Number(again.has_change), 0);
 });
 
 test('an entry that is not a "module:" one takes the config of the only module the request wrote', async () => {

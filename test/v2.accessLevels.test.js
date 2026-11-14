@@ -380,6 +380,44 @@ test('only Edit can change the access settings, and only Manage Server the Edit 
   assert.deepEqual((await getDashboardAccessRoles(D_GUILD)).edit, [MASTER, OTHER_ROLE]);
 });
 
+test('saving the access roles keeps a before and after for the Inbox and View lists, under their own names', async () => {
+  const { getAuditEntry, listAudit } = await import('../src/db/audit.js');
+  const latest = async () => {
+    const row = (await listAudit(D_GUILD, 20)).find((r) => r.action === 'settings:access');
+    return getAuditEntry(D_GUILD, row.id);
+  };
+  const master = await person({ roles: [MASTER] });
+  await setDashboardAccessRoles(D_GUILD, { inbox: [INBOX], view: [VIEW] });
+
+  // Only Inbox changes: the entry shows that, and nothing about View or a key called "undefined".
+  const inboxOnly = await master.web.post(g('/access'), { inboxRoleIds: [INBOX, OTHER_ROLE] });
+  assert.equal(inboxOnly.status, 200);
+  assert.deepEqual((await latest()).change, {
+    before: { inboxRoleIds: [INBOX] },
+    after: { inboxRoleIds: [INBOX, OTHER_ROLE] },
+  });
+
+  // Only View changes.
+  assert.equal((await master.web.post(g('/access'), { viewRoleIds: [] })).status, 200);
+  assert.deepEqual((await latest()).change, { before: { viewRoleIds: [VIEW] }, after: { viewRoleIds: [] } });
+
+  // Both change in one save: each list has its own before and after.
+  assert.equal(
+    (await master.web.post(g('/access'), { inboxRoleIds: [], viewRoleIds: [VIEW, OTHER_ROLE] })).status,
+    200
+  );
+  assert.deepEqual((await latest()).change, {
+    before: { inboxRoleIds: [INBOX, OTHER_ROLE], viewRoleIds: [] },
+    after: { inboxRoleIds: [], viewRoleIds: [VIEW, OTHER_ROLE] },
+  });
+
+  // Nothing changes: no change is kept.
+  assert.equal((await master.web.post(g('/access'), { viewRoleIds: [VIEW, OTHER_ROLE] })).status, 200);
+  assert.equal((await latest()).change, null);
+
+  await setDashboardAccessRoles(D_GUILD, { inbox: [INBOX, OTHER_ROLE], view: [VIEW] });
+});
+
 // --- what a lower level reads -------------------------------------------------------------------
 
 test('View does not see GitHub webhook secrets', async () => {

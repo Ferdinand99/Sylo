@@ -80,10 +80,14 @@ const HISTORY_NAME = {
   embed_color: 'embedColor',
   bot_master_roles: 'botMasterRoleIds',
   command_prefix: 'commandPrefix',
+  dashboard_inbox_roles: 'inboxRoleIds',
+  dashboard_view_roles: 'viewRoleIds',
 };
+// Columns whose stored text is a JSON list of role ids, kept in the history as the list itself.
+const ROLE_LIST_COLUMNS = new Set(['bot_master_roles', 'dashboard_inbox_roles', 'dashboard_view_roles']);
 function historyValue(col, raw) {
   if (col === 'embed_color') return Number.isInteger(raw) ? `#${raw.toString(16).padStart(6, '0')}` : '';
-  if (col === 'bot_master_roles') {
+  if (ROLE_LIST_COLUMNS.has(col)) {
     try {
       const v = JSON.parse(raw ?? '[]');
       return Array.isArray(v) ? v : [];
@@ -99,7 +103,9 @@ async function put(guildId, col, value) {
   await ensureStmt.run(guildId, Date.now());
   await setCol[col].run({ g: guildId, v: value, t: Date.now() });
   // The change history of the dashboard request this write belongs to keeps what it changed.
-  noteSettingWrite(guildId, HISTORY_NAME[col], historyValue(col, before), historyValue(col, value));
+  // A column without a history name is left out: noting it would file it under the key "undefined".
+  const name = HISTORY_NAME[col];
+  if (name) noteSettingWrite(guildId, name, historyValue(col, before), historyValue(col, value));
 }
 
 /** Set (or clear, with null) the mod-log channel for a guild. */
