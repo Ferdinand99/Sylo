@@ -23,6 +23,7 @@ import { notifyTarget, MOD_COLOR } from '../bot/lib/moderation.js';
 import { addCase } from '../db/modCases.js';
 import { recordHoneypotCatch } from '../db/honeypotCatches.js';
 import { log } from '../lib/log.js';
+import { isMessageGone } from '../platform/messageErrors.js';
 
 export const HONEYPOT_ACTIONS = ['kick', 'timeout', 'ban'];
 const ACTION_LABELS = { kick: 'Kicks', timeout: 'Timeouts', ban: 'Bans' };
@@ -237,10 +238,20 @@ export async function ensureHoneypotMessages(guild, config) {
     }
 
     if (row.messageId) {
-      const existing = await channel.messages.fetch(row.messageId).catch((err) => {
-        log.error('module:honeypot', 'fetching the bait message failed:', err.message);
-        return null;
-      });
+      let existing = null;
+      try {
+        existing = await channel.messages.fetch(row.messageId);
+      } catch (err) {
+        // Only "it is gone" means post a new one. A timeout, a 5xx or missing access must not.
+        if (!isMessageGone(err)) {
+          log.error(
+            'module:honeypot',
+            'fetching the bait message failed, not posting a new one:',
+            err.message
+          );
+          continue;
+        }
+      }
       if (existing) {
         await existing
           .edit({ embeds: [baitEmbed(row)] })
