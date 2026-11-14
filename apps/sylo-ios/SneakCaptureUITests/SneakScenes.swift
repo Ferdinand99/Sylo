@@ -17,15 +17,16 @@ final class SneakScenes: XCTestCase {
         let harbor = find(app, "Pixel Harbor")
         XCTAssertTrue(harbor.waitForExistence(timeout: 30), "server list did not load")
         mark("01", "start")
-        pause(1.8)
+        pause(1.4)
         harbor.tap()
         XCTAssertTrue(find(app, "open suggestions").waitForExistence(timeout: 20), "overview did not load")
-        pause(2.6)
+        pause(2.4)
         scroll(app)
-        pause(1.8)
+        pause(1.6)
         scroll(app)
-        pause(1.8)
+        pause(1.0)
         mark("01", "end")
+        pause(0.8)
     }
 
     /// 2. A health problem opened: the fix text, then the role picker's note.
@@ -35,19 +36,20 @@ final class SneakScenes: XCTestCase {
         let row = find(app, "do everything it needs")
         scrollTo(app, row)
         mark("02", "start")
-        pause(2.0)
+        pause(1.8)
         row.tap()
         let banner = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "do everything this module needs")).firstMatch
         XCTAssertTrue(banner.waitForExistence(timeout: 20), "module screen did not open")
-        pause(1.2)
+        pause(1.0)
         banner.tap()
-        pause(3.4)
+        pause(3.2)
         banner.tap()
-        pause(0.8)
+        pause(0.6)
         let note = find(app, "give this role")
         scrollTo(app, note)
-        pause(3.2)
+        pause(2.6)
         mark("02", "end")
+        pause(0.8)
     }
 
     /// 3. Change history: a diff and the Undo button.
@@ -58,18 +60,19 @@ final class SneakScenes: XCTestCase {
         let auditRow = find(app, "Audit Log")
         scrollTo(app, auditRow)
         mark("03", "start")
-        pause(1.5)
+        pause(1.2)
         auditRow.tap()
         let show = app.buttons["Show Changes"].firstMatch
         XCTAssertTrue(show.waitForExistence(timeout: 20), "audit log did not load")
-        pause(2.0)
+        pause(1.6)
         show.tap()
         let undo = app.buttons["Undo This Change"].firstMatch
         XCTAssertTrue(undo.waitForExistence(timeout: 20), "change did not load")
         pause(1.2)
         scrollTo(app, undo)
-        pause(3.2)
+        pause(2.6)
         mark("03", "end")
+        pause(0.8)
     }
 
     /// 4. Suggestions: quick Approve with the reason sheet.
@@ -81,21 +84,24 @@ final class SneakScenes: XCTestCase {
         module.tap()
         let approve = app.buttons["Approve"].firstMatch
         scrollTo(app, approve, swipes: 14)
+        // One more drag when the suggestion sits at the bottom edge, so the whole card is in view.
+        if approve.frame.midY > app.frame.height * 0.6 { scroll(app) }
         mark("04", "start")
-        pause(1.8)
+        pause(1.6)
         approve.tap()
         let alert = app.alerts.firstMatch
         XCTAssertTrue(alert.waitForExistence(timeout: 10), "reason alert did not show")
-        pause(1.0)
+        pause(0.8)
         let field = alert.textFields.firstMatch
         field.tap()
         dismissKeyboardTip(app)
-        type(field, "Great idea, let's start this Saturday.")
-        pause(1.4)
+        field.typeText("Great idea, let's start this Saturday.")
+        pause(1.2)
         alert.buttons["Approved"].tap()
         XCTAssertTrue(find(app, "Great idea").waitForExistence(timeout: 15), "decision did not show")
-        pause(3.0)
+        pause(2.2)
         mark("04", "end")
+        pause(0.8)
     }
 
     /// 5. The setup wizard's goals screen.
@@ -106,20 +112,22 @@ final class SneakScenes: XCTestCase {
         let row = find(app, "Setup Wizard")
         scrollTo(app, row)
         mark("05", "start")
-        pause(1.4)
+        pause(1.2)
         row.tap()
         let choose = app.buttons["Choose What to Set Up"]
         XCTAssertTrue(choose.waitForExistence(timeout: 20), "wizard did not load")
-        pause(2.2)
+        pause(1.8)
         choose.tap()
         XCTAssertTrue(find(app, "Welcome new members").waitForExistence(timeout: 10), "goals did not show")
-        pause(1.6)
+        pause(1.4)
+        // The switch itself sits at the right edge of its row.
         let toggles = app.switches
-        if toggles.count > 0 { toggles.element(boundBy: 0).tap() }
-        pause(1.0)
-        if toggles.count > 1 { toggles.element(boundBy: 1).tap() }
-        pause(2.2)
+        if toggles.count > 0 { toggles.element(boundBy: 0).coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap() }
+        pause(0.9)
+        if toggles.count > 2 { toggles.element(boundBy: 2).coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap() }
+        pause(1.8)
         mark("05", "end")
+        pause(0.8)
     }
 
     // MARK: Helpers
@@ -170,14 +178,6 @@ final class SneakScenes: XCTestCase {
     @MainActor private func dismissKeyboardTip(_ app: XCUIApplication) {
         let tip = app.buttons["Continue"]
         if tip.waitForExistence(timeout: 1.0) { tip.tap() }
-    }
-
-    /// Types a character at a time, about eleven a second.
-    @MainActor private func type(_ field: XCUIElement, _ text: String) {
-        for character in text {
-            field.typeText(String(character))
-            pause(0.05)
-        }
     }
 
     /// Tells the workflow when a scene starts and ends, as seconds since 1970.

@@ -96,13 +96,13 @@ struct ServerView: View {
             .environment(openAppeals)
         }
         .navigationDestination(for: ModuleRoute.self) { route in
-            ModuleScreens.screen(for: route.moduleID, server: summary.id, session: session)
+            scoped(ModuleScreens.screen(for: route.moduleID, server: summary.id, session: session))
         }
         .navigationDestination(for: ServerPageRoute.self) { route in
-            ServerPages.screen(for: route.cardID, server: summary.id, session: session)
+            scoped(ServerPages.screen(for: route.cardID, server: summary.id, session: session))
         }
         .navigationDestination(for: TicketRoute.self) { route in
-            TicketThreadView(server: summary.id, route: route, session: session)
+            scoped(TicketThreadView(server: summary.id, route: route, session: session))
         }
         .confirmationDialog("Discard your changes?", isPresented: $isConfirmingDiscard, titleVisibility: .visible) {
             Button("Discard Changes", role: .destructive) { settings.discardChanges() }
@@ -136,6 +136,16 @@ struct ServerView: View {
                 await health.load()
             }
         }
+    }
+
+    /// A pushed screen reads the server's models and access from its environment. Values set below the
+    /// destinations on this view do not reach a screen the stack pushes, so they are set on the screen itself.
+    private func scoped<Content: View>(_ content: Content) -> some View {
+        content
+            .environment(openAppeals)
+            .environment(health)
+            .environment(\.serverPlatform, summary.platform)
+            .environment(\.dashboardAccess, summary.effectiveAccess)
     }
 
     /// The pages the search can open: those of the app, and the wizard and the import where this server has them.

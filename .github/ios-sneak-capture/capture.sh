@@ -88,9 +88,10 @@ for ENTRY in 01:overview:testScene01Overview 02:health:testScene02Health 03:hist
   CLIP="$OUT/$ID-$NAME.mp4"
   if [ -n "$START" ] && [ -n "$END" ] && [ -s "$RAWFILE" ]; then
     SS="$(awk -v s="$START" -v t="$T0" 'BEGIN { v = s - t - 1.0; if (v < 0) v = 0; printf "%.2f", v }')"
-    DUR="$(awk -v s="$START" -v e="$END" 'BEGIN { printf "%.2f", e - s + 2.2 }')"
+    # One second before the start and 0.4 s after the end marker; the test holds the last screen 0.8 s more.
+    DUR="$(awk -v s="$START" -v e="$END" 'BEGIN { printf "%.2f", e - s + 1.4 }')"
     echo "Cut $CLIP from $SS s for $DUR s"
-    ffmpeg -y -loglevel error -ss "$SS" -i "$RAWFILE" -t "$DUR" -c:v libx264 -pix_fmt yuv420p -crf 17 -an "$CLIP"
+    ffmpeg -y -loglevel error -ss "$SS" -i "$RAWFILE" -t "$DUR" -vf "fps=30" -c:v libx264 -pix_fmt yuv420p -crf 17 -an "$CLIP"
   elif [ -s "$RAWFILE" ]; then
     echo "No markers for scene $ID: keeping the whole recording"
     cp "$RAWFILE" "$CLIP"
@@ -98,6 +99,8 @@ for ENTRY in 01:overview:testScene01Overview 02:health:testScene02Health 03:hist
   if [ -s "$CLIP" ]; then
     ffmpeg -y -loglevel error -i "$CLIP" -vf "fps=1.5,scale=200:-1,tile=10x4" -frames:v 1 "$SHEETS/$ID-$NAME.png" || true
     ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$CLIP" > "$LOGS/length-$ID.txt" || true
+    ffprobe -v error -show_entries stream=nb_frames,avg_frame_rate,width,height -of default=nw=1 "$RAWFILE" > "$LOGS/raw-info-$ID.txt" || true
+    ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$RAWFILE" >> "$LOGS/raw-info-$ID.txt" || true
   fi
 done
 
