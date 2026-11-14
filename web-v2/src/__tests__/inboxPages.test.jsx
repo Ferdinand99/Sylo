@@ -104,7 +104,7 @@ describe('TicketView', () => {
     api.getTicket.mockResolvedValue(ticket({ status: 'closed' }));
     view();
     const title = await screen.findByRole('heading', { level: 1 });
-    expect(title.textContent).toMatch(/Closed/);
+    await waitFor(() => expect(title.textContent).toMatch(/Closed/));
   });
 });
 
