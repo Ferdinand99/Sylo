@@ -6,7 +6,7 @@ import { config } from '../../config.js';
 import { splitPlatformGuildId } from '../../lib/platformId.js';
 import { identityFor } from '../lib/accountAuth.js';
 import { fetchMemberFromGuild } from './auth.js';
-import { accountGuildAccessDetail, atLeast, checksLive } from './access.js';
+import { accountGuildAccessDetail, atLeast, checksLive, refreshStaleMember } from './access.js';
 import { getGuildModule } from '../../db/modules.js';
 import { withoutEveryone } from '../../db/guildSettings.js';
 
@@ -39,6 +39,9 @@ export async function accountTicketAccess(
   const guild = guildByKey(guildId);
   if (!guild) return level;
   try {
+    // `known` was read after a refresh. Otherwise (no dashboard access roles in this server) refresh here:
+    // without the Server Members intent the cached member may still hold a staff role that was taken away.
+    if (!known) await refreshStaleMember(guildId, userId, { write });
     const member = known ?? (await fetchMember(guild, userId));
     if (member?.roles.cache.some((r) => staffRoles.includes(r.id))) return 'inbox';
   } catch {
