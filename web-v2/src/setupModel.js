@@ -36,6 +36,30 @@ export const initialGoals = () => new Set();
  * to replace it.
  * @returns {Record<string, { on: boolean, fields: Record<string, { mode: 'pick' | 'create', id: string, fix: boolean }> }>}
  */
+/**
+ * The channel a field's "Change its permissions" tick is about, when the admin has picked it: the one with the
+ * wanted name, or the one found by name that others can see, and only when it differs from what the wizard promises.
+ */
+export function fixableChannel(field, pickId) {
+  return [field.create?.existing, field.unsafeMatch].find((c) => c && c.gap && c.id === pickId) ?? null;
+}
+
+/**
+ * Whether a role that is only for who may see a channel does anything now: Sylo sets who sees a channel when it
+ * creates it, or when the admin ticks the change of its permissions. With neither, the field is not used.
+ */
+export function viewerActive(item, choice) {
+  return item.fields.some((f) => {
+    const pick = choice?.fields?.[f.key];
+    return (
+      f.kind === 'channel' &&
+      f.create &&
+      pick &&
+      ((pick.mode === 'create' && !f.create.existing) || (pick.fix && fixableChannel(f, pick.id)))
+    );
+  });
+}
+
 export function initialChoices(data) {
   const out = {};
   for (const item of data.items) {
@@ -44,7 +68,12 @@ export function initialChoices(data) {
       fields: Object.fromEntries(
         item.fields.map((f) => [
           f.key,
-          { mode: 'pick', id: (f.match ?? f.create?.existing)?.id ?? '', fix: false },
+          // Only a channel that is what the wizard promises is picked for the admin (not one others can see).
+          {
+            mode: 'pick',
+            id: f.match?.id ?? (f.create?.existing && !f.create.existing.gap ? f.create.existing.id : ''),
+            fix: false,
+          },
         ])
       ),
     };
@@ -89,11 +118,12 @@ export function reviewSummary(data, goalIds, choices) {
   let problems = 0;
   for (const item of active) {
     problems += itemProblems(data, item, choices[item.id]).length;
+    const viewerOn = viewerActive(item, choices[item.id]);
     for (const field of item.fields) {
       const pick = choices[item.id].fields[field.key];
-      if (pick?.fix && field.create?.existing && pick.id === field.create.existing.id) {
-        changed.push(field.create.existing.name);
-      }
+      if (field.viewerOnly && !viewerOn) continue;
+      const fixing = pick?.fix ? fixableChannel(field, pick.id) : null;
+      if (fixing) changed.push(fixing.name);
       if (pick?.mode !== 'create' || !field.create || field.create.existing) continue;
       (field.kind === 'channel' ? channels : roles).set(field.create.name, field.create);
     }
@@ -131,11 +161,13 @@ export function toPayload(data, goalIds, choices) {
       fields: Object.fromEntries(
         item.fields.map((field) => {
           const pick = choices[item.id].fields[field.key] ?? { mode: 'pick', id: '' };
+          // A role only for who may see a channel is sent only when it will be used.
+          if (field.viewerOnly && !viewerActive(item, choices[item.id])) return [field.key, {}];
           if (pick.mode === 'create' && field.create && !field.create.existing)
             return [field.key, { create: true }];
           if (!pick.id) return [field.key, {}];
           // A channel's permissions change only where the wizard knows how, and only when the admin ticked it.
-          const fix = pick.fix && field.create?.existing?.id === pick.id;
+          const fix = pick.fix && fixableChannel(field, pick.id);
           return [field.key, fix ? { id: pick.id, fix: true } : { id: pick.id }];
         })
       ),

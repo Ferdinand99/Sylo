@@ -20,7 +20,8 @@ test.after(() => app.close());
 let nextId = 700000000000000000n;
 const snowflake = () => String(nextId++);
 
-const channelOf = (guild, id, name, perms = PermissionsBitField.All) => ({
+// `everyone` is what members can do in the channel; `perms` is what Sylo can.
+const channelOf = (guild, id, name, perms = PermissionsBitField.All, everyone = perms) => ({
   id,
   name,
   type: ChannelType.GuildText,
@@ -28,13 +29,14 @@ const channelOf = (guild, id, name, perms = PermissionsBitField.All) => ({
   position: 50,
   guild,
   isTextBased: () => true,
-  permissionsFor: () => new PermissionsBitField(perms),
+  // Sylo (the bot member) holds `perms`; @everyone and every other role see what `everyone` says.
+  permissionsFor: (who) => new PermissionsBitField(who === guild.members.me ? perms : everyone),
 });
 
 /** A channel the server already has. */
-function addChannel(name, perms) {
+function addChannel(name, perms, everyone) {
   const id = snowflake();
-  app.guild.channels.cache.set(id, channelOf(app.guild, id, name, perms));
+  app.guild.channels.cache.set(id, channelOf(app.guild, id, name, perms, everyone));
   return id;
 }
 function addRole(name, position = 3, managed = false) {
@@ -127,8 +129,9 @@ test('channels and roles found by name are proposed, and what Sylo cannot use is
   const welcomeCh = addChannel('📜│welcome');
   const rules = addChannel('rules');
   const verify = addChannel('verify');
-  const modlog = addChannel('mod-log');
-  const logs = addChannel('logs');
+  // Staff-only channels: members cannot see them (so they are offered).
+  const modlog = addChannel('mod-log', undefined, PermissionsBitField.Flags.SendMessages);
+  const logs = addChannel('logs', undefined, PermissionsBitField.Flags.SendMessages);
   const readOnlyForBot = addChannel('suggestions', new PermissionsBitField(0n));
   const above = addRole('Verified', 99);
   const staff = addRole('Staff');

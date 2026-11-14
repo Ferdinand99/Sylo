@@ -243,6 +243,67 @@ describe('SetupWizard', () => {
   });
 });
 
+describe('SetupWizard: staff-only channels and the staff role', () => {
+  const gap = 'Members with the Verified role can see it.';
+  const withUnsafe = () =>
+    suggestion({
+      channels: [{ id: GENERAL, name: 'logs', problem: null }],
+      roles: [{ id: '200000000000000002', name: 'Support team', problem: null }],
+      items: [
+        {
+          ...suggestion().items[0],
+          fields: [
+            field({
+              match: null,
+              unsafeMatch: { id: GENERAL, name: 'logs', gap },
+              create: { name: 'server-log', kind: 'channel', private: true, readOnly: false, existing: null },
+            }),
+            field({
+              key: 'viewRole',
+              kind: 'role',
+              label: 'Role that can see this channel',
+              optional: true,
+              post: false,
+              viewer: true,
+              viewerOnly: true,
+              match: { id: '200000000000000002', name: 'Support team' },
+              create: { name: 'Support team', kind: 'role' },
+            }),
+          ],
+        },
+      ],
+    });
+
+  it('does not pick a channel that others can see, says why, and offers the permission change when it is picked', async () => {
+    api.getSetupSuggestion.mockResolvedValue(withUnsafe());
+    await toReview();
+    expect(screen.getByText(/logs exists, but members with the Verified role can see it\./)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Apply' }).disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText('Welcome channel'), { target: { value: GENERAL } });
+    const fix = screen.getByRole('checkbox', { name: /Change its permissions to private/ });
+    expect(fix.checked).toBe(false);
+    fireEvent.click(fix);
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(api.applySetup).toHaveBeenCalled());
+    const fields = api.applySetup.mock.calls[0][1].items[0].fields;
+    expect(fields.joinChannel).toEqual({ id: GENERAL, fix: true });
+    expect(fields.viewRole).toEqual({ id: '200000000000000002' });
+  });
+
+  it('says the staff role is not used while the channel is neither created nor changed, and sends nothing for it', async () => {
+    api.getSetupSuggestion.mockResolvedValue(withUnsafe());
+    await toReview();
+    expect(
+      screen.getByText(/Not used now\. This role gets access when Sylo creates the channel/)
+    ).toBeTruthy();
+    expect(screen.getByLabelText(/Role that can see this channel/).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('checkbox', { name: /Create #server-log/ }));
+    expect(screen.queryByText(/Not used now/)).toBeNull();
+    expect(screen.getByLabelText(/Role that can see this channel/).disabled).toBe(false);
+  });
+});
+
 describe('SetupWizard: a channel that already has the wanted name', () => {
   const existing = { id: GENERAL, name: 'general', gap: 'Everyone can see it.' };
   const withExisting = () =>

@@ -10,6 +10,8 @@ import {
   needsSetupOffer,
   reviewSummary,
   toPayload,
+  viewerActive,
+  fixableChannel,
 } from '../setupModel.js';
 
 const field = (over) => ({
@@ -127,14 +129,33 @@ describe('the first choices', () => {
     expect([...initialGoals(d)]).toEqual([]);
   });
 
-  it('pick the channel that already has the name Create would give', () => {
-    const existing = { id: '100000000000000002', name: 'tickets', gap: 'Everyone can see it.' };
+  it('pick the channel that already has the name Create would give, when it is what the wizard promises', () => {
+    const existing = { id: '100000000000000002', name: 'tickets', gap: null };
     const d = data({
       items: [
         item({ fields: [field({ create: { name: 'tickets', kind: 'channel', private: true, existing } })] }),
       ],
     });
     expect(initialChoices(d).welcome.fields.channel.id).toBe('100000000000000002');
+  });
+
+  it('do not pick a channel that others can see for a staff-only field', () => {
+    const gap = 'Members with the Verified role can see it.';
+    const existing = { id: '100000000000000002', name: 'tickets', gap };
+    const d = data({
+      items: [
+        item({
+          fields: [
+            field({
+              match: null,
+              unsafeMatch: { id: '100000000000000003', name: 'logs', gap },
+              create: { name: 'tickets', kind: 'channel', private: true, existing },
+            }),
+          ],
+        }),
+      ],
+    });
+    expect(initialChoices(d).welcome.fields.channel.id).toBe('');
   });
 });
 
@@ -300,6 +321,69 @@ describe('a channel that already has the wanted name', () => {
     expect(toPayload(d, new Set(['welcome']), c).items[0].fields.channel).toEqual({
       id: '100000000000000003',
     });
+  });
+});
+
+describe('a role that is only for who may see a channel', () => {
+  const gap = 'Everyone can see it.';
+  const make = () =>
+    data({
+      channels: [{ id: '100000000000000002', name: 'logs', problem: null }],
+      roles: [{ id: '200000000000000002', name: 'Support team', problem: null }],
+      items: [
+        item({
+          fields: [
+            field({
+              match: null,
+              unsafeMatch: { id: '100000000000000002', name: 'logs', gap },
+              create: { name: 'server-log', kind: 'channel', private: true, existing: null },
+            }),
+            field({
+              key: 'viewRole',
+              kind: 'role',
+              optional: true,
+              viewer: true,
+              viewerOnly: true,
+              post: false,
+              match: { id: '200000000000000002', name: 'Support team' },
+              create: { name: 'Support team', kind: 'role' },
+            }),
+          ],
+        }),
+      ],
+    });
+
+  it('does nothing unless the channel is created or its permissions are changed, and is then not sent', () => {
+    const d = make();
+    const c = initialChoices(d);
+    expect(viewerActive(d.items[0], c.welcome)).toBe(false);
+    expect(toPayload(d, new Set(['welcome']), c).items[0].fields.viewRole).toEqual({});
+
+    c.welcome.fields.channel = { mode: 'create', id: '', fix: false };
+    expect(viewerActive(d.items[0], c.welcome)).toBe(true);
+    expect(toPayload(d, new Set(['welcome']), c).items[0].fields.viewRole).toEqual({
+      id: '200000000000000002',
+    });
+  });
+
+  it('is used when the admin ticks the permission change of the channel that others can see', () => {
+    const d = make();
+    const c = initialChoices(d);
+    c.welcome.fields.channel = { mode: 'pick', id: '100000000000000002', fix: true };
+    expect(fixableChannel(d.items[0].fields[0], '100000000000000002')?.name).toBe('logs');
+    expect(viewerActive(d.items[0], c.welcome)).toBe(true);
+    expect(toPayload(d, new Set(['welcome']), c).items[0].fields.channel).toEqual({
+      id: '100000000000000002',
+      fix: true,
+    });
+    expect(reviewSummary(d, new Set(['welcome']), c).changed).toEqual(['logs']);
+  });
+
+  it('is not counted in the summary while it is not used', () => {
+    const d = make();
+    const c = initialChoices(d);
+    c.welcome.fields.viewRole = { mode: 'create', id: '', fix: false };
+    expect(reviewSummary(d, new Set(['welcome']), c).roles).toEqual([]);
   });
 });
 

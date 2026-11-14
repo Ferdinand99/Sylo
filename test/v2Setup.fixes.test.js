@@ -31,7 +31,14 @@ function everyoneBits(overwrites = []) {
 }
 
 const edits = [];
-function channelOf(id, name, everyone) {
+let failEditAt = 0; // the number of the edit that throws (0: none)
+
+/**
+ * A channel as members and roles see it. `everyone` is what @everyone can do; `hidden` is an @everyone overwrite
+ * that denies View (which also strips View that a role only holds at role level); `roleAllow` are role
+ * overwrites that allow View; `stuck` are role ids whose overwrite cannot be changed.
+ */
+function channelOf(id, name, everyone, extra = {}) {
   const channel = {
     id,
     name,
@@ -39,17 +46,42 @@ function channelOf(id, name, everyone) {
     rawPosition: 50,
     guild: app.guild,
     everyone,
+    hidden: Boolean(extra.hidden),
+    roleAllow: new Map(Object.entries(extra.roleAllow ?? {})),
     isTextBased: () => true,
-    permissionsFor: (who) =>
-      new PermissionsBitField(who === app.guild.roles.everyone ? channel.everyone : PermissionsBitField.All),
+    permissionsFor: (who) => {
+      if (who === app.guild.roles.everyone) return new PermissionsBitField(channel.everyone);
+      if (who?.permissions && who !== app.guild.members.me) {
+        let bits = channel.everyone;
+        if (who.grantsView && !channel.hidden) bits |= F.ViewChannel;
+        bits |= channel.roleAllow.get(who.id) ?? 0n;
+        return new PermissionsBitField(bits);
+      }
+      return new PermissionsBitField(PermissionsBitField.All);
+    },
     permissionOverwrites: {
+      get cache() {
+        return new Map(
+          [...channel.roleAllow].map(([rid, bits]) => [
+            rid,
+            { id: rid, type: 0, allow: { has: (flag) => (bits & F[flag]) !== 0n } },
+          ])
+        );
+      },
       edit: async (target, opts) => {
-        edits.push({ channel: id, target: target?.id ?? target, opts });
-        if ((target?.id ?? target) === GID) {
-          for (const [name, on] of Object.entries(opts)) {
-            if (on === false) channel.everyone &= ~F[name];
-            if (on === true) channel.everyone |= F[name];
+        const tid = target?.id ?? target;
+        if (failEditAt && edits.length + 1 === failEditAt) throw new Error('Missing Access');
+        edits.push({ channel: id, target: tid, opts });
+        if (tid === GID) {
+          for (const [flag, on] of Object.entries(opts)) {
+            if (on === false) channel.everyone &= ~F[flag];
+            if (on === true) channel.everyone |= F[flag];
           }
+          if (opts.ViewChannel === false) channel.hidden = true;
+          if (opts.ViewChannel === true) channel.hidden = false;
+        } else if (!extra.stuck?.includes(tid)) {
+          if (opts.ViewChannel === true) channel.roleAllow.set(tid, F.ViewChannel);
+          else if ('ViewChannel' in opts) channel.roleAllow.delete(tid);
         }
       },
     },
@@ -63,9 +95,22 @@ let entered = null;
 let failChannelCreate = false;
 
 /** A channel the server already has: `everyone` is what members can do in it. */
-function addChannel(name, everyone = F.ViewChannel | F.SendMessages) {
+function addChannel(name, everyone = F.ViewChannel | F.SendMessages, extra) {
   const id = snowflake();
-  app.guild.channels.cache.set(id, channelOf(id, name, everyone));
+  app.guild.channels.cache.set(id, channelOf(id, name, everyone, extra));
+  return id;
+}
+function addRole(name, extra = {}) {
+  const id = snowflake();
+  app.guild.roles.cache.set(id, {
+    id,
+    name,
+    position: 3,
+    managed: false,
+    permissions: new PermissionsBitField(0n),
+    comparePositionTo: () => 0,
+    ...extra,
+  });
   return id;
 }
 function dropByName(cache, name) {
@@ -266,4 +311,158 @@ test('Sylo needs View Channel and Send Messages itself before it sets who can se
   } finally {
     me.permissions = had;
   }
+});
+
+// --- who else can see a "private" channel (a server that hides channels behind a role) ---------------------
+
+const clean = () => {
+  for (const name of ['logs', 'server-log', 'mod-log', 'welcome']) dropByName(app.guild.channels.cache, name);
+  for (const name of ['Verified', 'Members', 'Boss', 'Support team']) dropByName(app.guild.roles.cache, name);
+  edits.length = 0;
+  failEditAt = 0;
+};
+const logging = (fields) => ({ id: 'logging', replace: true, fields });
+const run = (items) => applySetup({ guild: app.guild, actor: 'Dashboard', selections: items });
+
+test('on a server that hides channels behind a role, a log channel the verified members can see is not offered as private', async () => {
+  clean();
+  addRole('Verified', { grantsView: true }); // @everyone cannot see channels; Verified can
+  const logs = addChannel('logs', F.SendMessages); // no overwrites: @everyone cannot see it, Verified can
+  const body = await (await api.get('/setup/suggest')).json();
+  const f = field(
+    body.items.find((i) => i.id === 'logging'),
+    'channel'
+  );
+  assert.equal(f.match, null, 'not pre-picked');
+  assert.equal(f.unsafeMatch.id, logs);
+  assert.match(f.unsafeMatch.gap, /^Members with the Verified role can see it\.$/);
+
+  // The same name Create would give: refused, nothing touched.
+  addChannel('server-log', F.SendMessages);
+  const [r] = await run([logging({ channel: { create: true } })]);
+  assert.equal(r.status, 'failed');
+  assert.match(
+    r.message,
+    /#server-log already exists\. Members with the Verified role can see it\. Pick it to use it as it is/
+  );
+  assert.deepEqual(edits, []);
+});
+
+test('the staff role the channel is for does not count, but any other role with access does', async () => {
+  clean();
+  addRole('Verified', { grantsView: true });
+  const staff = addRole('Support team');
+  // @everyone is denied View, and only the staff role has an allow overwrite.
+  addChannel('server-log', F.SendMessages, { hidden: true, roleAllow: { [staff]: F.ViewChannel } });
+  const [ok] = await run([logging({ channel: { create: true }, viewRole: { id: staff } })]);
+  assert.equal(ok.status, 'applied', ok.message);
+  assert.deepEqual(
+    ok.reused.map((c) => c.name),
+    ['server-log']
+  );
+
+  // Without naming the staff role, the role that has an allow overwrite can see it: not private.
+  const [no] = await run([logging({ channel: { create: true } })]);
+  assert.equal(no.status, 'failed');
+  assert.match(no.message, /Members with the Support team role can see it\./);
+});
+
+test('"change its permissions" closes the channel to every role but the staff role, and says what it changed', async () => {
+  clean();
+  const members = addRole('Members');
+  const staff = addRole('Support team');
+  const id = addChannel('server-log', F.ViewChannel | F.SendMessages, {
+    roleAllow: { [members]: F.ViewChannel },
+  });
+  const channel = app.guild.channels.cache.get(id);
+  const [r] = await run([logging({ channel: { create: true, fix: true }, viewRole: { id: staff } })]);
+  assert.equal(r.status, 'applied', r.message);
+  assert.ok(
+    edits.some((e) => e.target === GID && e.opts.ViewChannel === false),
+    '@everyone is denied'
+  );
+  assert.ok(
+    edits.some((e) => e.target === staff && e.opts.ViewChannel === true),
+    'the staff role may see it'
+  );
+  assert.ok(
+    edits.some((e) => e.target === members && e.opts.ViewChannel === null),
+    'the allow overwrite of the Members role is cleared'
+  );
+  assert.ok(channel.roleAllow.has(staff));
+  assert.ok(
+    !channel.roleAllow.has(members),
+    'no role but the staff role (and Sylo) keeps an allow overwrite'
+  );
+  assert.match(r.message, /Changed the permissions of #server-log/);
+  assert.match(
+    (await auditRows(GID, 'setup:channel'))[0].detail,
+    /^changed who can see or post in #server-log/
+  );
+});
+
+test('a channel that still cannot be made private is not called private: the item fails and says what was changed', async () => {
+  clean();
+  const boss = addRole('Boss');
+  addChannel('server-log', F.ViewChannel | F.SendMessages, {
+    roleAllow: { [boss]: F.ViewChannel },
+    stuck: [boss],
+  });
+  const [r] = await run([logging({ channel: { create: true, fix: true } })]);
+  assert.equal(r.status, 'failed');
+  assert.match(r.message, /#server-log is still not private: members with the Boss role can see it/);
+  assert.match(r.message, /Before it stopped, Sylo changed who can see or post in #server-log/);
+  assert.equal(r.changed.length, 1);
+  assert.match(
+    (await auditRows(GID, 'setup:channel'))[0].detail,
+    /^partly changed who can see or post in #server-log/
+  );
+});
+
+test('when the permission change fails halfway, what was changed is audited and reported', async () => {
+  clean();
+  addChannel('server-log', F.ViewChannel | F.SendMessages);
+  failEditAt = 2; // Sylo's own overwrite goes through, the @everyone overwrite does not
+  const [r] = await run([logging({ channel: { create: true, fix: true } })]);
+  assert.equal(r.status, 'failed');
+  assert.match(r.message, /Could not save this: Missing Access/);
+  assert.match(r.message, /Before it stopped, Sylo changed who can see or post in #server-log/);
+  assert.equal(r.changed.length, 1);
+  assert.match((await auditRows(GID, 'setup:channel'))[0].detail, /^partly changed/);
+});
+
+test('the permission change leaves out flags Sylo does not hold itself', async () => {
+  clean();
+  addChannel('welcome', F.ViewChannel | F.SendMessages);
+  const me = app.guild.members.me;
+  const had = me.permissions;
+  me.permissions = new PermissionsBitField(
+    PermissionsBitField.All & ~F.CreatePrivateThreads & ~F.Administrator
+  );
+  try {
+    const [r] = await run([
+      { id: 'welcome', replace: true, fields: { joinChannel: { create: true, fix: true } } },
+    ]);
+    assert.equal(r.status, 'applied', r.message);
+    const everyone = edits.find((e) => e.target === GID);
+    assert.equal(everyone.opts.SendMessages, false);
+    assert.ok(
+      !('CreatePrivateThreads' in everyone.opts),
+      'the platform refuses an overwrite for a permission Sylo lacks'
+    );
+  } finally {
+    me.permissions = had;
+  }
+});
+
+test('a role picked only to see the channel is never ignored silently: it is used, or the result says it was not', async () => {
+  clean();
+  const staff = addRole('Support team');
+  const id = addChannel('mod-log', F.SendMessages, { hidden: true }); // private already
+  const [r] = await run([
+    { id: 'modlog', replace: true, fields: { channelId: { id }, viewRole: { id: staff } } },
+  ]);
+  assert.equal(r.status, 'applied', r.message);
+  assert.deepEqual(edits, [], 'no permission was changed: the admin did not tick it');
+  assert.match(r.warnings.join(' '), /Support team was not given access to the channel/);
 });

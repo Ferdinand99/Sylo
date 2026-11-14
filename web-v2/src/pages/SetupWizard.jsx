@@ -21,6 +21,8 @@ import {
   reviewSummary,
   toPayload,
   usable,
+  viewerActive,
+  fixableChannel,
 } from '../setupModel.js';
 import '../styles/setup-wizard.css';
 
@@ -142,12 +144,15 @@ function GoalsStep({ data, goals, setGoals, onBack, onNext }) {
 
 // What a channel the wizard makes or changes ends up as, in words.
 function accessPhrase(create) {
-  if (create.private) return 'private (only admins and Sylo, and the role below if you pick one)';
+  if (create.private)
+    return 'private (only admins and Sylo, and the role below if you pick one; roles that were allowed to see it lose that)';
   if (create.everyoneCanView) return 'readable by everyone and read-only';
   return 'read-only for members';
 }
 
-function PickField({ item, field, pick, data, disabled, onChange }) {
+function PickField({ item, field, pick, data, disabled: disabledByItem, viewerUnused, onChange }) {
+  // A role only for who may see a channel does nothing unless the channel is created or its permissions change.
+  const disabled = disabledByItem || viewerUnused;
   const pool = field.kind === 'channel' ? data.channels : data.roles;
   const prefix = field.kind === 'channel' ? '#' : '';
   const selectId = `setup-${item.id}-${field.key}`;
@@ -164,9 +169,10 @@ function PickField({ item, field, pick, data, disabled, onChange }) {
         : field.kind === 'role'
           ? ' It has no permissions.'
           : '';
-  // The channel that already has the name "Create" would give: it is in the list, and its permissions are only
-  // changed when the admin ticks the box.
-  const usingExisting = Boolean(existing && existing.gap && pick.id === existing.id);
+  // A channel the admin picked that is not what the wizard promises (the one with the name Create would give, or
+  // the one found by name that others can see): its permissions are only changed when the admin ticks the box.
+  const fixing = pick.id && field.kind === 'channel' ? fixableChannel(field, pick.id) : null;
+  const unsafe = field.unsafeMatch && !pick.id && !creating ? field.unsafeMatch : null;
   return (
     <div className="v2-field v2-setup-field">
       <label htmlFor={selectId}>
@@ -201,11 +207,25 @@ function PickField({ item, field, pick, data, disabled, onChange }) {
           </span>
         </label>
       ) : null}
-      {usingExisting && field.kind === 'channel' ? (
+      {viewerUnused && !disabledByItem ? (
+        <p className="v2-field-hint">
+          Not used now. This role gets access when Sylo creates the channel above, or when you tick the box
+          that changes its permissions. Neither is ticked.
+        </p>
+      ) : null}
+      {unsafe ? (
+        <p className="v2-row-warn">
+          {prefix}
+          {unsafe.name} exists, but {unsafe.gap.charAt(0).toLowerCase()}
+          {unsafe.gap.slice(1)} Pick it to make it private, or pick another channel.
+        </p>
+      ) : null}
+      {fixing ? (
         <>
           <p className="v2-row-warn">
             {prefix}
-            {existing.name} already exists. {existing.gap}
+            {fixing.name} {existing && fixing.id === existing.id ? 'already exists. ' : 'is not private. '}
+            {fixing.gap}
           </p>
           <label className="v2-check v2-setup-create">
             <input
@@ -221,7 +241,6 @@ function PickField({ item, field, pick, data, disabled, onChange }) {
         </>
       ) : null}
       {flag && !creating ? <p className="v2-row-warn">{flag}</p> : null}
-      {field.warning && !creating && pick.id ? <p className="v2-row-warn">{field.warning}</p> : null}
       {!pick.id && !creating && !field.optional && !disabled && !field.create ? (
         <p className="v2-field-hint">This server has no match. Pick one to set this up.</p>
       ) : null}
@@ -274,6 +293,7 @@ function ItemCard({ data, item, choice, setChoice }) {
           data={data}
           pick={choice.fields[field.key]}
           disabled={!choice.on}
+          viewerUnused={Boolean(field.viewerOnly) && !viewerActive(item, choice)}
           onChange={(pick) => setChoice({ ...choice, fields: { ...choice.fields, [field.key]: pick } })}
         />
       ))}
