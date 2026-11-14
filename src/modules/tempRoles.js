@@ -21,6 +21,7 @@ import {
   putTempRole,
   tempRoleCount,
 } from '../db/tempRoles.js';
+import { liveMember } from './lib/liveMember.js';
 import { isNotFound } from '../platform/messageErrors.js';
 import { LIMITS as CEILINGS, checkLimit } from '../lib/limits.js';
 import { log } from '../lib/log.js';
@@ -153,7 +154,7 @@ export function describeTempRole(row) {
 }
 
 async function memberOf(guild, userId) {
-  return guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
+  return liveMember(guild, userId).catch(() => null);
 }
 
 /** The platform says the member or role no longer exists (Discord 10007 / 10011, a 404 on either platform). */
@@ -407,7 +408,7 @@ async function settle(row, now) {
 
   let member;
   try {
-    member = guild.members.cache.get(row.user_id) ?? (await guild.members.fetch(row.user_id));
+    member = await liveMember(guild, row.user_id);
   } catch (err) {
     if (!isGone(err)) throw err; // a hiccup: the next sweep tries again
     member = null;

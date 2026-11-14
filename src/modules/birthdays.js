@@ -10,6 +10,7 @@ import { getAppSetting, setAppSetting } from '../db/appSettings.js';
 import { birthdaysOnDay, guildBirthdays } from '../db/birthdays.js';
 import { log } from '../lib/log.js';
 import { every } from './schedule.js';
+import { liveMember } from './lib/liveMember.js';
 
 /** Setting limits, served to the dashboard (modules/limits.js). */
 export const LIMITS = {
@@ -95,8 +96,16 @@ async function celebrateGuild(guildId, now) {
       for (const member of role.members.values()) {
         if (!celebrantIds.has(member.id)) await member.roles.remove(role, 'Birthday over').catch(() => {});
       }
+      // The role's member list is the cache, which a server without the Server Members intent does not keep
+      // current: yesterday's celebrants are looked up by name as well, and take the role off when they hold it.
+      const yesterday = await celebrantsToday(guildId, new Date(now.getTime() - 86_400_000));
+      for (const row of yesterday) {
+        if (celebrantIds.has(row.user_id)) continue;
+        const m = await liveMember(guild, row.user_id).catch(() => null);
+        if (m?.roles.cache.has(role.id)) await m.roles.remove(role, 'Birthday over').catch(() => {});
+      }
       for (const id of celebrantIds) {
-        const m = guild.members.cache.get(id) ?? (await guild.members.fetch(id).catch(() => null));
+        const m = await liveMember(guild, id).catch(() => null);
         if (m && !m.roles.cache.has(role.id)) await m.roles.add(role, 'Birthday').catch(() => {});
       }
     }
