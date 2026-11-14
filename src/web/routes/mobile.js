@@ -5,7 +5,8 @@
 //    through the normal Discord / Fluxer login, which returns to /auth/mobile/confirm.
 // 2. The confirmation page asks "Sign in to the Sylo app as <name>?". Allow posts back with a
 //    per-flow nonce (the /auth paths are outside the global CSRF check, so the nonce is it) and
-//    the server redirects to sylo://auth?code=…&state=… with a 60-second single-use code. The page
+//    the server redirects to sylo://auth?code=…&state=…&iss=… with a 60-second single-use code
+//    (`iss` is this server's own address, so the app can reject a callback from another one). The page
 //    is what stops someone else's link from sending a code for your account to an app.
 // 3. The app posts code + PKCE verifier to POST /api/mobile/token and gets an API token
 //    (src/db/apiTokens.js), used as `Authorization: Bearer`. DELETE /api/mobile/token signs out.
@@ -18,7 +19,7 @@
 //    /auth/mobile/connect?code=… in the browser sheet.
 // 2. The person confirms and logs in on the other platform. The callback links nothing: it keeps the
 //    verified login under a one-time result code and ends the sheet at
-//    sylo://connected?platform=…&result=… (or &error=…).
+//    sylo://connected?platform=…&result=…&iss=… (or &error=…&iss=…).
 // 3. The app finishes with POST /api/mobile/connect/complete { result } and its token. The login is
 //    linked only to the account of the token the flow began with, and only if that very token
 //    completes it. A link made by someone else therefore ends at the app on the victim's device,
@@ -72,7 +73,7 @@ import { bearerToken } from '../lib/bearer.js';
 import { isOperator, sessionUserLabel } from '../lib/accountAuth.js';
 import { clientKey, rateLimit } from '../middleware/rateLimit.js';
 import { accountMaySeeTickets } from '../middleware/ticketAccess.js';
-import { MOBILE_CONNECT_TTL_MS, beginOAuth, connectedUrl } from '../middleware/auth.js';
+import { MOBILE_CONNECT_TTL_MS, beginOAuth, connectedUrl, issuerOf } from '../middleware/auth.js';
 
 const APP_CALLBACK = 'sylo://auth';
 const FLOW_TTL_MS = 10 * 60 * 1000;
@@ -80,7 +81,9 @@ const CHALLENGE = /^[A-Za-z0-9_-]{43}$/; // base64url of a SHA-256 (PKCE S256)
 const STATE = /^[A-Za-z0-9._~-]{8,128}$/;
 const VERIFIER = /^[A-Za-z0-9._~-]{43,128}$/; // RFC 7636 section 4.1
 
-const callback = (params) => `${APP_CALLBACK}?${new URLSearchParams(params)}`;
+// `iss` is this instance's origin (RFC 9207 style): the app compares it with the server it chose
+// and drops a callback that came from another one (mix-up attack).
+const callback = (req, params) => `${APP_CALLBACK}?${new URLSearchParams({ ...params, iss: issuerOf(req) })}`;
 
 function sameString(a, b) {
   const x = Buffer.from(String(a ?? ''));
@@ -172,7 +175,8 @@ mobileAuthRouter.get('/confirm', (req, res) => {
     name: sessionUserLabel(req.account),
     platforms: req.account.identities.map((i) => providers[i.platform]?.label ?? i.platform),
     nonce: flow.nonce,
-    cancelUrl: callback({ error: 'access_denied', state: flow.state }),
+    server: issuerOf(req),
+    cancelUrl: callback(req, { error: 'access_denied', state: flow.state }),
   });
 });
 
@@ -191,7 +195,7 @@ mobileAuthRouter.post('/confirm', async (req, res, next) => {
     req.session.mobile = undefined; // one code per flow
     req.session.mobileDone = Date.now();
     const code = await createMobileCode(req.account.id, flow.challenge);
-    res.redirect(callback({ code, state: flow.state }));
+    res.redirect(callback(req, { code, state: flow.state }));
   } catch (err) {
     next(err);
   }
@@ -229,14 +233,14 @@ mobileAuthRouter.get('/connect', connectLimit, async (req, res, next) => {
     }
     // The app that asked has signed out, or was signed out, since: the flow is over.
     if (!(await isApiTokenLive(grant.tokenId))) {
-      return res.redirect(connectedUrl(provider.platform, { error: 'token-revoked' }));
+      return res.redirect(connectedUrl(req, provider.platform, { error: 'token-revoked' }));
     }
     const identities = await identitiesOf(grant.accountId);
     if (identities.length === 0) {
       return connectError(res, 'This Sylo account no longer exists. Go back to the Sylo app.');
     }
     if (identities.some((i) => i.platform === provider.platform)) {
-      return res.redirect(connectedUrl(provider.platform, { error: 'already-linked' }));
+      return res.redirect(connectedUrl(req, provider.platform, { error: 'already-linked' }));
     }
     // Nothing of an earlier login or app flow in this browser may carry over into this one.
     req.session.oauthState = undefined;
@@ -259,7 +263,8 @@ mobileAuthRouter.get('/connect', connectLimit, async (req, res, next) => {
       // Signed in to the dashboard here as somebody else? Then the link is very likely not yours.
       browserName: req.account && req.account.id !== grant.accountId ? sessionUserLabel(req.account) : null,
       nonce,
-      cancelUrl: connectedUrl(provider.platform, { error: 'access-denied' }),
+      server: issuerOf(req),
+      cancelUrl: connectedUrl(req, provider.platform, { error: 'access-denied' }),
     });
   } catch (err) {
     next(err);

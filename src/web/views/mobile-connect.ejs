@@ -7,6 +7,9 @@
     <strong><%= name %></strong> (<%= platforms.join(' and ') %>). After that, whoever uses that account
     can manage the servers you manage on <%= platformLabel %>, in the Sylo app and on the dashboard.
   </p>
+  <p>
+    Server: <strong><code><%= server %></code></strong>
+  </p>
   <% if (browserName) { %>
     <p class="auth-warning">
       <strong>This browser is signed in to Sylo as <%= browserName %>, not as <%= name %>.</strong>
@@ -14,8 +17,8 @@
     </p>
   <% } %>
   <p class="muted small">
-    Only continue if <strong><%= name %></strong> is your account and you started this from your own
-    Sylo app. The login is finished in the app, so it is only added if the app on this device agrees.
+    Only continue if <strong><%= name %></strong> is your account, the server above is the one you
+    chose in the app, and you started this from your own Sylo app. The login is finished in the app, so it is only added if the app on this device agrees.
     You can disconnect a login again from your account page.
   </p>
   <%# A link, not a form: the next step redirects to the platform's login, which the page's
