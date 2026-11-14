@@ -10,6 +10,9 @@ export class ApiError extends Error {
     this.reason = body?.reason;
     this.errors = body?.errors;
     this.view = body?.view;
+    // A refusal the page can act on (the settings changed since an audit entry: confirm to undo anyway).
+    this.code = body?.code;
+    this.laterChanges = body?.laterChanges;
   }
 }
 
@@ -436,6 +439,15 @@ export const getAuditLog = (guildId, { action, before, limit } = {}) => {
   const qs = q.toString();
   return apiFetch(`/api/v2/guilds/${gid(guildId)}/audit${qs ? `?${qs}` : ''}`);
 };
+// What one audit entry changed (before and after, with names for the ids) and whether it can be undone,
+// and the undo itself: `confirm: true` once the person has accepted that later changes are lost.
+export const getAuditChange = (guildId, id) =>
+  apiFetch(`/api/v2/guilds/${gid(guildId)}/audit/${encodeURIComponent(String(id))}/change`);
+export const undoAuditChange = (guildId, id, { confirm = false } = {}) =>
+  postJson(
+    `/api/v2/guilds/${gid(guildId)}/audit/${encodeURIComponent(String(id))}/undo`,
+    confirm ? { confirm: true } : {}
+  );
 export const exportGuildConfig = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/export`);
 export const getMemberData = (guildId, user) =>
   apiFetch(`/api/v2/guilds/${gid(guildId)}/member-data?user=${encodeURIComponent(user ?? '')}`);

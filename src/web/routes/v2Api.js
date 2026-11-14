@@ -258,6 +258,8 @@ import {
   withoutEveryone,
 } from '../../db/guildSettings.js';
 import { recordAudit } from '../../db/audit.js';
+import { runWithCapture } from '../../db/auditCapture.js';
+import { readSettingsSnapshot } from '../lib/configUndo.js';
 import { recordBotAudit, listBotAudit } from '../../db/botAudit.js';
 import { platformInfo } from '../../platform/modulePlatformNotes.js';
 import { guildCommandPrefix } from '../../platform/commandPrefix.js';
@@ -451,7 +453,13 @@ router.use('/shop/:guildId', shopMemberRouter);
 // The web form of an application (/apply/<server>/<form>): the same kind of page, the same access rule.
 router.use('/apply/:guildId', applyMemberRouter);
 router.use('/guilds/:guildId/tickets', ticketsRouter);
-router.use('/guilds/:guildId', requireGuildAdmin, loadGuildJson, guardRoleGrants);
+// A dashboard save runs inside a capture of the module configs it writes (src/db/auditCapture.js), which is
+// what the audit entry it writes keeps as the change: the settings before and after, for the history view.
+function captureConfigChanges(req, res, next) {
+  if (req.method === 'GET' || req.method === 'HEAD') return next();
+  runWithCapture(next);
+}
+router.use('/guilds/:guildId', requireGuildAdmin, loadGuildJson, guardRoleGrants, captureConfigChanges);
 // Appeals review, command limits and the moderation hub (v2Staff.js).
 router.use('/guilds/:guildId', staffRouter);
 // Audit log, config export and member data (v2GuildData.js).
@@ -2273,6 +2281,8 @@ router.post(
   '/guilds/:guildId/settings',
   asyncHandler(async (req, res) => {
     const guild = req.guild;
+    // What the history keeps as the change: the settings as they are before anything is saved.
+    const settingsBefore = await readSettingsSnapshot(guild);
     // Before anything is saved: a bot master may not change who the bot masters are.
     const botMasterRoleIds = [].concat(req.body.botMasterRoleIds ?? []);
     const saveBotMasters = await shouldSaveBotMasters(
@@ -2340,6 +2350,7 @@ router.post(
       actor: moderatorDisplayName(req),
       action: 'settings:server',
       detail,
+      change: { before: settingsBefore, after: await readSettingsSnapshot(guild) },
     });
     res.json({ ok: true });
   })

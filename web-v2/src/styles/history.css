@@ -1,0 +1,90 @@
+/* Change history (the audit log): "Show changes" under an entry, the diff of changed fields, "Undo this change". */
+
+.v2-history {
+  margin-top: 8px;
+}
+.v2-history-toggle {
+  min-height: 32px;
+  padding: 4px 12px;
+  font-size: var(--fs-sm);
+}
+.v2-history [role='region'] {
+  margin-top: 10px;
+}
+.v2-history [role='region'][hidden] {
+  display: none;
+}
+
+/* ---- The diff: one block per changed field, "Before" and "After" in words and in a tint ---------------- */
+.v2-diff-list {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+.v2-diff-row {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 12px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+.v2-diff-path {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+.v2-diff-value {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: baseline;
+  padding-left: 8px;
+  border-left: 3px solid var(--border-strong);
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+.v2-diff-value.is-before {
+  border-left-color: var(--danger);
+}
+.v2-diff-value.is-after {
+  border-left-color: var(--success);
+}
+.v2-diff-value.is-hidden {
+  display: block;
+  color: var(--text-muted);
+}
+.v2-diff-word {
+  font-size: var(--fs-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.v2-diff-text {
+  min-width: 0;
+  white-space: pre-wrap;
+}
+
+.v2-history-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 10px 0 6px;
+}
+.v2-history-actions > p {
+  margin: 0;
+}
+.v2-history .v2-callout {
+  margin: 0 0 10px;
+}
+
+@media (max-width: 600px) {
+  .v2-diff-value {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 2px;
+  }
+}

@@ -1,9 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { getAuditLog, getMemberNames } from '../api.js';
+import { getAuditChange, getAuditLog, getMemberNames, undoAuditChange } from '../api.js';
 import { useOverview } from '../OverviewContext.jsx';
 import Breadcrumb, { peopleCrumb } from '../components/Breadcrumb.jsx';
+import Callout from '../components/Callout.jsx';
+import ConfigDiff from '../components/ConfigDiff.jsx';
 import LoadError from '../components/LoadError.jsx';
+import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import { labelFor } from '../configDiff.js';
+import { notify } from '../notify.js';
 import { formatCount } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
 import Time from '../components/Time.jsx';
@@ -121,6 +126,140 @@ function useEntryNames(guildId, entries) {
   return names;
 }
 
+// "Show changes" under an entry that kept what it changed: the difference (changed fields only), and
+// "Undo this change" where the settings can be put back. The change is loaded when the entry is opened.
+function EntryChange({ guildId, entry, onUndone }) {
+  const [open, setOpen] = useState(false);
+  const [load, setLoad] = useState({ status: 'idle', data: null, error: '' });
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState('');
+  const regionId = useId();
+
+  async function toggle() {
+    const next = !open;
+    setOpen(next);
+    if (!next || load.status === 'loading' || load.status === 'ready') return;
+    setLoad({ status: 'loading', data: null, error: '' });
+    try {
+      setLoad({ status: 'ready', data: await getAuditChange(guildId, entry.id), error: '' });
+    } catch (err) {
+      setLoad({ status: 'error', data: null, error: err.message || 'Could not load the change.' });
+    }
+  }
+
+  // Settings changed again since this entry: say which, and ask before they are lost.
+  const confirmLoss = (later) =>
+    confirmDialog({
+      title: 'Undo this change?',
+      body: (
+        <>
+          <p>
+            These settings were changed again after this entry
+            {later?.length ? <>: {later.map(labelFor).join(', ')}</> : null}. Undoing it puts the earlier
+            values back and the later changes will be lost.
+          </p>
+          <p>The undo is written to the audit log, so it can be undone too.</p>
+        </>
+      ),
+      confirmLabel: 'Undo and lose later changes',
+    });
+
+  async function undo() {
+    const state = load.data.undo;
+    let confirm = false;
+    if (state.state === 'changed') {
+      if (!(await confirmLoss(state.laterChanges))) return;
+      confirm = true;
+    }
+    setBusy(true);
+    setProblem('');
+    try {
+      let res;
+      try {
+        res = await undoAuditChange(guildId, entry.id, { confirm });
+      } catch (err) {
+        // Changed again since the page loaded: the server asks for the confirmation the page did not know about.
+        if (err.code !== 'changed-since' || confirm) throw err;
+        if (!(await confirmLoss(err.laterChanges))) return;
+        res = await undoAuditChange(guildId, entry.id, { confirm: true });
+      }
+      notify(
+        res.adjusted?.length
+          ? `Change undone. Some settings now follow today's limits: ${res.adjusted.map(labelFor).join(', ')}.`
+          : 'Change undone.',
+        'info'
+      );
+      onUndone();
+    } catch (err) {
+      setProblem(err.message || 'Could not undo the change.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const data = load.data;
+  const later = data?.undo?.laterChanges ?? [];
+  return (
+    <div className="v2-history">
+      <button
+        type="button"
+        className="v2-btn-ghost v2-history-toggle"
+        aria-expanded={open}
+        aria-controls={regionId}
+        onClick={toggle}
+      >
+        {open ? 'Hide changes' : 'Show changes'}
+      </button>
+      <div id={regionId} role="region" aria-label="What this entry changed" hidden={!open}>
+        {open && load.status === 'loading' ? <p className="v2-field-hint">Loading…</p> : null}
+        {open && load.status === 'error' ? (
+          <p className="v2-field-error" role="alert">
+            {load.error}
+          </p>
+        ) : null}
+        {open && load.status === 'ready' ? (
+          <>
+            {data.tooLarge ? (
+              <p className="v2-field-hint">{data.undo.reason}</p>
+            ) : (
+              <ConfigDiff before={data.before} after={data.after} names={data.names} />
+            )}
+            {data.undo.state === 'changed' && data.undo.available ? (
+              <Callout tone="warning">
+                <p>
+                  These settings were changed again after this entry
+                  {later.length ? <>: {later.map(labelFor).join(', ')}</> : null}. Undoing it will lose those
+                  later changes.
+                </p>
+              </Callout>
+            ) : null}
+            <div className="v2-history-actions">
+              {data.undo.available ? (
+                <button type="button" className="v2-btn-ghost" disabled={busy} onClick={undo}>
+                  {busy ? 'Undoing…' : 'Undo this change'}
+                </button>
+              ) : data.undo.reason && !data.tooLarge ? (
+                <p className="v2-field-hint">{data.undo.reason}</p>
+              ) : null}
+              {problem ? (
+                <span className="v2-field-error" role="alert">
+                  {problem}
+                </span>
+              ) : null}
+            </div>
+            {!data.tooLarge ? (
+              <p className="v2-field-hint">
+                Undo restores this module&apos;s settings. Lists kept on their own (reminders, shop items and
+                the like) are not part of it and are not restored.
+              </p>
+            ) : null}
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 // The server's config-change history: a filter by kind of change, and 50 entries at a time.
 export default function AuditLog() {
   const { guildId } = useParams();
@@ -129,6 +268,8 @@ export default function AuditLog() {
   const [page, setPage] = useState({ entries: [], hasMore: false, actions: [], kept: 0, loaded: false });
   const [error, setError] = useState(null);
   const [more, setMore] = useState({ busy: false, error: '' });
+  // Bumped after an undo: the list is read again from the top, so the new entry shows.
+  const [reloads, setReloads] = useState(0);
   const seq = useRef(0);
 
   // The first page, again whenever the server or the filter changes. An answer that arrives after a newer
@@ -151,7 +292,7 @@ export default function AuditLog() {
       .catch((err) => {
         if (seq.current === mine) setError(err);
       });
-  }, [guildId, action]);
+  }, [guildId, action, reloads]);
 
   async function showMore() {
     const last = page.entries[page.entries.length - 1];
@@ -189,7 +330,7 @@ export default function AuditLog() {
       <h1 className="v2-section-title">Audit log</h1>
       <p className="v2-field-hint">
         Configuration changes made from the dashboard. Keeps the most recent {formatCount(page.kept)} per
-        server.
+        server. Open an entry to see what it changed and, for settings, undo it.
       </p>
 
       {showFilter ? (
@@ -227,6 +368,14 @@ export default function AuditLog() {
                       <Time value={a.at} relative fallback={a.ago} />
                     </span>
                   </p>
+                  {a.hasChange ? (
+                    <EntryChange
+                      key={reloads}
+                      guildId={guildId}
+                      entry={a}
+                      onUndone={() => setReloads((n) => n + 1)}
+                    />
+                  ) : null}
                 </div>
                 <Time className="v2-field-hint v2-row-time" value={a.at} relative fallback={a.ago} />
               </div>

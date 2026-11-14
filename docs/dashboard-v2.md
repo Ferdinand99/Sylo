@@ -51,6 +51,27 @@ server tools are there too, under **Settings → Server data**: the audit log,
 config export (a JSON file) and member data (look up and forget a member;
 moderation cases and other safety records are kept).
 
+### Change history and undo
+
+Every settings save (a module's settings, or the server settings) keeps what it
+changed in its audit log entry: the settings that differ, with the value before
+and after. Open an entry in the audit log with **Show changes** to see the
+changed fields only, with a readable name where one is known. API keys, tokens,
+passwords and webhook links are masked and never stored in clear. The log keeps
+the newest 500 entries per server, saved changes included, and they go with the
+server when Sylo is removed from it.
+
+**Undo this change** puts the earlier values of that module back. It goes
+through the module's normal save (the same limits and checks as its form,
+including the rule that you cannot hand out a role above your own) and writes an
+entry of its own, so an undo can be undone too. If the settings were changed
+again since the entry, the page says which ones and asks before they are lost. A
+masked secret is never restored: the value that is saved now stays. Undo covers a
+module's settings and the server settings; lists kept on their own (reminders,
+shop items, custom commands, saved messages) are not restored, and a few
+modules whose save does more than store settings show the difference without an
+undo.
+
 Two pages are public, with no login: the command list (`/v2/commands`) and the
 roadmap (`/v2/roadmap`). They show the same lists as before; voting
 and suggesting a feature still need a login, and the log-in link on them brings

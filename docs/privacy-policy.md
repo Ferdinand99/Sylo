@@ -58,7 +58,13 @@ the public-leaderboard vanity slug.
   free-text answers to the server's appeal questions, and the staff decision and
   reason.
 - **Config audit log** — the display name of whoever changed a setting from the
-  Dashboard, what changed, and when.
+  Dashboard, what changed, and when. For a saved module or server setting it
+  also keeps the settings that changed, with their value before and after, so
+  the Dashboard can show the difference and undo the change. Secrets (API keys,
+  tokens, passwords, webhook links) are masked before anything is stored and
+  never kept in clear. A setting can name a member (for example who an
+  auto-reaction applies to); those saved values are covered by `/mydata`, and
+  `/forget` takes the member's ID out of them.
 
 ### Member activity
 
@@ -322,7 +328,7 @@ For any request the above does not cover, contact the Operator (section 9).
 | Server configuration & module settings | As long as the Bot is in the server | Bot removed from the server; or the setting is changed or cleared |
 | Infractions / moderation case log | Indefinitely, as a moderation record | Staff remove the case; Bot removed. Not by `/forget` or admin-assisted erasure (a safety record). Inactive cases (`/case delete`, expired temp-bans) are kept for audit unless the server sets a "delete inactive cases after N days" limit |
 | Ban appeals | Indefinitely | `/forget`; admin-assisted erasure; Bot removed |
-| Config audit log | Indefinitely | Bot removed from the server (not covered by `/forget` — it records only a display name) |
+| Config audit log (including the saved before and after of settings) | The newest 500 entries per server | Bot removed from the server. `/forget` does not remove the entries, which record only a display name, but takes the member's ID out of the saved settings |
 | Leveling XP, level, message/voice counters | Until erased | `/forget`; admin-assisted erasure; Bot removed; leaderboard reset by an admin |
 | Weekly / monthly leveling period rows | ~10 weeks / ~6 months | Automatic pruning, or any of the leveling triggers above |
 | Invite tracking (tallies + attribution graph) | Until erased | `/forget`; admin-assisted erasure; Bot removed |

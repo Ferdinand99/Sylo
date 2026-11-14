@@ -194,6 +194,51 @@ test('SQLite: a database from the 5.1 release with shop rows boots and gets the 
   }
 });
 
+test('SQLite: a database from the 5.1 release with audit entries boots, keeps them and gets the change-history columns', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'sylo-upgrade-'));
+  try {
+    const old = join(dir, 'old.db');
+    const db = new Database(old);
+    for (let v = 0; v < RELEASE_5_1_MIGRATIONS; v += 1) {
+      db.transaction(() => MIGRATIONS[v](db))();
+    }
+    db.pragma(`user_version = ${RELEASE_5_1_MIGRATIONS}`);
+    const columns = () =>
+      db
+        .prepare('PRAGMA table_info(config_audit)')
+        .all()
+        .map((c) => c.name);
+    assert.equal(columns().includes('change_json'), false, '5.1 audit entries keep no change');
+    db.exec(
+      "INSERT INTO config_audit (guild_id, actor, action, detail, created_at) VALUES ('g', 'Ann (dashboard)', 'module:afk', 'settings saved', 5)"
+    );
+    db.close();
+
+    boot({ DATABASE_PATH: old });
+    const after = new Database(old, { readonly: true });
+    const row = after.prepare('SELECT * FROM config_audit').get();
+    after.close();
+    assert.deepEqual(
+      { ...row },
+      {
+        id: 1,
+        guild_id: 'g',
+        actor: 'Ann (dashboard)',
+        action: 'module:afk',
+        detail: 'settings saved',
+        created_at: 5,
+        change_json: null,
+        reverts_id: null,
+      }
+    );
+    const fresh = join(dir, 'fresh.db');
+    boot({ DATABASE_PATH: fresh });
+    assert.deepEqual(sqliteShape(old).shape, sqliteShape(fresh).shape);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('SQLite: a database that already ran the branch up to migration 69 is backfilled by 70', () => {
   const dir = mkdtempSync(join(tmpdir(), 'sylo-upgrade-'));
   try {
@@ -254,6 +299,7 @@ const BACK_TO_5_0 = `
     DROP COLUMN IF EXISTS cancelled, DROP COLUMN IF EXISTS prizes_paid,
     DROP COLUMN IF EXISTS drawn_at, DROP COLUMN IF EXISTS sweep_at;
   ALTER TABLE giveaway_entries DROP COLUMN IF EXISTS refunded;
+  ALTER TABLE config_audit DROP COLUMN IF EXISTS change_json, DROP COLUMN IF EXISTS reverts_id;
   ALTER TABLE guild_suggestions DROP COLUMN IF EXISTS log_channel_id,
     DROP COLUMN IF EXISTS log_message_id;
   DELETE FROM schema_migrations;
@@ -407,6 +453,9 @@ test(
       ALTER TABLE economy_items DROP COLUMN IF EXISTS image_id, DROP COLUMN IF EXISTS rarity,
         DROP COLUMN IF EXISTS announce;
       ALTER TABLE economy_inventory DROP COLUMN IF EXISTS image_id, DROP COLUMN IF EXISTS rarity;
+      ALTER TABLE config_audit DROP COLUMN IF EXISTS change_json, DROP COLUMN IF EXISTS reverts_id;
+      INSERT INTO config_audit (guild_id, actor, action, detail, created_at)
+        VALUES ('g', 'Ann (dashboard)', 'module:afk', 'settings saved', 5);
       INSERT INTO economy_items (guild_id, name, type, price, created_at, updated_at)
         VALUES ('g', 'Shout-out', 'custom', 10, 1, 1);
       INSERT INTO economy_inventory (guild_id, user_id, item_id, item_name, item_type, price_paid, source, status, created_at, updated_at)
@@ -429,6 +478,15 @@ test(
     const b = postgres(urlFor(oldDb));
     try {
       assert.deepEqual(await pgShape(b), await pgShape(a));
+      // the audit entry of 5.1 is untouched and keeps no change; the new columns take a copy
+      const [entry] = await b`SELECT actor, detail, change_json, reverts_id FROM config_audit`;
+      assert.deepEqual(
+        [entry.actor, entry.detail, entry.change_json, entry.reverts_id],
+        ['Ann (dashboard)', 'settings saved', null, null]
+      );
+      await b`UPDATE config_audit SET change_json = '{"before":{},"after":{}}', reverts_id = 7`;
+      const [kept] = await b`SELECT change_json, reverts_id FROM config_audit`;
+      assert.deepEqual([kept.change_json, Number(kept.reverts_id)], ['{"before":{},"after":{}}', 7]);
       // the shop rows of 5.1 are untouched and have the defaults of the new columns
       const [item] = await b`SELECT name, image_id, rarity, announce FROM economy_items`;
       assert.deepEqual(

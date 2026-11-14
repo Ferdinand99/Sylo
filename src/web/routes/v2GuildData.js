@@ -14,8 +14,21 @@ import {
   lookupProfile,
   MEMBER_DATA_UNAFFECTED,
 } from '../lib/guildData.js';
-import { listAuditActions, listAuditPage } from '../../db/audit.js';
+import { getAuditEntry, listAuditActions, listAuditPage, recordAudit } from '../../db/audit.js';
 import { describeUserData } from '../../db/purge.js';
+import { platformActionLimit } from '../middleware/rateLimit.js';
+import { changeKeys, laterChanges, undoState, undoTarget } from '../../lib/configSnapshot.js';
+import { isDeepStrictEqual } from 'node:util';
+import {
+  UndoError,
+  currentSettingsFor,
+  mayTouchModule,
+  namesFor,
+  restoreModule,
+  restoreSettings,
+  targetOf,
+  undoRefusal,
+} from '../lib/configUndo.js';
 
 // The audit page loads 50 entries at a time (never more than 100) of the 500 kept per server.
 const AUDIT_PAGE = 50;
@@ -61,8 +74,132 @@ router.get(
         detail: a.detail,
         at: Number(a.created_at),
         ago: timeAgo(a.created_at),
+        // The settings that changed were kept (GET /audit/:id/change shows them), and the entry this one undid.
+        hasChange: Number(a.has_change) === 1 && mayViewChange(req, a.action),
+        revertsId: a.reverts_id == null ? null : Number(a.reverts_id),
       })),
     });
+  })
+);
+
+// An operator-only module's settings are shown to operators only, like the config export.
+function mayViewChange(req, action) {
+  const target = targetOf(action);
+  return !target || target.kind !== 'module' || mayTouchModule(target.id, isOwner(req));
+}
+
+const entryId = (req) => Number.parseInt(String(req.params.id ?? ''), 10);
+
+// What one entry changed: the settings that differ, before and after (secrets masked), channel and role
+// names for the ids in them, and where the saved settings stand now against it, so the page can offer the
+// undo and warn when later changes would be lost.
+router.get(
+  '/audit/:id/change',
+  asyncHandler(async (req, res) => {
+    const entry = await getAuditEntry(req.guild.id, entryId(req));
+    if (!entry || !entry.change || !mayViewChange(req, entry.action)) {
+      return fail(res, 'That entry has no saved change.', 404);
+    }
+    const base = {
+      entry: {
+        id: entry.id,
+        actor: entry.actor,
+        action: entry.action,
+        detail: entry.detail,
+        at: entry.createdAt,
+        ago: timeAgo(entry.createdAt),
+        revertsId: entry.revertsId,
+      },
+    };
+    if (entry.change.tooLarge) {
+      return res.json({
+        ...base,
+        tooLarge: true,
+        undo: { available: false, reason: 'This change was too large to keep a copy of.' },
+      });
+    }
+    const target = targetOf(entry.action);
+    const refusal = undoRefusal(target);
+    const current = target ? await currentSettingsFor(req.guild, target) : {};
+    const state = target ? undoState(current, entry.change) : 'changed';
+    res.json({
+      ...base,
+      before: entry.change.before,
+      after: entry.change.after,
+      names: namesFor(req.guild, entry.change.before, entry.change.after),
+      undo: {
+        available: !refusal && state !== 'reverted',
+        reason: refusal ?? (state === 'reverted' ? 'The settings already have the earlier values.' : null),
+        state,
+        laterChanges: state === 'changed' ? laterChanges(current, entry.change) : [],
+      },
+    });
+  })
+);
+
+// Put the earlier settings of one entry back. Goes through the module's normaliser and the guarded write,
+// then writes an audit entry of its own (with its own before and after). If the settings changed since the
+// entry, nothing is restored until the request says `confirm: true`, because those later changes are lost.
+router.post(
+  '/audit/:id/undo',
+  platformActionLimit,
+  asyncHandler(async (req, res) => {
+    const entry = await getAuditEntry(req.guild.id, entryId(req));
+    if (!entry || !entry.change || !mayViewChange(req, entry.action)) {
+      return fail(res, 'That entry has no saved change.', 404);
+    }
+    if (entry.change.tooLarge) return fail(res, 'This change was too large to keep a copy of.');
+    const target = targetOf(entry.action);
+    const refusal = undoRefusal(target);
+    if (refusal) return fail(res, refusal);
+
+    const current = await currentSettingsFor(req.guild, target);
+    const state = undoState(current, entry.change);
+    if (state === 'reverted') {
+      return fail(res, 'The settings already have the earlier values.', 409);
+    }
+    if (state === 'changed' && req.body?.confirm !== true) {
+      return res.status(409).json({
+        error:
+          'These settings were changed again after this entry. Undoing it will lose those later changes.',
+        code: 'changed-since',
+        laterChanges: laterChanges(current, entry.change),
+      });
+    }
+
+    // The settings that did not end up as the entry had them (a limit that is lower now, say), for the page.
+    let adjusted;
+    try {
+      if (target.kind === 'settings') {
+        const wanted = {};
+        for (const key of changeKeys(entry.change)) {
+          if (key in entry.change.before) wanted[key] = entry.change.before[key];
+        }
+        const after = await restoreSettings(req, req.guild, wanted);
+        await recordAudit(req.guild.id, {
+          actor: moderatorDisplayName(req),
+          action: entry.action,
+          detail: `undid change #${entry.id}`,
+          change: { before: current, after },
+          revertsId: entry.id,
+        });
+        adjusted = Object.keys(wanted).filter((k) => !isDeepStrictEqual(after[k], wanted[k]));
+      } else {
+        const wanted = undoTarget(current, entry.change);
+        const { config } = await restoreModule(req.guild, target.id, wanted);
+        await recordAudit(req.guild.id, {
+          actor: moderatorDisplayName(req),
+          action: entry.action,
+          detail: `undid change #${entry.id}`,
+          revertsId: entry.id,
+        });
+        adjusted = changeKeys(entry.change).filter((k) => !isDeepStrictEqual(config[k], wanted[k]));
+      }
+    } catch (err) {
+      if (err instanceof UndoError) return fail(res, err.message, err.status);
+      throw err;
+    }
+    res.json({ ok: true, adjusted });
   })
 );
 

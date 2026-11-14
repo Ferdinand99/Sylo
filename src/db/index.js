@@ -1487,6 +1487,18 @@ export const MIGRATIONS = [
       CREATE INDEX idx_collectible_images_guild ON collectible_images (guild_id);
     `);
   },
+
+  // Change history (src/db/audit.js, which adds the same columns on Postgres with ADD COLUMN IF NOT EXISTS):
+  // an audit entry for a settings save keeps the settings that changed, before and after, as JSON with the
+  // secrets masked (change_json); an entry written by an undo says which entry it undoes (reverts_id).
+  // Entries from before this migration have neither. The 500-entries-per-server cap and the purge that goes
+  // with the server are the audit log's own.
+  (database) => {
+    database.exec(`
+      ALTER TABLE config_audit ADD COLUMN change_json TEXT;
+      ALTER TABLE config_audit ADD COLUMN reverts_id INTEGER;
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

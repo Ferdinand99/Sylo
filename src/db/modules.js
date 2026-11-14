@@ -2,6 +2,7 @@
 import { prepare, registerPostgresBootstrap } from './driver.js';
 import { MODULES, getModule } from '../modules/registry.js';
 import { restartTriggerClock } from '../modules/lib/welcomeClock.js';
+import { noteModuleWrite } from './auditCapture.js';
 
 registerPostgresBootstrap(`
   CREATE TABLE IF NOT EXISTS guild_modules (
@@ -113,6 +114,8 @@ export async function setGuildModule(guildId, moduleId, patch) {
     config: JSON.stringify(patch.config ?? current.config),
     updatedAt: Date.now(),
   });
+  // The change history of the dashboard request this write belongs to keeps what it changed.
+  if (patch.config) noteModuleWrite(moduleId, current.config ?? {}, patch.config);
 }
 
 function safeParse(json) {

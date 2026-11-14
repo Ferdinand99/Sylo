@@ -38,7 +38,7 @@ import './countingPenalties.js';
 import './githubWatches.js';
 import './scheduledMessages.js';
 import './leveling.js';
-import './audit.js';
+import { scrubMemberFromHistory } from './audit.js';
 import './afk.js';
 import './postedKeys.js';
 import './appeals.js';
@@ -247,7 +247,8 @@ const userStmts = {
 /**
  * Erase a single member's data within one guild. Covers the tables that key on
  * a Discord user id. A completed giveaway's winner list and the config audit log (which
- * records a display name, not an id) are guild records, only removed by {@link purgeGuild};
+ * records a display name, not an id) are guild records, only removed by {@link purgeGuild} (the entries; /forget
+ * does take the member's id out of the settings they saved);
  * so is `infractions.moderator_id`, the staff side of a moderation case (the cases are kept).
  * test/purge.test.js lists every column that holds a user id and fails for a new one that
  * is neither handled here nor kept on purpose.
@@ -256,7 +257,7 @@ const userStmts = {
  * honeypot catches and counting penalties. They exist to protect the server, so a member
  * cannot erase them (or reset their warning count) with /forget; staff can remove a case in
  * the dashboard. `keptCases` says how many cases stayed.
- * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, eventsHosted: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, introductions: number, welcomeSent: number, applications: number, applicationsDecided: number, economyAccounts: number, economyTransactions: number, economyNames: number, economyInventory: number, economyFulfilled: number, invites: number, pollsCreated: number, giveawaysHosted: number, tempVoiceOwned: number, verificationKicks: number, ticketsClosed: number, appealsDecided: number }}
+ * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, eventsHosted: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, introductions: number, welcomeSent: number, applications: number, applicationsDecided: number, economyAccounts: number, economyTransactions: number, economyNames: number, economyInventory: number, economyFulfilled: number, invites: number, pollsCreated: number, giveawaysHosted: number, tempVoiceOwned: number, verificationKicks: number, ticketsClosed: number, appealsDecided: number, configHistory: number }}
  */
 // `keepIntroduction`: leave the introduction row (the card message could not be deleted, so the row
 // is what lets it be removed later). `keepTempRoles`: role ids whose temporary-role record stays
@@ -332,6 +333,8 @@ export async function forgetUser(
   const verificationKicks = (await userStmts.verificationKicks.run(guildId, userId)).changes;
   const ticketsClosed = (await userStmts.ticketsClosed.run(guildId, userId)).changes;
   const appealsDecided = (await userStmts.appealsDecided.run(guildId, userId)).changes;
+  // A saved setting in the change history can name the member (who an auto-reaction targets): the id comes out.
+  const configHistory = await scrubMemberFromHistory(guildId, userId);
   return {
     keptCases,
     leveling,
@@ -366,6 +369,7 @@ export async function forgetUser(
     verificationKicks,
     ticketsClosed,
     appealsDecided,
+    configHistory,
   };
 }
 
@@ -734,6 +738,16 @@ const USER_DATA_SOURCES = [
     order: 'gu',
     countSql: 'SELECT COUNT(*) AS n FROM invite_personal WHERE guild_id = ? AND user_id = ?',
     rowsSql: 'SELECT * FROM invite_personal WHERE guild_id = ? AND user_id = ?',
+  },
+  {
+    key: 'configHistory',
+    label: 'Settings changes in the history that name you (/forget takes your id out)',
+    order: 'gu',
+    countSql:
+      "SELECT COUNT(*) AS n FROM config_audit WHERE guild_id = ? AND change_json LIKE '%' || ? || '%'",
+    // That the entry exists and what it was, not the saved values: those are the server's settings.
+    rowsSql:
+      "SELECT id, action, created_at FROM config_audit WHERE guild_id = ? AND change_json LIKE '%' || ? || '%' ORDER BY id",
   },
   {
     key: 'countingLast',
