@@ -315,6 +315,12 @@ const FEATURES = Object.freeze([
   'member-search',
   'access-levels',
   'health',
+  'setup-wizard',
+  'config-history',
+  'inbox-search',
+  'config-import',
+  'duplicate',
+  'message-templates',
 ]);
 
 // Public and ahead of the open-mode guard: the app calls it before anyone signs in, and an open-mode
