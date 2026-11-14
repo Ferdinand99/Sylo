@@ -154,6 +154,16 @@ finish the link). Compare origins, not strings: the host is case-insensitive and
 default port may be left out. The confirmation pages also show the server address, so a
 person can notice a server they did not expect.
 
+Two things follow for operators:
+
+- Behind a reverse proxy, set `DASHBOARD_URL` to the public address (the same one people
+  type into the app). Without it, `iss` is built from the request, which behind a proxy
+  that ends TLS can be `http://…` or an internal name, and the app then rejects its own
+  server.
+- Separate Sylo instances need distinct origins. Only the origin is compared, so two
+  instances served from different paths of one host (`https://host/a`, `https://host/b`)
+  are not told apart by `iss`.
+
 Servers older than this change leave `iss` out. An app that still supports them may
 accept a callback without `iss`; one that does not can require it. A callback that has
 `iss` must always match. Apps that ignore unknown parameters keep working with newer

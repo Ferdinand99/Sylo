@@ -82,3 +82,18 @@ test('connect callbacks (result and error) carry the origin of the configured UR
   assert.equal(err.searchParams.get('error'), 'access-denied');
   assert.equal(err.searchParams.get('iss'), ISSUER);
 });
+
+test('X-Forwarded-Host and X-Forwarded-Proto do not change iss', async () => {
+  setProfiles();
+  const b = browser();
+  const challenge = pkceChallenge(randomBytes(48).toString('base64url'));
+  await b.get(`/auth/mobile/start?challenge=${challenge}&state=st4te-From_the.app~1&platform=discord`);
+  await signIn(b, 'discord');
+  const page = await b.get('/auth/mobile/confirm', {
+    headers: { 'x-forwarded-host': 'evil.test', 'x-forwarded-proto': 'https' },
+  });
+  const html = await page.text();
+  assert.ok(html.includes(`<code>${ISSUER}</code>`));
+  assert.ok(!html.includes('evil.test'));
+  assert.equal(cancelHref(html).searchParams.get('iss'), ISSUER);
+});

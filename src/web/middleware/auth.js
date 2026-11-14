@@ -446,6 +446,7 @@ function takeMobileConnect(req, provider) {
  * and the app completes the link with its own token (POST /api/mobile/connect/complete).
  */
 async function finishMobileConnect(req, res, provider, flow, identity) {
+  issuerOf(req); // an unusable address fails here, before a result code is made that nobody could use
   const to = (outcome) => res.redirect(connectedUrl(req, provider.platform, outcome));
   // Sign-out or revocation while the sheet was open ends the flow.
   if (!(await isApiTokenLive(flow.tokenId))) return to({ error: 'token-revoked' });

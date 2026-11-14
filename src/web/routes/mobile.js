@@ -192,6 +192,7 @@ mobileAuthRouter.post('/confirm', async (req, res, next) => {
         backHref: null,
       });
     }
+    issuerOf(req); // an unusable address fails here, before the flow is used up and a code is made
     req.session.mobile = undefined; // one code per flow
     req.session.mobileDone = Date.now();
     const code = await createMobileCode(req.account.id, flow.challenge);

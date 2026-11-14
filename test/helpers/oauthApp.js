@@ -56,7 +56,8 @@ const stubbedFetch = async (url, init) => {
       : null;
   if (!platform) return realFetch(url, init);
   const p = profiles[platform];
-  if (u.endsWith('/oauth2/token')) return json({ access_token: `${platform}-token` });
+  if (u.endsWith('/oauth2/token'))
+    return p.tokenFails ? json({ error: 'invalid_grant' }, 400) : json({ access_token: `${platform}-token` });
   if (u.endsWith('/users/@me/guilds')) return json(p.guilds);
   if (u.endsWith('/users/@me'))
     return json({ id: p.id, username: p.username, global_name: null, avatar: null });
@@ -157,13 +158,20 @@ export function browser() {
  * GET as a browser that asked for another Host (fetch cannot change it): the page's status and text.
  * Uses the browser's cookies, and keeps what the answer sets.
  */
-export async function getWithHost(b, path, host) {
+export async function getWithHost(b, path, host, { method = 'GET', body, headers = {} } = {}) {
   const { request } = await import('node:http');
   const url = new URL(base);
   const cookie = [...b.jar].map(([k, v]) => `${k}=${v}`).join('; ');
   return new Promise((resolve, reject) => {
     const req = request(
-      { host: url.hostname, port: url.port, path, headers: { host, cookie }, agent: false },
+      {
+        host: url.hostname,
+        port: url.port,
+        path,
+        method,
+        headers: { ...headers, host, cookie },
+        agent: false,
+      },
       (res) => {
         let text = '';
         res.setEncoding('utf8');
@@ -179,7 +187,7 @@ export async function getWithHost(b, path, host) {
       }
     );
     req.on('error', reject);
-    req.end();
+    req.end(body);
   });
 }
 
