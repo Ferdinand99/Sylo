@@ -157,21 +157,109 @@ test('followUp() sends an additional message', async () => {
   assert.equal(log.replies.length + log.sends.length, 2);
 });
 
-test('an ephemeral reply is removed (with the invoking message) after the private TTL', async () => {
+// Fluxer has no private replies. A private reply that carries data (an embed or a file: a member's
+// moderation history, a private quote) goes to the DMs of whoever ran the command, and the channel only
+// gets a notice with none of it, removed (with the invoking message) after the private TTL. A private
+// line of plain text (a status or an error) is sent normally and removed after the same delay.
+function withDms(ix, { fail = false } = {}) {
+  const dms = [];
+  const dmEdits = [];
+  ix.user.send = async (p) => {
+    if (fail) throw new Error('Cannot send messages to this user');
+    dms.push(p);
+    return { id: `dm${dms.length}`, edit: async (e) => dmEdits.push(e) };
+  };
+  return { dms, dmEdits };
+}
+const channelText = (log) => JSON.stringify([...log.replies, ...log.sends, ...log.edits]);
+const secret = (text) => ({ embeds: [{ title: 'Cases', description: text }] });
+
+test('a plain-text ephemeral reply is removed (with the invoking message) after the private TTL', async () => {
   const { ix, log } = make();
-  await ix.reply({ content: 'secret', flags: MessageFlags.Ephemeral });
-  assert.deepEqual(log.replies, [{ content: 'secret', allowedMentions: USERS_ONLY }]); // the flag itself is not sent
+  const { dms } = withDms(ix);
+  await ix.reply({ content: 'nope', flags: MessageFlags.Ephemeral });
+  assert.deepEqual(log.replies, [{ content: 'nope', allowedMentions: USERS_ONLY }]); // the flag itself is not sent
+  assert.equal(dms.length, 0);
   await new Promise((r) => setTimeout(r, 40));
-  assert.ok(log.deletes.includes('sent:secret'));
+  assert.ok(log.deletes.includes('sent:nope'));
   assert.ok(log.deletes.includes('invoker'));
 });
 
-test('a deferred ephemeral reply is also private', async () => {
+test('a deferred plain-text ephemeral reply is also removed again', async () => {
   const { ix, log } = make();
   await ix.deferReply({ flags: MessageFlags.Ephemeral });
   await ix.editReply('quiet');
   await new Promise((r) => setTimeout(r, 40));
   assert.ok(log.deletes.includes('sent:quiet'));
+});
+
+test('an ephemeral reply with an embed goes to the DMs; the channel only gets a notice, removed with the invoking message', async () => {
+  const { ix, log } = make();
+  const { dms } = withDms(ix);
+  await ix.reply({ ...secret('warned for harassment'), flags: MessageFlags.Ephemeral });
+  assert.equal(dms.length, 1);
+  assert.match(JSON.stringify(dms[0]), /harassment/);
+  assert.ok(!channelText(log).includes('harassment'), 'nothing private in the channel');
+  assert.equal(log.replies.length + log.sends.length, 1);
+  assert.match((log.replies[0] ?? log.sends[0]).content, /DMs/);
+  await new Promise((r) => setTimeout(r, 40));
+  assert.ok(
+    log.deletes.some((d) => d.startsWith('sent:')),
+    'the notice is removed'
+  );
+  assert.ok(log.deletes.includes('invoker'));
+});
+
+test('a deferred ephemeral reply with an embed is private too, and editing it edits the DM', async () => {
+  const { ix, log } = make();
+  const { dms, dmEdits } = withDms(ix);
+  await ix.deferReply({ flags: MessageFlags.Ephemeral });
+  await ix.editReply(secret('first'));
+  await ix.editReply(secret('second'));
+  assert.equal(dms.length, 1);
+  assert.equal(dmEdits.length, 1);
+  assert.match(JSON.stringify(dmEdits[0]), /second/);
+  assert.ok(!channelText(log).includes('first') && !channelText(log).includes('second'));
+  assert.equal(log.replies.length + log.sends.length, 1, 'one notice, not one per edit');
+});
+
+test('an ephemeral follow-up with an embed goes to the DMs too', async () => {
+  const { ix, log } = make();
+  const { dms } = withDms(ix);
+  await ix.reply('public first');
+  await ix.followUp({ ...secret('private second'), flags: MessageFlags.Ephemeral });
+  assert.equal(dms.length, 1);
+  assert.match(JSON.stringify(dms[0]), /private second/);
+  assert.ok(!channelText(log).includes('private second'));
+});
+
+test('when the DM fails, only a notice without the data is posted, and later edits never reach the channel', async () => {
+  const { ix, log } = make();
+  withDms(ix, { fail: true });
+  await ix.deferReply({ flags: MessageFlags.Ephemeral });
+  await ix.editReply(secret('moderation notes: spam'));
+  await ix.editReply(secret('moderation notes: spam, harassment'));
+  await ix.followUp({ ...secret('more notes'), flags: MessageFlags.Ephemeral });
+  const all = [...log.replies, ...log.sends];
+  assert.equal(all.length, 1);
+  assert.match(all[0].content, /DM/);
+  assert.ok(!channelText(log).includes('notes'));
+  assert.equal(log.edits.length, 0);
+});
+
+test('a private reply with data in a DM channel is sent where it is (nobody else is there)', async () => {
+  const { message, log } = fakeMessage();
+  message.guild = null;
+  message.guildId = null;
+  const ix = new MessageInteraction({
+    message,
+    commandName: 'ping',
+    parsed: { subcommand: null, values: {} },
+    resolved: {},
+    privateTtlMs: 5,
+  });
+  await ix.reply({ ...secret('mine'), flags: MessageFlags.Ephemeral });
+  assert.match(JSON.stringify(log.replies[0]), /mine/);
 });
 
 test('a normal reply is never auto-deleted', async () => {
@@ -226,9 +314,8 @@ test('getSubcommand() throws when the command has none', () => {
   assert.throws(() => ix.options.getSubcommand());
 });
 
-// Fluxer has no private replies: a "private" one is posted in the channel and removed later.
-// A file (the /mydata export, with tickets and mod cases) must never be shown there: it goes to
-// the author's DMs, and the channel only learns whether that worked.
+// A file (the /mydata export, with tickets and mod cases) must never be shown in the channel: it goes
+// to the author's DMs, and the channel only learns whether that worked.
 test('a private reply with a file goes to DMs, never the channel', async () => {
   const { ix, log } = make();
   const dms = [];

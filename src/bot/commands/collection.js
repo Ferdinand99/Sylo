@@ -21,7 +21,7 @@ import {
 import { collectionPage } from '../../db/economyShop.js';
 import { economySettings } from '../../modules/economy.js';
 import { collectionEmbed } from '../../modules/lib/collectibles.js';
-import { guildKey, platformOfGuild } from '../../platform/platformOf.js';
+import { guildKey } from '../../platform/platformOf.js';
 import { isPlatformGuildId } from '../../lib/platformId.js';
 import { registerComponent } from '../lib/components.js';
 import { economyGate, reply } from '../lib/economyCmd.js';
@@ -85,18 +85,6 @@ export async function execute(interaction) {
   }
   const guildId = guildKey(interaction.guild);
   const payload = await buildCollection({ guildId, userId: user.id, page: 1 });
-  // Off on Fluxer (no private replies): a DM, and the channel hears only that it was sent.
-  if (payload && !config.collectionPublic && platformOfGuild(interaction.guild) === 'fluxer') {
-    try {
-      await interaction.user.send(payload);
-    } catch {
-      return reply(
-        interaction,
-        'I could not send you a DM. Allow direct messages from members of this server, then try again.'
-      );
-    }
-    return reply(interaction, '📬 Sent to your DMs.');
-  }
   // Off: only the member sees it. On: the member is showing it, so the reply is public.
   const send = (body) =>
     config.collectionPublic

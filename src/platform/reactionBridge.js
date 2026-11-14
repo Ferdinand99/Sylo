@@ -9,9 +9,10 @@ import { ReactionInteraction } from '../bot/framework/ReactionInteraction.js';
 import { getComponentAction } from '../db/componentReactions.js';
 import { dispatchToCollectors } from './outgoing.js';
 import { log } from '../lib/log.js';
+import { guildByKey } from './platformOf.js';
 
-async function memberOf(message, userId) {
-  const members = message.guild?.members;
+async function memberOf(guild, userId) {
+  const members = guild?.members;
   if (!members) return null;
   return members.cache.get(userId) ?? (await members.fetch(userId).catch(() => null));
 }
@@ -30,10 +31,14 @@ export async function handleReactionAdd(reaction, user, opts = {}) {
   const action = await getComponentAction(message.id, emoji);
   if (!action || (action.expiresAt && action.expiresAt <= Date.now())) return;
 
+  // A private reply of a server command is sent to the DMs: there the message has no guild, the stored
+  // action knows which server it belongs to.
+  const guild = message.guild ?? (action.guildId ? (guildByKey(action.guildId) ?? null) : null);
   const interaction = new ReactionInteraction({
     message,
     user,
-    member: await memberOf(message, user.id),
+    member: await memberOf(guild, user.id),
+    guild: message.guild ? null : guild,
     action,
     platform: opts.platform,
     privateTtlMs: opts.privateTtlMs,
