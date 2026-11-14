@@ -183,7 +183,7 @@ public final class AppSession {
             // The person closed the sheet or pressed Cancel: nothing to say.
         } catch NetworkError.cancelled {
         } catch let error as SignInError {
-            errorMessage = Self.message(for: error)
+            errorMessage = Self.message(for: error, chosen: server.origin)
         } catch let error as NetworkError {
             errorMessage = error.userMessage
         } catch is TokenStoreError {
@@ -405,12 +405,12 @@ public final class AppSession {
     /// different paths keep separate tokens.
     private func key(_ server: ServerURL) -> String { server.description }
 
-    private static func message(for error: SignInError) -> String {
+    private static func message(for error: SignInError, chosen: String) -> String {
         switch error {
         case .invalidServerURL: ServerURLError.invalid.userMessage
         case .serverError: "The server couldn't sign you in. Try again."
         case .issuerMismatch(let claimed):
-            "This sign-in came from a different server (\(claimed)). Sign in again, or add the server with that address."
+            "This sign-in came from a different server (\(claimed)), but you chose \(chosen). Sign in again, or add the server with that address."
         case .cancelled, .stateMismatch, .wrongCallback, .missingCode: unfinishedSignIn
         }
     }

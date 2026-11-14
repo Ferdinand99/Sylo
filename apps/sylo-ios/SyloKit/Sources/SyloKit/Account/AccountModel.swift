@@ -210,7 +210,7 @@ public final class AccountModel {
         } catch NetworkError.cancelled {
             return false
         } catch let error as ConnectError {
-            platformError = Self.message(for: error)
+            platformError = Self.message(for: error, chosen: server.origin)
             return false
         } catch {
             let error = NetworkError(error)
@@ -221,12 +221,12 @@ public final class AccountModel {
         return true
     }
 
-    private static func message(for error: ConnectError) -> String {
+    private static func message(for error: ConnectError, chosen: String) -> String {
         switch error {
         case .cancelled: "Cancelled."
         case .wrongCallback, .missingResult, .invalidServerURL: "Connecting didn't finish. Try again."
         case .issuerMismatch(let claimed):
-            "This connection came from a different server (\(claimed)). Try again, or add the server with that address."
+            "This connection came from a different server (\(claimed)), but you chose \(chosen). Try again, or add the server with that address."
         case .sheetFailed(let reason): "Couldn't open the sign-in sheet: \(reason)"
         case .serverError(let code): Self.connectFailure(code)
         }

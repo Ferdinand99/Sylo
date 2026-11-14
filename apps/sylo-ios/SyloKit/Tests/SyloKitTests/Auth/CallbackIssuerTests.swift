@@ -140,8 +140,8 @@ struct CallbackIssuerTests {
                 .queryItems?.first { $0.name == "state" }?.value ?? ""
             return URL(string: "sylo://auth?code=c&state=\(state)&iss=https://evil.example")!
         }
-        let expected = "This sign-in came from a different server (https://evil.example). "
-            + "Sign in again, or add the server with that address."
+        let expected = "This sign-in came from a different server (https://evil.example), "
+            + "but you chose https://app.sylobot.com. Sign in again, or add the server with that address."
         #expect(session.errorMessage == expected)
         #expect(session.phase == .signIn(chosen))
         // The code was not redeemed anywhere.
@@ -201,6 +201,41 @@ struct IssuerFlowTests {
         #expect(try tokens.token(for: server.description) == nil)
     }
 
+    @Test("Sign-in: http against https (a proxy that drops TLS) is refused and both origins are shown")
+    func signInHttpAgainstHttps() async throws {
+        let tokens = InMemoryTokenStore()
+        let refused = await signIn("&iss=http://sylo.example.com", tokens: tokens)
+        #expect(refused.phase == .signIn(server))
+        let expected = "This sign-in came from a different server (http://sylo.example.com), "
+            + "but you chose https://sylo.example.com. Sign in again, or add the server with that address."
+        #expect(refused.errorMessage == expected)
+        #expect(!clients.calls.contains { $0.endpoint is Endpoints.ExchangeCode })
+        #expect(try tokens.token(for: server.description) == nil)
+    }
+
+    @Test("Sign-in: a callback with more than one issuer is refused, even when they agree")
+    func signInRepeatedIssuer() async {
+        let refused = await signIn("&iss=https://sylo.example.com&iss=https://sylo.example.com")
+        #expect(refused.phase == .signIn(server))
+        #expect(refused.errorMessage?.contains("but you chose https://sylo.example.com") == true)
+        #expect(!clients.calls.contains { $0.endpoint is Endpoints.ExchangeCode })
+    }
+
+    @Test("Connect: http against https is refused and both origins are shown; so is a repeated issuer")
+    func connectHttpAndRepeated() async {
+        for extra in ["&iss=http://sylo.example.com", "&iss=https://sylo.example.com&iss=https://sylo.example.com"] {
+            let clients = AccountConnectModelTests.clients()
+            let model = AccountModel(session: makeSignedInSession(clients: clients))
+            await model.load()
+            let connected = await model.connect(AccountModelTests.fluxer) { _ in
+                URL(string: "sylo://connected?result=r-1&platform=fluxer\(extra)")!
+            }
+            #expect(!connected, "\(extra)")
+            #expect(model.platformError?.contains("but you chose https://sylo.example.com") == true, "\(extra)")
+            #expect(!clients.calls.contains { $0.endpoint is Endpoints.CompleteConnect }, "\(extra)")
+        }
+    }
+
     @Test("Connect: a matching or absent issuer completes the link")
     func connectAccepted() async {
         for extra in ["&iss=https://sylo.example.com", "&iss=https://SYLO.example.com:443", ""] {
@@ -234,8 +269,8 @@ struct IssuerFlowTests {
         _ = await model.connect(AccountModelTests.fluxer) { _ in
             URL(string: "sylo://connected?result=r-1&platform=fluxer&iss=https://other.example.com")!
         }
-        let expected = "This connection came from a different server (https://other.example.com). "
-            + "Try again, or add the server with that address."
+        let expected = "This connection came from a different server (https://other.example.com), "
+            + "but you chose https://sylo.example.com. Try again, or add the server with that address."
         #expect(model.platformError == expected)
     }
 }
