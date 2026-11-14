@@ -1,12 +1,13 @@
-import { useContext } from 'react';
-import { PlatformContext } from '../platformContext.jsx';
 import EmojiPicker from '../components/EmojiPicker.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import UnitInput from '../components/UnitInput.jsx';
-import { cardTitle, channelTitle, copyIdHint } from '../util.js';
+import MemberPicker from '../components/MemberPicker.jsx';
+import { useMemberNames } from '../memberNames.js';
+import { cardTitle, channelTitle } from '../util.js';
+import '../styles/wp1-members.css';
 
 const MODE_LABELS = { always: 'React to every message', random: 'React at a random chance' };
 const ROLE_ACTION_LABELS = { add: 'Give it to them', remove: 'Take it away from them' };
@@ -24,7 +25,7 @@ export function appendEmoji(text, emoji) {
 function toFormRule(r) {
   return {
     key: newKey(),
-    targetUsersText: (r.targetUsers || []).join(' '),
+    targetUsers: (r.targetUsers || []).map(String),
     targetRoleId: (r.targetRoles || [])[0] || '',
     channelId: r.channelId || '',
     emojisText: (r.emojis || []).join(' '),
@@ -35,12 +36,27 @@ function toFormRule(r) {
   };
 }
 
-// A rule's title says what it does: "🧟 🔥 in #general", or "Rule 2" while it is still empty.
-function ruleTitle(r, channels, index) {
+// A rule's title says who it is for and what it does: "@Infected → 🧟 🔥 in #general". Until the rule has a
+// target it is named by its emoji and channel, and "Rule 2" while it is still empty.
+function ruleTitle(r, channels, roles, names, index) {
   const emojis = cardTitle(r.emojisText, '', 24);
   const where = channelTitle(channels, r.channelId, '');
-  if (emojis && where) return `${emojis} in ${where}`;
-  return emojis || where || `Rule ${index + 1}`;
+  const role = roles.find((x) => String(x.id) === String(r.targetRoleId));
+  const [firstUser] = r.targetUsers;
+  const userName = firstUser ? (names.get(firstUser) ?? 'member') : '';
+  const target = role
+    ? `@${role.name}`
+    : userName
+      ? `@${userName}${r.targetUsers.length > 1 ? ` +${r.targetUsers.length - 1}` : ''}`
+      : '';
+  const what = emojis ? (where ? `${emojis} in ${where}` : emojis) : where;
+  if (target && what) return `${target} → ${what}`;
+  return target || what || `Rule ${index + 1}`;
+}
+
+function RuleTitle({ rule, channels, roles, index }) {
+  const names = useMemberNames(...rule.targetUsers.slice(0, 1).map((id) => `<@${id}>`));
+  return <span className="v2-rule-title">{ruleTitle(rule, channels, roles, names, index)}</span>;
 }
 
 function emptyFormRule() {
@@ -56,7 +72,8 @@ const fromForm = (form) => ({
   cooldownSeconds: form.cooldownSeconds,
   logChannelId: form.logChannelId,
   rules: form.rules.map((r) => ({
-    targetUsersText: r.targetUsersText,
+    // The API takes the ids as one text, separated by spaces.
+    targetUsersText: r.targetUsers.join(' '),
     targetRoleId: r.targetRoleId,
     channelId: r.channelId,
     emojis: r.emojisText,
@@ -68,7 +85,6 @@ const fromForm = (form) => ({
 });
 
 export default function AutoReact() {
-  const { platform } = useContext(PlatformContext);
   const limits = useModuleLimits('auto-react');
   const { data, form, setForm, status, error, dirty, saving, save, reset } = useModuleForm('auto-react', {
     toForm,
@@ -135,7 +151,7 @@ export default function AutoReact() {
         {form.rules.map((r, i) => (
           <div className="v2-rule-card" key={r.key}>
             <div className="v2-rule-head">
-              <span className="v2-rule-title">{ruleTitle(r, data.channels, i)}</span>
+              <RuleTitle rule={r} channels={data.channels} roles={data.roles} index={i} />
               <button type="button" className="v2-btn-danger-ghost" onClick={() => removeRule(r.key)}>
                 Remove rule
               </button>
@@ -143,7 +159,7 @@ export default function AutoReact() {
             <p className="v2-field-hint v2-rule-lead">
               Matches if <strong>either</strong> the users or the role below match.
             </p>
-            {!r.targetUsersText.trim() && !r.targetRoleId ? (
+            {!r.targetUsers.length && !r.targetRoleId ? (
               <p className="v2-ph-warn v2-ph-warn-block" role="status">
                 <span aria-hidden="true">⚠ </span>
                 This rule has no users and no role yet, so it will be removed when you save.
@@ -151,26 +167,28 @@ export default function AutoReact() {
             ) : null}
 
             <div className="v2-field">
-              <label>
+              <label htmlFor={`target-users-${r.key}`}>
                 Target users <span className="v2-field-hint">— optional</span>
               </label>
-              <input
-                type="text"
-                placeholder="e.g. 123456789012345678 or <@123456789012345678>"
-                value={r.targetUsersText}
-                onChange={(e) => updateRule(r.key, { targetUsersText: e.target.value })}
+              <MemberPicker
+                multiple
+                id={`target-users-${r.key}`}
+                value={r.targetUsers}
+                onChange={(targetUsers) => updateRule(r.key, { targetUsers })}
+                max={limitOf(limits, 'rules[].targetUsers').maxItems}
+                placeholder="Search by name, or paste an ID"
               />
               <p className="v2-field-hint">
-                Paste one or more user IDs, separated by spaces or commas. {copyIdHint(platform)} A pasted
-                mention like &lt;@123…&gt; works too; a typed @name is not looked up.
+                Type two letters of a name and pick the member. For someone who has left, paste their user ID.
               </p>
             </div>
 
             <div className="v2-field">
-              <label>
+              <label htmlFor={`target-role-${r.key}`}>
                 Target role <span className="v2-field-hint">— optional</span>
               </label>
               <select
+                id={`target-role-${r.key}`}
                 value={r.targetRoleId}
                 onChange={(e) => updateRule(r.key, { targetRoleId: e.target.value })}
               >
