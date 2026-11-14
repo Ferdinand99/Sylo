@@ -176,7 +176,9 @@ describe('MemberPicker, several members', () => {
   it('adds several pasted ids and mentions in one go, skipping ones already there', async () => {
     const changes = [];
     render(<Host changes={changes} />);
-    fireEvent.change(screen.getByLabelText('Members'), { target: { value: `${MARA}, <@${MARLIN}> ${THIRD}` } });
+    fireEvent.change(screen.getByLabelText('Members'), {
+      target: { value: `${MARA}, <@${MARLIN}> ${THIRD}` },
+    });
     fireEvent.mouseDown(await screen.findByRole('option', { name: 'Add 3 members' }));
     expect(changes.at(-1)).toEqual([MARA, MARLIN, THIRD]);
     fireEvent.change(screen.getByLabelText('Members'), { target: { value: `${MARA} ${MARLIN}` } });
@@ -270,11 +272,11 @@ describe('Moderation: warn a member', () => {
     expect(screen.getByRole('menuitem', { name: 'Restore' })).toBeTruthy();
   });
 
-  it('wraps the hub tabs below 600 px through its own class', async () => {
+  it('wraps the hub tabs below 600 px through the shared tab row', async () => {
     api.getModeration.mockResolvedValue(moderation());
     renderHub();
     const tabs = (await screen.findAllByRole('tablist'))[0];
-    expect(tabs.classList.contains('v2-hub-tabs-wrap')).toBe(true);
+    expect(tabs.classList.contains('v2-tabs-wrap')).toBe(true);
   });
 });
 
@@ -386,7 +388,18 @@ describe('Leveling: set XP', () => {
       'Set XP',
       'Danger zone',
     ]);
-    for (const id of ['lvl-up', 'lvl-rewards', 'lvl-rate', 'lvl-voice', 'lvl-multipliers', 'lvl-by-role', 'lvl-by-channel', 'lvl-board', 'lvl-set-xp', 'lvl-danger']) {
+    for (const id of [
+      'lvl-up',
+      'lvl-rewards',
+      'lvl-rate',
+      'lvl-voice',
+      'lvl-multipliers',
+      'lvl-by-role',
+      'lvl-by-channel',
+      'lvl-board',
+      'lvl-set-xp',
+      'lvl-danger',
+    ]) {
       expect(container.querySelector(`#${id}`), id).not.toBeNull();
     }
   });
@@ -424,7 +437,9 @@ describe('Auto-react: target users', () => {
     config: {
       cooldownSeconds: 5,
       logChannelId: '',
-      rules: [{ targetUsers: users, targetRoles: [], channelId: '', emojis: ['🧟'], mode: 'always', chance: 50 }],
+      rules: [
+        { targetUsers: users, targetRoles: [], channelId: '', emojis: ['🧟'], mode: 'always', chance: 50 },
+      ],
     },
     channels: [],
     roles: [{ id: '900000000000000001', name: 'Infected' }],
@@ -439,7 +454,11 @@ describe('Auto-react: target users', () => {
     renderAtGuild(<AutoReact />, GUILD);
     const list = await screen.findByRole('list', { name: 'Chosen members' });
     await waitFor(() =>
-      expect(within(list).getAllByRole('listitem').map((c) => c.textContent)).toEqual(['@Marlin×', '@Mara×'])
+      expect(
+        within(list)
+          .getAllByRole('listitem')
+          .map((c) => c.textContent)
+      ).toEqual(['@Marlin×', '@Mara×'])
     );
     // nothing was touched, so there is nothing to save
     expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(true);

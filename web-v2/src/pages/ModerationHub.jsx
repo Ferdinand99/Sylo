@@ -423,7 +423,7 @@ export default function ModerationHub() {
   return (
     <PlatformContext.Provider value={info}>
       <h1 className="v2-section-title">Moderation</h1>
-      <TabRow className="v2-hub-tabs v2-hub-tabs-wrap" role="tablist" activeKey={active} panelId="moderation-panel">
+      <TabRow className="v2-hub-tabs" role="tablist" activeKey={active} panelId="moderation-panel">
         {TABS.map(([key, label, moduleId]) => (
           <button
             key={key}

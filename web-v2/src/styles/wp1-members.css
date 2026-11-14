@@ -55,16 +55,6 @@
   }
 }
 
-/* ---- Moderation hub: below 600 px the tabs wrap onto a second line instead of running off the screen ------ */
-@media (max-width: 600px) {
-  .v2-tabs.v2-hub-tabs-wrap {
-    flex-wrap: wrap;
-    overflow-x: visible;
-    -webkit-mask-image: none;
-    mask-image: none;
-  }
-}
-
 /* ---- Leveling: a jump target that is not a heading --------------------------------------------------------- */
 .v2-danger-zone[id] {
   scroll-margin-top: calc(var(--topbar-h) + 16px);
