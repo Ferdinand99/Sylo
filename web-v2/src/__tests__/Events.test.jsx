@@ -181,10 +181,65 @@ describe('Events form', () => {
   it('cancels an event after confirming', async () => {
     cancelEvent.mockResolvedValue({ events: [event({ state: 'cancelled' })] });
     renderAtGuild(<Events />, GUILD);
-    fireEvent.click(await screen.findByRole('button', { name: 'Cancel event' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'More actions for Game night' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Cancel event' }));
     await waitFor(() => expect(cancelEvent).toHaveBeenCalledWith(GUILD, 7));
     expect(confirmDialog).toHaveBeenCalledTimes(1);
     expect(await screen.findByText(/cancelled · 3\/10 going/)).toBeTruthy();
+  });
+});
+
+describe('Events time zones and header', () => {
+  it('offers the time zones in a select that includes Europe/Oslo, for the event and for the commands', async () => {
+    renderAtGuild(<Events />, GUILD);
+    const commandsZone = await screen.findByLabelText(/Time zone for commands/);
+    expect(commandsZone.tagName).toBe('SELECT');
+    const names = (select) => [...select.querySelectorAll('option')].map((o) => o.value);
+    expect(names(commandsZone)).toContain('Europe/Oslo');
+    // the setting is blank here: that reads "UTC (default)"
+    expect(commandsZone.value).toBe('');
+    expect(names(commandsZone)[0]).toBe('');
+
+    fireEvent.click(screen.getByRole('button', { name: '+ New event' }));
+    const eventZone = screen.getByLabelText('Time zone');
+    expect(eventZone.tagName).toBe('SELECT');
+    expect(names(eventZone)).toContain('Europe/Oslo');
+  });
+
+  it('saves the picked zone for the commands', async () => {
+    saveModuleConfig.mockImplementation(async (_guild, _id, body) => ({ config: body }));
+    renderAtGuild(<Events />, GUILD);
+    fireEvent.change(await screen.findByLabelText(/Time zone for commands/), {
+      target: { value: 'Europe/Oslo' },
+    });
+    fireEvent.click(screen.getAllByRole('button', { name: /Save/ })[0]);
+    await waitFor(() =>
+      expect(saveModuleConfig).toHaveBeenCalledWith(
+        GUILD,
+        'events',
+        expect.objectContaining({ timeZone: 'Europe/Oslo' })
+      )
+    );
+  });
+
+  it('keeps a saved zone that this browser does not list, instead of changing it', async () => {
+    load([event({ timeZone: 'Mars/Olympus_Mons' })]);
+    renderAtGuild(<Events />, GUILD);
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    expect(screen.getByLabelText('Time zone').value).toBe('Mars/Olympus_Mons');
+  });
+
+  it('has the one accent button in the header, and Cancel event only in the row menu', async () => {
+    const { container } = renderAtGuild(<Events />, GUILD);
+    await screen.findByText(/#7 · Game night/);
+    const accent = [...container.querySelectorAll('.v2-btn-primary')].filter(
+      (b) => !b.closest('.v2-savebar')
+    );
+    expect(accent.map((b) => b.textContent)).toEqual(['+ New event']);
+    expect(container.querySelector('.v2-listhead').contains(accent[0])).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Cancel event' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'More actions for Game night' }));
+    expect(screen.getAllByRole('menuitem').map((i) => i.textContent)).toEqual(['Cancel event']);
   });
 });
 

@@ -15,5 +15,6 @@ export function purchaseText(out, config) {
     return `${bought} You have the role until ${until}${out.extended ? ' (the new time was added to what you had)' : ''}.${left}`;
   }
   if (out.item.type === 'role') return `${bought} The role is yours.${left}`;
+  if (out.item.type === 'collectible') return `${bought} It is in your collection (/collection).${left}`;
   return `${bought} Staff were told and will take care of it.${left}`;
 }

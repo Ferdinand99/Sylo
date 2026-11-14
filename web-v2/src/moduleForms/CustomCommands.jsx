@@ -1,4 +1,5 @@
 import { useContext, useEffect, useState } from 'react';
+import PickerHealth from '../components/PickerHealth.jsx';
 import { useParams } from 'react-router-dom';
 import { getCustomCommands, saveCustomCommand, deleteCustomCommand } from '../api.js';
 import { notify } from '../notify.js';
@@ -7,6 +8,12 @@ import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import ChipPicker from '../components/ChipPicker.jsx';
 import EmbedEditor from '../components/EmbedEditor.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
+import PlaceholderBar from '../components/PlaceholderBar.jsx';
+import PreviewLayout from '../components/PreviewLayout.jsx';
+import MentionTextarea from '../components/MentionTextarea.jsx';
+import ListPageHead from '../components/ListPageHead.jsx';
+import RowActions from '../components/RowActions.jsx';
+import EmptyList from '../components/EmptyList.jsx';
 import { newKey } from '../components/EmbedCard.jsx';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { PlatformContext } from '../platformContext.jsx';
@@ -36,8 +43,26 @@ function blankAction(type) {
   return a;
 }
 
-function ActionBlock({ action, index, count, roles, channels, placeholders, onChange, onMove, onRemove }) {
-  const tokens = tokensFor('customCommands', placeholders);
+const SENDS_MESSAGES = (a) => a.type === 'reply' || a.type === 'send';
+const messageFieldId = (action, message) => `cc-msg-${action.key}-${message.key}`;
+// "Action 2", or "Action 2, message 3" where the action has several messages to pick from.
+const messageName = (action, index, mi) =>
+  action.messages.length > 1 ? `Action ${index + 1}, message ${mi + 1}` : `Action ${index + 1}`;
+
+/** An embed as the editor keeps it, in the shape MessagePreview draws. */
+const previewEmbed = (e) =>
+  e
+    ? {
+        color: e.color,
+        title: e.title,
+        description: e.description,
+        authorName: e.authorName,
+        fields: e.fields,
+        footer: e.footerText,
+      }
+    : null;
+
+function ActionBlock({ action, index, count, roles, channels, tokens, onChange, onMove, onRemove }) {
   const limits = useModuleLimits('custom-commands');
   const set = (patch) => onChange({ ...action, ...patch });
   const updateMessage = (key, patch) =>
@@ -80,6 +105,7 @@ function ActionBlock({ action, index, count, roles, channels, placeholders, onCh
               </option>
             ))}
           </select>
+          <PickerHealth kind="role" value={action.roleId} />
           <p className="v2-field-hint">Applied to whoever ran the command.</p>
         </div>
       ) : (
@@ -95,6 +121,7 @@ function ActionBlock({ action, index, count, roles, channels, placeholders, onCh
                   </option>
                 ))}
               </select>
+              <PickerHealth kind="channel" value={action.channelId} />
             </div>
           ) : (
             <div className="v2-field">
@@ -134,17 +161,20 @@ function ActionBlock({ action, index, count, roles, channels, placeholders, onCh
                   ) : null}
                 </div>
               </div>
-              <textarea
-                id={`cc-msg-${action.key}-${m.key}`}
+              <MentionTextarea
+                id={messageFieldId(action, m)}
                 aria-label={`Message ${mi + 1} text`}
                 rows={2}
+                channels={channels}
+                roles={roles}
                 maxLength={limitOf(limits, 'commands[].actions[].messages[].content').maxLength}
                 placeholder="Write your message here… (leave blank for embed-only)"
                 value={m.content}
                 onChange={(e) => updateMessage(m.key, { content: e.target.value })}
               />
               <PlaceholderHint
-                fieldId={`cc-msg-${action.key}-${m.key}`}
+                chips={false}
+                fieldId={messageFieldId(action, m)}
                 tokens={tokens}
                 value={m.content}
                 onChange={(content) => updateMessage(m.key, { content })}
@@ -186,8 +216,9 @@ function ActionBlock({ action, index, count, roles, channels, placeholders, onCh
   );
 }
 
-function CommandForm({ initial, channels, roles, placeholders, onSave, onCancel, saving }) {
+function CommandForm({ initial, title, channels, roles, placeholders, onSave, onCancel, saving }) {
   const limits = useModuleLimits('custom-commands');
+  const tokens = tokensFor('customCommands', placeholders);
   const { platform, commandPrefix } = useContext(PlatformContext);
   const [name, setName] = useState(initial.name || '');
   const [description, setDescription] = useState(initial.description || '');
@@ -237,6 +268,32 @@ function CommandForm({ initial, channels, roles, placeholders, onSave, onCancel,
     setPicking(false);
   }
 
+  // One row of placeholder chips for the whole command: it writes into the message field edited last.
+  const barFields = actions.flatMap((a, i) =>
+    SENDS_MESSAGES(a)
+      ? a.messages.map((m, mi) => ({ id: messageFieldId(a, m), label: messageName(a, i, mi), tokens }))
+      : []
+  );
+  const previews = actions.flatMap((a, i) =>
+    SENDS_MESSAGES(a)
+      ? a.messages.map((m, mi) => ({
+          key: messageFieldId(a, m),
+          title: `${messageName(a, i, mi)}: ${a.type === 'reply' ? 'reply' : 'message to a channel'}`,
+          content: m.content,
+          embed: previewEmbed(m.embed),
+          note: [
+            a.type === 'reply' && a.private ? 'Only the person who ran the command sees this reply.' : '',
+            a.type === 'send' && a.channelId
+              ? `Posted in #${channels.find((c) => c.id === a.channelId)?.name ?? 'the chosen channel'}.`
+              : '',
+            a.messages.length > 1 ? "The bot picks one of this action's messages at random." : '',
+          ]
+            .filter(Boolean)
+            .join(' '),
+        }))
+      : []
+  );
+
   function submit(e) {
     e.preventDefault();
     onSave({
@@ -260,126 +317,144 @@ function CommandForm({ initial, channels, roles, placeholders, onSave, onCancel,
   }
 
   return (
-    <form onSubmit={submit} className="v2-section-gap">
-      <div className="v2-field">
-        <label>Name</label>
-        <div className="v2-field-row" style={{ alignItems: 'center', marginBottom: 0 }}>
-          <span className="v2-field-hint">{commandPrefix}</span>
-          <input
-            type="text"
-            maxLength={limitOf(limits, 'commands[].name').maxLength}
-            pattern={`[a-z0-9_-]{1,${limitOf(limits, 'commands[].name').maxLength ?? ''}}`}
-            placeholder="my-command"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
-        </div>
+    <PreviewLayout previews={previews} lookup={{ channels, roles }} toggleAfter={3}>
+      <>
+        <button type="button" className="v2-btn-ghost v2-btn-compact" onClick={onCancel}>
+          ← Custom commands
+        </button>
+        <h1 className="v2-section-title">{title}</h1>
         <p className="v2-field-hint">
-          Lowercase letters, numbers, - and _.{' '}
-          {platform === 'fluxer'
-            ? `Members run it as ${commandPrefix}name in chat.`
-            : 'This is the slash command.'}
+          Each action runs in order when a member uses the command. Click into a message, then click a
+          placeholder to insert it there.
         </p>
-      </div>
+        <form onSubmit={submit} className="v2-section-gap">
+          <div className="v2-field">
+            <label>Name</label>
+            <div className="v2-field-row" style={{ alignItems: 'center', marginBottom: 0 }}>
+              <span className="v2-field-hint">{commandPrefix}</span>
+              <input
+                type="text"
+                maxLength={limitOf(limits, 'commands[].name').maxLength}
+                pattern={`[a-z0-9_-]{1,${limitOf(limits, 'commands[].name').maxLength ?? ''}}`}
+                placeholder="my-command"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </div>
+            <p className="v2-field-hint">
+              Lowercase letters, numbers, - and _.{' '}
+              {platform === 'fluxer'
+                ? `Members run it as ${commandPrefix}name in chat.`
+                : 'This is the slash command.'}
+            </p>
+          </div>
 
-      <div className="v2-field">
-        <label>
-          Description{' '}
-          <span className="v2-field-hint">
-            {platform === 'fluxer'
-              ? '— a note for you; Fluxer has no command list to show it in'
-              : "— shown in Discord's command list"}
-          </span>
-        </label>
-        <input
-          type="text"
-          maxLength={limitOf(limits, 'commands[].description').maxLength}
-          placeholder="What this command does"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-      </div>
+          <div className="v2-field">
+            <label>
+              Description{' '}
+              <span className="v2-field-hint">
+                {platform === 'fluxer'
+                  ? '— a note for you; Fluxer has no command list to show it in'
+                  : "— shown in Discord's command list"}
+              </span>
+            </label>
+            <input
+              type="text"
+              maxLength={limitOf(limits, 'commands[].description').maxLength}
+              placeholder="What this command does"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
 
-      <div className="v2-field">
-        <label>Command actions</label>
-        <p className="v2-field-hint">Actions run in order — use the ↑ ↓ buttons to reorder.</p>
-        {actions.map((a, i) => (
-          <ActionBlock
-            key={a.key}
-            action={a}
-            index={i}
-            count={actions.length}
-            roles={roles}
-            channels={channels}
-            placeholders={placeholders}
-            onChange={(next) => updateAction(a.key, next)}
-            onMove={(dir) => moveAction(a.key, dir)}
-            onRemove={() => removeAction(a.key)}
-          />
-        ))}
-
-        {picking ? (
-          <div className="v2-field-row" style={{ flexWrap: 'wrap' }}>
-            {ACTION_TYPES.map(([type, title]) => (
-              <button type="button" key={type} className="v2-btn-ghost" onClick={() => addAction(type)}>
-                {title}
-              </button>
+          <div className="v2-field">
+            <label>Command actions</label>
+            <p className="v2-field-hint">Actions run in order — use the ↑ ↓ buttons to reorder.</p>
+            {barFields.length ? <PlaceholderBar fields={barFields} /> : null}
+            {actions.map((a, i) => (
+              <ActionBlock
+                key={a.key}
+                action={a}
+                index={i}
+                count={actions.length}
+                roles={roles}
+                channels={channels}
+                tokens={tokens}
+                onChange={(next) => updateAction(a.key, next)}
+                onMove={(dir) => moveAction(a.key, dir)}
+                onRemove={() => removeAction(a.key)}
+              />
             ))}
-            <button type="button" className="v2-btn-ghost" onClick={() => setPicking(false)}>
-              cancel
+
+            {picking ? (
+              <div className="v2-field-row" style={{ flexWrap: 'wrap' }}>
+                {ACTION_TYPES.map(([type, title]) => (
+                  <button type="button" key={type} className="v2-btn-ghost" onClick={() => addAction(type)}>
+                    {title}
+                  </button>
+                ))}
+                <button type="button" className="v2-btn-ghost" onClick={() => setPicking(false)}>
+                  cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="v2-btn-ghost"
+                onClick={() => setPicking(true)}
+                disabled={actions.length >= (limitOf(limits, 'commands[].actions').maxItems ?? Infinity)}
+              >
+                + Add another action
+              </button>
+            )}
+          </div>
+
+          <details className="v2-am-params">
+            <summary>
+              <strong>Advanced options and permissions</strong>
+            </summary>
+            <div className="v2-field">
+              <label>
+                Only these roles may use it <span className="v2-field-hint">— empty = everyone</span>
+              </label>
+              <ChipPicker kind="role" items={roles} value={allowedRoles} onChange={setAllowedRoles} />
+            </div>
+            <div className="v2-field">
+              <label>
+                Only in these channels <span className="v2-field-hint">— empty = anywhere</span>
+              </label>
+              <ChipPicker
+                kind="channel"
+                items={channels}
+                value={allowedChannels}
+                onChange={setAllowedChannels}
+              />
+            </div>
+            <div className="v2-field">
+              <label>Per-user cooldown (seconds)</label>
+              <input
+                type="number"
+                min={limitOf(limits, 'commands[].cooldownSeconds').min}
+                max={limitOf(limits, 'commands[].cooldownSeconds').max}
+                style={{ maxWidth: '120px' }}
+                value={cooldownSeconds}
+                onChange={(e) => setCooldownSeconds(Number(e.target.value))}
+              />
+            </div>
+          </details>
+
+          <div className="v2-field-row">
+            <button type="submit" className="v2-btn-primary" disabled={saving}>
+              Save &amp; close
+            </button>
+            <button type="button" className="v2-btn-ghost" onClick={onCancel}>
+              Cancel
             </button>
           </div>
-        ) : (
-          <button
-            type="button"
-            className="v2-btn-ghost"
-            onClick={() => setPicking(true)}
-            disabled={actions.length >= (limitOf(limits, 'commands[].actions').maxItems ?? Infinity)}
-          >
-            + Add another action
-          </button>
-        )}
-      </div>
-
-      <details className="v2-am-params">
-        <summary>
-          <strong>Advanced options and permissions</strong>
-        </summary>
-        <div className="v2-field">
-          <label>
-            Only these roles may use it <span className="v2-field-hint">— empty = everyone</span>
-          </label>
-          <ChipPicker kind="role" items={roles} value={allowedRoles} onChange={setAllowedRoles} />
-        </div>
-        <div className="v2-field">
-          <label>
-            Only in these channels <span className="v2-field-hint">— empty = anywhere</span>
-          </label>
-          <ChipPicker kind="channel" items={channels} value={allowedChannels} onChange={setAllowedChannels} />
-        </div>
-        <div className="v2-field">
-          <label>Per-user cooldown (seconds)</label>
-          <input
-            type="number"
-            min={limitOf(limits, 'commands[].cooldownSeconds').min}
-            max={limitOf(limits, 'commands[].cooldownSeconds').max}
-            style={{ maxWidth: '120px' }}
-            value={cooldownSeconds}
-            onChange={(e) => setCooldownSeconds(Number(e.target.value))}
-          />
-        </div>
-      </details>
-
-      <div className="v2-field-row">
-        <button type="submit" className="v2-btn-primary" disabled={saving}>
-          Save &amp; close
-        </button>
-        <button type="button" className="v2-btn-ghost" onClick={onCancel}>
-          Cancel
-        </button>
-      </div>
-    </form>
+        </form>
+      </>
+    </PreviewLayout>
   );
 }
 
@@ -437,18 +512,55 @@ export default function CustomCommands() {
     }
   }
 
+  // The editor takes the whole page: the actions, the message fields and their preview need the room.
+  const editing = editingId === null ? null : d.commands.find((c) => c.id === editingId);
+  if (creating || editing) {
+    return (
+      <CommandForm
+        key={creating ? 'new' : editing.id}
+        initial={creating ? {} : editing}
+        title={creating ? 'New command' : `Edit /${editing.name}`}
+        channels={d.channels}
+        roles={d.roles}
+        placeholders={d.placeholders}
+        saving={saving}
+        onSave={onSave}
+        onCancel={() => {
+          setCreating(false);
+          setEditingId(null);
+        }}
+      />
+    );
+  }
+
   return (
     <>
-      <h1 className="v2-section-title">Custom commands</h1>
-      <p className="v2-field-hint">
-        Build {platform === 'fluxer' ? 'chat commands' : '/slash commands'} from an ordered list of actions:
-        reply, post to a channel, add or remove a role.
-      </p>
+      <ListPageHead
+        title="Custom commands"
+        action={
+          <button type="button" className="v2-btn-primary" onClick={() => setCreating(true)}>
+            + New command
+          </button>
+        }
+      >
+        <p className="v2-field-hint">
+          Build {platform === 'fluxer' ? 'chat commands' : '/slash commands'} from an ordered list of actions:
+          reply, post to a channel, add or remove a role.
+        </p>
+      </ListPageHead>
 
       <div className="v2-group">
         <h2 className="v2-group-title">Your commands ({d.commands.length})</h2>
         {d.commands.length === 0 ? (
-          <p className="v2-note">None yet — create one below.</p>
+          <EmptyList
+            action={
+              <button type="button" className="v2-btn-ghost" onClick={() => setCreating(true)}>
+                + New command
+              </button>
+            }
+          >
+            None yet — create one to give members a command of your own.
+          </EmptyList>
         ) : (
           <div className="v2-list">
             {d.commands.map((c) => (
@@ -472,52 +584,17 @@ export default function CustomCommands() {
                       until you give it another name.
                     </p>
                   ) : null}
-                  {editingId === c.id ? (
-                    <CommandForm
-                      initial={c}
-                      channels={d.channels}
-                      roles={d.roles}
-                      placeholders={d.placeholders}
-                      saving={saving}
-                      onSave={onSave}
-                      onCancel={() => setEditingId(null)}
-                    />
-                  ) : null}
                 </div>
-                {editingId === c.id ? null : (
-                  <div className="v2-row-actions">
-                    <button type="button" className="v2-btn-ghost" onClick={() => setEditingId(c.id)}>
-                      Edit
-                    </button>
-                    <button type="button" className="v2-btn-danger-ghost" onClick={() => onDelete(c.id)}>
-                      Delete
-                    </button>
-                  </div>
-                )}
+                <RowActions
+                  edit={{ onClick: () => setEditingId(c.id) }}
+                  menuLabel={`More actions for /${c.name}`}
+                  items={[{ label: 'Delete', danger: true, onClick: () => onDelete(c.id) }]}
+                />
               </div>
             ))}
           </div>
         )}
       </div>
-
-      {creating ? (
-        <div className="v2-group">
-          <h2 className="v2-group-title">New command</h2>
-          <CommandForm
-            initial={{}}
-            channels={d.channels}
-            roles={d.roles}
-            placeholders={d.placeholders}
-            saving={saving}
-            onSave={onSave}
-            onCancel={() => setCreating(false)}
-          />
-        </div>
-      ) : (
-        <button type="button" className="v2-btn-primary" onClick={() => setCreating(true)}>
-          + New command
-        </button>
-      )}
     </>
   );
 }

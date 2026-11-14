@@ -48,6 +48,47 @@ test('an admin gets the audit log, newest first', async () => {
   assert.equal(typeof row.ago, 'string');
 });
 
+test('the audit log is paged, filterable by kind of change, capped, and limited to this server', async () => {
+  const s = await session();
+  for (let i = 1; i <= 5; i += 1) {
+    await recordAudit(D_GUILD, {
+      actor: 'a',
+      action: i % 2 ? 'module:polls' : 'economy:adjust',
+      detail: `pg ${i}`,
+    });
+  }
+  await recordAudit(OTHER_D_GUILD, { actor: 'a', action: 'module:polls', detail: 'pg other' });
+  const get = async (qs) => (await s.get(`/api/v2/guilds/${D_GUILD}/audit${qs}`)).json();
+
+  const one = await get('?limit=2');
+  assert.deepEqual(
+    one.entries.map((e) => e.detail),
+    ['pg 5', 'pg 4']
+  );
+  assert.equal(one.hasMore, true);
+  const two = await get(`?limit=2&before=${one.entries.at(-1).id}`);
+  assert.deepEqual(
+    two.entries.map((e) => e.detail),
+    ['pg 3', 'pg 2']
+  );
+
+  const polls = await get('?action=module:polls&limit=50');
+  assert.deepEqual(
+    polls.entries.map((e) => e.detail).filter((d) => d.startsWith('pg ')),
+    ['pg 5', 'pg 3', 'pg 1']
+  );
+  assert.ok(polls.entries.every((e) => e.action === 'module:polls'));
+  assert.ok(!polls.entries.some((e) => e.detail === 'pg other'), 'no row of another server shows');
+  assert.ok(polls.actions.some((a) => a.action === 'module:polls' && a.count >= 3));
+  assert.ok(!(await get('')).entries.some((e) => e.detail === 'pg other'));
+
+  for (let i = 0; i < 110; i += 1) {
+    await recordAudit(D_GUILD, { actor: 'a', action: 'command:/bulk', detail: `bulk ${i}` });
+  }
+  assert.equal((await get('?limit=100000')).entries.length, 100, 'never more than 100 in a page');
+  assert.equal((await get('?limit=abc')).entries.length, 50, 'the default page is 50');
+});
+
 test('a member without Manage Server is refused all of it', async () => {
   const s = await session();
   for (const path of ['audit', 'export', 'member-data']) {

@@ -1,5 +1,6 @@
 import { useContext } from 'react';
 import { PlatformContext } from '../platformContext.jsx';
+import PlaceholderBar from '../components/PlaceholderBar.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
@@ -101,6 +102,9 @@ export default function ServerStats() {
               </div>
             </div>
 
+            <PlaceholderBar
+              fields={[{ id: `ss-name-${c.key}`, label: 'Channel name', tokens: tokensFor('serverStats') }]}
+            />
             <div className="v2-field">
               <label htmlFor={`ss-name-${c.key}`}>
                 Channel name{' '}
@@ -116,10 +120,12 @@ export default function ServerStats() {
               />
               <PlaceholderHint
                 fieldId={`ss-name-${c.key}`}
+                chips={false}
                 tokens={tokensFor('serverStats')}
                 value={c.template}
                 onChange={(template) => updateRow(c.key, { template })}
               />
+              <p className="v2-field-hint">Preview: {c.template.replaceAll('{count}', '1,284')}</p>
             </div>
           </div>
         ))}

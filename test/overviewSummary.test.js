@@ -16,6 +16,44 @@ function stubGuild(id) {
   };
 }
 
+test('the Welcome card shows when members are welcomed', async () => {
+  const find = async (guild = stubGuild(G)) =>
+    (await buildOverview(guild)).groups.flatMap((g) => g.cards).find((c) => c.id === 'welcome');
+  const when = (card) => card.lines.find((l) => l.label === 'Welcome when');
+  assert.deepEqual(
+    { ...when(await find()) },
+    { label: 'Welcome when', value: 'a member joins', state: 'neutral' },
+    'an unset trigger is a welcome on join'
+  );
+
+  const ROLE_A = '800000000000000001';
+  const ROLE_B = '800000000000000002';
+  const guild = {
+    ...stubGuild(G),
+    roles: {
+      cache: new Map([
+        [ROLE_A, { id: ROLE_A, name: 'Verified', managed: false }],
+        [ROLE_B, { id: ROLE_B, name: 'Member', managed: false }],
+      ]),
+    },
+  };
+  await setGuildModule(G, 'welcome', {
+    enabled: true,
+    config: { trigger: 'role', triggerRoleIds: [ROLE_A, ROLE_B] },
+  });
+  assert.deepEqual(
+    { ...when(await find(guild)) },
+    { label: 'Welcome when', value: 'a member gets Verified or Member', state: 'on' }
+  );
+
+  await setGuildModule(G, 'welcome', { enabled: true, config: { trigger: 'role', triggerRoleIds: [] } });
+  assert.deepEqual(
+    { ...when(await find(guild)) },
+    { label: 'Welcome when', value: 'a role is not picked yet', state: 'off' }
+  );
+  await setGuildModule(G, 'welcome', { enabled: true, config: {} });
+});
+
 test('the Quote board card counts the saved quotes and shows the public page switch', async () => {
   const { insertQuote } = await import('../src/db/quotes.js');
   const find = async () =>
@@ -160,16 +198,32 @@ test('the Suggestions card counts open and stored suggestions', async () => {
   assert.equal(card.lines.find((l) => l.label === 'Open suggestions').value, '1');
   assert.equal(card.lines.find((l) => l.label === 'Stored').value, '2');
   assert.equal(card.lines.find((l) => l.label === 'Log channel').value, 'not set');
+  assert.equal(card.lines.find((l) => l.label === 'Channel').value, 'not set');
 
+  // The channels are named in the lines: "#general", not "set"
   const LOG = '100000000000000002';
-  await setGuildModule(G, 'suggestions', { enabled: true, config: { logChannel: LOG } });
+  const guild = stubGuild(G);
+  guild.channels.cache = {
+    get: (cid) => ({ 111: { id: '111', name: 'general' }, [LOG]: { id: LOG, name: 'announcements' } })[cid],
+  };
+  const findIn = async () =>
+    (await buildOverview(guild)).groups.flatMap((g) => g.cards).find((c) => c.id === 'suggestions');
+  await setGuildModule(G, 'suggestions', { enabled: true, config: { channel: '111', logChannel: LOG } });
+  let named = await findIn();
+  assert.equal(named.lines.find((l) => l.label === 'Channel').value, '#general');
+  assert.equal(named.lines.find((l) => l.label === 'Log channel').value, '#announcements');
   assert.equal(
-    (await find()).lines.find((l) => l.label === 'Log channel').value,
-    'move',
+    named.lines.find((l) => l.label === 'When decided').value,
+    'moved to the log channel',
     'a config from before the setting keeps moving'
   );
-  await setGuildModule(G, 'suggestions', { enabled: true, config: { logChannel: LOG, logMode: 'copy' } });
-  assert.equal((await find()).lines.find((l) => l.label === 'Log channel').value, 'copy');
+  assert.deepEqual(named.summaryParts, ['1 open', '#general', 'log in #announcements']);
+  await setGuildModule(G, 'suggestions', {
+    enabled: true,
+    config: { channel: '111', logChannel: LOG, logMode: 'copy' },
+  });
+  named = await findIn();
+  assert.equal(named.lines.find((l) => l.label === 'When decided').value, 'copied to the log channel');
 });
 
 test('the Temporary roles card counts active roles and shows the next expiry', async () => {

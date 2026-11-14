@@ -42,3 +42,17 @@ describe('Message Creator preview', () => {
     expect(screen.queryByText('APP')).toBeNull();
   });
 });
+
+describe('Message Creator header', () => {
+  it('has a breadcrumb back to the list and no Back button', async () => {
+    renderAt('123456789012345678');
+    const crumbs = await screen.findByRole('navigation', { name: 'Breadcrumb' });
+    const parent = crumbs.querySelector('a');
+    expect(parent.textContent).toBe('Embed messages');
+    expect(parent.getAttribute('href')).toBe('/guilds/123456789012345678/messages');
+    expect(crumbs.querySelector('[aria-current="page"]').textContent).toBe('New embed message');
+    expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+    // Nothing changed yet, so there is nothing to discard either.
+    expect(screen.queryByRole('button', { name: 'Discard' })).toBeNull();
+  });
+});

@@ -91,6 +91,12 @@ beforeEach(() => {
   getSuggestions.mockResolvedValue({ suggestions: [item()] });
 });
 
+// "Delete" sits in the "⋯" menu of the first row.
+async function deleteFirst() {
+  fireEvent.click((await screen.findAllByRole('button', { name: /More actions for suggestion/ }))[0]);
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+}
+
 describe('Suggestions form', () => {
   it('lists suggestions with votes, status and author; an anonymous one is marked as hidden from members', async () => {
     renderAtGuild(<Suggestions />, GUILD);
@@ -100,12 +106,42 @@ describe('Suggestions form', () => {
     expect(screen.getByText(/👍 3 · 👎 1/)).toBeTruthy();
     expect(screen.getByText(/by Alice$/)).toBeTruthy();
     expect(screen.getByText(/by Alice \(hidden from members\)/)).toBeTruthy();
-    expect(screen.getByText('✅ Approved')).toBeTruthy();
+    // the pill says the word once, with its coloured dot (no emoji on top)
+    const pills = [...document.querySelectorAll('.v2-status-pill')].map((p) => p.textContent);
+    expect(pills).toEqual(['Open', 'Approved']);
     expect(getModuleConfig).toHaveBeenCalledWith(GUILD, 'suggestions');
   });
 
-  it('the settings take their limits from the server', async () => {
+  it('opens on the queue with the open count on its tab, and the settings come only with "?tab=settings"', async () => {
+    getModuleConfig.mockResolvedValue({ ...(await getModuleConfig()), openCount: 4 });
+    const { router } = renderAtGuild(<Suggestions />, GUILD);
+    const queue = await screen.findByRole('tab', { name: 'Suggestions · 4 open' });
+    expect(queue.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByText(/#7 · Movie night/)).toBeTruthy();
+    expect(screen.queryByLabelText(/Cooldown/)).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+    await waitFor(() => expect(router.state.location.search).toBe('?tab=settings'));
+    expect(await screen.findByLabelText(/Cooldown/)).toBeTruthy();
+    expect(screen.queryByText(/#7 · Movie night/)).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: 'Suggestions · 4 open' }));
+    await waitFor(() => expect(router.state.location.search).toBe(''));
+    expect(await screen.findByText(/#7 · Movie night/)).toBeTruthy();
+  });
+
+  it('counts the open ones from the list when the server sends no count,', async () => {
     renderAtGuild(<Suggestions />, GUILD);
+    expect(await screen.findByRole('tab', { name: 'Suggestions · 1 open' })).toBeTruthy();
+  });
+
+  it('shows a plain tab label when nothing is waiting', async () => {
+    load([item({ status: 'approved' })]);
+    renderAtGuild(<Suggestions />, GUILD);
+    expect(await screen.findByRole('tab', { name: 'Suggestions' })).toBeTruthy();
+  });
+
+  it('the settings take their limits from the server', async () => {
+    const { router } = renderAtGuild(<Suggestions />, GUILD);
+    await router.navigate(`/g/${GUILD}?tab=settings`);
     const cooldown = await screen.findByLabelText(/Cooldown/);
     await waitFor(() => expect(cooldown.max).toBe('3600'));
     expect(cooldown.min).toBe('0');
@@ -131,7 +167,7 @@ describe('Suggestions form', () => {
     renderAtGuild(<Suggestions />, GUILD);
     const setStatus = (await screen.findAllByRole('combobox', { name: /Set status of suggestion/ }))[0];
     fireEvent.change(setStatus, { target: { value: 'approve' } });
-    fireEvent.click(screen.getAllByRole('button', { name: 'Set…' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Set status' })[0]);
     const reason = screen.getByLabelText(/Reason/);
     await waitFor(() => expect(reason.maxLength).toBe(500));
     fireEvent.change(reason, { target: { value: 'Planned' } });
@@ -146,7 +182,9 @@ describe('Suggestions form', () => {
     await screen.findByText(/#7 · Movie night/);
     const lists = screen.getAllByRole('combobox', { name: /Set status of suggestion/ });
     expect(lists).toHaveLength(2);
-    expect(screen.getAllByRole('button', { name: 'Delete' })).toHaveLength(2);
+    // Delete is behind the row's "⋯" menu, not an inline pill
+    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
+    expect(screen.getAllByRole('button', { name: /More actions for suggestion/ })).toHaveLength(2);
     expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
     const optionLabels = (select) =>
       within(select)
@@ -155,24 +193,26 @@ describe('Suggestions form', () => {
     const all = ['Approved', 'Denied', 'Implemented', 'Considering'];
     for (const select of lists) {
       const labels = optionLabels(select);
-      expect(labels[0]).toBe('Set status…');
+      expect(labels[0]).toBe('Choose status…');
       expect(labels.slice(1).every((l) => all.includes(l))).toBe(true);
     }
     // The open suggestion offers all four; the approved one does not offer "Approved" again.
     expect(lists.map((s) => optionLabels(s).length).sort()).toEqual([4, 5]);
     expect(lists.some((s) => !optionLabels(s).includes('Approved'))).toBe(true);
     fireEvent.change(lists[0], { target: { value: 'deny' } });
-    fireEvent.click(screen.getAllByRole('button', { name: 'Set…' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Set status' })[0]);
     const form = screen.getByLabelText(/Reason/).closest('form');
     fireEvent.click(within(form).getByRole('button', { name: 'Set to Denied' }));
     await waitFor(() => expect(decideSuggestion).toHaveBeenCalledWith(GUILD, 7, 'deny', ''));
   });
 
-  it('a picked status opens the reason form only after "Set…"; the reason is focused and Close gives focus back', async () => {
+  it('a picked status opens the reason form only from the "Set status" button, so arrow keys can browse the list', async () => {
     renderAtGuild(<Suggestions />, GUILD);
     const lists = await screen.findAllByRole('combobox', { name: /Set status of suggestion/ });
-    const buttons = screen.getAllByRole('button', { name: 'Set…' });
+    const buttons = screen.getAllByRole('button', { name: 'Set status' });
     expect(buttons[0].disabled).toBe(true);
+    // each change of the list (an arrow key on a closed list fires one) only picks an option
+    fireEvent.change(lists[0], { target: { value: 'approve' } });
     fireEvent.change(lists[0], { target: { value: 'deny' } });
     expect(screen.queryByLabelText(/Reason/)).toBeNull();
     expect(buttons[0].disabled).toBe(false);
@@ -180,10 +220,8 @@ describe('Suggestions form', () => {
     expect(document.activeElement).toBe(screen.getByLabelText(/Reason/));
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(screen.queryByLabelText(/Reason/)).toBeNull();
-    await waitFor(() =>
-      expect(document.activeElement).toBe(
-        screen.getAllByRole('combobox', { name: /Set status of suggestion/ })[0]
-      )
+    expect(document.activeElement).toBe(
+      screen.getAllByRole('combobox', { name: /Set status of suggestion/ })[0]
     );
   });
 
@@ -191,7 +229,7 @@ describe('Suggestions form', () => {
     deleteSuggestion.mockResolvedValue({ ok: true });
     getSuggestions.mockResolvedValue({ suggestions: [] });
     renderAtGuild(<Suggestions />, GUILD);
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Delete' }))[0]);
+    await deleteFirst();
     await waitFor(() => expect(deleteSuggestion).toHaveBeenCalledWith(GUILD, 7));
     expect(confirmDialog).toHaveBeenCalledTimes(1);
     expect(await screen.findByText('Nothing here yet.')).toBeTruthy();
@@ -200,7 +238,7 @@ describe('Suggestions form', () => {
   it('does nothing when the confirmation is declined', async () => {
     confirmDialog.mockResolvedValue(false);
     renderAtGuild(<Suggestions />, GUILD);
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Delete' }))[0]);
+    await deleteFirst();
     await waitFor(() => expect(confirmDialog).toHaveBeenCalled());
     expect(deleteSuggestion).not.toHaveBeenCalled();
   });

@@ -24,6 +24,24 @@ function copyWithTextarea(value) {
 }
 
 /**
+ * Copies `text` to the clipboard (the API where there is one, else the textarea fallback).
+ * Resolves to whether it worked; for a menu item that has no button of its own to show "Copied".
+ */
+export async function copyText(text) {
+  const value = String(text);
+  let ok = false;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      ok = true;
+    }
+  } catch {
+    ok = false;
+  }
+  return ok || copyWithTextarea(value);
+}
+
+/**
  * A small "Copy" button for a value people paste elsewhere (a user ID). Shows "Copied" for a
  * moment. Without the clipboard API (a plain http address) it tries a textarea fallback; if that
  * fails too, it says "Select and copy manually". The result is also announced to screen readers.
@@ -41,18 +59,7 @@ export default function CopyButton({ text, what = 'value' }) {
   }
 
   async function copy() {
-    const value = String(text);
-    let ok = false;
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(value);
-        ok = true;
-      }
-    } catch {
-      ok = false;
-    }
-    if (!ok) ok = copyWithTextarea(value);
-    show(ok ? 'copied' : 'failed');
+    show((await copyText(text)) ? 'copied' : 'failed');
   }
 
   const label = state === 'copied' ? 'Copied' : state === 'failed' ? 'Select and copy manually' : 'Copy';

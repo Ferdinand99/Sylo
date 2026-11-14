@@ -1442,6 +1442,125 @@ export const MIGRATIONS = [
       CREATE INDEX idx_applications_cooldowns_until ON applications_cooldowns (until_at);
     `);
   },
+
+  // Welcome on role (src/db/welcomeSent.js, which bootstraps the same table on Postgres): who has been
+  // welcomed in "when a member gets a role" mode, so the welcome is sent once per member and server.
+  (database) => {
+    database.exec(`
+      CREATE TABLE welcome_sent (
+        guild_id TEXT NOT NULL,
+        user_id  TEXT NOT NULL,
+        sent_at  INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, user_id)
+      );
+    `);
+  },
+
+  // Collectibles in the Economy shop (src/db/economyShop.js, which adds the same columns on Postgres with
+  // ADD COLUMN IF NOT EXISTS before the indexes): the picture and rarity of an item, whether a purchase is
+  // announced, and on an inventory row the copy of the picture and rarity kept when the item is deleted.
+  (database) => {
+    database.exec(`
+      ALTER TABLE economy_items ADD COLUMN image_id TEXT;
+      ALTER TABLE economy_items ADD COLUMN rarity TEXT;
+      ALTER TABLE economy_items ADD COLUMN announce INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE economy_inventory ADD COLUMN image_id TEXT;
+      ALTER TABLE economy_inventory ADD COLUMN rarity TEXT;
+      CREATE INDEX idx_economy_items_image ON economy_items (image_id) WHERE image_id IS NOT NULL;
+      CREATE INDEX idx_economy_inventory_image ON economy_inventory (image_id) WHERE image_id IS NOT NULL;
+    `);
+  },
+
+  // The pictures of collectibles (src/db/collectibleImages.js, which bootstraps the same table on Postgres):
+  // the re-encoded WebP itself, so it is part of every backup. Referenced by economy_items.image_id and
+  // economy_inventory.image_id.
+  (database) => {
+    database.exec(`
+      CREATE TABLE collectible_images (
+        id         TEXT PRIMARY KEY,
+        guild_id   TEXT NOT NULL,
+        mime       TEXT NOT NULL,
+        bytes      INTEGER NOT NULL,
+        data       BLOB NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_collectible_images_guild ON collectible_images (guild_id);
+    `);
+  },
+
+  // One-time codes for connecting a second platform from the Sylo app (src/db/apiTokens.js, which
+  // bootstraps the same table on Postgres). Only the code's hash is stored.
+  (database) => {
+    database.exec(`
+      CREATE TABLE mobile_connect_codes (
+        code_hash  TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        platform   TEXT NOT NULL,
+        expires_at INTEGER NOT NULL
+      );
+      CREATE INDEX idx_mobile_connect_codes_account ON mobile_connect_codes (account_id);
+    `);
+  },
+
+  // Adding a login from the app, second step (src/db/apiTokens.js and src/db/accounts.js, which carry
+  // the same changes for Postgres): a connect code names the app token that asked; the platform
+  // callback keeps the verified identity in a result code until that token completes the link; at
+  // most one live connect code per account; and one login per platform and account is enforced, not
+  // only checked (where two sign-ins at once left two, the one linked first stays).
+  (database) => {
+    database.exec(`
+      ALTER TABLE mobile_connect_codes ADD COLUMN token_id TEXT;
+      DELETE FROM mobile_connect_codes;
+      -- The unique index below answers the same lookups as the plain one from migration 76.
+      DROP INDEX idx_mobile_connect_codes_account;
+      CREATE UNIQUE INDEX idx_mobile_connect_codes_one ON mobile_connect_codes (account_id);
+      CREATE TABLE mobile_connect_results (
+        code_hash        TEXT PRIMARY KEY,
+        account_id       TEXT NOT NULL,
+        token_id         TEXT NOT NULL,
+        platform         TEXT NOT NULL,
+        platform_user_id TEXT NOT NULL,
+        username         TEXT NOT NULL DEFAULT '',
+        avatar           TEXT,
+        guild_ids        TEXT NOT NULL DEFAULT '[]',
+        expires_at       INTEGER NOT NULL
+      );
+    `);
+    const doubled = database
+      .prepare(
+        `DELETE FROM account_identities WHERE rowid NOT IN (
+           SELECT rowid FROM (
+             SELECT rowid, ROW_NUMBER() OVER (
+               PARTITION BY account_id, platform ORDER BY linked_at, platform_user_id
+             ) AS n FROM account_identities
+           ) WHERE n = 1
+         )`
+      )
+      .run().changes;
+    // The count only: which logins were dropped is not written down.
+    if (doubled > 0)
+      log.warn('db', `Migration 77 removed ${doubled} doubled login(s), keeping the first of each`);
+    database.exec(
+      'CREATE UNIQUE INDEX idx_account_identities_one ON account_identities (account_id, platform)'
+    );
+  },
+
+  // Change history (src/db/audit.js, which adds the same columns on Postgres with ADD COLUMN IF NOT EXISTS):
+  // an audit entry for a settings save keeps the settings that changed, before and after, as JSON with the
+  // secrets masked (change_json); an entry written by an undo says which entry it undoes (reverts_id).
+  // Entries from before this migration have neither. The 500-entries-per-server cap and the purge that goes
+  // with the server are the audit log's own. Each column is added only if it is missing, so a database that
+  // already has them (this entry once ran at another position) still boots.
+  (database) => {
+    const have = new Set(
+      database
+        .prepare('PRAGMA table_info(config_audit)')
+        .all()
+        .map((c) => c.name)
+    );
+    if (!have.has('change_json')) database.exec('ALTER TABLE config_audit ADD COLUMN change_json TEXT');
+    if (!have.has('reverts_id')) database.exec('ALTER TABLE config_audit ADD COLUMN reverts_id INTEGER');
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

@@ -1,5 +1,6 @@
 import ChipPicker from '../components/ChipPicker.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
+import MentionTextarea from '../components/MentionTextarea.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
@@ -122,7 +123,9 @@ export default function Autoresponder() {
 
             <div className="v2-field">
               <label htmlFor={`ar-reply-${r.key}`}>Reply</label>
-              <textarea
+              <MentionTextarea
+                channels={data.channels}
+                roles={data.roles}
                 id={`ar-reply-${r.key}`}
                 rows={2}
                 maxLength={limitOf(limits, 'responders[].response').maxLength}

@@ -1,10 +1,22 @@
 import { Link, useOutletContext } from 'react-router-dom';
 import PlatformBadge from '../components/PlatformBadge.jsx';
+import FreeLine from '../components/FreeLine.jsx';
 import LoadError from '../components/LoadError.jsx';
+import { getInvites } from '../api.js';
+import { useApiData } from '../useApiData.js';
 import { initial } from '../util.js';
 
 export default function GuildPicker() {
   const { guilds, guildsLoading, guildsError } = useOutletContext();
+  // Where Sylo can be added to another server (one link per platform that is set up).
+  const { data: invites } = useApiData(
+    () =>
+      Promise.resolve()
+        .then(getInvites)
+        .catch(() => []),
+    []
+  );
+  const addLinks = invites ?? [];
 
   if (guildsError) return <LoadError error={guildsError} what="your servers" />;
   if (guildsLoading || !guilds) return <p className="v2-state">Loading your servers…</p>;
@@ -38,7 +50,24 @@ export default function GuildPicker() {
             )}
           </Link>
         ))}
+        {addLinks.map((inv) => (
+          <a
+            key={inv.platform}
+            href={inv.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="v2-card v2-guild-card v2-guild-add"
+          >
+            <h3 className="v2-break">
+              {addLinks.length > 1 ? `Add Sylo to a server on ${inv.label}` : 'Add Sylo to another server'}
+            </h3>
+            <span className="v2-guild-card-icon v2-guild-card-ph" aria-hidden="true">
+              ＋
+            </span>
+          </a>
+        ))}
       </div>
+      <FreeLine />
     </>
   );
 }

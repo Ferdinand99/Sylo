@@ -4,6 +4,7 @@ import { getModuleConfig, saveModuleConfig } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
 import { isDirty } from './formEqual.js';
+import { useHealth } from '../HealthContext.jsx';
 
 /**
  * Form state with a saved snapshot to compare against. `load(next)` sets both
@@ -79,6 +80,7 @@ export function useModuleForm(moduleId, options = {}) {
     () => (loadFn ? loadFn(guildId) : getModuleConfig(guildId, moduleId)),
     [guildId, moduleId, ...deps]
   );
+  const refreshHealth = useHealth()?.refresh;
   const state = useFormState(null);
   const { form, load, commit, setForm: setFormState } = state;
   const [saving, setSaving] = useState(false);
@@ -125,6 +127,8 @@ export function useModuleForm(moduleId, options = {}) {
         if (next === undefined) commit(form);
         else load(next);
         saved?.(result);
+        // The saved settings may use other channels and roles: the permission check reads them again.
+        refreshHealth?.();
         return true;
       } catch (err) {
         notify(err.message || 'Saving failed.');
@@ -134,7 +138,7 @@ export function useModuleForm(moduleId, options = {}) {
         setSaving(false);
       }
     },
-    [form, data, guildId, loadedFor, moduleId, saveFn, load, commit]
+    [form, data, guildId, loadedFor, moduleId, saveFn, load, commit, refreshHealth]
   );
 
   const set = useCallback((patch) => setFormState((f) => ({ ...f, ...patch })), [setFormState]);

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useCmd } from '../platformContext.jsx';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import {
   getModuleConfig,
   publishApplicationsPanel,
@@ -21,9 +21,13 @@ import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 const TABS = [
   ['forms', 'Forms'],
-  ['submissions', 'Applications'],
+  ['submissions', 'Submissions'],
   ['panel', 'Panel and settings'],
 ];
+
+/** The label of a tab; the queue says how many applications wait for a decision. */
+const tabLabel = (key, label, pending) =>
+  key === 'submissions' && pending > 0 ? `${label} · ${pending} waiting` : label;
 
 const MODE_TEXT = { both: 'DM or web', discord: 'DM only', web: 'Web only' };
 
@@ -158,12 +162,17 @@ export default function Applications() {
   const { guildId } = useParams();
   const limits = useModuleLimits('applications');
   const { data, error, setData } = useApiData(() => getModuleConfig(guildId, 'applications'), [guildId]);
-  const [tab, setTab] = useState('forms');
+  const [params, setParams] = useSearchParams();
   // The form being edited: null (the list), a draft, or a new draft.
   const [editing, setEditing] = useState(null);
 
   if (error) return <LoadError error={error} what="Applications" />;
   if (!data) return <p className="v2-state">Loading…</p>;
+
+  // "?tab=" says which tab; without it the page opens on the queue when applications wait, else on the forms.
+  const asked = params.get('tab');
+  const tab = TABS.some(([key]) => key === asked) ? asked : data.pending > 0 ? 'submissions' : 'forms';
+  const setTab = (key) => setParams({ tab: key }, { replace: true, preventScrollReset: true });
 
   const upsert = (form) =>
     setData((d) => {
@@ -199,8 +208,7 @@ export default function Applications() {
             className={`v2-tab${tab === key ? ' is-active' : ''}`}
             onClick={() => setTab(key)}
           >
-            {label}
-            {key === 'submissions' && data.pending > 0 ? ` (${data.pending})` : ''}
+            {tabLabel(key, label, data.pending)}
           </button>
         ))}
       </TabRow>

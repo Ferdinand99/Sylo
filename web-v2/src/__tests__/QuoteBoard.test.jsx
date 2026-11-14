@@ -74,6 +74,12 @@ beforeEach(() => {
   });
 });
 
+// A quote's Delete sits in its "⋯" menu, not on the row.
+async function deleteFromMenu(number) {
+  fireEvent.click(await screen.findByRole('button', { name: `More actions for quote #${number}` }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+}
+
 describe('QuoteBoard form', () => {
   it('lists the quotes with number, author, date, channel and attachments', async () => {
     renderAtGuild(<QuoteBoard />, GUILD);
@@ -118,8 +124,11 @@ describe('QuoteBoard form', () => {
         staffRoles: [],
       })
     );
-    const link = await screen.findByRole('link', { name: new RegExp(`/quotes/${GUILD}$`) });
+    const link = await screen.findByRole('link', { name: 'Open the public quote page' });
     expect(link.getAttribute('href')).toBe(`${window.location.origin}/quotes/${GUILD}`);
+    // The address itself is not printed: a Copy button and an Open link stand for it.
+    expect(screen.queryByText(new RegExp(`/quotes/${GUILD}`))).toBeNull();
+    expect(screen.getByRole('button', { name: /^Copy/ })).toBeTruthy();
   });
 
   it('shows the link when the page is already public', async () => {
@@ -131,7 +140,7 @@ describe('QuoteBoard form', () => {
       quotes: [],
     });
     renderAtGuild(<QuoteBoard />, GUILD);
-    expect(await screen.findByRole('link', { name: new RegExp(`/quotes/${GUILD}$`) })).toBeTruthy();
+    expect(await screen.findByRole('link', { name: 'Open the public quote page' })).toBeTruthy();
     expect(screen.getByText('Nothing here yet.')).toBeTruthy();
   });
 
@@ -150,11 +159,11 @@ describe('QuoteBoard form', () => {
     getQuotes.mockResolvedValue({ total: 1, quotes: [quote({ number: 1, author: 'Bob', text: 'Second' })] });
     renderAtGuild(<QuoteBoard />, GUILD);
     confirmDialog.mockResolvedValueOnce(false);
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Delete' }))[0]);
+    await deleteFromMenu(2);
     await waitFor(() => expect(confirmDialog).toHaveBeenCalledTimes(1));
     expect(deleteQuote).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]);
+    await deleteFromMenu(2);
     await waitFor(() => expect(deleteQuote).toHaveBeenCalledWith(GUILD, 2));
     expect(confirmDialog).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Delete quote #2?' }));
     await waitFor(() => expect(screen.queryByText('#2 · Alice')).toBeNull());
@@ -164,7 +173,7 @@ describe('QuoteBoard form', () => {
   it('shows the server error when a remove fails', async () => {
     deleteQuote.mockRejectedValue(new Error('No such quote.'));
     renderAtGuild(<QuoteBoard />, GUILD);
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Delete' }))[0]);
+    await deleteFromMenu(2);
     await waitFor(() => expect(notify).toHaveBeenCalledWith('No such quote.'));
     expect(screen.getByText('#2 · Alice')).toBeTruthy();
   });

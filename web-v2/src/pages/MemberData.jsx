@@ -4,12 +4,14 @@ import { getMemberData, forgetMemberData } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
-import Breadcrumb from '../components/Breadcrumb.jsx';
+import Breadcrumb, { peopleCrumb } from '../components/Breadcrumb.jsx';
 import Field from '../components/Field.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { copyIdHint, formatCount } from '../util.js';
 import { usePlatformInfo } from '../usePlatformInfo.js';
 import Reveal from '../components/Reveal.jsx';
+import MemberPicker, { parseMemberIds } from '../components/MemberPicker.jsx';
+import '../styles/wp1-members.css';
 
 // Look up what Sylo stores about one member in this server and delete it on request.
 // Moderation cases and other safety records are kept.
@@ -18,25 +20,22 @@ export default function MemberData() {
   const { info } = usePlatformInfo(guildId);
   const [params, setParams] = useSearchParams();
   const user = params.get('user') ?? '';
-  const [query, setQuery] = useState(user);
   const { data, error, setData } = useApiData(
     () => (user ? getMemberData(guildId, user) : Promise.resolve({ lookup: null })),
     [guildId, user]
   );
 
-  function onLookup(e) {
-    e.preventDefault();
-    const next = query.trim();
+  // The picker holds a member id; an older link may carry an @mention, which is the same member.
+  const picked = parseMemberIds(user)[0] ?? '';
+
+  function onPick(id) {
     // Same page, other search: the window stays where it is instead of jumping to the top.
-    setParams(next ? { user: next } : {}, { preventScrollReset: true });
+    setParams(id ? { user: id } : {}, { preventScrollReset: true });
   }
 
   return (
     <Reveal>
-      <Breadcrumb
-        parents={[{ label: 'Settings', to: `/guilds/${guildId}/settings` }]}
-        current="Member data"
-      />
+      <Breadcrumb parents={[peopleCrumb(guildId)]} current="Member data" />
       <h1 className="v2-section-title">Member data</h1>
       <p className="v2-field-hint">
         Look up what Sylo has stored about a member in this server and delete it on request (for example a
@@ -44,25 +43,20 @@ export default function MemberData() {
         was removed.
       </p>
 
-      <form className="v2-field-row v2-wrap-row v2-section-gap" onSubmit={onLookup} role="search">
-        <input
-          type="text"
-          className="v2-member-data-input"
-          aria-label="User ID or @mention"
-          placeholder="User ID or @mention"
-          aria-describedby="member-id-hint"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          required
+      <div className="v2-field v2-member-data-picker v2-section-gap" role="search">
+        <label htmlFor="member-data-member">Member</label>
+        <MemberPicker
+          id="member-data-member"
+          value={picked}
+          onChange={onPick}
+          placeholder="Search by name, or paste an ID"
+          clearLabel="Look up another member"
         />
-        <button type="submit" className="v2-btn-primary">
-          Look up
-        </button>
-      </form>
-
-      <p className="v2-field-hint" id="member-id-hint">
-        Paste the member's user ID or an @mention. {copyIdHint(info.platform)}
-      </p>
+        <p className="v2-field-hint" id="member-id-hint">
+          Type two letters of the name. For a member who has left, paste the user ID.{' '}
+          {copyIdHint(info.platform)}
+        </p>
+      </div>
 
       {error ? (
         error.status === 400 ? (

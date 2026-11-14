@@ -86,11 +86,13 @@ describe('Welcome', () => {
     getModuleConfig.mockResolvedValue(welcomeData());
     renderAtGuild(<Welcome />, GUILD);
     const join = await screen.findByLabelText('Message', { selector: '#joinMessage' });
-    expect(screen.getAllByRole('button', { name: 'Insert {memberCount}' })).toHaveLength(3);
+    // One row of placeholder chips for the whole form, not one under every message.
+    expect(screen.getAllByRole('button', { name: 'Insert {memberCount}' })).toHaveLength(1);
 
     join.focus();
+    fireEvent.focusIn(join);
     join.setSelectionRange(8, 8); // after "Welcome "
-    fireEvent.click(screen.getAllByRole('button', { name: 'Insert {user.name}' })[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Insert {user.name}' }));
     expect(join.value).toBe('Welcome {user.name}{user} to {server}!');
   });
 
@@ -154,10 +156,11 @@ describe('Alert pages', () => {
       defaultMessage: '',
     });
     renderAtGuild(<KickAlerts />, GUILD);
-    expect(await screen.findByPlaceholderText('e.g. streamer_name')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: '+ Add streamer' }));
+    expect(screen.getByPlaceholderText('e.g. streamer_name')).toBeTruthy();
   });
 
-  it('shows the YouTube channel name that was found, with the id after it', async () => {
+  it('shows the YouTube channel name that was found, without its id', async () => {
     getModuleConfig.mockResolvedValue({
       config: {
         alerts: [
@@ -178,8 +181,9 @@ describe('Alert pages', () => {
     });
     renderAtGuild(<YoutubeAlerts />, GUILD);
     const found = await screen.findByText(/Found: Cool Channel/);
-    expect(found.textContent).toContain('ID UC123');
-    expect(screen.getAllByRole('button', { name: 'Insert {title}' })).toHaveLength(2);
+    expect(found.textContent).not.toContain('UC123');
+    // One placeholder bar for the card's two message fields.
+    expect(screen.getAllByRole('button', { name: 'Insert {title}' })).toHaveLength(1);
   });
 
   it('calls the RSS channel "Announce in" and the text "Message"', async () => {

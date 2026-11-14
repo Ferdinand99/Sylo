@@ -72,7 +72,12 @@ function AppealCard({ appeal, onDecide }) {
             <button type="button" className="v2-btn-primary" disabled={busy} onClick={() => decide('accept')}>
               Accept and unban
             </button>
-            <button type="button" className="v2-btn-ghost" disabled={busy} onClick={() => decide('deny')}>
+            <button
+              type="button"
+              className="v2-btn-danger-ghost"
+              disabled={busy}
+              onClick={() => decide('deny')}
+            >
               Deny
             </button>
           </div>

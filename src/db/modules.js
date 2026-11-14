@@ -1,6 +1,9 @@
 // Per-guild module enable state and JSON config.
 import { prepare, registerPostgresBootstrap } from './driver.js';
 import { MODULES, getModule } from '../modules/registry.js';
+import { restartTriggerClock } from '../modules/lib/welcomeClock.js';
+import { noteModuleWrite } from './auditCapture.js';
+import { invalidateHealth } from '../lib/healthCache.js';
 
 registerPostgresBootstrap(`
   CREATE TABLE IF NOT EXISTS guild_modules (
@@ -97,6 +100,11 @@ export function setModuleConfigGuard(fn) {
 
 export async function setGuildModule(guildId, moduleId, patch) {
   const current = await getGuildModule(guildId, moduleId);
+  // Every way of switching Welcome on (the toggle, the bulk toggle, an API client) passes here: its trigger
+  // roles start counting from now, not from when they were set up (see restartTriggerClock).
+  if (moduleId === 'welcome' && patch.enabled === true && !current.enabled) {
+    patch = { ...patch, config: restartTriggerClock(patch.config ?? current.config) };
+  }
   if (patch.config && configGuard) {
     await configGuard({ guildId, moduleId, prev: current.config ?? {}, next: patch.config });
   }
@@ -107,6 +115,10 @@ export async function setGuildModule(guildId, moduleId, patch) {
     config: JSON.stringify(patch.config ?? current.config),
     updatedAt: Date.now(),
   });
+  // The change history of the dashboard request this write belongs to keeps what it changed.
+  if (patch.config) noteModuleWrite(guildId, moduleId, current.config ?? {}, patch.config);
+  // The permission health check of this server read the settings that just changed.
+  invalidateHealth(guildId);
 }
 
 function safeParse(json) {

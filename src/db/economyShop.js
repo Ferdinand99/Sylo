@@ -1,21 +1,29 @@
 // Economy shop storage: the items staff sell and what members own.
 //
-//   economy_items       id, guild_id, name, description, emoji, type ('temp_role' | 'role' | 'custom'),
-//                       role_id, duration_ms, price, stock (NULL = unlimited), sold, required_roles
-//                       (JSON list, any-of), per_member_limit, enabled, sort_order
+//   economy_items       id, guild_id, name, description, emoji, type ('temp_role' | 'role' | 'custom' |
+//                       'collectible'), role_id, duration_ms, price, stock (NULL = unlimited), sold,
+//                       required_roles (JSON list, any-of), per_member_limit, enabled, sort_order, and
+//                       for a collectible: image_id (the picture, a row of collectible_images, see
+//                       db/collectibleImages.js),
+//                       rarity (NULL or one of modules/lib/collectibles.js RARITIES), announce (post a
+//                       message when it is bought)
 //   economy_inventory   id, guild_id, user_id, item_id, item_name / item_type / role_id (a copy of the
 //                       item, so a row still reads right after the item was deleted), price_paid,
 //                       source ('purchase' | 'grant'), status ('pending' | 'active' | 'revoked' |
 //                       'refunded' | 'expired'), fulfilled_at / fulfilled_by / note (custom items:
 //                       staff text), added_ms (the time a temporary role purchase added to the
 //                       role's record), lease_until (a pending row's role grant may still be running
-//                       until then; the sweep leaves it alone)
+//                       until then; the sweep leaves it alone), image_id / rarity (a collectible: the
+//                       picture and rarity this copy shows. Written when the copy is made and kept in step
+//                       with the item while it exists, so the collection still shows it when the item is
+//                       removed, or when staff take the picture off the item)
 //
 // Money and stock NEVER change through this file while a purchase, refund, grant or revoke runs:
 // those are transactions in modules/lib/shop.js (through the money API and its `after` hook). This
 // file holds the plain reads, the staff's editing of the item list, and the erasure of a member.
 // `guild_id` is the server key; the tables are created here for Postgres (SQLite: migration 68).
-import { prepare, registerPostgresBootstrap, registerPostgresMigration } from './driver.js';
+import { prepare, registerPostgresBootstrap, registerPostgresMigration, transaction } from './driver.js';
+import { releaseImageTx, sortedDistinct } from './collectibleImages.js';
 
 registerPostgresBootstrap(`
   CREATE TABLE IF NOT EXISTS economy_items (
@@ -61,6 +69,15 @@ registerPostgresBootstrap(`
   CREATE INDEX IF NOT EXISTS idx_economy_inventory_user ON economy_inventory (guild_id, user_id, id DESC);
   CREATE INDEX IF NOT EXISTS idx_economy_inventory_item ON economy_inventory (guild_id, item_id);
   CREATE INDEX IF NOT EXISTS idx_economy_inventory_created ON economy_inventory (guild_id, created_at);
+  -- Collectibles (SQLite migration 74). The columns come before the indexes that use them, so a database
+  -- from before them boots.
+  ALTER TABLE economy_items ADD COLUMN IF NOT EXISTS image_id TEXT;
+  ALTER TABLE economy_items ADD COLUMN IF NOT EXISTS rarity TEXT;
+  ALTER TABLE economy_items ADD COLUMN IF NOT EXISTS announce INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE economy_inventory ADD COLUMN IF NOT EXISTS image_id TEXT;
+  ALTER TABLE economy_inventory ADD COLUMN IF NOT EXISTS rarity TEXT;
+  CREATE INDEX IF NOT EXISTS idx_economy_items_image ON economy_items (image_id) WHERE image_id IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS idx_economy_inventory_image ON economy_inventory (image_id) WHERE image_id IS NOT NULL;
 `);
 
 // Mirrors the data step of SQLite migration 71: every temporary-role row that exists before it has an
@@ -70,32 +87,29 @@ registerPostgresMigration(71, "UPDATE economy_inventory SET added_ms = -1 WHERE 
 export const INVENTORY_STATUSES = ['pending', 'active', 'revoked', 'refunded', 'expired'];
 
 const ITEM_COLUMNS = `id, guild_id, name, description, emoji, type, role_id, duration_ms, price, stock, sold,
-  required_roles, per_member_limit, enabled, sort_order, created_at, updated_at`;
+  required_roles, per_member_limit, enabled, sort_order, image_id, rarity, announce, created_at, updated_at`;
+
+const UPDATE_ITEM_SQL = `UPDATE economy_items SET name = ?, description = ?, emoji = ?, type = ?, role_id = ?,
+    duration_ms = ?, price = ?, stock = ?, required_roles = ?, per_member_limit = ?, enabled = ?, rarity = ?,
+    announce = ?, updated_at = CASE WHEN updated_at >= ? THEN updated_at + 1 ELSE ? END
+  WHERE guild_id = ? AND id = ?`;
 
 const s = {
   insertItem: prepare(
     `INSERT INTO economy_items
        (guild_id, name, description, emoji, type, role_id, duration_ms, price, stock, required_roles,
-        per_member_limit, enabled, sort_order, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        per_member_limit, enabled, sort_order, rarity, announce, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     { returningId: true }
   ),
   getItem: prepare(`SELECT ${ITEM_COLUMNS} FROM economy_items WHERE guild_id = ? AND id = ?`),
   listItems: prepare(`SELECT ${ITEM_COLUMNS} FROM economy_items WHERE guild_id = ? ORDER BY sort_order, id`),
   countItems: prepare('SELECT COUNT(*) AS n FROM economy_items WHERE guild_id = ?'),
   maxOrder: prepare('SELECT MAX(sort_order) AS m FROM economy_items WHERE guild_id = ?'),
-  updateItem: prepare(
-    `UPDATE economy_items SET name = ?, description = ?, emoji = ?, type = ?, role_id = ?, duration_ms = ?,
-       price = ?, stock = ?, required_roles = ?, per_member_limit = ?, enabled = ?,
-       updated_at = CASE WHEN updated_at >= ? THEN updated_at + 1 ELSE ? END
-     WHERE guild_id = ? AND id = ?`
-  ),
   setEnabled: prepare(
     `UPDATE economy_items SET enabled = ?, updated_at = CASE WHEN updated_at >= ? THEN updated_at + 1 ELSE ? END WHERE guild_id = ? AND id = ?`
   ),
   setOrder: prepare('UPDATE economy_items SET sort_order = ? WHERE guild_id = ? AND id = ?'),
-  deleteItem: prepare('DELETE FROM economy_items WHERE guild_id = ? AND id = ?'),
-
   getRow: prepare('SELECT * FROM economy_inventory WHERE guild_id = ? AND id = ?'),
   listUser: prepare(
     'SELECT * FROM economy_inventory WHERE guild_id = ? AND user_id = ? ORDER BY id DESC LIMIT ?'
@@ -138,11 +152,6 @@ const s = {
     `SELECT * FROM economy_inventory
      WHERE guild_id = ? AND user_id = ? AND item_type <> 'custom' AND role_id IS NOT NULL AND status IN ('active', 'pending')`
   ),
-
-  eraseUser: prepare('DELETE FROM economy_inventory WHERE guild_id = ? AND user_id = ?'),
-  eraseFulfiller: prepare(
-    'UPDATE economy_inventory SET fulfilled_by = NULL WHERE guild_id = ? AND fulfilled_by = ?'
-  ),
 };
 
 /** An item row as the code uses it: numbers as numbers, the role list as an array, flags as booleans. */
@@ -171,6 +180,9 @@ export function hydrateItem(row) {
     perMemberLimit: row.per_member_limit == null ? null : Number(row.per_member_limit),
     enabled: Number(row.enabled) === 1,
     sortOrder: Number(row.sort_order),
+    imageId: row.image_id ?? null,
+    rarity: row.rarity ?? null,
+    announce: Number(row.announce) === 1,
     createdAt: Number(row.created_at),
     updatedAt: Number(row.updated_at),
   };
@@ -195,6 +207,8 @@ export function hydrateRow(row) {
     note: row.note,
     addedMs: Number.isFinite(Number(row.added_ms)) ? Number(row.added_ms) : 0,
     leaseUntil: Number(row.lease_until) || 0,
+    imageId: row.image_id ?? null,
+    rarity: row.rarity ?? null,
     createdAt: Number(row.created_at),
     updatedAt: Number(row.updated_at),
   };
@@ -219,6 +233,8 @@ export async function createItem(guildId, v, now = Date.now()) {
     v.perMemberLimit,
     v.enabled ? 1 : 0,
     next,
+    v.rarity ?? null,
+    v.announce ? 1 : 0,
     now,
     now
   );
@@ -232,27 +248,54 @@ export const itemCount = async (guildId) => Number((await s.countItems.get(guild
 /**
  * Replace the fields of an item (never its stock sold count). Every edit gives the item a new, larger
  * `updated_at`, even two within the same millisecond: it is the version a buyer's confirmation carries.
+ * A collectible's rarity is copied to the copies members hold. An item that stops being a collectible lets go of
+ * its picture (the members who own a copy keep theirs).
  * @returns {Promise<boolean>} found
  */
 export async function updateItem(guildId, id, v, now = Date.now()) {
-  const info = await s.updateItem.run(
-    v.name,
-    v.description,
-    v.emoji,
-    v.type,
-    v.roleId,
-    v.durationMs,
-    v.price,
-    v.stock,
-    JSON.stringify(v.requiredRoles),
-    v.perMemberLimit,
-    v.enabled ? 1 : 0,
-    now,
-    now,
-    guildId,
-    id
-  );
-  return info.changes > 0;
+  return transaction(function* (tx) {
+    // Lock the item first, then read its picture: an upload that finished a moment ago has moved it already.
+    const lock = yield tx.run(
+      'UPDATE economy_items SET sold = sold WHERE guild_id = ? AND id = ?',
+      guildId,
+      id
+    );
+    if (lock.changes < 1) return false;
+    const cur = yield tx.get('SELECT image_id FROM economy_items WHERE guild_id = ? AND id = ?', guildId, id);
+    const info = yield tx.run(
+      UPDATE_ITEM_SQL,
+      v.name,
+      v.description,
+      v.emoji,
+      v.type,
+      v.roleId,
+      v.durationMs,
+      v.price,
+      v.stock,
+      JSON.stringify(v.requiredRoles),
+      v.perMemberLimit,
+      v.enabled ? 1 : 0,
+      v.rarity ?? null,
+      v.announce ? 1 : 0,
+      now,
+      now,
+      guildId,
+      id
+    );
+    if (info.changes < 1) return false;
+    if (v.type === 'collectible') {
+      yield tx.run(
+        "UPDATE economy_inventory SET rarity = ? WHERE guild_id = ? AND item_id = ? AND item_type = 'collectible'",
+        v.rarity ?? null,
+        guildId,
+        id
+      );
+    } else if (cur.image_id) {
+      yield tx.run('UPDATE economy_items SET image_id = NULL WHERE guild_id = ? AND id = ?', guildId, id);
+      yield* releaseImageTx(tx, guildId, cur.image_id);
+    }
+    return true;
+  });
 }
 
 export async function setItemEnabled(guildId, id, enabled, now = Date.now()) {
@@ -268,9 +311,85 @@ export async function reorderItems(guildId, orderedIds) {
   for (const id of [...wanted, ...rest]) await s.setOrder.run(at++, guildId, id);
 }
 
-/** Delete an item. The inventory rows stay (they keep a copy of its name). @returns {Promise<boolean>} */
+/**
+ * Delete an item. The inventory rows stay (they keep a copy of its name, and a collectible's copies keep their
+ * picture and rarity, so the members who own it still see it, "item removed"). The picture is deleted in the
+ * same transaction when nobody owns a copy.
+ * @returns {Promise<boolean>}
+ */
 export async function deleteItem(guildId, id) {
-  return (await s.deleteItem.run(guildId, id)).changes > 0;
+  return transaction(function* (tx) {
+    // Lock the item first, then read its picture: an upload that finished a moment ago has moved it already.
+    const lock = yield tx.run(
+      'UPDATE economy_items SET sold = sold WHERE guild_id = ? AND id = ?',
+      guildId,
+      id
+    );
+    if (lock.changes < 1) return false;
+    const item = yield tx.get(
+      'SELECT image_id FROM economy_items WHERE guild_id = ? AND id = ?',
+      guildId,
+      id
+    );
+    const gone = yield tx.run('DELETE FROM economy_items WHERE guild_id = ? AND id = ?', guildId, id);
+    if (gone.changes < 1) return false;
+    yield* releaseImageTx(tx, guildId, item.image_id);
+    return true;
+  });
+}
+
+// --- collectibles: a member's collection ------------------------------------------------------------------------
+
+const COLLECTION_WHERE = "guild_id = ? AND user_id = ? AND item_type = 'collectible' AND status = 'active'";
+
+/**
+ * One page of a member's collection: the collectibles they own (active rows), one entry per item with how many
+ * copies they hold, oldest first. The picture and rarity are the ones the copies carry (kept in step with the
+ * item); the item's current name and emoji are used while it exists, the name on the row after it was deleted.
+ * @returns {Promise<{ page: number, pages: number, kinds: number, copies: number, entries: object[] }>}
+ */
+export async function collectionPage(guildId, userId, page = 1, perPage = 10) {
+  // COLLECTION_WHERE is a fixed fragment; every value is a bound argument.
+  const kinds =
+    Number(
+      (
+        await prepare(
+          `SELECT COUNT(DISTINCT item_id) AS n FROM economy_inventory WHERE ${COLLECTION_WHERE}`
+        ).get(guildId, userId)
+      )?.n
+    ) || 0;
+  const copies =
+    Number(
+      (
+        await prepare(`SELECT COUNT(*) AS n FROM economy_inventory WHERE ${COLLECTION_WHERE}`).get(
+          guildId,
+          userId
+        )
+      )?.n
+    ) || 0;
+  const pages = Math.max(1, Math.ceil(kinds / perPage));
+  const at = Math.min(pages, Math.max(1, Math.floor(Number(page)) || 1));
+  const rows = await prepare(
+    `SELECT item_id, MIN(item_name) AS item_name, MIN(image_id) AS image_id, MIN(rarity) AS rarity,
+            COUNT(*) AS n, MIN(created_at) AS first_at
+     FROM economy_inventory WHERE ${COLLECTION_WHERE}
+     GROUP BY item_id ORDER BY MIN(id) LIMIT ? OFFSET ?`
+  ).all(guildId, userId, perPage, (at - 1) * perPage);
+  const entries = [];
+  for (const r of rows) {
+    const item = await getItem(guildId, Number(r.item_id));
+    entries.push({
+      itemId: Number(r.item_id),
+      removed: !item,
+      name: item?.name ?? r.item_name,
+      emoji: item?.emoji ?? '',
+      imageId: r.image_id ?? null,
+      rarity: r.rarity ?? null,
+      count: Number(r.n),
+      firstAt: Number(r.first_at),
+    });
+  }
+  return { page: at, pages, kinds, copies, entries };
 }
 
 // --- inventory reads -----------------------------------------------------------------------------------
@@ -388,9 +507,30 @@ export async function markUnfulfilled(guildId, id, now = Date.now()) {
 
 // --- erasure ----------------------------------------------------------------------------------------------
 
-/** /forget: delete the member's inventory; take the member's id off rows they fulfilled as staff. */
+/**
+ * /forget: delete the member's inventory; take the member's id off rows they fulfilled as staff. One
+ * transaction: the pictures that only this member held go with the rows.
+ *
+ * The pictures to release come from the DELETE itself (RETURNING), not from an earlier read: the delete waits
+ * for a row that an upload is moving to a new picture at that moment and then returns the picture the row has
+ * NOW, so the picture an upload just put on these rows is released too. They are released in sorted order,
+ * after the rows are gone (rows, then pictures, never the item after a row: no cycle with the item-first paths).
+ */
 export async function eraseInventory(guildId, userId) {
-  const rows = (await s.eraseUser.run(guildId, userId)).changes;
-  const fulfilled = (await s.eraseFulfiller.run(guildId, userId)).changes;
-  return { rows, fulfilled };
+  return transaction(function* (tx) {
+    const deleted = yield tx.all(
+      'DELETE FROM economy_inventory WHERE guild_id = ? AND user_id = ? RETURNING image_id',
+      guildId,
+      userId
+    );
+    const fulfilled = yield tx.run(
+      'UPDATE economy_inventory SET fulfilled_by = NULL WHERE guild_id = ? AND fulfilled_by = ?',
+      guildId,
+      userId
+    );
+    for (const imageId of sortedDistinct(deleted.map((r) => r.image_id))) {
+      yield* releaseImageTx(tx, guildId, imageId);
+    }
+    return { rows: deleted.length, fulfilled: fulfilled.changes };
+  });
 }

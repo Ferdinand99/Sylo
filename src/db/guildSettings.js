@@ -2,6 +2,8 @@
 // default embed colour.
 import { prepare, registerPostgresBootstrap } from './driver.js';
 import { splitPlatformGuildId } from '../lib/platformId.js';
+import { noteSettingWrite } from './auditCapture.js';
+import { invalidateHealth } from '../lib/healthCache.js';
 
 /**
  * A role id list without @everyone, whose id is the server's own id: as a bot-master or staff
@@ -57,14 +59,38 @@ export async function getGuildSettings(guildId) {
   return selectStmt.get(guildId);
 }
 
+// A setting as the change history keeps it (readable, the same on both sides of a change).
+const HISTORY_NAME = {
+  modlog_channel_id: 'modlogChannelId',
+  embed_color: 'embedColor',
+  bot_master_roles: 'botMasterRoleIds',
+  command_prefix: 'commandPrefix',
+};
+function historyValue(col, raw) {
+  if (col === 'embed_color') return Number.isInteger(raw) ? `#${raw.toString(16).padStart(6, '0')}` : '';
+  if (col === 'bot_master_roles') {
+    try {
+      const v = JSON.parse(raw ?? '[]');
+      return Array.isArray(v) ? v : [];
+    } catch {
+      return [];
+    }
+  }
+  return raw ?? '';
+}
+
 async function put(guildId, col, value) {
+  const before = (await selectStmt.get(guildId))?.[col];
   await ensureStmt.run(guildId, Date.now());
   await setCol[col].run({ g: guildId, v: value, t: Date.now() });
+  // The change history of the dashboard request this write belongs to keeps what it changed.
+  noteSettingWrite(guildId, HISTORY_NAME[col], historyValue(col, before), historyValue(col, value));
 }
 
 /** Set (or clear, with null) the mod-log channel for a guild. */
 export async function setModlogChannel(guildId, channelId) {
   await put(guildId, 'modlog_channel_id', channelId);
+  invalidateHealth(guildId);
 }
 
 /** Roles (besides Discord admins) allowed to manage this guild in the dashboard. */

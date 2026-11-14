@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import PickerHealth from '../components/PickerHealth.jsx';
 import { useParams } from 'react-router-dom';
 import {
   getGithubWatches,
@@ -14,6 +15,9 @@ import LoadError from '../components/LoadError.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import Meta from '../components/Meta.jsx';
+import ListPageHead from '../components/ListPageHead.jsx';
+import RowActions from '../components/RowActions.jsx';
+import EmptyList from '../components/EmptyList.jsx';
 
 const BLANK = { repo: '', channelId: '', roleId: '', changelogPath: '', events: ['push', 'release'] };
 
@@ -63,6 +67,7 @@ function WatchForm({ initial, channels, roles, eventTypes, onSave, onCancel, sav
             </option>
           ))}
         </select>
+        <PickerHealth kind="channel" value={channelId} embed />
       </div>
 
       <div className="v2-field">
@@ -242,22 +247,42 @@ export default function GithubAlerts() {
 
   return (
     <>
-      <h1 className="v2-section-title">GitHub alerts</h1>
-      <p className="v2-field-hint">
-        Post GitHub activity from a repo straight to a channel — pushes, releases, issues, pull requests. Each
-        repo gets its own webhook URL and secret to paste into that repo's Settings → Webhooks page.
-      </p>
-      {!d.dashboardUrlSet ? (
-        <p className="v2-note">
-          DASHBOARD_URL isn't set, so GitHub has no reachable address to send events to. Set it before adding
-          a repo here.
+      <ListPageHead
+        title="GitHub alerts"
+        action={
+          creating ? null : (
+            <button type="button" className="v2-btn-primary" onClick={() => setCreating(true)}>
+              + Add repository
+            </button>
+          )
+        }
+      >
+        <p className="v2-field-hint">
+          Post GitHub activity from a repo straight to a channel — pushes, releases, issues, pull requests.
+          Each repo gets its own webhook URL and secret to paste into that repo's Settings → Webhooks page.
         </p>
-      ) : null}
+        {!d.dashboardUrlSet ? (
+          <p className="v2-note">
+            DASHBOARD_URL isn't set, so GitHub has no reachable address to send events to. Set it before
+            adding a repo here.
+          </p>
+        ) : null}
+      </ListPageHead>
 
       <div className="v2-group">
         <h2 className="v2-group-title">Watched repos ({d.watches.length})</h2>
         {d.watches.length === 0 ? (
-          <p className="v2-note">None yet — add a repo to start posting its activity here.</p>
+          <EmptyList
+            action={
+              creating ? null : (
+                <button type="button" className="v2-btn-ghost" onClick={() => setCreating(true)}>
+                  + Add repository
+                </button>
+              )
+            }
+          >
+            None yet — add a repo to start posting its activity here.
+          </EmptyList>
         ) : (
           <div className="v2-list">
             {d.watches.map((w) => (
@@ -310,24 +335,18 @@ export default function GithubAlerts() {
                 </div>
 
                 {editingId === w.id ? null : (
-                  <div className="v2-row-actions">
-                    <button type="button" className="v2-btn-ghost" onClick={() => setEditingId(w.id)}>
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="v2-btn-ghost"
-                      onClick={() => setWebhookOpenId(webhookOpenId === w.id ? null : w.id)}
-                    >
-                      Webhook setup
-                    </button>
-                    <button type="button" className="v2-btn-ghost" onClick={() => onToggle(w.id)}>
-                      {w.enabled ? 'Pause' : 'Resume'}
-                    </button>
-                    <button type="button" className="v2-btn-danger-ghost" onClick={() => onDelete(w.id)}>
-                      Delete
-                    </button>
-                  </div>
+                  <RowActions
+                    edit={{ onClick: () => setEditingId(w.id) }}
+                    menuLabel={`More actions for ${w.repo}`}
+                    items={[
+                      {
+                        label: webhookOpenId === w.id ? 'Hide webhook setup' : 'Webhook setup',
+                        onClick: () => setWebhookOpenId(webhookOpenId === w.id ? null : w.id),
+                      },
+                      { label: w.enabled ? 'Pause' : 'Resume', onClick: () => onToggle(w.id) },
+                      { label: 'Delete', danger: true, onClick: () => onDelete(w.id) },
+                    ]}
+                  />
                 )}
               </div>
             ))}
@@ -348,11 +367,7 @@ export default function GithubAlerts() {
             onCancel={() => setCreating(false)}
           />
         </div>
-      ) : (
-        <button type="button" className="v2-btn-ghost" onClick={() => setCreating(true)}>
-          + Add repository
-        </button>
-      )}
+      ) : null}
     </>
   );
 }

@@ -4,11 +4,14 @@ import { getGuilds, getPublicSession } from '../api.js';
 import { readLastGuildId, writeLastGuildId } from '../util.js';
 import { isPublicPath } from '../publicRoutes.js';
 import { OverviewProvider } from '../OverviewContext.jsx';
+import { HealthProvider } from '../HealthContext.jsx';
 import Announcement from './Announcement.jsx';
 import ServerSwitcher from './ServerSwitcher.jsx';
 import Sidebar from './Sidebar.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
 import AccountMenu from './AccountMenu.jsx';
+import CommandPalette, { isApplePlatform, isPaletteShortcut } from './CommandPalette.jsx';
+import { Icon } from './icons.jsx';
 import PublicShell from './PublicShell.jsx';
 import Toasts from './Toasts.jsx';
 import useLabelLinks from './useLabelLinks.js';
@@ -45,6 +48,20 @@ function SignedInShell() {
   const [theme, toggleTheme] = useTheme();
   useTopbarScrolled(topbarRef);
   const { pathname } = useLocation();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // Ctrl+K (⌘K on Apple devices) opens the command palette from anywhere. The palette closes itself on the
+  // same keys (CommandPalette.jsx). It stays out of the way of another dialog that is already open (a
+  // confirmation).
+  useEffect(() => {
+    function onKeyDown(e) {
+      if (!isPaletteShortcut(e) || paletteOpen || document.querySelector('dialog[open]')) return;
+      e.preventDefault();
+      setPaletteOpen(true);
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [paletteOpen]);
 
   useEffect(() => {
     getGuilds()
@@ -96,24 +113,46 @@ function SignedInShell() {
           <span>Sylo</span>
         </Link>
         <ServerSwitcher guilds={guilds} activeGuildId={lastGuildId} onSelectGuild={selectGuild} />
+        <button
+          type="button"
+          className="v2-palette-trigger"
+          aria-label="Search the dashboard"
+          aria-keyshortcuts="Control+K Meta+K"
+          aria-haspopup="dialog"
+          onClick={() => setPaletteOpen(true)}
+        >
+          <Icon name="search" className="v2-palette-trigger-icon" />
+          <span className="v2-palette-trigger-text">Search</span>
+          <kbd className="v2-palette-trigger-key" aria-hidden="true">
+            {isApplePlatform() ? '⌘K' : 'Ctrl K'}
+          </kbd>
+        </button>
         <ThemeToggle theme={theme} onToggle={toggleTheme} />
         <AccountMenu />
       </header>
       <OverviewProvider guildId={lastGuildId}>
-        <div className="v2-body">
-          <Sidebar
-            activeGuildId={lastGuildId}
-            open={mobileNavOpen}
-            onClose={() => setMobileNavOpen(false)}
-            returnFocusRef={navToggleRef}
+        <HealthProvider guildId={lastGuildId}>
+          <div className="v2-body">
+            <Sidebar
+              activeGuildId={lastGuildId}
+              open={mobileNavOpen}
+              onClose={() => setMobileNavOpen(false)}
+              returnFocusRef={navToggleRef}
+            />
+            <main className="v2-page">
+              <Announcement />
+              <Suspense fallback={<p className="v2-state">Loading…</p>}>
+                <Outlet context={{ guilds, guildsLoading: loading, guildsError: error }} />
+              </Suspense>
+            </main>
+          </div>
+          <CommandPalette
+            open={paletteOpen}
+            onClose={() => setPaletteOpen(false)}
+            guildId={lastGuildId}
+            guilds={guilds}
           />
-          <main className="v2-page">
-            <Announcement />
-            <Suspense fallback={<p className="v2-state">Loading…</p>}>
-              <Outlet context={{ guilds, guildsLoading: loading, guildsError: error }} />
-            </Suspense>
-          </main>
-        </div>
+        </HealthProvider>
       </OverviewProvider>
       <Toasts />
     </div>

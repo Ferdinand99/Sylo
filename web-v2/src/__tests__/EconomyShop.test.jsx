@@ -19,6 +19,8 @@ vi.mock('../api.js', () => ({
   setShopItemEnabled: vi.fn(),
   reorderShopItems: vi.fn(),
   deleteShopItem: vi.fn(),
+  uploadShopItemImage: vi.fn(),
+  deleteShopItemImage: vi.fn(),
   grantShopItem: vi.fn(),
   actOnInventoryRow: vi.fn(),
   getShopActivity: vi.fn(),
@@ -84,6 +86,8 @@ const config = {
   logChannelId: '',
   webShop: false,
   shopChannelId: '',
+  collectibleChannelId: '',
+  collectionPublic: false,
 };
 
 const item = (over = {}) => ({
@@ -111,6 +115,13 @@ const shopData = (items) => ({
   roles: [{ id: ROLE, name: 'Millionaire' }],
   channels: [],
   maxItems: 100,
+  rarities: [
+    { key: 'common', label: 'Common' },
+    { key: 'uncommon', label: 'Uncommon' },
+    { key: 'rare', label: 'Rare' },
+    { key: 'epic', label: 'Epic' },
+    { key: 'legendary', label: 'Legendary' },
+  ],
 });
 const person = (id, name) => ({ id, name, inServer: true });
 const invRow = (over = {}) => ({
@@ -201,6 +212,168 @@ describe('Economy settings: the shop', () => {
         expect.objectContaining({ webShop: true, shopChannelId: '555555555555555552' })
       )
     );
+  });
+});
+
+describe('Economy settings: collectibles', () => {
+  it('has the announcement channel and the collection switch (off by default), and saves them', async () => {
+    api.saveModuleConfig.mockResolvedValue({
+      config: { ...config, collectibleChannelId: '555555555555555552', collectionPublic: true },
+    });
+    renderAtGuild(<Economy />, GUILD);
+    const show = await screen.findByLabelText('Members can show their collection');
+    expect(show.checked).toBe(false);
+    expect(screen.getByText(/Off \(the default\)/)).toBeTruthy();
+    fireEvent.click(show);
+    fireEvent.change(screen.getByLabelText(/Channel for collectible announcements/), {
+      target: { value: '555555555555555552' },
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(api.saveModuleConfig).toHaveBeenCalledWith(
+        GUILD,
+        'economy',
+        expect.objectContaining({ collectibleChannelId: '555555555555555552', collectionPublic: true })
+      )
+    );
+  });
+});
+
+describe('Economy: collectibles on the Shop tab', () => {
+  const badge = (over = {}) =>
+    item({
+      id: 3,
+      name: 'Founder badge',
+      type: 'collectible',
+      rarity: 'epic',
+      announce: true,
+      imagePath: '/c/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.webp',
+      ...over,
+    });
+  const png = () => new File([new Uint8Array([1, 2, 3])], 'badge.png', { type: 'image/png' });
+
+  it('lists a collectible with its picture, rarity and announce switch, and warns when it has no picture', async () => {
+    api.getShopItems.mockResolvedValue(
+      shopData([badge(), badge({ id: 4, name: 'Bare', imagePath: null, rarity: null, announce: false })])
+    );
+    await openTab('Shop');
+    const row = (await screen.findByRole('heading', { name: /^Founder badge/, level: 3 })).closest('.v2-row');
+    expect(row.querySelector('img').getAttribute('src')).toBe('/c/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.webp');
+    expect(row.textContent).toContain('Collectible (a picture, no role)');
+    expect(row.textContent).toContain('Epic');
+    expect(row.textContent).toContain('announced');
+    const bare = screen.getByRole('heading', { name: /^Bare/, level: 3 }).closest('.v2-row');
+    expect(bare.querySelector('img')).toBeNull();
+    expect(bare.textContent).toContain('needs a picture');
+  });
+
+  it('adds a collectible: the fields go first, then the picture goes up to the new item', async () => {
+    api.createShopItem.mockResolvedValue({ items: [badge()], id: 3 });
+    api.uploadShopItemImage.mockResolvedValue({ items: [badge()] });
+    await openTab('Shop');
+    fireEvent.click(await screen.findByRole('button', { name: 'Add an item' }));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Founder badge' } });
+    expect(screen.queryByLabelText('Picture')).toBeNull();
+    fireEvent.change(screen.getByLabelText('What it is'), { target: { value: 'collectible' } });
+    expect(screen.queryByLabelText('Role')).toBeNull();
+    const rarity = screen.getByLabelText(/Rarity/);
+    expect([...rarity.options].map((o) => o.textContent)).toEqual([
+      '— none —',
+      'Common',
+      'Uncommon',
+      'Rare',
+      'Epic',
+      'Legendary',
+    ]);
+    fireEvent.change(rarity, { target: { value: 'epic' } });
+    fireEvent.click(screen.getByLabelText('Announce purchases'));
+    const file = png();
+    const input = screen.getByLabelText('Picture');
+    expect(input.accept).toBe('image/png,image/jpeg,image/webp');
+    fireEvent.change(input, { target: { files: [file] } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save item' }));
+    await waitFor(() => expect(api.uploadShopItemImage).toHaveBeenCalledWith(GUILD, 3, file));
+    expect(api.createShopItem).toHaveBeenCalledWith(
+      GUILD,
+      expect.objectContaining({ type: 'collectible', rarity: 'epic', announce: true, roleId: '' })
+    );
+    expect(api.createShopItem.mock.invocationCallOrder[0]).toBeLessThan(
+      api.uploadShopItemImage.mock.invocationCallOrder[0]
+    );
+    expect(notify).toHaveBeenCalledWith('Item added.', 'info');
+  });
+
+  it('keeps the item and the form when the picture is refused, so it can be tried again', async () => {
+    api.createShopItem.mockResolvedValue({ items: [badge({ imagePath: null })], id: 3 });
+    api.uploadShopItemImage.mockRejectedValueOnce(new Error('Use a PNG, JPEG or WebP image.'));
+    await openTab('Shop');
+    fireEvent.click(await screen.findByRole('button', { name: 'Add an item' }));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Founder badge' } });
+    fireEvent.change(screen.getByLabelText('What it is'), { target: { value: 'collectible' } });
+    fireEvent.change(screen.getByLabelText('Picture'), { target: { files: [png()] } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save item' }));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith('Use a PNG, JPEG or WebP image.'));
+    expect(
+      screen.getByRole('heading', { name: 'Edit item' }),
+      'the form is now an edit of the new item'
+    ).toBeTruthy();
+    // the file input is emptied too, so it does not still show the refused file
+    expect(screen.getByLabelText('Picture').files.length).toBe(0);
+    // a second try updates the item that now exists, and uploads again
+    api.updateShopItem.mockResolvedValue({ items: [badge()] });
+    api.uploadShopItemImage.mockResolvedValue({ items: [badge()] });
+    const again = png();
+    fireEvent.change(screen.getByLabelText('Picture'), { target: { files: [again] } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save item' }));
+    await waitFor(() => expect(api.uploadShopItemImage).toHaveBeenLastCalledWith(GUILD, 3, again));
+    expect(api.createShopItem).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a picture over 2 MB before anything is sent', async () => {
+    await openTab('Shop');
+    fireEvent.click(await screen.findByRole('button', { name: 'Add an item' }));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Big' } });
+    fireEvent.change(screen.getByLabelText('What it is'), { target: { value: 'collectible' } });
+    const big = new File([new Uint8Array(2 * 1024 * 1024 + 1)], 'big.png', { type: 'image/png' });
+    fireEvent.change(screen.getByLabelText('Picture'), { target: { files: [big] } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save item' }));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith('The picture is larger than 2 MB.'));
+    expect(api.createShopItem).not.toHaveBeenCalled();
+    expect(api.uploadShopItemImage).not.toHaveBeenCalled();
+  });
+
+  it('edits a collectible and removes its picture after a confirmation', async () => {
+    api.getShopItems.mockResolvedValue(shopData([badge()]));
+    api.deleteShopItemImage.mockResolvedValue({ items: [badge({ imagePath: null })] });
+    await openTab('Shop');
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    expect(screen.getByLabelText(/Rarity/).value).toBe('epic');
+    expect(screen.getByLabelText('Announce purchases').checked).toBe(true);
+    expect(screen.getByAltText('The current picture').getAttribute('src')).toBe(
+      '/c/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.webp'
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Remove picture' }));
+    await waitFor(() => expect(api.deleteShopItemImage).toHaveBeenCalledWith(GUILD, 3));
+    expect(confirmDialog).toHaveBeenCalledWith(expect.objectContaining({ confirmLabel: 'Remove picture' }));
+    await waitFor(() => expect(screen.queryByAltText('The current picture')).toBeNull());
+  });
+
+  it('a type that is not a collectible sends no rarity and no announce switch', async () => {
+    api.createShopItem.mockResolvedValue({ items: [item()], id: 1 });
+    await openTab('Shop');
+    fireEvent.click(await screen.findByRole('button', { name: 'Add an item' }));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Plain' } });
+    fireEvent.change(screen.getByLabelText('What it is'), { target: { value: 'collectible' } });
+    fireEvent.change(screen.getByLabelText(/Rarity/), { target: { value: 'rare' } });
+    fireEvent.change(screen.getByLabelText('What it is'), { target: { value: 'custom' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save item' }));
+    await waitFor(() =>
+      expect(api.createShopItem).toHaveBeenCalledWith(
+        GUILD,
+        expect.objectContaining({ type: 'custom', rarity: '', announce: false })
+      )
+    );
+    expect(api.uploadShopItemImage).not.toHaveBeenCalled();
   });
 });
 
@@ -306,13 +479,18 @@ describe('Economy: the Shop tab', () => {
       )
     );
 
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Pause' }))[0]);
+    // The less common actions are in each row's "⋯" menu, so the row keeps its buttons on one line.
+    const choose = async (row, name) => {
+      fireEvent.click(await screen.findByRole('button', { name: `More actions for ${row}` }));
+      fireEvent.click(await screen.findByRole('menuitem', { name }));
+    };
+    await choose('Renamed', 'Pause');
     await waitFor(() => expect(api.setShopItemEnabled).toHaveBeenCalledWith(GUILD, 1, false));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Move Renamed down' }));
+    await choose('Renamed', 'Move down');
     await waitFor(() => expect(api.reorderShopItems).toHaveBeenCalledWith(GUILD, [2, 1]));
 
-    fireEvent.click((await screen.findAllByRole('button', { name: 'Delete' }))[0]);
+    await choose('Renamed', 'Delete');
     await waitFor(() => expect(api.deleteShopItem).toHaveBeenCalled());
     expect(confirmDialog).toHaveBeenCalledWith(expect.objectContaining({ confirmLabel: 'Delete item' }));
   });
@@ -459,7 +637,8 @@ describe('Economy: the Activity tab', () => {
     await waitFor(() =>
       expect(api.getShopActivity).toHaveBeenLastCalledWith(GUILD, { userId: '', itemId: '1', page: 1 })
     );
-    fireEvent.change(screen.getByLabelText('Member ID'), { target: { value: ALICE } });
+    fireEvent.change(screen.getByLabelText('Member'), { target: { value: ALICE } });
+    fireEvent.mouseDown(await screen.findByRole('option', { name: `Use the member id ${ALICE}` }));
     await waitFor(() =>
       expect(api.getShopActivity).toHaveBeenLastCalledWith(GUILD, { userId: ALICE, itemId: '1', page: 1 })
     );
@@ -468,13 +647,21 @@ describe('Economy: the Activity tab', () => {
   it('pages and says when nothing matches', async () => {
     api.getShopActivity.mockResolvedValue(activity([], { total: 0 }));
     await openTab('Activity');
-    expect(await screen.findByText('No purchases match.')).toBeTruthy();
+    // no filter set: the page is empty, not "no match"
+    expect(
+      await screen.findByText(/No purchases yet\. Purchases made with \/buy or in the web shop/)
+    ).toBeTruthy();
     api.getShopActivity.mockResolvedValue(activity([invRow()], { pages: 3, total: 60 }));
-    fireEvent.change(screen.getByLabelText('Member ID'), { target: { value: 'x' } });
+    fireEvent.change(screen.getByLabelText('Member'), { target: { value: ALICE } });
+    fireEvent.mouseDown(await screen.findByRole('option', { name: `Use the member id ${ALICE}` }));
     expect(await screen.findByText('Page 1 of 3')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     await waitFor(() =>
-      expect(api.getShopActivity).toHaveBeenLastCalledWith(GUILD, { userId: 'x', itemId: '', page: 2 })
+      expect(api.getShopActivity).toHaveBeenLastCalledWith(GUILD, { userId: ALICE, itemId: '', page: 2 })
     );
+    api.getShopActivity.mockResolvedValue(activity([], { total: 0 }));
+    fireEvent.click(screen.getByRole('button', { name: /Clear the member filter/ }));
+    fireEvent.change(screen.getByLabelText('Item'), { target: { value: '1' } });
+    expect(await screen.findByText('No purchases match.')).toBeTruthy();
   });
 });

@@ -27,8 +27,10 @@ export function assignableRoles(guild) {
  * @param {import('discord.js').Guild} guild
  * @param {string} panel  active panel id (for nav highlighting)
  */
-export async function baseContext(guild, panel) {
-  const enabledById = new Map((await getGuildModules(guild.id)).map((m) => [m.id, m.enabled]));
+export async function baseContext(guild, panel, moduleRows) {
+  const enabledById = new Map(
+    (moduleRows ?? (await getGuildModules(guild.id))).map((m) => [m.id, m.enabled])
+  );
   const { platform, capabilities, webAppUrl, commandPrefix } = platformInfo(
     guild,
     await guildCommandPrefix(guild)

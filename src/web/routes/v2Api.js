@@ -42,10 +42,13 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { changelogHandler } from '../lib/changelogFeed.js';
 import { ticketsRouter, staffRouter } from './v2Staff.js';
 import guildDataRouter from './v2GuildData.js';
+import healthRouter, { dropHealthOnWrite } from './v2Health.js';
+import { moduleIcon } from '../lib/moduleIcons.js';
 import eventsRouter from './v2Events.js';
 import suggestionsRouter from './v2Suggestions.js';
 import tempRolesRouter from './v2TempRoles.js';
 import quotesRouter from './v2Quotes.js';
+import searchRouter from './v2Search.js';
 import introRouter from './v2Intro.js';
 import applicationsRouter from './v2Applications.js';
 import applyMemberRouter from './v2Apply.js';
@@ -62,6 +65,7 @@ import { withRowIds } from '../lib/rowIds.js';
 import { shouldSaveBotMasters } from '../lib/botMasters.js';
 import { guildTextChannels, guildVoiceChannels, guildCategories, resolveUserTags } from '../lib/discord.js';
 import { buildOverview } from '../lib/overviewSummary.js';
+import { buildAttention } from '../lib/overviewAttention.js';
 import {
   ROADMAP_STATUSES,
   listPublicPosts,
@@ -78,7 +82,12 @@ import {
 import { mdToHtml } from '../lib/markdown.js';
 import { voteLimit as roadmapVoteLimit, suggestLimit as roadmapSuggestLimit } from '../lib/roadmapLimits.js';
 import { roadmapView } from '../lib/roadmapView.js';
-import { getGuildModule, listEnabledModuleConfigs, setGuildModule } from '../../db/modules.js';
+import {
+  getGuildModule,
+  getGuildModules,
+  listEnabledModuleConfigs,
+  setGuildModule,
+} from '../../db/modules.js';
 import {
   normaliseLevelingConfig,
   validXp,
@@ -156,7 +165,12 @@ import { primeGuild as primeInviteCache } from '../../modules/inviteTracker.js';
 import { syncGuildAutomod } from '../../bot/lib/automodSync.js';
 import { TESTABLE, sendModuleTest } from '../../bot/lib/moduleTest.js';
 import { reservedCommandNames, syncGuildCustomCommands } from '../../bot/lib/customCommandSync.js';
-import { WELCOME_PLACEHOLDERS, normaliseWelcomeConfig } from '../../modules/welcome.js';
+import {
+  WELCOME_PLACEHOLDERS,
+  normaliseWelcomeConfig,
+  validTriggerRoleIds,
+  welcomeTrigger,
+} from '../../modules/welcome.js';
 import { MODULE_LIMITS } from '../../modules/limits.js';
 import { normaliseBirthdaysConfig } from '../../modules/birthdays.js';
 import { normaliseAfkConfig } from '../../modules/afk.js';
@@ -246,6 +260,7 @@ import {
   withoutEveryone,
 } from '../../db/guildSettings.js';
 import { recordAudit } from '../../db/audit.js';
+import { runWithCapture } from '../../db/auditCapture.js';
 import { recordBotAudit, listBotAudit } from '../../db/botAudit.js';
 import { platformInfo } from '../../platform/modulePlatformNotes.js';
 import { guildCommandPrefix } from '../../platform/commandPrefix.js';
@@ -439,11 +454,26 @@ router.use('/shop/:guildId', shopMemberRouter);
 // The web form of an application (/apply/<server>/<form>): the same kind of page, the same access rule.
 router.use('/apply/:guildId', applyMemberRouter);
 router.use('/guilds/:guildId/tickets', ticketsRouter);
-router.use('/guilds/:guildId', requireGuildAdmin, loadGuildJson, guardRoleGrants);
+// A dashboard save runs inside a capture of the module configs it writes (src/db/auditCapture.js), which is
+// what the audit entry it writes keeps as the change: the settings before and after, for the history view.
+function captureConfigChanges(req, res, next) {
+  if (req.method === 'GET' || req.method === 'HEAD') return next();
+  runWithCapture(next);
+}
+router.use(
+  '/guilds/:guildId',
+  requireGuildAdmin,
+  loadGuildJson,
+  guardRoleGrants,
+  dropHealthOnWrite,
+  captureConfigChanges
+);
 // Appeals review, command limits and the moderation hub (v2Staff.js).
 router.use('/guilds/:guildId', staffRouter);
 // Audit log, config export and member data (v2GuildData.js).
 router.use('/guilds/:guildId', guildDataRouter);
+// The permission and role-hierarchy health check (v2Health.js).
+router.use('/guilds/:guildId', healthRouter);
 // Events: settings, create, edit, cancel (v2Events.js).
 router.use('/guilds/:guildId', eventsRouter);
 // Suggestions: settings, list, decide, delete (v2Suggestions.js).
@@ -460,6 +490,8 @@ router.use('/guilds/:guildId', economyRouter);
 router.use('/guilds/:guildId', shopRouter);
 // Applications: settings, forms, the panel, submissions, export (v2Applications.js).
 router.use('/guilds/:guildId', applicationsRouter);
+// The command palette's lookup of an inbox item by number (v2Search.js).
+router.use('/guilds/:guildId', searchRouter);
 
 // What the new dashboard needs to know about a server's platform: its capabilities (to hide
 // what the platform cannot do) and the per-module notes (what behaves differently there).
@@ -479,11 +511,79 @@ router.get(
     // baseContext for the guild/ticket/appeal summary; buildOverview (see
     // src/web/lib/overviewSummary.js) for the category-grouped module cards
     // — reused wholesale rather than re-deriving the same grouping here.
-    const [{ guild, openTickets, openAppeals }, { groups }] = await Promise.all([
-      baseContext(req.guild, 'overview'),
-      buildOverview(req.guild, { owner: isOwner(req) }),
+    // The module rows and the two counts are read once and shared.
+    const modules = await getGuildModules(req.guild.id);
+    const { guild, openTickets, openAppeals } = await baseContext(req.guild, 'overview', modules);
+    const [{ groups }, attention] = await Promise.all([
+      buildOverview(req.guild, { owner: isOwner(req), modules }),
+      buildAttention(req.guild, { owner: isOwner(req), modules, openTickets, openAppeals }),
     ]);
-    res.json({ guild, openTickets, openAppeals, groups });
+    res.json({ guild, openTickets, openAppeals, groups, attention });
+  })
+);
+
+// Members of this server by name, for the @ suggestions in the message fields. Only the members Sylo has
+// cached are searched (no id is looked up), bots are left out and at most MENTION_SHOWN come back. A
+// query needs at least two characters, so one letter does not scan a large member list.
+const MENTION_SHOWN = 8;
+const MENTION_MIN_QUERY = 2;
+const NAMES_MAX_IDS = 20;
+const NAMES_MAX_FETCH = 5;
+// A scan of the member cache on every pause in typing (the @ suggestions, the member picker, the command
+// palette): a person never needs more than a couple a second, a script should not scan all day.
+const memberSearchLimit = rateLimit({
+  windowMs: 60_000,
+  max: 120,
+  message: 'Too many searches — wait a moment.',
+});
+router.get('/guilds/:guildId/members/search', memberSearchLimit, (req, res) => {
+  const q = String(req.query.q ?? '')
+    .trim()
+    .toLowerCase()
+    .slice(0, 100);
+  const found = [];
+  if (q.length >= MENTION_MIN_QUERY) {
+    for (const m of req.guild.members.cache.values()) {
+      if (m.user?.bot) continue;
+      const names = [m.displayName, m.user?.username].map((v) => String(v ?? '').toLowerCase());
+      if (names.some((n) => n.includes(q))) found.push(m);
+      if (found.length >= MENTION_SHOWN) break;
+    }
+  }
+  res.json({
+    members: found.map((m) => ({
+      id: m.id,
+      name: m.displayName ?? m.user?.username ?? m.id,
+      username: m.user?.username ?? '',
+    })),
+  });
+});
+
+// The names of members by id, for the mentions saved in a message (a saved <@id> shows as a name after a
+// reload). Cached members first; a few unknown ids are fetched, and an id that cannot be found is left
+// out, so the page shows "@member" for it.
+router.get(
+  '/guilds/:guildId/members/names',
+  asyncHandler(async (req, res) => {
+    const ids = [
+      ...new Set(
+        String(req.query.ids ?? '')
+          .split(',')
+          .filter((id) => /^\d{17,20}$/.test(id))
+      ),
+    ].slice(0, NAMES_MAX_IDS);
+    const names = {};
+    let fetches = 0;
+    for (const id of ids) {
+      let m = req.guild.members.cache.get(id);
+      if (!m && fetches < NAMES_MAX_FETCH) {
+        fetches += 1;
+        m = await req.guild.members.fetch(id).catch(() => null);
+      }
+      const name = m ? (m.displayName ?? m.user?.username) : null;
+      if (name) names[id] = name;
+    }
+    res.json({ names });
   })
 );
 
@@ -658,8 +758,13 @@ router.get(
     const autoroleEnabled =
       cfg.autoroleEnabled !== undefined ? Boolean(cfg.autoroleEnabled) : picked.length > 0;
 
+    const { trigger, roleIds } = welcomeTrigger(cfg);
+    const triggerRoleIds = validTriggerRoleIds(guild, roleIds);
+
     res.json({
       config: {
+        trigger,
+        triggerRoleIds,
         joinEnabled,
         joinChannel: cfg.joinChannel || '',
         joinMessage: cfg.joinMessage || '',
@@ -688,7 +793,14 @@ router.post(
   '/guilds/:guildId/modules/welcome/config',
   asyncHandler(async (req, res) => {
     const guild = req.guild;
-    const config = normaliseWelcomeConfig(req.body);
+    // A client that does not know the "when to welcome" fields (the Sylo app) leaves them out: that keeps
+    // what is saved, instead of switching the server back to welcoming on join.
+    const prev = (await getGuildModule(guild.id, 'welcome')).config;
+    const body = { ...req.body };
+    if (body.trigger === undefined) body.trigger = prev.trigger;
+    if (body.triggerRoleIds === undefined) body.triggerRoleIds = prev.triggerRoleIds;
+    // The time each trigger role started counting is the server's to set, from what was stored before.
+    const config = normaliseWelcomeConfig(body, guild, { prev });
     const newRoles = config.autoroleEnabled ? normaliseAutoroles(req.body.autoroles) : [];
     const rolesMod = await getGuildModule(guild.id, 'roles');
     await setGuildModule(guild.id, 'roles', {
@@ -701,7 +813,12 @@ router.post(
       action: 'module:welcome',
       detail: 'settings saved',
     });
-    res.json({ config: { ...config, autoroles: newRoles } });
+    // Saved either way, but a "when a member gets a role" welcome with no usable role never fires.
+    const warning =
+      config.trigger === 'role' && config.triggerRoleIds.length === 0
+        ? 'No usable role is picked, so no welcome is sent until you pick one.'
+        : undefined;
+    res.json({ config: { ...config, autoroles: newRoles }, ...(warning ? { warning } : {}) });
   })
 );
 
@@ -2488,7 +2605,12 @@ router.get(
     const gatewayPing = client?.ws?.ping;
 
     const usage = await moduleUsage();
-    const modules = MODULES.map((m) => ({ name: m.name, icon: m.icon, guilds: usage.get(m.id) ?? 0 }))
+    const modules = MODULES.map((m) => ({
+      name: m.name,
+      icon: m.icon,
+      iconName: moduleIcon(m.id),
+      guilds: usage.get(m.id) ?? 0,
+    }))
       .filter((m) => m.guilds > 0)
       .sort((a, b) => b.guilds - a.guilds);
 
