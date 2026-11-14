@@ -1,0 +1,75 @@
+/* ---- Mentions drawn as names inside a message field ------------------------------------------------------ */
+/* The field keeps its text, caret, selection and undo. While a text holds a mention, the layer over it
+   (components/MentionMirror.jsx) repeats the text with the same metrics and the field's own letters are
+   made see-through, so the mention reads "#welcome" and not "<#1000…>". `color` stays what it was, so the
+   caret keeps its colour; only the fill of the letters goes. */
+
+.v2-mention-wrap > textarea.is-mirrored {
+  -webkit-text-fill-color: transparent;
+}
+/* A selection keeps the field's highlight; the letters under it are drawn by the layer above. */
+.v2-mention-wrap > textarea.is-mirrored::selection {
+  -webkit-text-fill-color: transparent;
+}
+
+.v2-mention-mirror {
+  position: absolute;
+  z-index: 1;
+  box-sizing: border-box;
+  margin: 0;
+  overflow: hidden;
+  border-style: solid;
+  border-color: transparent;
+  background: none;
+  pointer-events: none;
+  user-select: none;
+  /* Same wrapping as a textarea. The field's own values are copied over these as it is laid out. */
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+/* The stored token stays in the layer with its real width but cannot be seen: the name is drawn over it. */
+.v2-mm-token {
+  position: relative;
+  color: transparent;
+}
+.v2-mm-token::after {
+  content: attr(data-label);
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: 0 4px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  line-height: normal;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text);
+  font-weight: 500;
+}
+.v2-mm-token.is-missing::after {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger);
+}
+
+/* @everyone and @here are plain letters, so the pill is only a tint: it adds no width. */
+.v2-mm-pill.is-special {
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* Forced colours replace every colour, so a see-through text would vanish: the field shows its own text. */
+@media (forced-colors: active) {
+  .v2-mention-wrap > textarea.is-mirrored,
+  .v2-mention-wrap > textarea.is-mirrored::selection {
+    -webkit-text-fill-color: currentColor;
+  }
+  .v2-mention-mirror {
+    display: none;
+  }
+}

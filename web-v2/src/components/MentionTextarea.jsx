@@ -1,15 +1,21 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { searchMembers } from '../api.js';
 import { rememberMember, useMemberNames } from '../memberNames.js';
+import MentionMirror from './MentionMirror.jsx';
+import '../styles/mention-mirror.css';
 import {
   filterChannels,
   filterRoles,
+  hasMentions,
   insertMention,
   mentionIsMissing,
   mentionLabel,
   mentionsIn,
+  snapSelection,
+  tokenEndingAt,
   tokenOf,
+  tokenStartingAt,
   triggerAt,
 } from '../mentions.js';
 
@@ -45,6 +51,11 @@ export function MentionChips({ value, channels = [], roles = [], members = new M
  * token into the text and the names are shown as chips below. Everything else is a normal field: the same
  * props, the same onChange (it fires for a picked mention exactly as it does for typing).
  *
+ * A mention in the text is drawn as its name (a pill reading "#welcome") by a layer over the field
+ * (MentionMirror) while the field itself keeps the real text, caret, selection and undo. A stored token
+ * is one unit for the caret: the arrow keys step over it, Backspace and Delete remove all of it, and a
+ * click or a selection never ends inside it.
+ *
  *   <MentionTextarea id="joinMessage" rows={3} value={…} onChange={…} channels={data.channels} roles={data.roles} />
  */
 export default function MentionTextarea({
@@ -57,11 +68,21 @@ export default function MentionTextarea({
   onClick,
   onBlur,
   onInput,
+  onMouseUp,
+  onCompositionStart,
+  onCompositionEnd,
   className = '',
   ...rest
 }) {
   const { guildId } = useParams();
   const ref = useRef(null);
+  // The field element as state too, so the mirror can be laid over it once it exists.
+  const [field, setField] = useState(null);
+  const setRef = useCallback((el) => {
+    ref.current = el;
+    setField(el);
+  }, []);
+  const composing = useRef(false);
   const listId = useId();
   const [trigger, setTrigger] = useState(null);
   const [active, setActive] = useState(0);
@@ -115,6 +136,97 @@ export default function MentionTextarea({
     return [...found, ...users].slice(0, 8);
   }, [trigger, channels, roles, people]);
   const open = suggestions.length > 0;
+  // The mirror is for fields that wrap their text; a one-line input keeps showing its tokens as they are.
+  const mirrored = Boolean(field) && field.tagName === 'TEXTAREA' && hasMentions(rest.value);
+
+  /** Delete a range of the field the way typing would, so the browser keeps its undo history. */
+  function removeRange(el, start, end) {
+    el.focus();
+    el.setSelectionRange(start, end);
+    let done;
+    try {
+      done = typeof document.execCommand === 'function' && document.execCommand('delete');
+    } catch {
+      done = false;
+    }
+    if (!done) {
+      const proto = el.tagName === 'INPUT' ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
+      Object.getOwnPropertyDescriptor(proto, 'value').set.call(
+        el,
+        el.value.slice(0, start) + el.value.slice(end)
+      );
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.setSelectionRange(start, start);
+    }
+  }
+
+  /** A stored token next to the caret is one unit: Backspace/Delete remove it whole, arrows step over it. */
+  function stepOverToken(e) {
+    const el = ref.current;
+    if (!el || composing.current || e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return false;
+    if (el.selectionStart !== el.selectionEnd) return false;
+    const pos = el.selectionStart;
+    const text = el.value;
+    if (e.key === 'Backspace') {
+      const t = tokenEndingAt(text, pos);
+      if (!t) return false;
+      removeRange(el, t.start, t.end);
+      return true;
+    }
+    if (e.key === 'Delete') {
+      const t = tokenStartingAt(text, pos);
+      if (!t) return false;
+      removeRange(el, t.start, t.end);
+      return true;
+    }
+    if (e.key === 'ArrowLeft') {
+      const t = tokenEndingAt(text, pos);
+      if (!t) return false;
+      if (e.shiftKey) el.setSelectionRange(t.start, t.end, 'backward');
+      else el.setSelectionRange(t.start, t.start);
+      return true;
+    }
+    if (e.key === 'ArrowRight') {
+      const t = tokenStartingAt(text, pos);
+      if (!t) return false;
+      if (e.shiftKey) el.setSelectionRange(t.start, t.end, 'forward');
+      else el.setSelectionRange(t.end, t.end);
+      return true;
+    }
+    return false;
+  }
+
+  /** Move a caret or a range that ended up inside a token (a click, Up/Down, undo) out to its edges. */
+  function snapToTokens() {
+    const el = ref.current;
+    if (!el || composing.current || document.activeElement !== el) return;
+    const [start, end] = snapSelection(el.value, el.selectionStart, el.selectionEnd);
+    if (start !== el.selectionStart || end !== el.selectionEnd) {
+      el.setSelectionRange(start, end, el.selectionDirection ?? 'none');
+    }
+  }
+
+  // Backspace and Delete on a keyboard that sends no key (a phone's) arrive only as input intents.
+  useEffect(() => {
+    if (!field) return undefined;
+    const onBeforeInput = (e) => {
+      if (composing.current || e.isComposing) return;
+      if (e.inputType !== 'deleteContentBackward' && e.inputType !== 'deleteContentForward') return;
+      if (field.selectionStart !== field.selectionEnd) return;
+      const pos = field.selectionStart;
+      const t =
+        e.inputType === 'deleteContentBackward'
+          ? tokenEndingAt(field.value, pos)
+          : tokenStartingAt(field.value, pos);
+      if (!t) return;
+      e.preventDefault();
+      removeRange(field, t.start, t.end);
+    };
+    field.addEventListener('beforeinput', onBeforeInput);
+    return () => field.removeEventListener('beforeinput', onBeforeInput);
+    // removeRange only uses its arguments and the document
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [field]);
 
   function pick(s) {
     const el = ref.current;
@@ -163,14 +275,18 @@ export default function MentionTextarea({
       }
     }
     onKeyDown?.(e);
+    if (!e.defaultPrevented && stepOverToken(e)) {
+      e.preventDefault();
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') lookupTrigger();
+    }
   }
 
   return (
     <div className="v2-mention-wrap">
       <Tag
         {...rest}
-        {...(typeof Tag === 'string' ? { ref } : { innerRef: ref })}
-        className={className}
+        {...(typeof Tag === 'string' ? { ref: setRef } : { innerRef: setRef })}
+        className={mirrored ? `${className} is-mirrored`.trim() : className}
         role="combobox"
         aria-expanded={open}
         aria-haspopup="listbox"
@@ -184,7 +300,20 @@ export default function MentionTextarea({
         onKeyDown={handleKeyDown}
         onKeyUp={(e) => {
           onKeyUp?.(e);
+          snapToTokens();
           if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) lookupTrigger();
+        }}
+        onMouseUp={(e) => {
+          onMouseUp?.(e);
+          snapToTokens();
+        }}
+        onCompositionStart={(e) => {
+          composing.current = true;
+          onCompositionStart?.(e);
+        }}
+        onCompositionEnd={(e) => {
+          composing.current = false;
+          onCompositionEnd?.(e);
         }}
         onClick={(e) => {
           onClick?.(e);
@@ -195,6 +324,9 @@ export default function MentionTextarea({
           setTrigger(null);
         }}
       />
+      {mirrored ? (
+        <MentionMirror field={field} value={rest.value} channels={channels} roles={roles} members={members} />
+      ) : null}
       {open ? (
         <ul
           className="v2-mention-pop"

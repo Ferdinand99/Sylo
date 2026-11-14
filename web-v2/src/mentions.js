@@ -5,6 +5,11 @@
 
 const TOKEN = /<(#|@&|@!?)(\d{17,20})>|@(everyone|here)\b/g;
 
+/** Whether a text holds any mention at all (a stored token, or a plain @everyone / @here). */
+export function hasMentions(text) {
+  return String(text ?? '').search(TOKEN) !== -1;
+}
+
 /** The kind of a stored token by its prefix. */
 const KIND = { '#': 'channel', '@&': 'role', '@': 'user', '@!': 'user' };
 
@@ -66,6 +71,80 @@ export function mentionIsMissing(part, { channels = [], roles = [] } = {}) {
   if (part.type === 'channel') return !channels.some((x) => x.id === part.id);
   if (part.type === 'role') return !roles.some((x) => x.id === part.id);
   return false;
+}
+
+// ---- tokens inside the field ------------------------------------------------------------------------------
+
+/**
+ * Where the stored tokens (<#id>, <@&id>, <@id>) sit in a text, as { start, end, type, id }. The plain
+ * @everyone and @here are not in the list: they are ordinary letters that happen to be a mention, so
+ * the caret may stop inside them and Backspace removes one letter.
+ */
+export function tokenRanges(text) {
+  const out = [];
+  for (const m of String(text ?? '').matchAll(TOKEN)) {
+    if (m[3]) continue;
+    out.push({ start: m.index, end: m.index + m[0].length, type: KIND[m[1]], id: m[2] });
+  }
+  return out;
+}
+
+/** The token that ends exactly at `pos`, or null. */
+export function tokenEndingAt(text, pos) {
+  return tokenRanges(text).find((t) => t.end === pos) ?? null;
+}
+
+/** The token that starts exactly at `pos`, or null. */
+export function tokenStartingAt(text, pos) {
+  return tokenRanges(text).find((t) => t.start === pos) ?? null;
+}
+
+/**
+ * A selection moved off the inside of a token. A caret inside one goes to the nearer edge; the ends of a
+ * range that fall inside one move out to the edges, so a range never cuts a token in two.
+ * @returns {[number, number]} the new start and end (the same as given when nothing is inside a token)
+ */
+export function snapSelection(text, start, end) {
+  const tokens = tokenRanges(text);
+  const inside = (pos) => tokens.find((t) => pos > t.start && pos < t.end);
+  if (start === end) {
+    const t = inside(start);
+    if (!t) return [start, end];
+    const to = start - t.start < t.end - start ? t.start : t.end;
+    return [to, to];
+  }
+  const a = inside(start);
+  const b = inside(end);
+  return [a ? a.start : start, b ? b.end : end];
+}
+
+/**
+ * The text of a field as the layer behind the caret draws it: plain text, the stored tokens (kept as the
+ * raw text so the layer wraps exactly like the field, with the name as `label` to draw over it) and the
+ * plain @everyone / @here. Nothing here is markup: every part is a string to render as text.
+ * @returns {Array<{ kind: 'text'|'special', text: string } | { kind: 'mention', text: string, label: string, type: string, missing: boolean }>}
+ */
+export function mirrorParts(text, lookup = {}) {
+  const source = String(text ?? '');
+  const out = [];
+  let last = 0;
+  for (const m of source.matchAll(TOKEN)) {
+    if (m.index > last) out.push({ kind: 'text', text: source.slice(last, m.index) });
+    if (m[3]) out.push({ kind: 'special', text: m[0] });
+    else {
+      const part = { type: KIND[m[1]], id: m[2] };
+      out.push({
+        kind: 'mention',
+        text: m[0],
+        label: mentionLabel(part, lookup),
+        type: part.type,
+        missing: mentionIsMissing(part, lookup),
+      });
+    }
+    last = m.index + m[0].length;
+  }
+  if (last < source.length) out.push({ kind: 'text', text: source.slice(last) });
+  return out;
 }
 
 /**
