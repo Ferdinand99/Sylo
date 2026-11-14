@@ -2,6 +2,7 @@
 // roles), and a default embed colour.
 import { prepare, registerPostgresBootstrap } from './driver.js';
 import { splitPlatformGuildId } from '../lib/platformId.js';
+import { invalidateHealth } from '../lib/healthCache.js';
 
 /**
  * A role id list without @everyone, whose id is the server's own id: as a bot-master or staff
@@ -80,6 +81,7 @@ async function put(guildId, col, value) {
 /** Set (or clear, with null) the mod-log channel for a guild. */
 export async function setModlogChannel(guildId, channelId) {
   await put(guildId, 'modlog_channel_id', channelId);
+  invalidateHealth(guildId);
 }
 
 /** A stored role list (JSON text) as role ids: valid ids only, never @everyone. */

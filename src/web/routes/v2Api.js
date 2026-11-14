@@ -50,6 +50,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { changelogHandler } from '../lib/changelogFeed.js';
 import { ticketsRouter, staffRouter } from './v2Staff.js';
 import guildDataRouter from './v2GuildData.js';
+import healthRouter, { dropHealthOnWrite } from './v2Health.js';
 import { moduleIcon } from '../lib/moduleIcons.js';
 import eventsRouter from './v2Events.js';
 import suggestionsRouter from './v2Suggestions.js';
@@ -485,12 +486,15 @@ router.use(
   '/guilds/:guildId',
   requireGuildAccess,
   useMiddleware(loadGuildJson),
-  useMiddleware(guardRoleGrants)
+  useMiddleware(guardRoleGrants),
+  useMiddleware(dropHealthOnWrite)
 );
 // Appeals review, command limits and the moderation hub (v2Staff.js).
 router.use('/guilds/:guildId', staffRouter);
 // Audit log, config export and member data (v2GuildData.js).
 router.use('/guilds/:guildId', guildDataRouter);
+// The permission and role-hierarchy health check (v2Health.js).
+router.use('/guilds/:guildId', healthRouter);
 // Events: settings, create, edit, cancel (v2Events.js).
 router.use('/guilds/:guildId', eventsRouter);
 // Suggestions: settings, list, decide, delete (v2Suggestions.js).

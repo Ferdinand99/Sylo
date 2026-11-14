@@ -5,6 +5,7 @@ import { readLastGuildId, writeLastGuildId } from '../util.js';
 import { isPublicPath } from '../publicRoutes.js';
 import { OverviewProvider } from '../OverviewContext.jsx';
 import { AccessBadge, AccessProvider } from '../access.jsx';
+import { HealthProvider } from '../HealthContext.jsx';
 import Announcement from './Announcement.jsx';
 import ServerSwitcher from './ServerSwitcher.jsx';
 import Sidebar from './Sidebar.jsx';
@@ -133,6 +134,7 @@ function SignedInShell() {
           <AccountMenu />
         </header>
         <OverviewProvider guildId={lastGuildId}>
+          <HealthProvider guildId={lastGuildId}>
           <div className="v2-body">
             <Sidebar
               activeGuildId={lastGuildId}
@@ -153,6 +155,7 @@ function SignedInShell() {
             guildId={lastGuildId}
             guilds={guilds}
           />
+          </HealthProvider>
         </OverviewProvider>
         <Toasts />
       </div>

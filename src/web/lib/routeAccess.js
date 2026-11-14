@@ -298,4 +298,7 @@ export const ROUTE_ACCESS = Object.freeze({
 
   // v2Search.js
   'GET /guilds/:guildId/search/inbox': 'view',
+
+  // v2Health.js (the re-check with ?refresh=1 has its own per-server limit)
+  'GET /guilds/:guildId/health': 'view',
 });

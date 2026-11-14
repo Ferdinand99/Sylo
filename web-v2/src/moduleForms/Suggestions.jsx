@@ -21,6 +21,7 @@ import UnitInput from '../components/UnitInput.jsx';
 import Time from '../components/Time.jsx';
 import OverflowMenu from '../components/OverflowMenu.jsx';
 import TabRow from '../components/TabRow.jsx';
+import PickerHealth from '../components/PickerHealth.jsx';
 import { AccessLock, useAccess } from '../access.jsx';
 
 // The pill shows a coloured dot and the word; an emoji on top would say it a third time.
@@ -378,6 +379,7 @@ export default function Suggestions() {
                     </option>
                   ))}
                 </select>
+                <PickerHealth kind="channel" value={form.channel} embed />
               </div>
 
               <div className="v2-field">
@@ -396,6 +398,7 @@ export default function Suggestions() {
                     </option>
                   ))}
                 </select>
+                <PickerHealth kind="channel" value={form.logChannel} embed />
                 <p className="v2-field-hint">
                   Where a suggestion that is approved, denied or implemented is also posted. Pick how below.
                 </p>

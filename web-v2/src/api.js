@@ -90,6 +90,9 @@ const postJson = (path, body) =>
 
 export const getGuilds = () => apiFetch('/api/v2/guilds').then((d) => d.guilds);
 export const getOverview = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/overview`);
+// The permission and role-hierarchy health check; `refresh` asks the server to look again now.
+export const getGuildHealth = (guildId, { refresh = false } = {}) =>
+  apiFetch(`/api/v2/guilds/${gid(guildId)}/health${refresh ? '?refresh=1' : ''}`);
 export const setModuleEnabled = (guildId, moduleId, enabled) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/${moduleId}`, { enabled });
 export const setModulesEnabledBulk = (guildId, ids, enabled) =>

@@ -231,6 +231,7 @@ token a result code is useless to anyone else anyway.
 | `/api/v2/*` | Bearer token | The dashboard's JSON API |
 | `GET /api/v2/changelog?limit=N` | Bearer token or session | `{ version, releases: [{ version, date, url, sections: [{ title, kind, items: [{ scope, text, refs }] }] }] }`, newest first; the same release notes as the dashboard's What's new page |
 | `GET /api/v2/guilds/:id/members?q=` | Bearer token or session, Manage Server | `{ members: [{ id, name, username }] }`: the server's members by name (those Sylo has cached) or one pasted id (looked up live), never a bot, at most 25. 100 searches per minute per account and server |
+| `GET /api/v2/guilds/:id/health` | Bearer token, server admin | The permission and role-hierarchy health check of one server (below) |
 
 `GET /api/mobile/info` is public. The app calls it when you type a server
 address, to tell whether the address is a Sylo server and whether it can sign
@@ -244,7 +245,7 @@ in there:
 | `login` | Whether sign-in is available (false in open mode) |
 | `loginProviders` | The configured logins, for example `["discord", "fluxer"]`; empty when `login` is false |
 | `platforms` | The platforms the bot runs on, for example `["discord"]` |
-| `features` | What this version's app API supports, so the app can hide what an older Sylo lacks. Today: `app-login`, `live-access`, `changelog`, `collectibles`, `welcome-trigger`, `member-search`, `access-levels` and `app-connect`, plus `push` and `push-pigeon` when this instance can send notifications. See the list below |
+| `features` | What this version's app API supports, so the app can hide what an older Sylo lacks. Today: `app-login`, `live-access`, `changelog`, `collectibles`, `welcome-trigger`, `member-search`, `access-levels`, `health` and `app-connect`, plus `push` and `push-pigeon` when this instance can send notifications. See the list below |
 
 The feature strings:
 
@@ -255,12 +256,44 @@ The feature strings:
 - `welcome-trigger`: the Welcome module's `trigger` setting (a member joins, or first gets a role).
 - `member-search`: `GET /api/v2/guilds/:id/members?q=`.
 - `access-levels`: the dashboard [access levels](#access-levels) (View, Inbox, Edit).
+- `health`: `GET /api/v2/guilds/:id/health`, the [health check](#health-check).
 - `app-connect`: [adding the other login](#adding-the-other-login). Only where sign-in is on and both Discord and Fluxer logins are set up.
 - `push`, `push-pigeon`: this instance can send notifications to signed-in apps.
 
 An older Sylo without this endpoint answers `404`, and the app says the server
 is too old for it. A Sylo that has the endpoint but lacks a string does not have
 that feature: the app hides the control.
+
+### Health check
+
+`GET /api/v2/guilds/:id/health` tells a server admin what Sylo cannot do in the places its modules are
+set up to use: a channel it cannot post in, a role it cannot give because Sylo's role is not above it,
+a permission an action needs. Only the modules that are switched on are checked. The answer is cached for
+a minute per server and is dropped when a setting is saved; `?refresh=1` checks again at once (6 per minute).
+
+```json
+{
+  "guildId": "…", "available": true, "platform": "discord", "checkedAt": 1760000000000,
+  "summary": { "errors": 1, "warnings": 0 },
+  "checks": [{
+    "module": "verification", "moduleName": "Verification", "severity": "error",
+    "code": "role-above", "kind": "role-hierarchy",
+    "message": "Sylo can't give Verified: Sylo's role is not above it.",
+    "fix": "In the server's role settings, move Sylo's role above Verified.",
+    "href": "/v2/guilds/…/m/verification", "targetKind": "role", "targetId": "…", "targetName": "Verified"
+  }],
+  "targets": {
+    "roles": { "blockedAll": null, "blocked": { "<roleId>": "above | managed" } },
+    "channels": { "blocked": { "<channelId>": ["View Channel", "Send Messages"] }, "noEmbed": ["<channelId>"] }
+  }
+}
+```
+
+`severity` is `error` when a module cannot do that part of its job and `warning` when it still works.
+`targets` lists only the roles Sylo cannot give and the channels it cannot send in (`blocked`), and the
+channels where it can send but lacks Embed Links (`noEmbed`, which matters only to a module that sends an
+embed there), for a picker to warn about a choice that is not saved yet. A permission the platform does not
+have (Fluxer has no thread permissions) is never reported. The same checks come with the overview, in `attention.health`.
 
 On a token request, "not signed in" and "not allowed" are JSON, never a
 redirect or an HTML page:
