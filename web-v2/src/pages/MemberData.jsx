@@ -4,7 +4,7 @@ import { getMemberData, forgetMemberData } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
-import Breadcrumb from '../components/Breadcrumb.jsx';
+import Breadcrumb, { peopleCrumb } from '../components/Breadcrumb.jsx';
 import Field from '../components/Field.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { copyIdHint, formatCount } from '../util.js';
@@ -35,10 +35,7 @@ export default function MemberData() {
 
   return (
     <Reveal>
-      <Breadcrumb
-        parents={[{ label: 'Members & moderation', to: `/guilds/${guildId}/moderation` }]}
-        current="Member data"
-      />
+      <Breadcrumb parents={[peopleCrumb(guildId)]} current="Member data" />
       <h1 className="v2-section-title">Member data</h1>
       <p className="v2-field-hint">
         Look up what Sylo has stored about a member in this server and delete it on request (for example a
