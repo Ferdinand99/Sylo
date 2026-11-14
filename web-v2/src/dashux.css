@@ -999,6 +999,9 @@ fieldset.v2-fieldset > legend {
 .v2-attention-item.is-info .v2-attention-dot {
   background: var(--text-faint);
 }
+.v2-attention-item.is-health.is-error .v2-attention-dot {
+  background: var(--danger);
+}
 
 /* ---- Audit log: the filter and the "Show 50 more" row -------------------------------------------------- */
 .v2-audit-filter {

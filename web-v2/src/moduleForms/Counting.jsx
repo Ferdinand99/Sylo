@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import PickerHealth from '../components/PickerHealth.jsx';
 import { setCountingCount, resetCountingCount, releaseCountingPenalty } from '../api.js';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
@@ -95,6 +96,7 @@ export default function Counting() {
               </option>
             ))}
           </select>
+          <PickerHealth kind="channel" value={form.channelId} />
         </div>
 
         <div className="v2-field">
@@ -141,6 +143,7 @@ export default function Counting() {
               </option>
             ))}
           </select>
+          <PickerHealth kind="role" value={form.penaltyRoleId} />
           <p className="v2-field-hint">
             Removed for a while when someone breaks the count, then given back. Pick the role that lets people
             type in the counting channel. Sylo's own top role must sit above it. This is not a ban or a

@@ -1,8 +1,10 @@
 // What needs a server admin's attention on the dashboard overview: modules that are switched on but
 // cannot do their job yet (a channel or role that is missing or was deleted), the permissions Sylo is
-// missing, the modules that wait for API keys only the bot owner can add (information, not
-// something the admin can fix), and the work that is waiting for a person (open tickets, appeals,
-// applications and suggestions). Every module item carries the dashboard address of the page where it is fixed.
+// missing, the permission and role-hierarchy problems of the modules that are on (see
+// permissionHealth.js), the modules that wait for API keys only the bot operator can add
+// (information for the operator alone: nothing an admin can fix), and the work that is waiting for a
+// person (open tickets, appeals, applications and suggestions). Every module item carries the dashboard
+// address of the page where it is fixed.
 import { MODULES, getModule } from '../../modules/registry.js';
 import { getGuildModules } from '../../db/modules.js';
 import { countOpenAppeals } from '../../db/appeals.js';
@@ -12,6 +14,8 @@ import { openSuggestionCount } from '../../db/suggestions.js';
 import { missingOwnerKeys, missingPermissions, v2CardHref } from './overviewSummary.js';
 import { platformOfGuild } from '../../platform/platformOf.js';
 import { validTriggerRoleIds, welcomeTrigger } from '../../modules/welcome.js';
+import { getHealthReport, reportFor } from './permissionHealth.js';
+import { log } from '../../lib/log.js';
 
 const CHANNEL = 'channel';
 const ROLE = 'role';
@@ -90,8 +94,9 @@ export function moduleProblems(id, cfg, guild) {
  * leave a count behind that nobody can clear.
  * @param {any} guild
  * @param {{ owner?: boolean, modules?: Array<any>, openTickets?: number, openAppeals?: number }} [opts]
- *   a non-owner never sees an owner-only module; `modules` and the two counts are passed by a caller
- *   that has them already, so they are not queried again
+ *   `owner` is whether the viewer is a bot operator: only an operator sees an owner-only module and the
+ *   modules that wait for the operator's API keys (an admin keeps the amber card status on the module);
+ *   `modules` and the two counts are passed by a caller that has them already, so they are not queried again
  */
 export async function buildAttention(guild, { owner = true, modules, openTickets, openAppeals } = {}) {
   const rows = new Map((modules ?? (await getGuildModules(guild.id))).map((m) => [m.id, m]));
@@ -108,7 +113,7 @@ export async function buildAttention(guild, { owner = true, modules, openTickets
     if (!owner && def.ownerOnly) continue;
     const row = rows.get(def.id);
     if (!(row?.enabled ?? def.defaultEnabled)) continue;
-    const keys = missingOwnerKeys(def.id);
+    const keys = owner ? missingOwnerKeys(def.id) : null;
     if (keys) waitingForOwner.push({ id: def.id, name: getModule(def.id).name, keys });
     const issues = moduleProblems(def.id, row?.config ?? {}, guild);
     if (issues.length) {
@@ -121,5 +126,20 @@ export async function buildAttention(guild, { owner = true, modules, openTickets
     platform: platformOfGuild(guild),
     missingPermissions: missingPermissions(guild),
     waiting: { tickets, appeals, applications, suggestions },
+    health: await healthOf(guild, { owner, modules: [...rows.values()] }),
   };
+}
+
+/**
+ * The permission and role-hierarchy problems for the overview: the checks without the picker data.
+ * A failing check must never take the overview down, so it answers "unavailable" instead.
+ */
+async function healthOf(guild, { owner, modules }) {
+  try {
+    const { available, summary, checks } = reportFor(await getHealthReport(guild, { modules }), { owner });
+    return { available, summary, checks };
+  } catch (err) {
+    log.warn('health', `the permission check of ${guild.id} failed`, err);
+    return { available: false, summary: { errors: 0, warnings: 0 }, checks: [] };
+  }
 }
