@@ -295,7 +295,7 @@ describe('TabRow on a phone', () => {
     expect(row.classList.contains('v2-tabs')).toBe(true);
     expect(row.classList.contains('v2-tabs-wrap')).toBe(true);
     expect(row.classList.contains('v2-hub-tabs')).toBe(true);
-    expect(dashux).toMatch(/@media \(max-width: 599px\) \{\s*\.v2-tabs\.v2-tabs-wrap \{\s*flex-wrap: wrap;/);
+    expect(dashux).toMatch(/@media \(max-width: 600px\) \{\s*\.v2-tabs\.v2-tabs-wrap \{\s*flex-wrap: wrap;/);
   });
 });
 

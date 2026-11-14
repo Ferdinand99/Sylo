@@ -56,6 +56,7 @@
 }
 
 /* ---- Leveling: a jump target that is not a heading --------------------------------------------------------- */
+/* The top bar and the jump list are cleared by `html { scroll-padding-top }` (dashux.css); this is the room above. */
 .v2-danger-zone[id] {
-  scroll-margin-top: calc(var(--topbar-h) + 16px);
+  scroll-margin-top: 8px;
 }

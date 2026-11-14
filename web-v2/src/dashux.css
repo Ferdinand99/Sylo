@@ -626,8 +626,10 @@
     padding: 0 16px;
   }
 }
+/* The top bar and the jump list are cleared by `html { scroll-padding-top }` below; this is only the
+   breathing room above the heading, so a jump is not offset twice. */
 .v2-group-title[id] {
-  scroll-margin-top: calc(var(--topbar-h) + var(--sticky-index-h, 0px) + 16px);
+  scroll-margin-top: 8px;
 }
 .v2-group-title[id]:focus {
   outline: none;
@@ -904,7 +906,7 @@ html {
 }
 
 /* A row of tabs wraps onto a second line on a phone instead of hiding the last ones behind a scroll. */
-@media (max-width: 599px) {
+@media (max-width: 600px) {
   .v2-tabs.v2-tabs-wrap {
     flex-wrap: wrap;
     overflow-x: visible;
