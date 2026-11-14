@@ -51,6 +51,38 @@ server tools are there too, under **Settings → Server data**: the audit log,
 config export (a JSON file) and member data (look up and forget a member;
 moderation cases and other safety records are kept).
 
+### Change history and undo
+
+Every save of a module's settings or of the server settings made from the
+dashboard keeps what it changed in its audit log entry: the settings that
+differ, with the value before and after. This includes the leaderboard switch
+and any page that saves settings through the same write. Lists that live in
+tables of their own (reminders, shop items) are not module settings and keep no
+copy. Open an entry in the audit log with **Show changes** to see the changed
+fields only, with a readable name where one is known. API keys, tokens,
+passwords, webhook links and links that carry a key are masked and never stored
+in clear. The log keeps the newest 500 entries per server, saved changes
+included; one copy is at most about 32 KB, all the copies of a server together
+about 5 MB (the oldest copies go first, the entries stay), and they go with the
+server when Sylo is removed from it.
+
+**Undo this change** puts the earlier values of that module back. It goes
+through the module's normal save (the same limits and checks as its form,
+including the rule that you cannot hand out a role above your own) and writes an
+entry of its own, so an undo can be undone too. If the settings were changed
+again since the entry, the page says which ones and asks before they are lost
+(the yes is for what the page showed: if the settings change again meanwhile,
+you are asked again). A masked secret is never restored: the value that is saved
+now stays, and a secret with nothing to be taken from is left out and reported.
+Settings that Sylo manages itself (the id of a message it posted) and the
+auto-role switch of Welcome, which goes together with the Roles page, are left
+as they are, and an entry with only such settings has no undo. Server settings
+are checked as the settings form checks them, all before the first is written.
+Undo covers a module's settings and the server settings; lists kept on their own
+(reminders, shop items, custom commands, saved messages) are not restored, and a
+few modules whose save does more than store settings show the difference
+without an undo.
+
 Two pages are public, with no login: the command list (`/v2/commands`) and the
 roadmap (`/v2/roadmap`). They show the same lists as before; voting
 and suggesting a feature still need a login, and the log-in link on them brings

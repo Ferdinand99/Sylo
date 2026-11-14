@@ -58,7 +58,17 @@ the public-leaderboard vanity slug.
   free-text answers to the server's appeal questions, and the staff decision and
   reason.
 - **Config audit log** — the display name of whoever changed a setting from the
-  Dashboard, what changed, and when.
+  Dashboard, what changed, and when. The text of a few entries names a member by
+  ID (for example a currency adjustment or a bonus). For a saved module or
+  server setting an entry also keeps the settings that changed, with their value
+  before and after, so the Dashboard can show the difference and undo the
+  change; one copy is at most about 32 KB and the copies of a server together
+  about 5 MB, the oldest going first. Secrets (API keys, tokens, passwords,
+  webhook links and links that carry a key or password) are masked before
+  anything is stored and never kept in clear. A setting can name a member (for
+  example who an auto-reaction applies to). `/mydata` lists which entries name
+  you (not their saved values, which are the server's settings), and `/forget`
+  takes your ID out of those copies and out of the text of entries.
 
 ### Member activity
 
@@ -275,7 +285,8 @@ No other third parties receive your data.
   included), ban appeals, invite records, AFK status, birthday, giveaway
   entries, event sign-ups, suggestion votes and temporary-role records (a suggestion you wrote stays on the server's board, without your name; a temporary role you hold stays on you, but Sylo no longer takes it back). It does **not** remove messages already posted to channels, a
   completed giveaway's winner list, or the display name recorded in that server's
-  config audit log. **Safety records are kept**: moderation cases (warnings,
+  config audit log (your ID is taken out of the settings and the text that log
+  kept). **Safety records are kept**: moderation cases (warnings,
   notes, timeouts, kicks, bans), an active temporary ban, honeypot catches and a
   counting penalty. They protect the server and its members (section 4), so a
   member cannot erase their own record; the server's staff can remove a case, and
@@ -322,7 +333,7 @@ For any request the above does not cover, contact the Operator (section 9).
 | Server configuration & module settings | As long as the Bot is in the server | Bot removed from the server; or the setting is changed or cleared |
 | Infractions / moderation case log | Indefinitely, as a moderation record | Staff remove the case; Bot removed. Not by `/forget` or admin-assisted erasure (a safety record). Inactive cases (`/case delete`, expired temp-bans) are kept for audit unless the server sets a "delete inactive cases after N days" limit |
 | Ban appeals | Indefinitely | `/forget`; admin-assisted erasure; Bot removed |
-| Config audit log | Indefinitely | Bot removed from the server (not covered by `/forget` — it records only a display name) |
+| Config audit log (including the saved before and after of settings) | The newest 500 entries per server | Bot removed from the server. `/forget` does not remove the entries, which record a display name, but takes the member's ID out of their saved settings and out of their text |
 | Leveling XP, level, message/voice counters | Until erased | `/forget`; admin-assisted erasure; Bot removed; leaderboard reset by an admin |
 | Weekly / monthly leveling period rows | ~10 weeks / ~6 months | Automatic pruning, or any of the leveling triggers above |
 | Invite tracking (tallies + attribution graph) | Until erased | `/forget`; admin-assisted erasure; Bot removed |
