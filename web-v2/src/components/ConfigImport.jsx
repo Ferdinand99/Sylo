@@ -2,7 +2,7 @@ import { useId, useRef, useState } from 'react';
 import { applyConfigImport, previewConfigImport } from '../api.js';
 import Badge from './Badge.jsx';
 import Callout from './Callout.jsx';
-import ChangeList from './ChangeList.jsx';
+import ConfigDiff from './ConfigDiff.jsx';
 import { confirmDialog } from './ConfirmDialog.jsx';
 import { notify } from '../notify.js';
 import '../styles/p6-import.css';
@@ -250,13 +250,10 @@ function ImportItem({ item, checked, onToggle }) {
           {n}
         </Callout>
       ))}
-      {item.changes.length ? (
+      {item.change ? (
         <details className="v2-import-details">
-          <summary>
-            Show what changes ({item.changes.length}
-            {item.more ? `+${item.more}` : ''})
-          </summary>
-          <ChangeList changes={item.changes} more={item.more} label={`Changes to ${item.label}`} />
+          <summary>Show what changes</summary>
+          <ConfigDiff before={item.change.before} after={item.change.after} names={item.change.names} />
         </details>
       ) : null}
     </li>

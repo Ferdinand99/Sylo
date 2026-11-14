@@ -12,7 +12,6 @@ import { PLACEHOLDER_SETS, tokensFor, unknownTokens } from '../placeholders.js';
 import TemplatePicker, { embedTemplates, textTemplates } from '../components/TemplatePicker.jsx';
 import ConfigImport from '../components/ConfigImport.jsx';
 import EmbedJsonTools from '../components/EmbedJsonTools.jsx';
-import ChangeList from '../components/ChangeList.jsx';
 
 vi.mock('../api.js', () => ({
   ApiError: class ApiError extends Error {},
@@ -374,21 +373,6 @@ describe('EmbedJsonTools', () => {
 
 // --- import ------------------------------------------------------------------------------------------
 
-describe('ChangeList', () => {
-  it('lists the fields, the old and the new value, and how many more there are', () => {
-    render(
-      <ChangeList
-        changes={[{ path: 'a', label: 'Join channel', before: '(empty)', after: '123' }]}
-        more={3}
-        label="Changes to Welcome"
-      />
-    );
-    const list = screen.getByRole('list', { name: 'Changes to Welcome' });
-    expect(list.textContent).toContain('Join channel');
-    expect(list.textContent).toContain('and 3 more changes');
-  });
-});
-
 describe('ConfigImport', () => {
   const plan = {
     source: { guildId: '999', exportedAt: '2026-11-01T00:00:00.000Z', sameServer: false },
@@ -401,8 +385,7 @@ describe('ConfigImport', () => {
         label: 'AFK',
         status: 'change',
         notes: ['1 channel from the file is not in this server and was cleared.'],
-        changes: [{ path: 'enabled', label: 'Enabled', before: 'false', after: 'true' }],
-        more: 0,
+        change: { before: { enabled: false }, after: { enabled: true }, names: {} },
       },
       {
         key: 'module:birthdays',
@@ -410,8 +393,7 @@ describe('ConfigImport', () => {
         label: 'Birthdays',
         status: 'same',
         notes: [],
-        changes: [],
-        more: 0,
+        change: null,
       },
       {
         key: 'module:reminders',
@@ -419,8 +401,7 @@ describe('ConfigImport', () => {
         label: 'Reminders',
         status: 'skip',
         notes: ['Reminders live in their own list.'],
-        changes: [],
-        more: 0,
+        change: null,
       },
     ],
   };
@@ -443,7 +424,10 @@ describe('ConfigImport', () => {
     expect(screen.getByRole('checkbox', { name: 'Reminders' }).disabled).toBe(true);
     expect(screen.getByText(/was cleared/)).toBeTruthy();
     expect(screen.getByText('Not imported')).toBeTruthy();
-    expect(screen.getByText(/Show what changes \(1\)/)).toBeTruthy();
+    fireEvent.click(screen.getByText('Show what changes'));
+    expect(screen.getByText('Enabled')).toBeTruthy();
+    expect(screen.getByText('Before')).toBeTruthy();
+    expect(screen.getByText('After')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Import 1 item…' }));
     await waitFor(() => expect(confirmDialog).toHaveBeenCalledTimes(1));

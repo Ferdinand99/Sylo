@@ -28,6 +28,8 @@ import { platformOfGuild, primaryClient } from '../../platform/platformOf.js';
 import { commandPrefixError } from '../../lib/commandPrefix.js';
 import { canPostInChannel } from './modlogChannel.js';
 import { guildTextChannels } from './discord.js';
+import { changedSettings } from '../../lib/configSnapshot.js';
+import { namesFor } from './configUndo.js';
 import { log } from '../../lib/log.js';
 import { normaliseAfkConfig } from '../../modules/afk.js';
 import { normaliseAppealsConfig } from '../../modules/appeals.js';
@@ -81,14 +83,10 @@ const MAX_NODES = 20_000;
 const MAX_DEPTH = 12;
 const MAX_MODULE_BYTES = 128 * 1024;
 
-// How much of a diff the preview carries per item.
-const MAX_CHANGES = 40;
-const MAX_SHOWN_VALUE = 120;
 const MAX_CLEARED_PATHS = 12;
 
 const SNOWFLAKE = /^\d{17,20}$/;
 const MENTION = /<(#|@&)(\d{17,20})>/g;
-const SECRET_KEY = /secret|token|password|passwd|api[-_]?key|private/i;
 
 /** An error the person caused (a bad file); the route answers it with a 400. */
 export class ImportError extends Error {
@@ -214,75 +212,17 @@ function clearedWarning(cleared, emptied = 0) {
   return out.length ? out.join(' ') : null;
 }
 
-// --- The diff ------------------------------------------------------------------------------------
-
-/** "joinChannel" -> "Join channel"; "rules[0].name" -> "Rules 1 › Name". */
-export function humanisePath(path) {
-  const word = (s) => {
-    const spaced = s
-      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-      .replace(/[_-]+/g, ' ')
-      .trim()
-      .toLowerCase();
-    return spaced.charAt(0).toUpperCase() + spaced.slice(1);
-  };
-  return path
-    .split('.')
-    .map((seg) => {
-      const m = /^([^[]*)((?:\[\d+\])*)$/.exec(seg);
-      if (!m) return word(seg);
-      const base = word(m[1]);
-      const idx = [...m[2].matchAll(/\[(\d+)\]/g)].map((x) => Number(x[1]) + 1);
-      return idx.length ? `${base} ${idx.join('.')}` : base;
-    })
-    .join(' › ');
-}
-
-function show(path, v) {
-  if (v === undefined || v === null || v === '') return '(empty)';
-  if (SECRET_KEY.test(path)) return '••••••';
-  if (Array.isArray(v))
-    return v.length
-      ? v.map((x) => (typeof x === 'object' ? JSON.stringify(x) : String(x))).join(', ')
-      : '(none)';
-  const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
-  return s.length > MAX_SHOWN_VALUE ? `${s.slice(0, MAX_SHOWN_VALUE)}…` : s;
-}
-
-/** Every leaf of a value as { 'a.b[0].c': leaf }; a list of plain values is one leaf. */
-function leaves(value, path = '', out = new Map(), depth = 0) {
-  if (depth > MAX_DEPTH) return out;
-  if (Array.isArray(value) && value.some((x) => isPlain(x) || Array.isArray(x))) {
-    value.forEach((x, i) => leaves(x, `${path}[${i}]`, out, depth + 1));
-  } else if (isPlain(value)) {
-    for (const [k, v] of Object.entries(value)) leaves(v, path ? `${path}.${k}` : k, out, depth + 1);
-  } else if (path) {
-    out.set(path, value);
-  }
-  return out;
-}
-
-const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+// --- The change ----------------------------------------------------------------------------------
 
 /**
- * What changes when `after` replaces `before`: one line per changed field, at most MAX_CHANGES, and the
- * number of lines left out. Values of secret-looking fields are masked.
- * @returns {{ changes: { path: string, label: string, before: string, after: string }[], more: number }}
+ * What an item changes, as the change history keeps and shows it (lib/configSnapshot.js): the top-level
+ * settings that differ, secrets masked, plus the names of the channels and roles in them. Null when nothing
+ * differs.
+ * @returns {{ before: object, after: object, names: Record<string, string> } | null}
  */
-export function diffConfig(before, after) {
-  const a = leaves(before);
-  const b = leaves(after);
-  const lines = [];
-  for (const path of new Set([...a.keys(), ...b.keys()])) {
-    if (same(a.get(path), b.get(path))) continue;
-    lines.push({
-      path,
-      label: humanisePath(path),
-      before: show(path, a.get(path)),
-      after: show(path, b.get(path)),
-    });
-  }
-  return { changes: lines.slice(0, MAX_CHANGES), more: Math.max(0, lines.length - MAX_CHANGES) };
+function changeOf(guild, before, after) {
+  const change = changedSettings(before, after);
+  return change ? { ...change, names: namesFor(guild, change.before, change.after) } : null;
 }
 
 // --- The modules that can be imported ---------------------------------------------------------------
@@ -574,11 +514,10 @@ export function readExport(doc) {
  * @property {string} label
  * @property {'change'|'same'|'skip'} status
  * @property {string[]} notes     warnings and reasons, plain sentences
- * @property {{ path: string, label: string, before: string, after: string }[]} changes
- * @property {number} more        changed fields beyond the ones listed
+ * @property {{ before: object, after: object, names: object } | null} change  what it changes, see changeOf
  */
 
-const toItem = (key, kind, label, rest) => ({ key, kind, label, notes: [], changes: [], more: 0, ...rest });
+const toItem = (key, kind, label, rest) => ({ key, kind, label, notes: [], change: null, ...rest });
 
 async function planSettings(guild, file) {
   const raw = file.settings;
@@ -586,7 +525,7 @@ async function planSettings(guild, file) {
   const notes = [];
   const stored = (await getGuildSettings(guild.id)) ?? {};
   const before = {
-    modlogChannel: stored.modlog_channel_id ?? '',
+    modlogChannelId: stored.modlog_channel_id ?? '',
     embedColor: Number.isInteger(stored.embed_color)
       ? `#${stored.embed_color.toString(16).padStart(6, '0')}`
       : '',
@@ -600,7 +539,7 @@ async function planSettings(guild, file) {
       guild.channels?.cache?.has?.(raw.modlog_channel_id) &&
       canPostInChannel(guild, raw.modlog_channel_id)
     ) {
-      after.modlogChannel = raw.modlog_channel_id;
+      after.modlogChannelId = raw.modlog_channel_id;
       todo.modlog = raw.modlog_channel_id;
     } else {
       notes.push(
@@ -623,12 +562,11 @@ async function planSettings(guild, file) {
       todo.prefix = prefix;
     }
   }
-  const { changes, more } = diffConfig(before, after);
+  const change = changeOf(guild, before, after);
   return toItem('settings', 'settings', 'Server settings', {
-    status: changes.length ? 'change' : 'same',
+    status: change ? 'change' : 'same',
     notes,
-    changes,
-    more,
+    change,
     todo,
   });
 }
@@ -664,18 +602,17 @@ async function planModule(guild, entry) {
     ...flatConfig(moduleId, importer.prepare(stored, stored, guild)),
   };
   const after = { enabled, ...flatConfig(moduleId, config) };
-  const { changes, more } = diffConfig(before, after);
+  const change = changeOf(guild, before, after);
   const notes = [];
   const warning = clearedWarning(cleared, emptied);
   if (warning) notes.push(warning);
   if (moduleId === 'roles') notes.push(ROLES_NOTE);
   // What applying does besides saving, shown before the confirmation.
-  if (changes.length) notes.push(...(importer.notes?.(guild, config, stored) ?? []));
+  if (change) notes.push(...(importer.notes?.(guild, config, stored) ?? []));
   return toItem(key, 'module', label, {
-    status: changes.length ? 'change' : 'same',
+    status: change ? 'change' : 'same',
     notes,
-    changes,
-    more,
+    change,
     cleared,
     clearedPaths: paths,
     todo: { config, enabled, importer, previous: stored },
@@ -706,7 +643,8 @@ async function planOverride(guild, entry, current) {
     allowedRoles: keepIds(value.allowedRoles),
   };
   const now = current.get(name) ?? { enabled: true, allowedChannels: [], allowedRoles: [] };
-  const { changes, more } = diffConfig(
+  const change = changeOf(
+    guild,
     { enabled: now.enabled, allowedChannels: now.allowedChannels, allowedRoles: now.allowedRoles },
     next
   );
@@ -714,10 +652,9 @@ async function planOverride(guild, entry, current) {
   const warning = clearedWarning(cleared, emptied);
   if (warning) notes.push(warning);
   return toItem(key, 'command', label, {
-    status: changes.length ? 'change' : 'same',
+    status: change ? 'change' : 'same',
     notes,
-    changes,
-    more,
+    change,
     cleared,
     clearedPaths: paths,
     todo: { name, next },
@@ -777,7 +714,13 @@ async function applyItem(guild, item, actor) {
   }
   if (item.kind === 'command') {
     await setCommandOverride(guild.id, t.name, t.next);
-    await recordAudit(guild.id, { actor, action: `command:/${t.name}`, detail: 'imported from a file' });
+    // A command limit is not a module setting: it keeps no change of its own (and must not pick up a module's).
+    await recordAudit(guild.id, {
+      actor,
+      action: `command:/${t.name}`,
+      detail: 'imported from a file',
+      change: null,
+    });
     return;
   }
   const moduleId = item.key.slice('module:'.length);
@@ -840,6 +783,8 @@ export async function applyImport(guild, doc, keys, { actor }) {
     await recordAudit(guild.id, {
       actor,
       action: 'import:config',
+      // The summary of the items above, each of which kept its own change.
+      change: null,
       detail: `imported ${applied} item${applied === 1 ? '' : 's'} from a configuration file`,
     });
   }

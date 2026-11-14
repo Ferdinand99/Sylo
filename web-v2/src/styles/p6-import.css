@@ -1,4 +1,4 @@
-/* Import configuration (Settings), the change list it shares, the template gallery and the raw JSON tools. */
+/* Import configuration (Settings), the template gallery and the raw JSON tools. */
 
 .v2-import-file {
   position: absolute;
@@ -73,50 +73,6 @@
 }
 .v2-import-spacer {
   flex: 1 1 0;
-}
-
-/* The change list: label, then the old value struck through, an arrow, the new value. */
-.v2-changelist {
-  list-style: none;
-  margin: 8px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: var(--fs-sm);
-}
-.v2-changelist-row {
-  display: grid;
-  grid-template-columns: minmax(7rem, 14rem) minmax(0, 1fr);
-  gap: 4px 12px;
-}
-.v2-changelist-label {
-  color: var(--text-muted);
-  overflow-wrap: anywhere;
-}
-.v2-changelist-values {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 8px;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.v2-changelist-before {
-  color: var(--text-faint);
-  text-decoration: line-through;
-}
-.v2-changelist-after {
-  text-decoration: none;
-  color: var(--text);
-}
-.v2-changelist-more {
-  color: var(--text-muted);
-}
-@media (max-width: 600px) {
-  .v2-changelist-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 /* Template gallery. */

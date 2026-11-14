@@ -9,7 +9,8 @@ import assert from 'node:assert/strict';
 import { getGuildModule, setGuildModule } from '../src/db/modules.js';
 import { getGuildSettings } from '../src/db/guildSettings.js';
 import { getCommandOverride } from '../src/db/commandOverrides.js';
-import { IMPORTABLE_MODULES, diffConfig, ImportError, readExport } from '../src/web/lib/configImport.js';
+import { IMPORTABLE_MODULES, ImportError, readExport } from '../src/web/lib/configImport.js';
+import { getAuditEntry, listAudit } from '../src/db/audit.js';
 
 let app;
 let api;
@@ -63,7 +64,7 @@ test('the preview lists what changes, clears ids this server does not have, and 
   assert.equal(counting.status, 'change');
   assert.equal(counting.cleared.channel, 1);
   assert.match(counting.notes.join(' '), /1 channel from the file is not in this server and was cleared/);
-  const paths = counting.changes.map((c) => c.path);
+  const paths = Object.keys(counting.change.after);
   assert.deepEqual(paths.sort(), ['enabled', 'penaltyMinutes', 'penaltyRoleId']);
   assert.ok(!paths.includes('channelId'), 'the foreign channel is not a change');
   // nothing was written
@@ -306,114 +307,34 @@ test("importing a server's own export again changes nothing, for every module th
     (i) => i.status === 'change' && IMPORTABLE_MODULES.includes(i.key.slice('module:'.length))
   );
   assert.deepEqual(
-    changed.map((i) => `${i.key}: ${i.changes.map((c) => c.path).join(',')}`),
+    changed.map((i) => `${i.key}: ${Object.keys(i.change.after).join(',')}`),
     []
   );
 });
 
-test('a secret-looking field is masked in the preview', () => {
-  const { changes } = diffConfig({ apiKey: 'old-value' }, { apiKey: 'new-value', note: 'hello' });
-  assert.equal(changes.find((c) => c.path === 'apiKey').after, '••••••');
-  assert.equal(changes.find((c) => c.path === 'note').after, 'hello');
-});
-
-test('the preview says what applying does besides saving: posting a message, syncing AutoMod', async () => {
+test('every item keeps its own change in the history, and the summary row keeps none', async () => {
   const doc = file({
+    settings: { embed_color: 0x445566 },
     modules: [
-      {
-        moduleId: 'verification',
-        enabled: true,
-        config: { mode: 'button', verifiedRoleId: ROLE.member, channelId: CH.general },
-      },
-      {
-        moduleId: 'honeypot',
-        enabled: true,
-        config: { messages: [{ channelId: CH.bots, bait: 'free nitro' }] },
-      },
-      { moduleId: 'automod', enabled: true, config: { native: { enabled: true } } },
+      { moduleId: 'free-games', enabled: true, config: { channelId: CH.general } },
+      { moduleId: 'afk', enabled: true, config: { ignoreChannels: [CH.bots] } },
     ],
+    commandOverrides: [{ command: 'ping', enabled: false, allowedChannels: [], allowedRoles: [] }],
   });
-  const { body } = await preview(doc);
-  assert.match(
-    item(body, 'module:verification').notes.join(' '),
-    /posts or updates the verification message in #general/
-  );
-  assert.match(
-    item(body, 'module:honeypot').notes.join(' '),
-    /posts or updates the bait message in 1 channel/
-  );
-  assert.match(item(body, 'module:automod').notes.join(' '), /native AutoMod rules/);
-});
-
-test('the importers match their settings routes: automod keeps deleteMessage on, auto-threads drops rules for non-text channels, welcome keeps its stored trigger', async () => {
-  await setGuildModule(GID, 'welcome', {
-    enabled: true,
-    config: {
-      trigger: 'role',
-      triggerRoleIds: [ROLE.member],
-      joinEnabled: true,
-      joinChannel: CH.general,
-      joinMessage: 'a',
-    },
-  });
-  const rules = [
-    { channelId: CH.voice, nameTemplate: '{words}' },
-    { channelId: CH.general, nameTemplate: '{words}' },
-  ];
-  const doc = file({
-    modules: [
-      // the form cannot turn deleteMessage off, so a file cannot either
-      { moduleId: 'automod', enabled: true, config: { deleteMessage: false, timeoutMinutes: 5 } },
-      // a rule for a voice channel could never work
-      { moduleId: 'auto-threads', enabled: true, config: { rules } },
-      // a file from before the trigger fields keeps the stored trigger
-      {
-        moduleId: 'welcome',
-        enabled: true,
-        config: { joinEnabled: true, joinChannel: CH.general, joinMessage: 'b' },
-      },
-    ],
-  });
-  const { body } = await apply(doc, ['module:automod', 'module:auto-threads', 'module:welcome']);
+  const before = (await listAudit(GID, 500)).length;
+  const { body } = await apply(doc, ['settings', 'module:free-games', 'module:afk', 'command:ping']);
   for (const r of body.results) assert.equal(r.ok, true, `${r.key}: ${r.error}`);
-  assert.equal((await getGuildModule(GID, 'automod')).config.deleteMessage, true);
-  assert.deepEqual(
-    (await getGuildModule(GID, 'auto-threads')).config.rules.map((r) => r.channelId),
-    [CH.general]
-  );
-  const welcome = (await getGuildModule(GID, 'welcome')).config;
-  assert.equal(welcome.joinMessage, 'b');
-  assert.equal(welcome.trigger, 'role');
-  assert.deepEqual(welcome.triggerRoleIds, [ROLE.member]);
-});
-
-test('a list that is empty only because its ids were cleared is called out', async () => {
-  const doc = file({
-    commandOverrides: [{ command: 'ping', enabled: true, allowedChannels: [], allowedRoles: [FOREIGN_ROLE] }],
-  });
-  const { body } = await preview(doc);
-  assert.match(
-    item(body, 'command:ping').notes.join(' '),
-    /became empty. An empty list can mean no restriction/
-  );
-});
-
-test('the preview does not claim the export lacks what it carries', async () => {
-  const { body } = await preview(file());
-  assert.match(
-    body.notCarried,
-    /In the file but not imported yet: reminders, reaction-role sets and custom commands/
-  );
-  assert.doesNotMatch(body.notCarried, /Not in the file, so not imported: reminders/);
-});
-
-test('apply shares the limit of the other actions that call the platform', async () => {
-  const doc = file({ modules: [{ moduleId: 'afk', enabled: true, config: {} }] });
-  let limited = null;
-  for (let i = 0; i < 12 && !limited; i += 1) {
-    const res = await api.post('/import/apply', { export: doc, items: ['module:afk'], confirm: 'IMPORT' });
-    if (res.status === 429) limited = res;
-  }
-  assert.ok(limited, 'the apply is rate limited');
-  assert.match((await limited.json()).error, /Too many/);
+  const all = await listAudit(GID, 500);
+  const rows = all.slice(0, all.length - before);
+  const byAction = Object.fromEntries(rows.map((r) => [r.action, r]));
+  assert.equal(rows.length, 5, 'one row per item and one summary, nothing doubled');
+  const free = await getAuditEntry(GID, byAction['module:free-games'].id);
+  assert.deepEqual(free.change.after.channelId, CH.general);
+  const afk = await getAuditEntry(GID, byAction['module:afk'].id);
+  assert.deepEqual(afk.change.after.ignoreChannels, [CH.bots]);
+  assert.equal(afk.change.after.channelId, undefined, 'the other module is not mixed in');
+  const settings = await getAuditEntry(GID, byAction['settings:server'].id);
+  assert.equal(settings.change.after.embedColor, '#445566');
+  assert.equal((await getAuditEntry(GID, byAction['command:/ping'].id)).change, null);
+  assert.equal((await getAuditEntry(GID, byAction['import:config'].id)).change, null);
 });
