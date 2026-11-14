@@ -115,6 +115,56 @@ export function requirementsMet(item, roleIds) {
 /** The member's role ids, from a platform member object. */
 const rolesOf = (member) => [...(member?.roles?.cache?.keys?.() ?? [])];
 
+// Roles with these permissions can never be sold. Whoever buys such a role gets control of the server
+// (Administrator, Manage Server) or of every role below it (Manage Roles), and the shop cannot tell
+// who made the item or whether they ranked above the role. Checked when an item is saved and again
+// when it is bought or given, so an item made before the check existed hands out nothing either.
+const NEVER_SOLD = [
+  ['Administrator', 'Administrator'],
+  ['ManageGuild', 'Manage Server'],
+  ['ManageRoles', 'Manage Roles'],
+];
+
+/** True when the role has the permission; one this platform does not know counts as not held. */
+const roleHas = (role, perm) => {
+  try {
+    return Boolean(role?.permissions?.has?.(perm));
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Why a role may never be handed out by the shop, or null when it may. Works on Discord and Fluxer
+ * roles alike (`role.permissions.has`; an Administrator role has every permission on both).
+ * @returns {string|null}
+ */
+export function shopRoleRefusal(role) {
+  const held = NEVER_SOLD.filter(([perm]) => roleHas(role, perm)).map(([, label]) => label);
+  if (!held.length) return null;
+  return `${role.name} has ${held.join(', ')}: a role with Administrator, Manage Server or Manage Roles cannot be sold or given through the shop.`;
+}
+
+const warned = new Set();
+
+/**
+ * An item that hands out a role the shop must never hand out: nothing is charged, and the operator log
+ * gets a warning (once per item version, since the shop page asks about every item on every visit).
+ */
+function unsafeRole(guild, item) {
+  if (item.type === 'custom') return false;
+  const why = shopRoleRefusal(guild.roles.cache.get(item.roleId));
+  if (!why) return false;
+  const key = `${guildKey(guild)}:${item.id}:${item.updatedAt}`;
+  if (warned.has(key)) return true;
+  warned.add(key);
+  log.warn(
+    'shop',
+    `Refused to hand out item #${item.id} (${item.name}) in ${guildKey(guild)}: ${why} Pause or edit the item.`
+  );
+  return true;
+}
+
 /**
  * The reasons a member cannot buy an item right now, before any money is asked: gone, paused, sold out,
  * missing role, Sylo cannot hand out the role, or a permanent role the member already has.
@@ -127,6 +177,7 @@ export function buyProblem(guild, member, item) {
   if (!requirementsMet(item, rolesOf(member))) return { reason: 'requirements', roles: item.requiredRoles };
   if (item.type !== 'custom') {
     const role = guild.roles.cache.get(item.roleId) ?? null;
+    if (unsafeRole(guild, item)) return { reason: 'item_unavailable' };
     const refusal = botRefusal(guild, role);
     if (refusal) return { reason: 'cannot_grant', message: refusal };
     if (item.type === 'role' && member.roles.cache.has(item.roleId)) return { reason: 'already_has_role' };
@@ -167,6 +218,8 @@ export function shopRefusalText(result, config) {
       return 'That item is no longer in the shop.';
     case 'item_paused':
       return 'That item is not for sale right now.';
+    case 'item_unavailable':
+      return 'That item is unavailable right now. Nothing was charged. Ask staff.';
     case 'sold_out':
       return 'That item is sold out.';
     case 'item_changed':
@@ -454,6 +507,7 @@ export async function grantItem({ guild, member, itemId, by = null, reason = '',
   if (!item) return { ok: false, reason: 'item_gone' };
   if (item.type !== 'custom') {
     const role = guild.roles.cache.get(item.roleId) ?? null;
+    if (unsafeRole(guild, item)) return { ok: false, reason: 'item_unavailable' };
     const refusal = botRefusal(guild, role);
     if (refusal) return { ok: false, reason: 'cannot_grant', message: refusal };
     if (item.type === 'role' && member.roles.cache.has(item.roleId))

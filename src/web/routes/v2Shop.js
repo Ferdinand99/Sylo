@@ -34,7 +34,7 @@ import {
 } from '../../db/economyShop.js';
 import { LIMITS as CEILINGS, checkLimit } from '../../lib/limits.js';
 import { economySettings, itemProblem, normaliseItem, normaliseReason } from '../../modules/economy.js';
-import { endRow, grantItem, shopRefusalText } from '../../modules/lib/shop.js';
+import { endRow, grantItem, shopRefusalText, shopRoleRefusal } from '../../modules/lib/shop.js';
 
 const router = Router({ mergeParams: true });
 
@@ -122,14 +122,22 @@ function withinPlatformLimit(req, res) {
   return allowed;
 }
 
-/** The role of an item must be one the caller may hand out, and one the server really has. */
-function roleProblem(req, res, guild, item) {
+/**
+ * The role of an item must be one the server really has, one the shop may ever hand out (never
+ * Administrator, Manage Server or Manage Roles, whoever asks), and one the caller may hand out.
+ */
+async function roleProblem(req, res, guild, item) {
   if (item.type === 'custom') return false;
   if (!assignableRoles(guild).some((r) => r.id === item.roleId)) {
     fail(res, 'Pick a role from the list.');
     return true;
   }
-  checkRoleGrants([item.roleId]); // throws a RoleGrantError (403) for a role the person may not hand out
+  const unsafe = shopRoleRefusal(guild.roles.cache.get(item.roleId));
+  if (unsafe) {
+    fail(res, unsafe);
+    return true;
+  }
+  await checkRoleGrants([item.roleId]); // throws a RoleGrantError (403) for a role the person may not hand out
   return false;
 }
 
@@ -153,7 +161,7 @@ router.post(
     const item = normaliseItem(req.body);
     const problem = itemProblem(item);
     if (problem) return fail(res, problem);
-    if (roleProblem(req, res, req.guild, item)) return undefined;
+    if (await roleProblem(req, res, req.guild, item)) return undefined;
     checkLimit(await itemCount(req.guild.id), CEILINGS.shopItems, 'shop items');
     const id = await createItem(req.guild.id, item);
     await recordAudit(req.guild.id, {
@@ -188,7 +196,7 @@ router.post(
     const item = normaliseItem(req.body);
     const problem = itemProblem(item);
     if (problem) return fail(res, problem);
-    if (roleProblem(req, res, req.guild, item)) return undefined;
+    if (await roleProblem(req, res, req.guild, item)) return undefined;
     await updateItem(req.guild.id, id, item);
     await recordAudit(req.guild.id, {
       actor: actor(req),
@@ -205,6 +213,12 @@ router.post(
     if (!isItemId(req.params.id)) return fail(res, 'Unknown item.', 404);
     const id = Number(req.params.id);
     const enabled = req.body?.enabled === true;
+    if (enabled) {
+      // Resuming puts a role item back on sale: the role must be one the caller may hand out.
+      const item = await getItem(req.guild.id, id);
+      if (!item) return fail(res, 'Unknown item.', 404);
+      if (await roleProblem(req, res, req.guild, item)) return undefined;
+    }
     if (!(await setItemEnabled(req.guild.id, id, enabled))) return fail(res, 'Unknown item.', 404);
     await recordAudit(req.guild.id, {
       actor: actor(req),
@@ -258,7 +272,7 @@ router.post(
     if (!isItemId(req.body?.itemId)) return fail(res, 'Pick an item.');
     const item = await getItem(guild.id, Number(req.body.itemId));
     if (!item) return fail(res, 'Unknown item.', 404);
-    if (roleProblem(req, res, guild, item)) return undefined;
+    if (await roleProblem(req, res, guild, item)) return undefined;
     const member = await memberOf(guild, userId);
     if (!member) return fail(res, shopRefusalText({ reason: 'member_gone' }, config));
     if (member.user?.bot) return fail(res, 'Bots do not have an account.');
