@@ -303,6 +303,13 @@ textarea:focus {
   gap: 0.6rem;
   margin-top: 1.25rem;
 }
+/* A warning inside the app confirmation pages. */
+.auth-warning {
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--danger);
+}
 /* A single button under the text, as wide as its label (not a full-width bar like the sign-in ones). */
 .auth-actions-inline {
   flex-direction: row;

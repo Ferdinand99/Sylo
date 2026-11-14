@@ -13,6 +13,17 @@
 // Before any of that, GET /api/mobile/info tells the app whether an address it was given is a
 // Sylo, whether it can sign in there and what this version's app API supports.
 //
+// Signed in, the app can add the other login to its account (Discord or Fluxer):
+// 1. It asks POST /api/mobile/connect/:platform for a 60-second single-use code and opens
+//    /auth/mobile/connect?code=… in the browser sheet.
+// 2. The person confirms and logs in on the other platform. The callback links nothing: it keeps the
+//    verified login under a one-time result code and ends the sheet at
+//    sylo://connected?platform=…&result=… (or &error=…).
+// 3. The app finishes with POST /api/mobile/connect/complete { result } and its token. The login is
+//    linked only to the account of the token the flow began with, and only if that very token
+//    completes it. A link made by someone else therefore ends at the app on the victim's device,
+//    which holds another token, and attaches nothing. The browser never gets a session.
+//
 // Signed in, the app turns on push notifications for tickets with /api/mobile/push
 // (internal/push-notifications-plan.md, src/lib/push.js). With Postal Pigeon the notification
 // has no text: the app asks GET /api/mobile/push/events/:ref for it.
@@ -23,12 +34,21 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { Router } from 'express';
 import { config } from '../../config.js';
 import { BUILD } from '../../bot/lib/buildInfo.js';
-import { identitiesOf } from '../../db/accounts.js';
+import {
+  IdentityLinkedError,
+  PlatformAlreadyLinkedError,
+  identitiesOf,
+  linkIdentity,
+} from '../../db/accounts.js';
 import {
   API_TOKEN_TTL_MS,
   createApiToken,
   cleanDeviceName,
+  createConnectCode,
   createMobileCode,
+  isApiTokenLive,
+  redeemConnectCode,
+  redeemConnectResult,
   redeemMobileCode,
   revokeApiTokenValue,
   apiTokenPush,
@@ -52,6 +72,7 @@ import { bearerToken } from '../lib/bearer.js';
 import { isOperator, sessionUserLabel } from '../lib/accountAuth.js';
 import { clientKey, rateLimit } from '../middleware/rateLimit.js';
 import { accountMaySeeTickets } from '../middleware/ticketAccess.js';
+import { MOBILE_CONNECT_TTL_MS, beginOAuth, connectedUrl } from '../middleware/auth.js';
 
 const APP_CALLBACK = 'sylo://auth';
 const FLOW_TTL_MS = 10 * 60 * 1000;
@@ -176,6 +197,100 @@ mobileAuthRouter.post('/confirm', async (req, res, next) => {
   }
 });
 
+// Adding a login to the account of the app that sent the person here. The code in the link was made
+// by POST /api/mobile/connect/:platform for one account and one platform; it is used up at once, and
+// what it names is held in the session only until the person confirms. A page of its own asks first,
+// like the sign-in does: a link someone else made must not add *your* login to *their* account.
+const CONNECT_CODE = /^[A-Za-z0-9_-]{43}$/; // 32 random bytes, base64url
+const connectLimit = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  keyFn: (req) => `mobile-connect-page|${clientKey(req)}`,
+});
+
+const connectError = (res, message, status = 400) =>
+  res.status(status).render('error', {
+    title: 'Could not add the login',
+    heading: 'Could not add the login',
+    message,
+    backHref: null,
+  });
+
+mobileAuthRouter.get('/connect', connectLimit, async (req, res, next) => {
+  try {
+    const { code } = req.query;
+    const grant = typeof code === 'string' && CONNECT_CODE.test(code) ? await redeemConnectCode(code) : null;
+    const provider = grant && Object.hasOwn(providers, grant.platform) ? providers[grant.platform] : null;
+    if (!provider?.enabled()) {
+      return connectError(
+        res,
+        'This link has expired or was already used. Go back to the Sylo app and try again.'
+      );
+    }
+    // The app that asked has signed out, or was signed out, since: the flow is over.
+    if (!(await isApiTokenLive(grant.tokenId))) {
+      return res.redirect(connectedUrl(provider.platform, { error: 'token-revoked' }));
+    }
+    const identities = await identitiesOf(grant.accountId);
+    if (identities.length === 0) {
+      return connectError(res, 'This Sylo account no longer exists. Go back to the Sylo app.');
+    }
+    if (identities.some((i) => i.platform === provider.platform)) {
+      return res.redirect(connectedUrl(provider.platform, { error: 'already-linked' }));
+    }
+    // Nothing of an earlier login or app flow in this browser may carry over into this one.
+    req.session.oauthState = undefined;
+    req.session.oauthPlatform = undefined;
+    req.session.mobileConnect = undefined;
+    const nonce = randomBytes(24).toString('base64url');
+    req.session.mobileConnectAsk = {
+      accountId: grant.accountId,
+      tokenId: grant.tokenId,
+      platform: provider.platform,
+      nonce,
+      at: Date.now(),
+    };
+    res.set('Cache-Control', 'no-store');
+    res.render('mobile-connect', {
+      title: 'Add a login',
+      name: sessionUserLabel({ id: grant.accountId, identities }),
+      platforms: identities.map((i) => providers[i.platform]?.label ?? i.platform),
+      platformLabel: provider.label,
+      // Signed in to the dashboard here as somebody else? Then the link is very likely not yours.
+      browserName: req.account && req.account.id !== grant.accountId ? sessionUserLabel(req.account) : null,
+      nonce,
+      cancelUrl: connectedUrl(provider.platform, { error: 'access-denied' }),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+mobileAuthRouter.get('/connect/continue', connectLimit, (req, res) => {
+  const ask = req.session?.mobileConnectAsk;
+  req.session.mobileConnectAsk = undefined; // one confirmation, one round-trip
+  const provider = ask && Object.hasOwn(providers, ask.platform) ? providers[ask.platform] : null;
+  if (!provider || Date.now() - ask.at > MOBILE_CONNECT_TTL_MS || !sameString(req.query.nonce, ask.nonce)) {
+    return connectError(
+      res,
+      'This confirmation has expired or was not sent from the app. Go back to the Sylo app and try again.',
+      403
+    );
+  }
+  if (!provider.enabled()) return connectError(res, `${provider.label} login is not available here.`);
+  // To the other platform's login. Its callback (middleware/auth.js) adds the login to this account
+  // and ends at sylo://connected; it makes no session for this browser.
+  beginOAuth(req, res, provider, {
+    connect: false,
+    mobileConnect: {
+      accountId: ask.accountId,
+      tokenId: ask.tokenId,
+      platform: provider.platform,
+      at: Date.now(),
+    },
+  });
+});
+
 // --- the app part (/api/mobile) ------------------------------------------------------------
 
 export const mobileApiRouter = Router();
@@ -184,7 +299,19 @@ export const mobileApiRouter = Router();
 // (`changelog`: GET /api/v2/changelog). `push` is added when this instance can send
 // notifications the older way (APNs keys, or a relay) to signed-in apps, `push-pigeon` when it
 // can through Postal Pigeon. An app that knows Pigeon uses it when it is the official one.
-const FEATURES = Object.freeze(['app-login', 'live-access', 'changelog']);
+// `collectibles` is the collectible picture upload and inventory of the Economy shop,
+// `welcome-trigger` the Welcome module's `trigger` setting (a member joins, or first gets a role),
+// `member-search` GET /api/v2/guilds/:id/members?q=. `app-connect` is added when the app can add
+// the other login to its account (POST /api/mobile/connect/:platform, then /connect/complete):
+// sign-in is on and both Discord and Fluxer logins are set up.
+const FEATURES = Object.freeze([
+  'app-login',
+  'live-access',
+  'changelog',
+  'collectibles',
+  'welcome-trigger',
+  'member-search',
+]);
 
 // Public and ahead of the open-mode guard: the app calls it before anyone signs in, and an open-mode
 // server must still say it is a Sylo, just one the app cannot sign in to. Its own rate-limit bucket,
@@ -200,10 +327,13 @@ mobileApiRouter.get(
       login: config.authEnabled,
       loginProviders: config.authEnabled ? enabledProviders().map((p) => p.platform) : [],
       platforms: [config.discordEnabled && 'discord', config.fluxerEnabled && 'fluxer'].filter(Boolean),
-      features:
-        config.authEnabled && canPush()
-          ? [...FEATURES, ...(pushMode() ? ['push'] : []), ...(pigeonUrl() ? ['push-pigeon'] : [])]
-          : FEATURES,
+      features: [
+        ...FEATURES,
+        ...(config.authEnabled && enabledProviders().length > 1 ? ['app-connect'] : []),
+        ...(config.authEnabled && canPush()
+          ? [...(pushMode() ? ['push'] : []), ...(pigeonUrl() ? ['push-pigeon'] : [])]
+          : []),
+      ],
       // In relay mode the app registers its device token at this relay itself and gives this
       // server only the relay token (src/lib/push.js).
       ...(config.authEnabled && pushRelayUrl() ? { pushRelay: pushRelayUrl() } : {}),
@@ -214,6 +344,71 @@ mobileApiRouter.get(
 );
 
 mobileApiRouter.use(authEnabled);
+
+// A code for adding the other login to this account. Only for an app token (never a browser
+// session: nothing on a web page may start this), and only for a platform the account lacks.
+const connectIssueLimit = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  keyFn: (req) => `mobile-connect|${req.apiTokenId ?? clientKey(req)}`,
+});
+
+const RESULT_CODE = /^[A-Za-z0-9_-]{43}$/;
+const connectCompleteLimit = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  keyFn: (req) => `mobile-connect-complete|${req.apiTokenId ?? clientKey(req)}`,
+});
+
+// The last step: the app hands in the result code from sylo://connected and the login is linked, to
+// the account of the token that began the flow and only when this very token completes it. The
+// code is used up by any attempt, so a wrong token cannot be tried again with the same code. An
+// unknown, used, expired or foreign code all get the same answer.
+mobileApiRouter.post('/connect/complete', connectCompleteLimit, async (req, res, next) => {
+  try {
+    if (!req.account) return res.status(401).json({ error: 'Not signed in.' });
+    if (!req.viaToken) return res.status(403).json({ error: 'Adding a login is for the Sylo app only.' });
+    const { result } = req.body ?? {};
+    const grant =
+      typeof result === 'string' && RESULT_CODE.test(result) ? await redeemConnectResult(result) : null;
+    if (!grant || grant.accountId !== req.account.id || grant.tokenId !== req.apiTokenId) {
+      return res.status(400).json({ error: 'invalid_result' });
+    }
+    try {
+      await linkIdentity(grant.accountId, grant.identity);
+    } catch (err) {
+      if (err instanceof IdentityLinkedError) return res.status(409).json({ error: 'identity_linked' });
+      if (err instanceof PlatformAlreadyLinkedError) return res.status(409).json({ error: 'already_linked' });
+      throw err;
+    }
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      ok: true,
+      platform: grant.identity.platform,
+      platforms: (await identitiesOf(grant.accountId)).map((i) => i.platform),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+mobileApiRouter.post('/connect/:platform', connectIssueLimit, async (req, res, next) => {
+  try {
+    if (!req.account) return res.status(401).json({ error: 'Not signed in.' });
+    if (!req.viaToken) return res.status(403).json({ error: 'Adding a login is for the Sylo app only.' });
+    const { platform } = req.params;
+    const provider = Object.hasOwn(providers, platform) ? providers[platform] : null;
+    if (!provider?.enabled()) return res.status(400).json({ error: 'invalid_platform' });
+    if (req.account.identities.some((i) => i.platform === platform)) {
+      return res.status(409).json({ error: 'already_connected' });
+    }
+    const { code, expiresAt } = await createConnectCode(req.account.id, req.apiTokenId, platform);
+    res.set('Cache-Control', 'no-store');
+    res.json({ code, expiresAt });
+  } catch (err) {
+    next(err);
+  }
+});
 
 const badGrant = (res) => res.status(400).json({ error: 'invalid_grant' });
 
