@@ -137,13 +137,18 @@ export function normaliseComposedSpec(raw) {
   return JSON.stringify(spec).length > MAX_SPEC_BYTES ? null : spec;
 }
 
-export function buildPayload(spec) {
+/**
+ * The message to post. Roles in the text are shown but not pinged unless the caller says so
+ * (`allowedMentions`): it is decided where the person who asked is known (the dashboard routes), because
+ * the bot posts with its own right to mention roles, which the person may not have.
+ */
+export function buildPayload(spec, { allowedMentions = { parse: ['users'] } } = {}) {
   const content = trimOr(spec.content, 2000);
   const embeds = (Array.isArray(spec.embeds) ? spec.embeds : []).slice(0, 10).map(buildEmbed).filter(Boolean);
   const components = buildComponents(spec);
   const empty = !content && embeds.length === 0 && components.length === 0;
   return {
-    payload: { content: content ?? '', embeds, components, allowedMentions: { parse: ['users', 'roles'] } },
+    payload: { content: content ?? '', embeds, components, allowedMentions },
     empty,
   };
 }
@@ -158,8 +163,8 @@ async function resolveChannel(guild, channelId) {
   return ch;
 }
 
-export async function sendComposed(guild, channelId, spec) {
-  const { payload, empty } = buildPayload(spec);
+export async function sendComposed(guild, channelId, spec, opts = {}) {
+  const { payload, empty } = buildPayload(spec, opts);
   if (empty) throw new Error('Nothing to send — add content, an embed, or a component.');
   const channel = await resolveChannel(guild, channelId);
   const message = await channel.send(payload);

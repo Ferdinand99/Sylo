@@ -115,6 +115,7 @@ import {
   MIN_INTERVAL_MINUTES,
   MAX_INTERVAL_MINUTES,
   normaliseReminderConfig,
+  reminderMentions,
   remindersMayPing,
 } from '../../modules/scheduledMessages.js';
 import {
@@ -2101,7 +2102,16 @@ router.post(
         await editComposed(guild, rec.channel_id, rec.message_id, normalisedSpec);
         return res.json({ rec: composedRecJson(rec), status: 'updated' });
       }
-      const message = await sendComposed(guild, rec.channel_id, normalisedSpec);
+      // Sylo posts with its own right to mention roles: only a person who has it themselves (the owner, a live
+      // Manage Server holder; open mode has no one to check) may have roles in the text pinged.
+      const mayPing =
+        !config.authEnabled || (await holdsManageServerLive(guild.id, userIdForGuild(req, guild.id)));
+      const message = await sendComposed(
+        guild,
+        rec.channel_id,
+        normalisedSpec,
+        mayPing ? { allowedMentions: { parse: ['users', 'roles'] } } : {}
+      );
       rec = await updateComposed(guild.id, rec.id, {
         name,
         channelId: rec.channel_id,
@@ -3329,7 +3339,13 @@ router.post(
       return res.status(400).json({ error: 'Add a message or an embed.' });
     }
     try {
-      await sendComposed(req.guild, r.channelId, r.spec);
+      // The test posts like the reminder will: it pings only when the server's choice (owner or Manage
+      // Server) allows it.
+      const allowPings = remindersMayPing(
+        (await getGuildModule(req.guild.id, 'reminders')).config,
+        (await listScheduled(req.guild.id)).length
+      );
+      await sendComposed(req.guild, r.channelId, r.spec, { allowedMentions: reminderMentions(allowPings) });
       res.json({ ok: true });
     } catch (err) {
       res.status(400).json({ error: err.message });

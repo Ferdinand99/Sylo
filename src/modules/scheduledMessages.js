@@ -116,11 +116,14 @@ export function remindersMayPing(moduleConfig, reminderCount = 0) {
   return typeof chosen === 'boolean' ? chosen : reminderCount > 0;
 }
 
+/** Who a reminder may ping: roles and everyone when the server allows it, nobody otherwise. */
+export const reminderMentions = (allowPings) => (allowPings ? { parse: ['roles', 'everyone'] } : { parse: [] });
+
 /** The message a reminder posts. Without pings allowed, mentions in the text are shown but silent. */
 export function reminderPayload(reminder, allowPings = false) {
   const { payload, empty } = buildPayload(reminder.spec || { content: reminder.content ?? '' });
   if (empty) return null;
-  payload.allowedMentions = allowPings ? { parse: ['roles', 'everyone'] } : { parse: [] };
+  payload.allowedMentions = reminderMentions(allowPings);
   return payload;
 }
 
