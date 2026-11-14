@@ -133,7 +133,7 @@ struct SetupOfferRuleTests {
 
     @Test("Three modules that are on, with a line that is not off, are set up")
     func setUp() throws {
-        let mixed = #"[{"label":"Channel","value":"#a","state":"on"},{"label":"X","value":"-","state":"off"}]"#
+        let mixed = #"[{"label":"Channel","value":"general","state":"on"},{"label":"X","value":"-","state":"off"}]"#
         let cards = ["a", "b", "c"].map { card($0, lines: mixed) }.joined(separator: ",")
         #expect(!SetupDraft.shouldOffer(overview: try overview(cards)))
     }
