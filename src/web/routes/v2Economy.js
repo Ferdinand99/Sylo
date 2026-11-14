@@ -33,16 +33,17 @@ import {
 } from '../../modules/economy.js';
 
 /**
- * The audit-log line of one staff change: "add 330 for Alice". The member's name is stored, not the id, so
- * the log reads the same later; someone who is no longer in the server falls back to the id (the dashboard
- * then shows it as a short "member ...1234").
+ * The audit-log line of one staff change: "add 330 for Alice (…1234)". The member's name is stored with the
+ * end of the id, so the log reads the same later and two members with one name can still be told apart;
+ * someone who is no longer in the server falls back to the id (the dashboard then shows it as a short
+ * "member …1234").
  */
 export function auditDetail(action, amount, member, userId) {
   const name = String(member?.displayName ?? member?.user?.username ?? '')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 60);
-  const who = name || userId;
+  const who = name ? `${name} (…${String(userId).slice(-4)})` : userId;
   return action === 'reset-user' ? `reset-user for ${who}` : `${action} ${amount} for ${who}`;
 }
 

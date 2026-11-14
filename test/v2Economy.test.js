@@ -223,21 +223,31 @@ test('staff add, remove, set and reset a member from the page, each in the ledge
   assert.equal((await auditRows(GID, 'economy:adjust')).length, 4);
 });
 
-test('the audit line of a staff change names the member, not the snowflake', async () => {
+test('the audit line of a staff change names the member and keeps only the end of the id', async () => {
   await enable();
   await api.post(`/modules/economy/members/${U}/adjust`, { action: 'add', amount: 330 });
   await api.post(`/modules/economy/members/${V}/adjust`, { action: 'reset-user' });
   const details = (await auditRows(GID, 'economy:adjust')).map((r) => r.detail).sort();
-  assert.deepEqual(details, ['add 330 for Alice', 'reset-user for Bob']);
+  assert.deepEqual(details, [`add 330 for Alice (…${U.slice(-4)})`, `reset-user for Bob (…${V.slice(-4)})`]);
   for (const d of details) assert.doesNotMatch(d, /\d{17,20}/);
 });
 
-test('auditDetail: a name is trimmed and capped, and someone who is gone falls back to the id', () => {
-  assert.equal(auditDetail('remove', 40, { displayName: '  Ann   Lee ' }, U), 'remove 40 for Ann Lee');
-  assert.equal(auditDetail('set', 1, { user: { username: 'ann' } }, U), 'set 1 for ann');
+test('auditDetail: a name is trimmed and capped, keeps the end of the id, and someone who is gone falls back to the id', () => {
+  const end = U.slice(-4);
+  assert.equal(
+    auditDetail('remove', 40, { displayName: '  Ann   Lee ' }, U),
+    `remove 40 for Ann Lee (…${end})`
+  );
+  assert.equal(auditDetail('set', 1, { user: { username: 'ann' } }, U), `set 1 for ann (…${end})`);
   assert.equal(auditDetail('add', 5, null, U), `add 5 for ${U}`);
   assert.equal(auditDetail('reset-user', 0, null, U), `reset-user for ${U}`);
+  assert.equal(auditDetail('reset-user', 0, { displayName: 'Ann' }, U), `reset-user for Ann (…${end})`);
   assert.ok(auditDetail('add', 5, { displayName: 'x'.repeat(200) }, U).length < 90);
+  // two members with one name stay apart in the trail
+  assert.notEqual(
+    auditDetail('add', 5, { displayName: 'Alice' }, '800000000000001111'),
+    auditDetail('add', 5, { displayName: 'Alice' }, '800000000000002222')
+  );
 });
 
 test('the page refuses what /eco would refuse', async () => {
