@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import PickerHealth from '../components/PickerHealth.jsx';
 import { useCmd } from '../platformContext.jsx';
 import { cancelEvent, createEvent, updateEvent } from '../api.js';
 import { notify } from '../notify.js';
@@ -155,6 +156,7 @@ function EventForm({ initial, editing, channels, roles, saving, onSave, onCancel
                 </option>
               ))}
             </select>
+            <PickerHealth kind="role" value={f.roleId} />
           </div>
         </div>
       )}
@@ -339,6 +341,7 @@ export default function Events() {
               </option>
             ))}
           </select>
+          <PickerHealth kind="channel" value={form.channel} embed />
         </div>
 
         <div className="v2-field">
