@@ -69,8 +69,9 @@ export function syncMirror(field, mirror, { bare = false } = {}) {
   if (bare) {
     mirror.style.padding = '0';
     mirror.style.borderWidth = '0';
+  } else {
+    mirror.scrollTop = field.scrollTop;
   }
-  mirror.scrollTop = field.scrollTop;
 }
 
 const same = (a, b) =>
@@ -91,7 +92,7 @@ const same = (a, b) =>
  *   the flow, because anything else (a pseudo-element, an inline box) is a place where a browser may break
  *   the line, and the field's own text has none inside a word.
  * - the names sit in a second layer of the same box, each one placed over its token from where the
- *   browser laid the token out. The layer scrolls with the mirror.
+ *   browser laid the token out. They slide with the mirror's scroll.
  *
  * Names come from the server and from people, so they are only ever rendered as text, never as markup.
  *
@@ -101,6 +102,7 @@ const same = (a, b) =>
 export default function MentionMirror({ field, value, channels = [], roles = [], members = new Map() }) {
   const mirrorRef = useRef(null);
   const namesRef = useRef(null);
+  const innerRef = useRef(null);
   const [spots, setSpots] = useState([]);
 
   const parts = useMemo(
@@ -115,6 +117,9 @@ export default function MentionMirror({ field, value, channels = [], roles = [],
     syncMirror(field, mirror);
     syncMirror(field, namesRef.current, { bare: true });
     if (!mirror) return;
+    // The names are placed in the content of the mirror and slid by its scroll, so they cannot be limited
+    // by how far a layer with so little in it can scroll.
+    if (innerRef.current) innerRef.current.style.transform = `translateY(${-mirror.scrollTop}px)`;
     const origin = mirror.getBoundingClientRect();
     const found = [...mirror.querySelectorAll('[data-token]')].map((el) => {
       const r = el.getClientRects()[0];
@@ -133,8 +138,10 @@ export default function MentionMirror({ field, value, channels = [], roles = [],
   useEffect(() => {
     if (!field) return undefined;
     const onScroll = () => {
-      if (mirrorRef.current) mirrorRef.current.scrollTop = field.scrollTop;
-      if (namesRef.current) namesRef.current.scrollTop = field.scrollTop;
+      const mirror = mirrorRef.current;
+      if (!mirror) return;
+      mirror.scrollTop = field.scrollTop;
+      if (innerRef.current) innerRef.current.style.transform = `translateY(${-mirror.scrollTop}px)`;
     };
     const onSize = () => lay();
     field.addEventListener('scroll', onScroll, { passive: true });
@@ -191,18 +198,20 @@ export default function MentionMirror({ field, value, channels = [], roles = [],
         {endsInBreak ? '\u200b' : null}
       </div>
       <div className="v2-mention-names" aria-hidden="true" ref={namesRef} data-testid="mention-names">
-        {mentions.map((part, i) => {
-          const at = spots[i];
-          return (
-            <span
-              key={i}
-              className={`v2-mm-name is-${part.type}${part.missing ? ' is-missing' : ''}`}
-              style={at ? { left: at.x, top: at.y, width: at.w, height: at.h } : { visibility: 'hidden' }}
-            >
-              {part.label}
-            </span>
-          );
-        })}
+        <div className="v2-mm-names-inner" ref={innerRef}>
+          {mentions.map((part, i) => {
+            const at = spots[i];
+            return (
+              <span
+                key={i}
+                className={`v2-mm-name is-${part.type}${part.missing ? ' is-missing' : ''}`}
+                style={at ? { left: at.x, top: at.y, width: at.w, height: at.h } : { visibility: 'hidden' }}
+              >
+                {part.label}
+              </span>
+            );
+          })}
+        </div>
       </div>
     </>
   );

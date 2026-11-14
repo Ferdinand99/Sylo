@@ -54,6 +54,11 @@
   pointer-events: none;
   user-select: none;
 }
+.v2-mm-names-inner {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 100%;
+}
 .v2-mm-name {
   position: absolute;
   box-sizing: border-box;
