@@ -69,11 +69,15 @@ export async function ticketAccessState(req) {
 
 /** @type {import('express').RequestHandler} */
 export async function requireTicketAccess(req, res, next) {
-  const state = await ticketAccessState(req);
-  if (state === 'ok') return next();
-  if (state === 'login') {
-    req.session.returnTo = req.originalUrl;
-    return res.redirect('/auth/login');
+  try {
+    const state = await ticketAccessState(req);
+    if (state === 'ok') return next();
+    if (state === 'login') {
+      req.session.returnTo = req.originalUrl;
+      return res.redirect('/auth/login');
+    }
+    return deny(res);
+  } catch (err) {
+    return next(err); // a failed lookup answers through the error handler, never a hung request
   }
-  deny(res);
 }
