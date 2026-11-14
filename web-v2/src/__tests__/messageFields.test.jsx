@@ -26,9 +26,8 @@ vi.mock('../api.js', () => ({
   searchMembers: vi.fn(),
   getMemberNames: vi.fn(),
 }));
-const { getModuleConfig, getModuleLimits, getAccount, searchMembers, getMemberNames } = await import(
-  '../api.js'
-);
+const { getModuleConfig, getModuleLimits, getAccount, searchMembers, getMemberNames } =
+  await import('../api.js');
 
 const GUILD = '123456789012345678';
 const CHANNEL = '555555555555555555';
@@ -126,7 +125,7 @@ describe('Social alerts', () => {
     type(field, 'Live in #gen');
     const list = await screen.findByRole('listbox');
     fireEvent.mouseDown(within(list).getByRole('option', { name: /general/ }));
-    expect(field.value).toBe(`Live in <#${CHANNEL}>`);
+    expect(field.value).toBe(`Live in <#${CHANNEL}> `);
   });
 
   it('previews the alert with sample data and follows the message', async () => {
@@ -284,7 +283,7 @@ describe('Tickets', () => {
     type(greeting, 'Read #ru');
     const list = await screen.findByRole('listbox');
     fireEvent.mouseDown(within(list).getByRole('option', { name: /rules/ }));
-    expect(greeting.value).toBe(`Read <#${CHANNEL2}>`);
+    expect(greeting.value).toBe(`Read <#${CHANNEL2}> `);
   });
 
   it('previews the greeting and the closing message and follows them', async () => {
@@ -450,7 +449,9 @@ describe('Small form fixes', () => {
     const view = renderAtGuild(<Giveaways />, GUILD);
     const input = await screen.findByLabelText(/^Reroll/);
     expect(input.classList.contains('v2-input-sm')).toBe(true);
-    expect(view.container.textContent).toContain('None running. Start one with /giveaway start in your server.');
+    expect(view.container.textContent).toContain(
+      'None running. Start one with /giveaway start in your server.'
+    );
   });
 
   it('lays the App Store Connect alerts out as one grid row each', async () => {

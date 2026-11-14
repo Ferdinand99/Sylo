@@ -71,7 +71,8 @@ export function youtubePreviews(row, defaults) {
 
 /** The preview of one feed's post. */
 export function rssPreview(row, defaultTemplate) {
-  const source = (row.type === 'url' ? hostOf(row.ref, '') : '') || String(row.ref ?? '').trim() || 'Harbor blog';
+  const source =
+    (row.type === 'url' ? hostOf(row.ref, '') : '') || String(row.ref ?? '').trim() || 'Harbor blog';
   return {
     key: 'post',
     title: `New post (${source})`,

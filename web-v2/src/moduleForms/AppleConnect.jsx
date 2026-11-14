@@ -38,7 +38,12 @@ const ALERTS = [
   {
     kind: 'expiry',
     label: 'Certificates and profiles expiring',
-    option: { lead: 'from', field: 'days', unit: 'days before', aria: 'Days before expiry to start alerting' },
+    option: {
+      lead: 'from',
+      field: 'days',
+      unit: 'days before',
+      aria: 'Days before expiry to start alerting',
+    },
     hint: 'Also sent at 7 days and 1 day before. Needs a team API key.',
   },
 ];

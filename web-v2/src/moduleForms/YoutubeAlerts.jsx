@@ -145,8 +145,12 @@ export default function YoutubeAlerts() {
 
               <div className="v2-field-row">
                 <div className="v2-field">
-                  <label>Notify on</label>
-                  <select value={a.notify} onChange={(e) => updateRow(a.key, { notify: e.target.value })}>
+                  <label htmlFor={`yt-notify-${a.key}`}>Notify on</label>
+                  <select
+                    id={`yt-notify-${a.key}`}
+                    value={a.notify}
+                    onChange={(e) => updateRow(a.key, { notify: e.target.value })}
+                  >
                     <option value="both">New videos &amp; going live</option>
                     <option value="video">New videos only</option>
                     <option value="live">Going live only</option>

@@ -160,7 +160,8 @@ export default function AutoThreads() {
                     <span className="v2-thread-icon" aria-hidden="true">
                       🧵
                     </span>{' '}
-                    <strong>{preview}</strong> <span className="v2-field-hint">({[...preview].length}/100)</span>
+                    <strong>{preview}</strong>{' '}
+                    <span className="v2-field-hint">({[...preview].length}/100)</span>
                   </p>
                   {r.firstMessage.trim() ? (
                     <MessagePreview
