@@ -46,7 +46,8 @@ test('the public 404s have no dashboard button, a generic error still has one', 
   const lb = await (await get('/leaderboard/not-a-server')).text();
   assert.match(lb, /No leaderboard here/);
   assert.doesNotMatch(lb, /Back to the dashboard/);
-  assert.match(lb, /Go to the Sylo home page/);
+  assert.match(lb, /Go to the dashboard/);
+  assert.doesNotMatch(lb, /sylobot\.com/, 'never the hosted product, a self-hosted instance has its own');
   assert.match(lb, /Powered by Sylo/);
 
   const q = await (await get('/quotes/not-a-server')).text();
