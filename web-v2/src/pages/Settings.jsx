@@ -15,6 +15,7 @@ import { useModuleForm } from '../components/useModuleForm.js';
 import ChipPicker from '../components/ChipPicker.jsx';
 import { notify } from '../notify.js';
 import Reveal from '../components/Reveal.jsx';
+import { useCanSetUp } from '../setupAccess.js';
 import { AccessLock, useAccess } from '../access.jsx';
 
 const toForm = (data) => ({
@@ -71,6 +72,7 @@ function settingsBody(form, data) {
 }
 
 export default function Settings() {
+  const canSetUp = useCanSetUp();
   // The Inbox and View roles as last saved, so a save only writes them (and logs it) when they changed.
   const savedAccess = useRef(null);
   // The configuration download holds every setting as stored: Edit access (access.jsx).
@@ -284,6 +286,20 @@ export default function Settings() {
       <div className="v2-group v2-section-gap">
         <h2 className="v2-group-title">Server data</h2>
         <div className="v2-list">
+          {canSetUp ? (
+            <Link className="v2-row" to={`/guilds/${guildId}/setup`}>
+              <div className="v2-row-main">
+                <h3>Setup wizard</h3>
+                <p className="is-wrap">
+                  Pick what you want Sylo to do, and let it propose the channels and roles. Run it again any
+                  time.
+                </p>
+              </div>
+              <span className="v2-row-arrow" aria-hidden="true">
+                →
+              </span>
+            </Link>
+          ) : null}
           <Link className="v2-row" to={`/guilds/${guildId}/audit`}>
             <div className="v2-row-main">
               <h3>Audit log</h3>

@@ -38,11 +38,13 @@ export function OverviewProvider({ guildId, children }) {
     guildId
   );
   return (
-    <OverviewContext.Provider value={{ ...state, dataGuildId: dataKey }}>{children}</OverviewContext.Provider>
+    <OverviewContext.Provider value={{ ...state, dataGuildId: dataKey, reload: () => setTick((t) => t + 1) }}>
+      {children}
+    </OverviewContext.Provider>
   );
 }
 
-/** @returns {{ data: object | null, dataGuildId: string | undefined, loading: boolean, error: Error | null, setData: Function }} */
+/** @returns {{ data: object | null, dataGuildId: string | undefined, loading: boolean, error: Error | null, setData: Function, reload: () => void }} */
 export function useOverview() {
   return useContext(OverviewContext);
 }

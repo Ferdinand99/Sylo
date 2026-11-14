@@ -121,7 +121,16 @@ test.afterEach(() => {
 const g = (path) => `/guilds/${D_GUILD}${path}`;
 // Representative routes: reads, inbox actions (unknown ids: the route answers 404 or 400 once the
 // level lets the request through), and config writes.
-const READS = ['/overview', '/settings', '/access', '/modules/afk/config', '/audit', '/tickets', '/appeals'];
+const READS = [
+  '/overview',
+  '/settings',
+  '/access',
+  '/modules/afk/config',
+  '/audit',
+  '/tickets',
+  '/appeals',
+  '/setup/suggest',
+];
 // [path, body, the status the route itself answers once the level lets the request in]: an unknown
 // item gives a known status, so a request that never reached the route cannot pass.
 const INBOX_ACTIONS = [
@@ -137,6 +146,7 @@ const WRITES = [
   ['/modules/afk/config', {}, 200],
   ['/moderation/warnings/clear', { userId: '810000000000000001' }, 404],
   ['/access', { viewRoleIds: [VIEW, OTHER_ROLE] }, 200],
+  ['/setup/apply', { items: [] }, 400],
 ];
 
 async function expectLevel(client, level) {
