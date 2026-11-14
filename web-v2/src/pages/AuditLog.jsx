@@ -12,6 +12,7 @@ import { notify } from '../notify.js';
 import { formatCount } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
 import Time from '../components/Time.jsx';
+import { useAccess } from '../access.jsx';
 
 // Plain names for the action keys that are not "module:<id>".
 const ACTION_LABELS = {
@@ -129,6 +130,8 @@ function useEntryNames(guildId, entries) {
 // "Show changes" under an entry that kept what it changed: the difference (changed fields only), and
 // "Undo this change" where the settings can be put back. The change is loaded when the entry is opened.
 function EntryChange({ guildId, entry, onUndone }) {
+  // Undoing changes settings: Edit access (access.jsx). Below it the change is shown, not the button.
+  const canUndo = useAccess().can('edit');
   const [open, setOpen] = useState(false);
   const [load, setLoad] = useState({ status: 'idle', data: null, error: '' });
   const [busy, setBusy] = useState(false);
@@ -249,7 +252,7 @@ function EntryChange({ guildId, entry, onUndone }) {
               </Callout>
             ) : null}
             <div className="v2-history-actions">
-              {data.undo.available ? (
+              {data.undo.available && canUndo ? (
                 <button type="button" className="v2-btn-ghost" disabled={busy} onClick={undo}>
                   {busy ? 'Undoing…' : 'Undo this change'}
                 </button>

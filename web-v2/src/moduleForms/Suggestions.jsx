@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import PickerHealth from '../components/PickerHealth.jsx';
 import { useSearchParams } from 'react-router-dom';
 import '../styles/wp4-inbox.css';
 import { useCmd } from '../platformContext.jsx';
@@ -22,6 +21,8 @@ import UnitInput from '../components/UnitInput.jsx';
 import Time from '../components/Time.jsx';
 import OverflowMenu from '../components/OverflowMenu.jsx';
 import TabRow from '../components/TabRow.jsx';
+import PickerHealth from '../components/PickerHealth.jsx';
+import { AccessLock, useAccess } from '../access.jsx';
 
 // The pill shows a coloured dot and the word; an emoji on top would say it a third time.
 const STATUS_LABEL = {
@@ -138,47 +139,49 @@ function Item({ item, busy, limits, onDecide, onMoveBack, onDelete }) {
         ) : null}
       </div>
       {action ? null : (
-        <div className="v2-row-actions">
-          <select
-            ref={pickRef}
-            aria-label={`Set status of suggestion #${item.number}`}
-            value={pick}
-            disabled={busy}
-            onChange={(e) => setPick(e.target.value)}
-          >
-            {/* Choosing an option only picks it: an arrow key on a closed list changes it, so the reason
+        <AccessLock need="inbox">
+          <div className="v2-row-actions">
+            <select
+              ref={pickRef}
+              aria-label={`Set status of suggestion #${item.number}`}
+              value={pick}
+              disabled={busy}
+              onChange={(e) => setPick(e.target.value)}
+            >
+              {/* Choosing an option only picks it: an arrow key on a closed list changes it, so the reason
                 form opens from the button, never from the change itself. */}
-            <option value="">Choose status…</option>
-            {ACTIONS.filter(([, status]) => status !== item.status).map(([a, , label]) => (
-              <option key={a} value={a}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="v2-btn-ghost wp4-set-status"
-            disabled={busy || !pick}
-            onClick={() => setAction(pick)}
-          >
-            Set status
-          </button>
-          <OverflowMenu
-            label={`More actions for suggestion #${item.number}`}
-            items={[
-              ...(item.canMoveBack
-                ? [
-                    {
-                      label: 'Move back to the suggestions channel',
-                      onClick: () => onMoveBack(item),
-                      disabled: busy,
-                    },
-                  ]
-                : []),
-              { label: 'Delete', danger: true, onClick: () => onDelete(item), disabled: busy },
-            ]}
-          />
-        </div>
+              <option value="">Choose status…</option>
+              {ACTIONS.filter(([, status]) => status !== item.status).map(([a, , label]) => (
+                <option key={a} value={a}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="v2-btn-ghost wp4-set-status"
+              disabled={busy || !pick}
+              onClick={() => setAction(pick)}
+            >
+              Set status
+            </button>
+            <OverflowMenu
+              label={`More actions for suggestion #${item.number}`}
+              items={[
+                ...(item.canMoveBack
+                  ? [
+                      {
+                        label: 'Move back to the suggestions channel',
+                        onClick: () => onMoveBack(item),
+                        disabled: busy,
+                      },
+                    ]
+                  : []),
+                { label: 'Delete', danger: true, onClick: () => onDelete(item), disabled: busy },
+              ]}
+            />
+          </div>
+        </AccessLock>
       )}
     </div>
   );
@@ -186,6 +189,7 @@ function Item({ item, busy, limits, onDecide, onMoveBack, onDelete }) {
 
 export default function Suggestions() {
   const cmd = useCmd();
+  const { can } = useAccess();
   const limits = useModuleLimits('suggestions');
   // Saving can change which suggestions count as "outside" (a new suggestions channel): the list is
   // fetched again after a save, so the banner and the Move back buttons are right without a reload.
@@ -363,139 +367,141 @@ export default function Suggestions() {
 
       <div id="sug-panel" role="tabpanel" aria-labelledby={`sug-tab-${tab}`}>
         {tab === 'settings' ? (
-          <form onSubmit={save} data-savebar>
-            <div className="v2-field">
-              <label htmlFor="channel">Suggestions channel</label>
-              <select id="channel" value={form.channel} onChange={(e) => set({ channel: e.target.value })}>
-                <option value="">— the channel the command is used in —</option>
-                {data.channels.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    #{c.name}
-                  </option>
-                ))}
-              </select>
-              <PickerHealth kind="channel" value={form.channel} embed />
-            </div>
+          <AccessLock need="edit" note>
+            <form onSubmit={save} data-savebar>
+              <div className="v2-field">
+                <label htmlFor="channel">Suggestions channel</label>
+                <select id="channel" value={form.channel} onChange={(e) => set({ channel: e.target.value })}>
+                  <option value="">— the channel the command is used in —</option>
+                  {data.channels.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      #{c.name}
+                    </option>
+                  ))}
+                </select>
+                <PickerHealth kind="channel" value={form.channel} embed />
+              </div>
 
-            <div className="v2-field">
-              <label htmlFor="logChannel">
-                Log channel <span className="v2-field-hint">— optional</span>
-              </label>
-              <select
-                id="logChannel"
-                value={form.logChannel}
-                onChange={(e) => set({ logChannel: e.target.value })}
-              >
-                <option value="">— decided suggestions only change status where they are —</option>
-                {data.channels.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    #{c.name}
-                  </option>
-                ))}
-              </select>
-              <PickerHealth kind="channel" value={form.logChannel} embed />
-              <p className="v2-field-hint">
-                Where a suggestion that is approved, denied or implemented is also posted. Pick how below.
-              </p>
-              <fieldset className="v2-field wp4-log-mode" disabled={!form.logChannel}>
-                <legend className="v2-field-hint">When a suggestion is decided</legend>
-                <label className="v2-check">
-                  <input
-                    type="radio"
-                    name="logMode"
-                    checked={form.logMode === 'copy'}
-                    onChange={() => set({ logMode: 'copy' })}
-                  />
-                  Copy to the log channel and keep the original
+              <div className="v2-field">
+                <label htmlFor="logChannel">
+                  Log channel <span className="v2-field-hint">— optional</span>
                 </label>
-                <label className="v2-check">
-                  <input
-                    type="radio"
-                    name="logMode"
-                    checked={form.logMode === 'move'}
-                    onChange={() => set({ logMode: 'move' })}
-                  />
-                  Move to the log channel (delete the original)
-                </label>
-              </fieldset>
-              {form.logChannel ? (
+                <select
+                  id="logChannel"
+                  value={form.logChannel}
+                  onChange={(e) => set({ logChannel: e.target.value })}
+                >
+                  <option value="">— decided suggestions only change status where they are —</option>
+                  {data.channels.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      #{c.name}
+                    </option>
+                  ))}
+                </select>
+                <PickerHealth kind="channel" value={form.logChannel} embed />
                 <p className="v2-field-hint">
-                  {form.logMode === 'move'
-                    ? 'The original is deleted and the suggestion lives in the log channel from then on.'
-                    : 'The original stays in the suggestions channel and shows its status. The copy in the log channel is updated if the status changes again and removed if the suggestion is reopened.'}
+                  Where a suggestion that is approved, denied or implemented is also posted. Pick how below.
                 </p>
-              ) : null}
-            </div>
+                <fieldset className="v2-field wp4-log-mode" disabled={!form.logChannel}>
+                  <legend className="v2-field-hint">When a suggestion is decided</legend>
+                  <label className="v2-check">
+                    <input
+                      type="radio"
+                      name="logMode"
+                      checked={form.logMode === 'copy'}
+                      onChange={() => set({ logMode: 'copy' })}
+                    />
+                    Copy to the log channel and keep the original
+                  </label>
+                  <label className="v2-check">
+                    <input
+                      type="radio"
+                      name="logMode"
+                      checked={form.logMode === 'move'}
+                      onChange={() => set({ logMode: 'move' })}
+                    />
+                    Move to the log channel (delete the original)
+                  </label>
+                </fieldset>
+                {form.logChannel ? (
+                  <p className="v2-field-hint">
+                    {form.logMode === 'move'
+                      ? 'The original is deleted and the suggestion lives in the log channel from then on.'
+                      : 'The original stays in the suggestions channel and shows its status. The copy in the log channel is updated if the status changes again and removed if the suggestion is reopened.'}
+                  </p>
+                ) : null}
+              </div>
 
-            <div className="v2-field">
-              <label className="v2-check">
-                <input
-                  type="checkbox"
-                  checked={form.anonymous}
-                  onChange={(e) => set({ anonymous: e.target.checked })}
+              <div className="v2-field">
+                <label className="v2-check">
+                  <input
+                    type="checkbox"
+                    checked={form.anonymous}
+                    onChange={(e) => set({ anonymous: e.target.checked })}
+                  />
+                  Anonymous suggestions
+                </label>
+                <p className="v2-field-hint">
+                  New posts do not show who wrote them. Staff still see the author on this page.
+                </p>
+              </div>
+
+              <div className="v2-field">
+                <label className="v2-check">
+                  <input
+                    type="checkbox"
+                    checked={form.dmAuthor}
+                    onChange={(e) => set({ dmAuthor: e.target.checked })}
+                  />
+                  DM the author when staff decide
+                </label>
+                <p className="v2-field-hint">Members with DMs closed are skipped quietly.</p>
+              </div>
+
+              <div className="v2-field">
+                <label className="v2-check">
+                  <input
+                    type="checkbox"
+                    checked={form.messagesToSuggestions}
+                    onChange={(e) => set({ messagesToSuggestions: e.target.checked })}
+                  />
+                  Turn messages in the channel into suggestions
+                </label>
+                <p className="v2-field-hint">
+                  Sylo deletes the message and posts it as a suggestion. Needs the suggestions channel above
+                  and the Manage Messages permission. It also has to be allowed to read message text, which
+                  only the bot owner can switch on. Messages with attachments are left alone.
+                </p>
+              </div>
+
+              <div className="v2-field">
+                <label htmlFor="cooldownSeconds">Cooldown between suggestions</label>
+                <UnitInput
+                  id="cooldownSeconds"
+                  unit="seconds"
+                  min={cooldown.min}
+                  max={cooldown.max}
+                  value={form.cooldownSeconds}
+                  onChange={(e) =>
+                    set({ cooldownSeconds: e.target.value === '' ? '' : Number(e.target.value) })
+                  }
                 />
-                Anonymous suggestions
-              </label>
-              <p className="v2-field-hint">
-                New posts do not show who wrote them. Staff still see the author on this page.
-              </p>
-            </div>
+                <p className="v2-field-hint">Per member. 0 turns it off.</p>
+              </div>
 
-            <div className="v2-field">
-              <label className="v2-check">
-                <input
-                  type="checkbox"
-                  checked={form.dmAuthor}
-                  onChange={(e) => set({ dmAuthor: e.target.checked })}
+              <div className="v2-field">
+                <label>
+                  Staff roles <span className="v2-field-hint">— may decide without Manage Server</span>
+                </label>
+                <ChipPicker
+                  kind="role"
+                  items={data.roles}
+                  value={form.staffRoles}
+                  onChange={(staffRoles) => set({ staffRoles })}
                 />
-                DM the author when staff decide
-              </label>
-              <p className="v2-field-hint">Members with DMs closed are skipped quietly.</p>
-            </div>
-
-            <div className="v2-field">
-              <label className="v2-check">
-                <input
-                  type="checkbox"
-                  checked={form.messagesToSuggestions}
-                  onChange={(e) => set({ messagesToSuggestions: e.target.checked })}
-                />
-                Turn messages in the channel into suggestions
-              </label>
-              <p className="v2-field-hint">
-                Sylo deletes the message and posts it as a suggestion. Needs the suggestions channel above and
-                the Manage Messages permission. It also has to be allowed to read message text, which only the
-                bot owner can switch on. Messages with attachments are left alone.
-              </p>
-            </div>
-
-            <div className="v2-field">
-              <label htmlFor="cooldownSeconds">Cooldown between suggestions</label>
-              <UnitInput
-                id="cooldownSeconds"
-                unit="seconds"
-                min={cooldown.min}
-                max={cooldown.max}
-                value={form.cooldownSeconds}
-                onChange={(e) =>
-                  set({ cooldownSeconds: e.target.value === '' ? '' : Number(e.target.value) })
-                }
-              />
-              <p className="v2-field-hint">Per member. 0 turns it off.</p>
-            </div>
-
-            <div className="v2-field">
-              <label>
-                Staff roles <span className="v2-field-hint">— may decide without Manage Server</span>
-              </label>
-              <ChipPicker
-                kind="role"
-                items={data.roles}
-                value={form.staffRoles}
-                onChange={(staffRoles) => set({ staffRoles })}
-              />
-            </div>
-          </form>
+              </div>
+            </form>
+          </AccessLock>
         ) : (
           <div className="v2-group">
             <h2 className="v2-group-title">Suggestions ({data.suggestions.length})</h2>
@@ -505,7 +511,12 @@ export default function Suggestions() {
                   {data.outside} {data.outside === 1 ? 'suggestion is' : 'suggestions are'} not in the
                   suggestions channel (for example after an earlier move to the log channel).
                 </p>
-                <button type="button" className="v2-btn-ghost" disabled={busy} onClick={onMoveAllBack}>
+                <button
+                  type="button"
+                  className="v2-btn-ghost"
+                  disabled={busy || !can('inbox')}
+                  onClick={onMoveAllBack}
+                >
                   Move all back
                 </button>
               </div>

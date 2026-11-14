@@ -1,9 +1,12 @@
+import { useAccess } from '../access.jsx';
+
 /**
  * An on/off switch: <Switch checked={on} onChange={setOn} label="Enable logging" />.
  * A real <button role="switch"> (Space/Enter toggle it, screen readers hear
  * "Enable logging, switch, on"). `label` is required — it becomes the
  * accessible name; pass `labelledBy` instead when visible text already names it.
- * Styled as the .v2-toggle iOS switch (base in styles.css, look in forms.css).
+ * Styled as the .v2-toggle iOS switch (base in styles.css, look in forms.css). Disabled below the
+ * dashboard access level `need` (default 'edit', see access.jsx).
  */
 export default function Switch({
   checked,
@@ -14,7 +17,9 @@ export default function Switch({
   disabled,
   id,
   className = '',
+  need = 'edit',
 }) {
+  const { can } = useAccess();
   return (
     <button
       type="button"
@@ -24,7 +29,7 @@ export default function Switch({
       aria-label={labelledBy ? undefined : label}
       aria-labelledby={labelledBy}
       aria-describedby={describedBy}
-      disabled={disabled}
+      disabled={disabled || !can(need)}
       className={`v2-toggle v2-switch-btn${checked ? ' is-on' : ''}${className ? ` ${className}` : ''}`}
       onClick={() => onChange?.(!checked)}
     />

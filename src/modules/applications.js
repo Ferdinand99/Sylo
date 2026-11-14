@@ -317,6 +317,26 @@ function endingOps(form, sub, status, grants) {
   );
 }
 
+/**
+ * The roles accepting or denying `sub` would give the applicant, as the decision would work them out
+ * (the form's roles, the role question's answers, changes still waiting). For the dashboard, which checks
+ * them against the person deciding before the decision is made (src/web/middleware/roleGrants.js).
+ * @param {'accept' | 'deny'} action
+ * @returns {string[]}
+ */
+export function decisionGrantIds(form, sub, action) {
+  const status = action === 'accept' ? 'accepted' : 'denied';
+  const grants = status === 'accepted' ? questionGrants(form, sub.questions, sub.answers, 'accept').ids : [];
+  return endingOps(form, sub, status, grants)
+    .filter((o) => o.op === 'add')
+    .map((o) => o.roleId);
+}
+
+/** The roles a retry of the waiting role changes would give. */
+export function pendingGrantIds(sub) {
+  return (sub.rolesPending ?? []).filter((o) => o.op === 'add').map((o) => o.roleId);
+}
+
 /** Take the pending role off a member whose pending application ends without a decision (deleted, forgotten). */
 async function dropPendingRole(guild, sub) {
   if (sub.status !== 'pending' || !sub.pendingRoleId) return;
@@ -957,7 +977,8 @@ const normaliseReason = (v) => cut(cleanAnswer(String(v ?? '')), 500);
  * @param {{ guild: any, id: number, action: 'accept' | 'deny', reason?: string, by?: string | null,
  *   actor: { member?: any, permissions?: any, dashboard?: true, system?: true }, memberGone?: boolean }} args
  *   `actor` says who asks: a member (checked against the form's manager roles and Manage Server), the
- *   dashboard (the route has checked Manage Server) or the system (a leave).
+ *   dashboard (the route has checked the person's access level, Inbox or more, and that they may hand
+ *   out every role the decision gives: decisionGrantIds) or the system (a leave).
  * @returns {Promise<{ ok: true, status: string, warnings: string[], dm: boolean } | { ok: false, error: string, code: string }>}
  */
 export async function decideSubmission({

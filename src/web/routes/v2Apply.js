@@ -13,7 +13,7 @@
 // A member who does not meet a requirement is told why (they are in the server, so it is no secret).
 // Writes need the CSRF token (the global csrf middleware) and have their own rate limit. Drafts live in
 // the browser only: nothing is stored here until the member submits.
-import { Router } from 'express';
+import { accessRouter } from '../middleware/access.js';
 import { config as appConfig } from '../../config.js';
 import { rateLimit, clientKey } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -32,7 +32,7 @@ import {
 } from '../../modules/applications.js';
 import { fillTemplate } from '../../modules/lib/applicationsForm.js';
 
-const router = Router({ mergeParams: true });
+const router = accessRouter('/apply/:guildId', { mergeParams: true });
 
 /** A submit may post to the platform and change roles, so it has its own limit: per person and server. */
 const submitLimit = rateLimit({

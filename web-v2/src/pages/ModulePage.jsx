@@ -13,10 +13,16 @@ import { PlatformContext } from '../platformContext.jsx';
 import NotFound from '../components/NotFound.jsx';
 import Reveal from '../components/Reveal.jsx';
 import Switch from '../components/Switch.jsx';
+import { AccessLock } from '../access.jsx';
 
 // Modules whose queue is a page of its own: their settings link back to it ("Open the inbox →"), as the
 // inbox pages link to their settings. (Applications and Suggestions keep both in one page, as tabs.)
 const INBOX_PATH = { tickets: '/tickets', appeals: '/appeals' };
+
+// A module's settings need Edit access (access.jsx), so below it the whole form is disabled. Not for
+// pages with tabs or a search a reader still uses: there the save bar, the switches, the row actions
+// and the queue's own buttons (Applications, Suggestions: Inbox) check the level themselves.
+const NOT_LOCKED_AS_A_WHOLE = new Set(['applications', 'suggestions', 'economy', 'quote-board']);
 
 // The module's on/off state with a switch, so a module can be turned on from
 // its own settings page. Reads and patches the same shared overview state the
@@ -128,7 +134,13 @@ export default function ModulePage() {
         {/* Keyed by server, so switching server starts the form from scratch
             instead of briefly showing (and saving) the previous server's settings. */}
         <Suspense fallback={<p className="v2-state">Loading…</p>}>
-          <Form key={guildId} />
+          {NOT_LOCKED_AS_A_WHOLE.has(moduleId) ? (
+            <Form key={guildId} />
+          ) : (
+            <AccessLock need="edit" note>
+              <Form key={guildId} />
+            </AccessLock>
+          )}
         </Suspense>
       </Reveal>
     </PlatformContext.Provider>

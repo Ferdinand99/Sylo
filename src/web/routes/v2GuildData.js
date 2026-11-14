@@ -4,7 +4,7 @@
 //
 // Mounted at /guilds/:guildId AFTER the admin guard in v2Api.js, so req.guild is set and the
 // caller manages this server.
-import { Router } from 'express';
+import { accessRouter } from '../middleware/access.js';
 import { currentUser, isOwner } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { timeAgo } from '../lib/format.js';
@@ -47,7 +47,7 @@ function parseUserId(raw) {
   return m ? m[1] || m[2] : null;
 }
 
-const router = Router({ mergeParams: true });
+const router = accessRouter('/guilds/:guildId', { mergeParams: true });
 
 // Search as you type from a member picker, one count per person and server. Generous, because the
 // picker asks on every pause in typing; it mainly bounds the live lookups of pasted ids.

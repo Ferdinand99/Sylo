@@ -8,6 +8,8 @@ vi.mock('../api.js', () => ({
   getGuildSettings: vi.fn(),
   saveGuildSettings: vi.fn(),
   exportGuildConfig: vi.fn(),
+  getGuildAccess: vi.fn(),
+  saveGuildAccess: vi.fn(),
 }));
 vi.mock('../notify.js', () => ({ notify: vi.fn() }));
 const { getGuildSettings, saveGuildSettings } = await import('../api.js');

@@ -10,7 +10,7 @@
 // The only thing a signed-out visitor sees is the login page the dashboard sends everyone to.
 // Writes need the CSRF token (the global csrf middleware) and have their own rate limit; the
 // requirements of an item are checked on the server, never trusted from the page.
-import { Router } from 'express';
+import { accessRouter } from '../middleware/access.js';
 import { config as appConfig } from '../../config.js';
 import { rateLimit, clientKey } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -24,7 +24,7 @@ import { getTempRole } from '../../db/tempRoles.js';
 import { balanceOf, normaliseEconomyConfig } from '../../modules/economy.js';
 import { buyProblem, purchase, requirementsMet, shopRefusalText } from '../../modules/lib/shop.js';
 
-const router = Router({ mergeParams: true });
+const router = accessRouter('/shop/:guildId', { mergeParams: true });
 
 /** A purchase may call the platform (a role), so buying has its own limit: per person and server. */
 const buyLimit = rateLimit({

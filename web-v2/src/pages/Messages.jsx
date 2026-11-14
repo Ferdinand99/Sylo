@@ -10,9 +10,12 @@ import Meta from '../components/Meta.jsx';
 import ListPageHead from '../components/ListPageHead.jsx';
 import RowActions from '../components/RowActions.jsx';
 import EmptyList from '../components/EmptyList.jsx';
+import { useAccess } from '../access.jsx';
 
 export default function Messages() {
   const { guildId } = useParams();
+  // Creating a message needs Edit access (access.jsx); the list is for everyone who may look.
+  const canEdit = useAccess().can('edit');
   const { data, loading, error, setData } = useApiData(() => getComposedMessages(guildId), [guildId]);
 
   if (error) return <LoadError error={error} what="Embed messages" />;
@@ -56,9 +59,11 @@ export default function Messages() {
       <ListPageHead
         title="Embed messages"
         action={
-          <Link className="v2-btn-primary" to={`/guilds/${guildId}/messages/new`}>
-            + New embed message
-          </Link>
+          canEdit ? (
+            <Link className="v2-btn-primary" to={`/guilds/${guildId}/messages/new`}>
+              + New embed message
+            </Link>
+          ) : null
         }
       >
         <p className="v2-field-hint">
@@ -71,9 +76,11 @@ export default function Messages() {
       {data.items.length === 0 ? (
         <EmptyList
           action={
-            <Link className="v2-btn-ghost" to={`/guilds/${guildId}/messages/new`}>
-              + New embed message
-            </Link>
+            canEdit ? (
+              <Link className="v2-btn-ghost" to={`/guilds/${guildId}/messages/new`}>
+                + New embed message
+              </Link>
+            ) : null
           }
         >
           None yet — create one to post an embed to a channel.

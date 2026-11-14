@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useUnsavedChangesGuard } from './useUnsavedChangesGuard.js';
+import { LEVEL_LABEL, useAccess } from '../access.jsx';
 
 const SAVED_MS = 2000;
 const TEXT_LIKE = new Set([
@@ -22,7 +23,8 @@ const TEXT_LIKE = new Set([
  * unsaved-changes navigation guard, so render one per page, as the page's
  * last element (outside any <form>, so it sticks for the whole page).
  *
- * Props: dirty, saving, onSave(), onReset(), saveLabel ('Save'), guard (true).
+ * Props: dirty, saving, onSave(), onReset(), saveLabel ('Save'), guard (true), need ('edit': the
+ * dashboard access level saving needs; below it Save stays disabled and the bar says why).
  */
 export default function SaveBar({
   dirty,
@@ -31,7 +33,10 @@ export default function SaveBar({
   onReset,
   saveLabel = 'Save',
   guard = true,
+  need = 'edit',
 }) {
+  const { level, can } = useAccess();
+  const locked = !can(need);
   const [justSaved, setJustSaved] = useState(false);
   const wasSaving = useRef(false);
 
@@ -52,7 +57,7 @@ export default function SaveBar({
   }, [justSaved, dirty]);
 
   const latest = useRef({ dirty, saving, onSave });
-  latest.current = { dirty, saving, onSave };
+  latest.current = { dirty, saving: saving || locked, onSave };
   useEffect(() => {
     const onKey = (e) => {
       if (!(e.ctrlKey || e.metaKey) || e.altKey || e.key.toLowerCase() !== 's') return;
@@ -95,6 +100,7 @@ export default function SaveBar({
         onSave={onSave}
         onReset={onReset}
         saveLabel={saveLabel}
+        lockedAs={locked ? (LEVEL_LABEL[level] ?? 'Limited access') : null}
       />
     </>
   );
@@ -105,7 +111,7 @@ function Guard({ dirty }) {
   return null;
 }
 
-function SaveBarView({ dirty, saving, justSaved, onSave, onReset, saveLabel }) {
+function SaveBarView({ dirty, saving, justSaved, onSave, onReset, saveLabel, lockedAs }) {
   const visible = dirty || saving || justSaved;
   const mode = dirty || saving ? 'dirty' : 'saved';
   return (
@@ -127,6 +133,8 @@ function SaveBarView({ dirty, saving, justSaved, onSave, onReset, saveLabel }) {
             ) : null
           ) : saving ? (
             'Saving…'
+          ) : lockedAs ? (
+            `${lockedAs}: you can't save changes here`
           ) : (
             'Unsaved changes'
           )}
@@ -143,7 +151,7 @@ function SaveBarView({ dirty, saving, justSaved, onSave, onReset, saveLabel }) {
           <button
             type="button"
             className="v2-btn-primary"
-            disabled={!dirty || saving}
+            disabled={!dirty || saving || Boolean(lockedAs)}
             onClick={() => onSave?.()}
             title="Ctrl+S / ⌘S"
           >
