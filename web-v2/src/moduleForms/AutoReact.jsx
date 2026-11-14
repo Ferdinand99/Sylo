@@ -7,6 +7,7 @@ import UnitInput from '../components/UnitInput.jsx';
 import MemberPicker from '../components/MemberPicker.jsx';
 import { useMemberNames } from '../memberNames.js';
 import { cardTitle, channelTitle } from '../util.js';
+import { appendEmoji } from '../emojiText.js';
 import '../styles/wp1-members.css';
 
 const MODE_LABELS = { always: 'React to every message', random: 'React at a random chance' };
@@ -14,12 +15,6 @@ const ROLE_ACTION_LABELS = { add: 'Give it to them', remove: 'Take it away from 
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
-}
-
-/** The emoji list with `emoji` added at the end, space-separated (the field takes several). */
-export function appendEmoji(text, emoji) {
-  const current = String(text ?? '').trimEnd();
-  return current ? `${current} ${emoji}` : emoji;
 }
 
 function toFormRule(r) {
