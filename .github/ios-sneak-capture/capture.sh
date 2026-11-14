@@ -91,23 +91,37 @@ for ENTRY in 01:overview:testScene01Overview 02:health:testScene02Health 03:hist
   CLIP="$OUT/$ID-$NAME.mp4"
   if [ -n "$START" ] && [ -n "$END" ] && [ -s "$RAWFILE" ]; then
     # Seconds into the recording: the markers are wall-clock times, T0 is when recording began.
-    # The recorder only writes a frame when the screen changes, so the video is first made a steady
-    # 30 fps (a still screen repeats its last frame) and only then cut.
     FROM="$(awk -v s="$START" -v t="$T0" 'BEGIN { v = s - t - 0.5; if (v < 0) v = 0; printf "%.3f", v }')"
     TO="$(awk -v e="$END" -v t="$T0" 'BEGIN { printf "%.3f", e - t + 0.5 }')"
-    ENC="-c:v libx264 -preset veryfast -pix_fmt yuv420p -crf 18 -movflags +faststart -an"
+    # The recorder writes a frame only when the screen changes. Where nothing changed for longer than
+    # MAXHOLD seconds (the test is waiting for the simulator), the rest of that stretch is cut out.
+    MAXHOLD=2.2
+    GAPS="$(ffprobe -v error -select_streams v:0 -show_entries frame=pts_time -of default=nw=1:nk=1 "$RAWFILE"       | awk -v from="$FROM" -v to="$TO" -v hold="$MAXHOLD" '
+        { t = $1 + 0
+          if (NR > 1 && t >= from && prev <= to) {
+            gap = t - prev
+            if (gap > hold) {
+              a = prev + hold; if (a < from) a = from
+              b = t; if (b > to) b = to
+              if (b > a) expr = expr (expr == "" ? "" : "+") "between(t," a "," b ")"
+            }
+          }
+          prev = t
+        }
+        END { print (expr == "" ? "0" : expr) }')"
+    KEEP="between(t,$FROM,$TO)*not($GAPS)"
     if [ -n "$TYPE_START" ] && [ -n "$TYPE_END" ] && [ -n "$TYPE_CHARS" ]; then
-      # Typing is done a key at a time by the test, far slower than a person. That part is played
-      # faster, so the text appears at about eleven characters a second.
+      # Typing is done a key at a time by the test, far slower than a person. Only every Kth frame of
+      # that stretch is kept, so the text appears at about eleven characters a second.
       TA="$(awk -v s="$TYPE_START" -v t="$T0" 'BEGIN { printf "%.3f", s - t }')"
       TB="$(awk -v e="$TYPE_END" -v t="$T0" 'BEGIN { printf "%.3f", e - t }')"
-      FACTOR="$(awk -v a="$TYPE_START" -v b="$TYPE_END" -v n="$TYPE_CHARS" 'BEGIN { f = (b - a) * 11 / n; if (f < 1) f = 1; printf "%.3f", f }')"
-      echo "Cut $CLIP from $FROM s to $TO s, typing $TA-$TB s played $FACTOR times faster"
-      ffmpeg -y -loglevel error -i "$RAWFILE" -filter_complex         "[0:v]fps=30,split=3[a][b][c];[a]trim=start=$FROM:end=$TA,setpts=PTS-STARTPTS[v1];[b]trim=start=$TA:end=$TB,setpts=(PTS-STARTPTS)/$FACTOR[v2];[c]trim=start=$TB:end=$TO,setpts=PTS-STARTPTS[v3];[v1][v2][v3]concat=n=3:v=1:a=0,fps=30[out]"         -map "[out]" $ENC "$CLIP"
-    else
-      echo "Cut $CLIP from $FROM s to $TO s"
-      ffmpeg -y -loglevel error -i "$RAWFILE"         -vf "fps=30,trim=start=$FROM:end=$TO,setpts=PTS-STARTPTS" $ENC "$CLIP"
+      K="$(awk -v a="$TYPE_START" -v b="$TYPE_END" -v n="$TYPE_CHARS" 'BEGIN { f = (b - a) * 11 / n; k = int(f + 0.5); if (k < 1) k = 1; print k }')"
+      KEEP="$KEEP*(lt(t,$TA)+gt(t,$TB)+not(mod(n,$K)))"
+      echo "Typing $TA-$TB s: every $K. frame kept"
     fi
+    echo "Cut $CLIP from $FROM s to $TO s"
+    # fps first: a still screen then repeats its last frame, so the cut is on a steady 30 fps.
+    ffmpeg -y -loglevel error -i "$RAWFILE"       -vf "fps=30,select='$KEEP',setpts=N/(30*TB)"       -c:v libx264 -preset veryfast -pix_fmt yuv420p -crf 18 -movflags +faststart -an "$CLIP"
   elif [ -s "$RAWFILE" ]; then
     echo "No markers for scene $ID: keeping the whole recording"
     cp "$RAWFILE" "$CLIP"

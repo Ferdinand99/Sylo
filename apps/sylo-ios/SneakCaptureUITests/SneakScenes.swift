@@ -91,11 +91,12 @@ final class SneakScenes: XCTestCase {
         let alert = app.alerts.firstMatch
         XCTAssertTrue(alert.waitForExistence(timeout: 10), "reason alert did not show")
         let field = alert.textFields.firstMatch
-        field.tap()
-        // Typed a key at a time (typeText on a whole string shows it at once); the workflow plays this
-        // stretch faster, so it reads at about eleven characters a second.
+        // Typed a key at a time (typeText on a whole string shows it at once); the workflow thins this
+        // stretch out, so it reads at about eleven characters a second. The tap that opens the keyboard
+        // is part of it.
         let reason = "Great idea, let's start this Saturday."
         mark("04", "typestart")
+        field.tap()
         for character in reason {
             field.typeText(String(character))
         }
