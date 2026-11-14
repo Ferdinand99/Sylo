@@ -316,7 +316,7 @@ public final class ServerHealthModel {
     /// "Check again": asks the server to look now. A refusal for asking too soon, or any failure, keeps
     /// the answer on screen and says so in ``notice``.
     public func recheck() async {
-        guard isSupported, !isRechecking else { return }
+        guard isSupported, session.has(.health), !isRechecking else { return }
         isRechecking = true
         notice = nil
         defer { isRechecking = false }
@@ -325,7 +325,8 @@ public final class ServerHealthModel {
 
     /// Reads the check again after a save (the server dropped its copy then). Quiet on failure.
     public func refreshAfterSave() async {
-        guard isSupported else { return }
+        // Only a server that announced the check is asked, so a failed info read never sends a stray request.
+        guard isSupported, session.has(.health) else { return }
         _ = await read(refresh: false)
     }
 

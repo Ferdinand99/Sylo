@@ -74,6 +74,8 @@ struct MemberSearchModelsTests {
 @MainActor
 @Suite("Member search")
 struct MemberSearchTests {
+    /// A Sylo that announces the general member search.
+    nonisolated static let info = ServerInfo(features: [.appLogin, .memberSearch])
     nonisolated static let alex = MemberMatch(id: "111111111111111111", name: "Alex", username: "alex_99")
     nonisolated static let alexis = MemberMatch(id: "222222222222222222", name: "Alexis", username: "alexis")
 
@@ -84,6 +86,7 @@ struct MemberSearchTests {
     @Test("A search asks the server's member search and lists the matches")
     func searches() async {
         let clients = StubClients { endpoint in
+            if endpoint is Endpoints.ServerInfo { return Self.info }
             guard let search = endpoint as? Endpoints.SearchMembers else { throw NetworkError.notFound }
             #expect(search.text == "alex")
             return MemberSearchResult(members: [Self.alex, Self.alexis])
@@ -102,6 +105,7 @@ struct MemberSearchTests {
     @Test("A server without /members falls back to the Temporary roles search, and remembers it")
     func fallsBack() async {
         let clients = StubClients { endpoint in
+            if endpoint is Endpoints.ServerInfo { return Self.info }
             if endpoint is Endpoints.SearchMembers { throw NetworkError.notFound }
             return MemberSearchResult(members: [Self.alex])
         }
@@ -156,7 +160,10 @@ struct MemberSearchTests {
 
     @Test("A failed search says why and keeps the earlier results")
     func failure() async {
-        let clients = StubClients { _ in MemberSearchResult(members: [Self.alex]) }
+        let clients = StubClients { endpoint in
+            if endpoint is Endpoints.ServerInfo { return Self.info }
+            return MemberSearchResult(members: [Self.alex])
+        }
         let model = MemberSearchModel(server: "1", session: makeSignedInSession(clients: clients))
         model.query = "alex"
         await model.search()
@@ -178,6 +185,7 @@ struct MemberSearchTests {
     @Test("A pasted mention is searched as its id")
     func mentionSearchedAsID() async {
         let clients = StubClients { endpoint in
+            if endpoint is Endpoints.ServerInfo { return Self.info }
             guard let search = endpoint as? Endpoints.SearchMembers else { throw NetworkError.notFound }
             #expect(search.text == "111111111111111111")
             return MemberSearchResult(members: [Self.alex])
@@ -192,6 +200,7 @@ struct MemberSearchTests {
     @Test("What one search learned about the routes is kept for the sign-in, across pickers")
     func routeKeptOnSession() async {
         let clients = StubClients { endpoint in
+            if endpoint is Endpoints.ServerInfo { return Self.info }
             if endpoint is Endpoints.SearchMembers { throw NetworkError.notFound }
             return MemberSearchResult(members: [Self.alex])
         }
@@ -208,11 +217,13 @@ struct MemberSearchTests {
         #expect(count(Endpoints.SearchTempRoleMembers.self, in: clients) == 2)
     }
 
+    /// Waits until `count` member searches have reached the server (the info read before them is not counted).
     private func waitForCalls(_ clients: StubClients, _ count: Int) async throws {
-        for _ in 0..<1000 where clients.calls.count < count {
+        func searches() -> Int { clients.calls.filter { $0.endpoint is Endpoints.SearchMembers }.count }
+        for _ in 0..<1000 where searches() < count {
             try await Task.sleep(for: .milliseconds(5))
         }
-        #expect(clients.calls.count >= count)
+        #expect(searches() >= count)
     }
 
     @Test("An older search that ends does not switch the spinner off under a newer one")
@@ -222,6 +233,7 @@ struct MemberSearchTests {
         let gateOld = TestGate()
         let gateNew = TestGate()
         let clients = StubClients { endpoint in
+            if endpoint is Endpoints.ServerInfo { return Self.info }
             guard endpoint is Endpoints.SearchMembers else { throw NetworkError.notFound }
             return MemberSearchResult(members: [Self.alex])
         }
@@ -255,7 +267,8 @@ struct MemberSearchTests {
 
     @Test("A 404 about the server itself fails that search only and teaches the session nothing")
     func guildNotFoundIsNotARoute() async {
-        let clients = StubClients { _ in
+        let clients = StubClients { endpoint in
+            if endpoint is Endpoints.ServerInfo { return Self.info }
             throw NetworkError.notFound(message: "Unknown or unavailable server")
         }
         let session = makeSignedInSession(clients: clients)
@@ -278,6 +291,7 @@ struct MemberSearchTests {
     @Test("Express's stock 404 for a missing route is a missing route")
     func stockNotFoundIsARoute() async {
         let clients = StubClients { endpoint in
+            if endpoint is Endpoints.ServerInfo { return Self.info }
             if endpoint is Endpoints.SearchMembers { throw NetworkError.notFound(message: "Not found") }
             return MemberSearchResult(members: [Self.alex])
         }
@@ -287,6 +301,50 @@ struct MemberSearchTests {
         await model.search()
         #expect(session.memberSearchRoute == .tempRoles)
         #expect(model.results == [Self.alex])
+    }
+
+    @Test("A server that does not announce member-search is searched on the older route directly, with no probe")
+    func olderServerSkipsTheProbe() async {
+        let clients = StubClients { endpoint in
+            if endpoint is Endpoints.ServerInfo { return ServerInfo(features: [.appLogin]) }
+            guard endpoint is Endpoints.SearchTempRoleMembers else { throw NetworkError.notFound }
+            return MemberSearchResult(members: [Self.alex])
+        }
+        let model = MemberSearchModel(server: "1", session: makeSignedInSession(clients: clients))
+        model.query = "alex"
+        await model.search()
+        model.query = "alexi"
+        await model.search()
+        #expect(model.results == [Self.alex])
+        #expect(model.errorMessage == nil)
+        #expect(model.isAvailable)
+        #expect(count(Endpoints.SearchMembers.self, in: clients) == 0)
+        #expect(count(Endpoints.SearchTempRoleMembers.self, in: clients) == 2)
+    }
+
+    @Test("When the server's info cannot be read, the older route is used and nothing is learned from it")
+    func unknownFeaturesUseOlderRoute() async {
+        let clients = StubClients { endpoint in
+            if endpoint is Endpoints.ServerInfo { throw NetworkError.offline }
+            guard endpoint is Endpoints.SearchTempRoleMembers else { throw NetworkError.notFound }
+            return MemberSearchResult(members: [Self.alex])
+        }
+        let session = makeSignedInSession(clients: clients)
+        let model = MemberSearchModel(server: "1", session: session)
+        model.query = "alex"
+        await model.search()
+        #expect(model.results == [Self.alex])
+        #expect(count(Endpoints.SearchMembers.self, in: clients) == 0)
+        // Not remembered as the server's route: once the info arrives, the general search is used.
+        #expect(session.memberSearchRoute == .general)
+        clients.setHandler { endpoint in
+            if endpoint is Endpoints.ServerInfo { return Self.info }
+            return MemberSearchResult(members: [Self.alexis])
+        }
+        model.query = "alexi"
+        await model.search()
+        #expect(model.results == [Self.alexis])
+        #expect(count(Endpoints.SearchMembers.self, in: clients) == 1)
     }
 
     @Test("A search that finds the route unavailable clears the spinner it was showing")

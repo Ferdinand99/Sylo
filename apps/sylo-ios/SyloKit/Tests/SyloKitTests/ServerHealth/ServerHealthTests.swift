@@ -154,6 +154,40 @@ struct ServerHealthModelTests {
         #expect(model.targets == HealthTargets.none)
     }
 
+    @Test("Without the health feature, neither a save nor Check again sends a /health request")
+    func noRequestWithoutTheFeature() async {
+        // The info read failed (an offline start): nothing is known, so nothing is asked.
+        let unknown = StubClients { endpoint in
+            if endpoint is Endpoints.ServerInfo { throw NetworkError.offline }
+            return Self.report
+        }
+        let first = ServerHealthModel(server: "1", session: makeSignedInSession(clients: unknown))
+        await first.load()
+        await first.refreshAfterSave()
+        await first.recheck()
+        #expect(first.isSupported)
+        #expect(!unknown.calls.contains { $0.endpoint is Endpoints.LoadServerHealth })
+
+        // A Sylo 5.1 that did answer, without the string.
+        let older = StubClients { endpoint in
+            if endpoint is Endpoints.ServerInfo { return ServerInfo(features: [.appLogin]) }
+            throw NetworkError.notFound
+        }
+        let second = ServerHealthModel(server: "1", session: makeSignedInSession(clients: older))
+        await second.refreshAfterSave()
+        await second.recheck()
+        #expect(!older.calls.contains { $0.endpoint is Endpoints.LoadServerHealth })
+
+        // Once the info arrives with the string, a save reads the check.
+        unknown.setHandler { endpoint in
+            if endpoint is Endpoints.ServerInfo { return Self.info52 }
+            return Self.report
+        }
+        await first.load()
+        await first.refreshAfterSave()
+        #expect(unknown.calls.filter { $0.endpoint is Endpoints.LoadServerHealth }.count == 2)
+    }
+
     @Test("Check again asks for a fresh look")
     func recheck() async throws {
         let clients = StubClients { endpoint in

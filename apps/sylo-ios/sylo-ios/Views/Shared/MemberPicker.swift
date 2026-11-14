@@ -161,6 +161,7 @@ private struct MemberRow: View {
 
 #Preview {
     let session = AppSession.preview(.signedIn) { endpoint in
+        if endpoint is Endpoints.ServerInfo { return ServerInfo(features: [.appLogin, .memberSearch]) }
         guard endpoint is Endpoints.SearchMembers else { return nil }
         return MemberSearchResult(members: [
             MemberMatch(id: "111111111111111111", name: "Alex", username: "alex_99"),
