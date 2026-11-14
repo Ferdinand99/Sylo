@@ -1,5 +1,6 @@
 import { Suspense, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
+import '../styles/wp4-inbox.css';
 import { setModuleEnabled } from '../api.js';
 import { useOverview } from '../OverviewContext.jsx';
 import { MODULE_FORMS } from '../moduleForms/index.js';
@@ -10,6 +11,10 @@ import { PlatformContext } from '../platformContext.jsx';
 import NotFound from '../components/NotFound.jsx';
 import Reveal from '../components/Reveal.jsx';
 import Switch from '../components/Switch.jsx';
+
+// Modules whose queue is a page of its own: their settings link back to it ("Open the inbox →"), as the
+// inbox pages link to their settings. (Applications and Suggestions keep both in one page, as tabs.)
+const INBOX_PATH = { tickets: '/tickets', appeals: '/appeals' };
 
 // The module's on/off state with a switch, so a module can be turned on from
 // its own settings page. Reads and patches the same shared overview state the
@@ -99,6 +104,11 @@ export default function ModulePage() {
 
   return (
     <PlatformContext.Provider value={info}>
+      {INBOX_PATH[moduleId] ? (
+        <p className="wp4-inbox-link">
+          <Link to={`/guilds/${guildId}${INBOX_PATH[moduleId]}`}>Open the inbox →</Link>
+        </p>
+      ) : null}
       {card?.hasToggle ? <ModuleStatusBar card={card} onToggle={onToggle} /> : null}
       {note ? (
         <p className="v2-note v2-platform-note">

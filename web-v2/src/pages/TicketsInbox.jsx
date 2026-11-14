@@ -1,4 +1,5 @@
 import { Link, useParams } from 'react-router-dom';
+import '../styles/wp4-inbox.css';
 import { getTickets } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import LoadError from '../components/LoadError.jsx';
@@ -37,7 +38,12 @@ export default function TicketsInbox() {
 
   return (
     <Reveal>
-      <h1 className="v2-section-title">Tickets</h1>
+      <div className="v2-page-head">
+        <h1 className="v2-section-title">Tickets</h1>
+        <Link className="v2-row-arrow" to={`/guilds/${guildId}/m/tickets`}>
+          Ticket settings →
+        </Link>
+      </div>
       <p className="v2-field-hint">
         Members open a ticket by sending the bot a DM. Replies you write here reach them as an anonymous
         "Staff" DM.

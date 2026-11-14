@@ -117,7 +117,7 @@ describe('attentionItems', () => {
     expect(byKey.tickets.title).toBe('2 open tickets');
     expect(byKey.tickets.href).toBe(`/guilds/${G}/tickets`);
     expect(byKey.applications.title).toBe('3 applications waiting');
-    expect(byKey.applications.href).toBe(`/guilds/${G}/m/applications`);
+    expect(byKey.applications.href).toBe(`/guilds/${G}/m/applications?tab=submissions`);
     expect(byKey.suggestions.title).toBe('1 open suggestion');
     expect(byKey['setup-logging'].detail).toBe('The log channel is not set');
     expect(byKey['setup-logging'].href).toBe(`/guilds/${G}/m/logging`);
@@ -183,6 +183,16 @@ describe('navModel', () => {
       'Audit log',
     ]);
     expect(nav.server.map((i) => i.label)).toEqual(['Server settings', 'Commands']);
+  });
+
+  it('opens the Applications entry on the queue when applications wait, and on the page default when none do', () => {
+    const href = (d) => navModel({ guildId: G, data: d, operator: false }).inbox.find((i) => i.key === 'applications').href;
+    expect(href(data)).toBe(`/guilds/${G}/m/applications?tab=submissions`);
+    const none = { ...data, attention: { waiting: { ...data.attention.waiting, applications: 0 } } };
+    expect(href(none)).toBe(`/guilds/${G}/m/applications`);
+    // Suggestions open on the queue by themselves; their entry needs no query.
+    const sug = navModel({ guildId: G, data, operator: false }).inbox.find((i) => i.key === 'suggestions');
+    expect(sug.href).toBe(`/guilds/${G}/m/suggestions`);
   });
 
   it('takes the inbox counts from the attention data (a module that is off counts nothing), else from the totals', () => {

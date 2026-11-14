@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import '../styles/wp4-inbox.css';
 import { getTicket, pollTicket, replyToTicket, closeTicket, ticketTranscriptUrl } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
@@ -7,7 +8,9 @@ import LoadError from '../components/LoadError.jsx';
 import Meta from '../components/Meta.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import Badge from '../components/Badge.jsx';
-import CopyButton from '../components/CopyButton.jsx';
+import Breadcrumb from '../components/Breadcrumb.jsx';
+import { copyText } from '../components/CopyButton.jsx';
+import OverflowMenu from '../components/OverflowMenu.jsx';
 import Time from '../components/Time.jsx';
 
 const POLL_MS = 6000;
@@ -134,6 +137,11 @@ export default function TicketView() {
     }
   }
 
+  async function copyUserId() {
+    const ok = await copyText(ticket.userId);
+    notify(ok ? 'User ID copied.' : 'Could not copy the user ID.', ok ? 'info' : 'error');
+  }
+
   async function close() {
     const ok = await confirmDialog({
       title: `Close ticket #${ticket.id}?`,
@@ -159,33 +167,34 @@ export default function TicketView() {
 
   return (
     <>
-      <p className="v2-field-hint">
-        <Link to={`/guilds/${guildId}/tickets`}>← Tickets</Link>
-      </p>
-      <h1 className="v2-section-title v2-ticket-title">
-        Ticket #{ticket.id}
-        {/* An unresolved name is the raw ID, which the meta line below already shows with a Copy button. */}
-        {ticket.user && ticket.user !== ticket.userId ? (
-          <>
-            {' '}
-            <span className="v2-ticket-user">{ticket.user}</span>
-          </>
+      <Breadcrumb parents={[{ label: 'Tickets', to: `/guilds/${guildId}/tickets` }]} current={`#${ticket.id}`} />
+      <div className="wp4-ticket-head">
+        <h1 className="v2-section-title v2-ticket-title">
+          Ticket #{ticket.id}
+          {/* An unresolved name is the raw ID, which only the menu shows (Copy user ID). */}
+          {ticket.user && ticket.user !== ticket.userId ? (
+            <>
+              {' '}
+              <span className="v2-ticket-user">{ticket.user}</span>
+            </>
+          ) : null}
+          <Badge tone={status === 'open' ? 'warning' : 'neutral'} className="wp4-ticket-title-badge">
+            {status === 'open' ? 'Open' : 'Closed'}
+          </Badge>
+        </h1>
+        {ticket.userId ? (
+          <OverflowMenu
+            label={`More actions for ticket #${ticket.id}`}
+            items={[{ label: 'Copy user ID', onClick: copyUserId }]}
+          />
         ) : null}
-      </h1>
+      </div>
       <p className="v2-field-hint">
         <Meta
           items={[
-            ticket.userId && (
-              <span key="id">
-                User ID <code>{ticket.userId}</code> <CopyButton text={ticket.userId} what="user ID" />
-              </span>
-            ),
             <span key="o">
               opened <Time value={ticket.openedAt} relative fallback={ticket.openedAgo} />
             </span>,
-            <Badge key="s" tone={status === 'open' ? 'warning' : 'neutral'}>
-              {status === 'open' ? 'Open' : 'Closed'}
-            </Badge>,
             <a key="t" href={ticketTranscriptUrl(guildId, ticketId)} download>
               Download transcript
             </a>,

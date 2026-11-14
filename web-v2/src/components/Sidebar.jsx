@@ -41,7 +41,9 @@ function NavLinks({ items, pathname, onClose, title, separated = false }) {
             </a>
           );
         }
-        const active = pathname === it.href || (it.prefix && pathname.startsWith(`${it.href}/`));
+        // A link may carry a query ("?tab=submissions"); only its path says which page is open.
+        const path = it.href.split('?')[0];
+        const active = pathname === path || (it.prefix && pathname.startsWith(`${path}/`));
         return (
           <Link
             key={it.key}
