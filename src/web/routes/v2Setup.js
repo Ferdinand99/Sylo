@@ -74,11 +74,15 @@ router.post(
     if (!selections) return res.status(400).json({ error: 'Choose what to set up first.' });
     // Changing the permissions of a channel that exists is something the bot does with its own rights:
     // the person asking must be allowed to do it on the platform (live check; the owner and Administrators
-    // always are). Creating new channels with the wizard's overwrites stays open to Edit.
-    const wantsFix = selections.some((s) =>
+    // always are). Creating new channels with the wizard's overwrites stays open to Edit. A channel picked
+    // by id is refused here; one the wizard would reuse by its name is refused inside applySetup, which
+    // is told what the person may do.
+    const mayChangeChannels =
+      (await actorHolds(req, 'ManageChannels')) && (await actorHolds(req, 'ManageRoles'));
+    const picksFix = selections.some((s) =>
       Object.values(s.fields).some((pick) => pick.fix === true && !pick.create)
     );
-    if (wantsFix && !((await actorHolds(req, 'ManageChannels')) && (await actorHolds(req, 'ManageRoles')))) {
+    if (picksFix && !mayChangeChannels) {
       return res.status(403).json({
         error: "You need Manage Channels and Manage Roles in this server to change a channel's permissions.",
       });
@@ -88,7 +92,12 @@ router.post(
     }
     running.add(req.guild.id);
     try {
-      const results = await applySetup({ guild: req.guild, selections, actor: actor(req) });
+      const results = await applySetup({
+        guild: req.guild,
+        selections,
+        actor: actor(req),
+        mayChangeChannels,
+      });
       res.json({ results });
     } finally {
       running.delete(req.guild.id);

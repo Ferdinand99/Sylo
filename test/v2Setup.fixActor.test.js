@@ -75,10 +75,12 @@ test('Administrator gets past the check', async () => {
   assert.equal((await apply(fixExisting)).status, 200);
 });
 
-test('creating a new channel with the wizard permissions stays open to Edit', async () => {
+test('creating a new channel with the wizard permissions is not stopped by the permission check', async () => {
   const apply = await signedIn(['ManageGuild']);
   const res = await apply({ channelId: { create: true, fix: true } });
   assert.equal(res.status, 200);
+  const [result] = (await res.json()).results;
+  assert.doesNotMatch(result.message, /Manage Channels and Manage Roles in this server/);
 });
 
 test('picking a channel without ticking the permission change stays open to Edit', async () => {
