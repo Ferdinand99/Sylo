@@ -27,8 +27,6 @@ Moderation, tickets, welcome flows, an economy and alerts, in one place and free
 
 <img src="docs/media/sylo-demo.gif" alt="A short demo: the dashboard's Needs attention list leads to a role warning right at the setting, then the Sylo iOS app shows the same server on four phone screens." width="900" />
 
-<!-- full video: drag the mp4 into this README on GitHub to get a user-attachments URL -->
-
 </div>
 
 ## A look at Sylo
