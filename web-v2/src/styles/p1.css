@@ -1,0 +1,24 @@
+/* The focused moderator view (Sidebar.jsx): the quiet switch at the foot of the sidebar. */
+.v2-sidebar-foot {
+  margin-top: auto;
+  padding: 16px 12px 0;
+}
+.v2-sidebar-focus-toggle {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--fs-xs);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.v2-sidebar-focus-toggle:hover {
+  color: var(--text);
+}
+.v2-sidebar-focus-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}

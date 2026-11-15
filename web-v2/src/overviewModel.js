@@ -195,12 +195,17 @@ const INBOX_SAME_PAGE = new Set(['applications', 'suggestions']);
 // Inbox entries whose queue is another page than the module's settings: the settings keep an entry.
 const SETTINGS_SUFFIX = new Set(['tickets', 'appeals']);
 
+// What the focused moderator view keeps of "Members & moderation": every page here only needs View to
+// read, and its actions are guarded by the server; the leaderboard is not a moderation tool.
+const FOCUSED_PEOPLE = new Set(['moderation', 'member-data', 'audit']);
+
 /**
  * The sidebar as groups. `guildId` is null before a server is picked (links are then null and shown
  * disabled). `operator` is whether the server marks the viewer as the bot owner (OWNER_IDS): the bot
- * pages (Bot personalizer, Health, Roadmap admin, Stats cache) only exist for them.
+ * pages (Bot personalizer, Health, Roadmap admin, Stats cache) only exist for them. `focused` is the
+ * moderator view for an Inbox-level person (see useAccess in access.jsx).
  */
-export function navModel({ guildId, data, operator }) {
+export function navModel({ guildId, data, operator, focused = false }) {
   const g = (path) => (guildId ? `/guilds/${guildId}${path}` : null);
   const waiting = data?.attention?.waiting ?? {};
   const count = (n) => (Number(n) > 0 ? Number(n) : 0);
@@ -281,5 +286,18 @@ export function navModel({ guildId, data, operator }) {
         { key: 'stats', label: 'Game stats cache', icon: 'chart', href: '/stats' },
       ]
     : [];
+  if (focused) {
+    // The focused moderator view (an Inbox-level person): the inboxes and the moderation tools, nothing
+    // about setting the server up. Operators keep their bot pages.
+    return {
+      top: [],
+      inbox,
+      people: people.filter((it) => FOCUSED_PEOPLE.has(it.key)),
+      modules: [],
+      server: [],
+      more: [],
+      bot,
+    };
+  }
   return { top, inbox, people, modules, server, more, bot };
 }

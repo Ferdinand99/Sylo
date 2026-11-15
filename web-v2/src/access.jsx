@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { getGuildAccess } from './api.js';
+import { readShowEverything, writeShowEverything } from './util.js';
 
 // The signed-in person's dashboard access level in the selected server (src/web/middleware/access.js
 // on the server): 'view' reads only, 'inbox' may also act on tickets, appeals, applications and
@@ -12,12 +13,26 @@ const RANK = { view: 1, inbox: 2, edit: 3 };
 
 export const LEVEL_LABEL = { view: 'View only', inbox: 'Inbox only' };
 
-const AccessContext = createContext({ level: 'edit', guildId: null, reload: () => {} });
+// `ready` is false while the level of the selected server is still being read. `showEverything` is the
+// Inbox person's choice to see the full navigation instead of the focused view (see useAccess).
+const AccessContext = createContext({
+  level: 'edit',
+  guildId: null,
+  reload: () => {},
+  ready: true,
+  showEverything: false,
+  setShowEverything: () => {},
+});
 
 export function AccessProvider({ guildId, children }) {
   const [state, setState] = useState({ guildId: null, level: 'edit' });
   const [tick, setTick] = useState(0);
   const reload = useCallback(() => setTick((t) => t + 1), []);
+  const [showEverything, setShow] = useState(readShowEverything);
+  const setShowEverything = useCallback((on) => {
+    setShow(Boolean(on));
+    writeShowEverything(Boolean(on));
+  }, []);
 
   useEffect(() => {
     if (!guildId) return undefined;
@@ -37,8 +52,15 @@ export function AccessProvider({ guildId, children }) {
   }, [guildId, tick]);
 
   // The level of another server (the previous one, while the new one loads) is not used.
-  const level = state.guildId === guildId ? state.level : 'edit';
-  return <AccessContext.Provider value={{ level, guildId, reload }}>{children}</AccessContext.Provider>;
+  const known = state.guildId === guildId;
+  const level = known ? state.level : 'edit';
+  // Without a server there is nothing to wait for.
+  const ready = !guildId || known;
+  return (
+    <AccessContext.Provider value={{ level, guildId, reload, ready, showEverything, setShowEverything }}>
+      {children}
+    </AccessContext.Provider>
+  );
 }
 
 /**
@@ -46,8 +68,22 @@ export function AccessProvider({ guildId, children }) {
  *   const { can } = useAccess(); <button disabled={!can('inbox')}>Reply</button>
  */
 export function useAccess() {
-  const { level, guildId, reload } = useContext(AccessContext);
-  return { level, guildId, reload, can: (need) => (RANK[level] ?? 0) >= RANK[need] };
+  const { level, guildId, reload, ready, showEverything, setShowEverything } = useContext(AccessContext);
+  return {
+    level,
+    guildId,
+    reload,
+    ready,
+    can: (need) => (RANK[level] ?? 0) >= RANK[need],
+    // The focused moderator view: a person whose level here is exactly Inbox gets the moderation tools
+    // instead of the whole dashboard, unless they chose "Show everything". View keeps the full read-only
+    // dashboard (observers need the whole picture) and Edit is unchanged. `canFocus` is whether the choice
+    // is theirs to make at all.
+    canFocus: level === 'inbox',
+    focused: level === 'inbox' && !showEverything,
+    showEverything,
+    setShowEverything,
+  };
 }
 
 /**
