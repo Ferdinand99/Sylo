@@ -102,6 +102,7 @@ import {
   getGuildModules,
   listEnabledModuleConfigs,
   setGuildModule,
+  checkSwitchOn,
 } from '../../db/modules.js';
 import {
   normaliseLevelingConfig,
@@ -655,6 +656,9 @@ router.post(
       ),
     ];
     const enabled = Boolean(req.body.enabled);
+    // Switching modules on brings back what their settings hand out: if the person may not do that for one of
+    // them, none is switched on (a half-applied bulk change would be shown wrongly by the page).
+    if (enabled) await checkSwitchOn(req.guild.id, ids);
     for (const id of ids) {
       await setGuildModule(req.guild.id, id, { enabled });
       if (id === 'introductions' && !enabled) cancelIntroductionSessions(req.guild.id);

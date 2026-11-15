@@ -138,6 +138,7 @@ test('switching a module on checks every grant it holds', async () => {
   const { post } = await signedIn();
   const res = await post('roles', { enabled: true });
   assert.equal(res.status, 403);
+  assert.match((await res.json()).error, /Switching Reaction roles & autoroles on is refused.*Council is above/s);
   assert.equal((await getGuildModule(D_GUILD, 'roles')).enabled, false);
   // Switching it off is not a grant.
   await setGuildModule(D_GUILD, 'roles', { enabled: true });
@@ -164,4 +165,34 @@ test('moduleGrantSites tells the same role apart by where it is handed out', () 
       commands: [{ id: '1', actions: [{ type: 'add-role', roleId: '5' }] }],
     })
   );
+});
+
+test('a bulk switch-on that includes a refused module changes none of them', async () => {
+  await setGuildModule(D_GUILD, 'afk', { enabled: false });
+  await setGuildModule(D_GUILD, 'roles', { enabled: false, config: { autoroles: [HIGH.id] } });
+  const { post } = await signedIn();
+  const res = await post('bulk', { ids: ['afk', 'roles'], enabled: true });
+  assert.equal(res.status, 403);
+  assert.equal((await getGuildModule(D_GUILD, 'afk')).enabled, false, 'the allowed one was not switched on either');
+  assert.equal((await getGuildModule(D_GUILD, 'roles')).enabled, false);
+  const fine = await post('bulk', { ids: ['afk'], enabled: true });
+  assert.equal(fine.status, 200);
+  assert.equal((await getGuildModule(D_GUILD, 'afk')).enabled, true);
+});
+
+test('an auto-react rule that widens who gets the role, by mode or chance, is a new grant site', () => {
+  const rule = (over) => ({
+    id: 'r1',
+    targetUsers: ['1'],
+    targetRoles: [],
+    roleId: '5',
+    roleAction: 'add',
+    mode: 'random',
+    chance: 1,
+    ...over,
+  });
+  const site = (r) => moduleGrantSites('auto-react', { rules: [r] })[0].site;
+  assert.notEqual(site(rule({})), site(rule({ chance: 100 })));
+  assert.notEqual(site(rule({})), site(rule({ mode: 'always' })));
+  assert.equal(site(rule({})), site(rule({ emojis: ['x'] })), 'unrelated edits are not changes');
 });
