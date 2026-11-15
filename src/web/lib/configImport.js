@@ -29,9 +29,10 @@ import { commandPrefixError } from '../../lib/commandPrefix.js';
 import { canPostInChannel } from './modlogChannel.js';
 import { guildTextChannels } from './discord.js';
 import { changedSettings } from '../../lib/configSnapshot.js';
-import { namesFor } from './configUndo.js';
+import { mayTouchModule, namesFor } from './configUndo.js';
 import { log } from '../../lib/log.js';
 import { normaliseAfkConfig } from '../../modules/afk.js';
+import { normaliseAppleConfig } from '../../modules/appleConnect.js';
 import { normaliseAppealsConfig } from '../../modules/appeals.js';
 import { normaliseApplicationsConfig } from '../../modules/lib/applicationsForm.js';
 import { normaliseAutoReact } from '../../modules/autoReact.js';
@@ -250,6 +251,9 @@ const background = (what, p) =>
 
 const IMPORTERS = {
   afk: { prepare: (c) => normaliseAfkConfig(c) },
+  // Owner-only module: planned and applied only for a Sylo operator, through the same normaliser and
+  // setGuildModule as the operator's own save (routes/v2Api.js).
+  'apple-connect': { prepare: (c) => normaliseAppleConfig(c) },
   birthdays: { prepare: (c) => normaliseBirthdaysConfig(c) },
   counting: { prepare: (c) => normaliseCountingConfig(c) },
   moderation: { prepare: (c) => normaliseModerationConfig(c) },
@@ -579,14 +583,14 @@ async function planSettings(guild, file) {
   });
 }
 
-async function planModule(guild, entry) {
+async function planModule(guild, entry, { owner = false } = {}) {
   const { moduleId } = entry;
   const label = getModule(moduleId)?.name ?? moduleId;
   const key = `module:${moduleId}`;
   const skip = (why) => toItem(key, 'module', label, { status: 'skip', notes: [why] });
   const mod = getModule(moduleId);
   if (!mod) return skip('This Sylo has no module with this name.');
-  if (mod.ownerOnly) return skip('Only a Sylo operator can set this module up.');
+  if (!mayTouchModule(moduleId, owner)) return skip('Only a Sylo operator can set this module up.');
   if (SKIPPED[moduleId]) return skip(SKIPPED[moduleId]);
   const importer = IMPORTERS[moduleId];
   if (!importer) return skip('This module cannot be imported yet.');
@@ -673,13 +677,15 @@ async function planOverride(guild, entry, current) {
  * What importing `doc` into `guild` would do, item by item. Changes nothing.
  * @param {object} guild
  * @param {unknown} doc  the parsed export
+ * @param {{ owner?: boolean }} [opts]  `owner`: the person is a Sylo operator, so owner-only modules are
+ *   planned too (anyone else gets them skipped)
  */
-export async function planImport(guild, doc) {
+export async function planImport(guild, doc, { owner = false } = {}) {
   const file = readExport(doc);
   const items = [];
   const settings = await planSettings(guild, file);
   if (settings) items.push(settings);
-  for (const entry of file.modules) items.push(await planModule(guild, entry));
+  for (const entry of file.modules) items.push(await planModule(guild, entry, { owner }));
   const overrides = await getCommandOverrides(guild.id);
   for (const entry of file.overrides) items.push(await planOverride(guild, entry, overrides));
   return {
@@ -752,11 +758,11 @@ async function applyItem(guild, item, actor) {
  * @param {object} guild
  * @param {unknown} doc
  * @param {string[]} keys  the item keys to apply
- * @param {{ actor: string }} opts
+ * @param {{ actor: string, owner?: boolean }} opts
  * @returns {Promise<{ results: { key: string, label: string, ok: boolean, error?: string }[] }>}
  */
-export async function applyImport(guild, doc, keys, { actor }) {
-  const plan = await planImport(guild, doc);
+export async function applyImport(guild, doc, keys, { actor, owner = false }) {
+  const plan = await planImport(guild, doc, { owner });
   const wanted = new Set(keys);
   const results = [];
   let applied = 0;

@@ -83,6 +83,8 @@ const LABELS = {
   modlogChannelId: 'Mod-log channel',
   embedColor: 'Embed colour',
   botMasterRoleIds: 'Bot master roles',
+  inboxRoleIds: 'Inbox roles',
+  viewRoleIds: 'View roles',
   commandPrefix: 'Command prefix',
 };
 

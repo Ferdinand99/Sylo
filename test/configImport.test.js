@@ -3,13 +3,19 @@
 // needs the typed word and is audited.
 import { startWebApp } from './helpers/webApp.js';
 import { v2Open, auditRows } from './helpers/v2Open.js';
-import { GID, CH, ROLE } from './helpers/fakeGuild.js';
+import { GID, CH, ROLE, fakeGuild } from './helpers/fakeGuild.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getGuildModule, setGuildModule } from '../src/db/modules.js';
 import { getGuildSettings } from '../src/db/guildSettings.js';
 import { getCommandOverride } from '../src/db/commandOverrides.js';
-import { IMPORTABLE_MODULES, ImportError, readExport } from '../src/web/lib/configImport.js';
+import {
+  IMPORTABLE_MODULES,
+  ImportError,
+  applyImport,
+  planImport,
+  readExport,
+} from '../src/web/lib/configImport.js';
 import { getAuditEntry, listAudit } from '../src/db/audit.js';
 
 let app;
@@ -193,25 +199,69 @@ test('channel and role mentions of another server are removed from text, the one
   assert.equal(stored.appealMessage, `Vote in  or <#${CH.general}>  <@&${ROLE.member}>`);
 });
 
-test('a module that cannot be imported, an unknown one and an operator-only one are skipped with a reason', async () => {
+test('a module that cannot be imported and an unknown one are skipped with a reason', async () => {
   const doc = file({
     modules: [
       { moduleId: 'custom-commands', enabled: true, config: { commands: [] } },
       { moduleId: 'reminders', enabled: true, config: {} },
       { moduleId: 'no-such-module', enabled: true, config: {} },
-      { moduleId: 'apple-connect', enabled: true, config: { appId: 'x' } },
     ],
   });
   const { body } = await preview(doc);
-  for (const id of ['custom-commands', 'reminders', 'no-such-module', 'apple-connect']) {
+  for (const id of ['custom-commands', 'reminders', 'no-such-module']) {
     const it = item(body, `module:${id}`);
     assert.equal(it.status, 'skip', id);
     assert.ok(it.notes[0].length > 10, id);
   }
-  assert.match(item(body, 'module:apple-connect').notes[0], /operator/);
-  const { body: applied } = await apply(doc, ['module:apple-connect', 'module:reminders']);
+  const { body: applied } = await apply(doc, ['module:reminders']);
   assert.ok(applied.results.every((r) => r.ok === false));
-  assert.equal((await getGuildModule(GID, 'apple-connect')).config.appId, undefined);
+});
+
+// The route is in open mode here, where the signed-in person counts as an operator.
+const APPLE = {
+  moduleId: 'apple-connect',
+  enabled: true,
+  config: { channelId: CH.general, apps: ['6446998023'], events: { build: { enabled: false } } },
+};
+
+test('an operator-only module is skipped for a person who is not an operator, and nothing is written', async () => {
+  const { guild } = fakeGuild();
+  await setGuildModule(GID, 'apple-connect', { enabled: false, config: {} });
+  const doc = file({ modules: [APPLE] });
+  for (const opts of [undefined, { owner: false }]) {
+    const plan = await planImport(guild, doc, opts);
+    const it = plan.items.find((i) => i.key === 'module:apple-connect');
+    assert.equal(it.status, 'skip');
+    assert.match(it.notes[0], /operator/);
+  }
+  const { results } = await applyImport(guild, doc, ['module:apple-connect'], { actor: 'Test' });
+  assert.equal(results[0].ok, false);
+  assert.match(results[0].error, /operator/);
+  const stored = await getGuildModule(GID, 'apple-connect');
+  assert.equal(stored.enabled, false);
+  assert.deepEqual(stored.config, {});
+});
+
+test('an operator applies an operator-only module through its own normaliser and setGuildModule', async () => {
+  await setGuildModule(GID, 'apple-connect', { enabled: false, config: {} });
+  const doc = file({ modules: [APPLE] });
+  const { body } = await preview(doc);
+  assert.equal(item(body, 'module:apple-connect').status, 'change');
+  // Through the library, so the per-server limit of the apply route is left for the tests that use it.
+  const { results } = await applyImport(fakeGuild().guild, doc, ['module:apple-connect'], {
+    actor: 'Test',
+    owner: true,
+  });
+  assert.deepEqual(
+    results.map((r) => [r.key, r.ok, r.error]),
+    [['module:apple-connect', true, undefined]]
+  );
+  const stored = await getGuildModule(GID, 'apple-connect');
+  assert.equal(stored.enabled, true);
+  assert.equal(stored.config.channelId, CH.general);
+  assert.deepEqual(stored.config.apps, ['6446998023']);
+  assert.equal(stored.config.events.build.enabled, false);
+  assert.equal((await auditRows(GID, 'module:apple-connect')).length > 0, true);
 });
 
 test('server settings: a colour is imported, a mod-log channel of another server is not, Discord has no prefix, and the dashboard access roles are never touched', async () => {

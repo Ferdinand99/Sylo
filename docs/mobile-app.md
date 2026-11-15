@@ -258,7 +258,9 @@ The feature strings:
 - `access-levels`: the dashboard [access levels](#access-levels) (View, Inbox, Edit).
 - `health`: `GET /api/v2/guilds/:id/health`, the [health check](#health-check).
 - `setup-wizard`: `GET /api/v2/guilds/:id/setup/suggest` and `POST /api/v2/guilds/:id/setup/apply`.
-- `config-history`: the before and after values on audit entries, and `POST /api/v2/guilds/:id/audit/:entryId/undo`.
+- `config-history`: the before and after values of audit entries, and the undo:
+  - `GET /api/v2/guilds/:id/audit/:entryId/change`: the audit list only flags an entry with `hasChange` (and `revertsId`, the entry an undo undid). This call gives the values: `before` and `after` (secrets masked), `names` (channel, role and member names for the ids in them), `kind` (`"module"`, `"settings"` or `null`) and `undo`. `undo` has `available`, `reason` when it is not, `state` (`clean`: nothing changed since; `changed`: changed again since; `reverted`: already back to the earlier values), `laterChanges` (the keys changed again), `token`, `notRestored` and `droppedSecrets`. A change too large to keep answers `tooLarge: true` and an `undo` with `available: false`. An entry without a saved change is a `404`.
+  - `POST /api/v2/guilds/:id/audit/:entryId/undo`: restores the earlier values and answers `{ ok, adjusted, notRestored }`. When the settings were changed again since the entry it answers `409` with `code: "changed-since"`, `laterChanges` and a `token` instead, and restores nothing. The app shows what would be lost, and if the person confirms it sends the same request again with `confirm: true` and that `token`. The token names the saved values the person saw, so if they changed again meanwhile the answer is a new `409`. When `state` is `changed`, `GET …/change` already gives that `token` (otherwise it is `null`), so the app can ask first.
 - `inbox-search`: `GET /api/v2/guilds/:id/search/inbox`.
 - `config-import`: `POST /api/v2/guilds/:id/import/preview` and `POST /api/v2/guilds/:id/import/apply`.
 - `duplicate`: the `duplicate` routes for reminders, embed messages, reaction-role sets, custom commands and shop items.
