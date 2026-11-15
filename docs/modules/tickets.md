@@ -33,5 +33,13 @@ server. Staff reply as **Staff** from the ticket page; the member sees Sylo's DM
 **Close ticket** sends a final reply (or the default closing notice if the box is
 empty) and closes it. The member can open a new one by DMing again.
 
+To find the servers a member shares with the bot, Sylo uses its member cache first. A server
+whose full member list is cached (Server Members intent on) answers without any request to
+Discord. For the others it asks Discord for the one member, at most 8 servers per message, at most
+120 requests a minute for the whole bot, and it remembers "not a member" for two minutes. Without
+the Server Members intent a member is still found this way; if a message could not check every
+server yet, the member is asked to send it again a few seconds later, which continues with the
+servers not checked yet.
+
 `/forget` removes the member's ticket history: every message in their tickets,
 staff replies included. Replies already delivered by DM are not clawed back.

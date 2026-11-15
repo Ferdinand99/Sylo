@@ -1,12 +1,13 @@
 // Ticket / modmail helpers. Users DM the bot; staff reply from the dashboard.
 // The bot relays messages both ways. Staff replies are anonymous ("Staff").
-import { allGuilds, clientOfGuild, guildByKey, guildKey } from '../platform/platformOf.js';
+import { allGuilds, clientOfGuild, guildByKey, guildKey, platformOfClient } from '../platform/platformOf.js';
 import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import { config } from '../config.js';
 import { idList } from '../web/lib/idList.js';
 import { clampRetentionDays } from './lib/retentionDays.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { notifyTicketActivity } from '../lib/push.js';
+import { sweepMap } from '../lib/sweepMap.js';
 import {
   openOrCreateTicket,
   getTicket,
@@ -152,18 +153,151 @@ ${bubbles}
   return { filename: `ticket-${ticket.id}-transcript.html`, html };
 }
 
-/**
- * Guilds where the tickets module is enabled and the user is a member. Pass the client the
- * DM arrived on to look only at that platform's servers.
- */
-export async function ticketGuildsForUser(user, client) {
-  const out = [];
-  for (const guild of client ? [...client.guilds.cache.values()] : allGuilds()) {
-    if (!(await isModuleEnabled(guildKey(guild), 'tickets'))) continue;
-    const member = await guild.members.fetch(user.id).catch(() => null);
-    if (member) out.push(guild);
+// --- Which ticket servers is a DM sender in? --------------------------------------------------
+// Any account can DM the bot, so the lookup must cost little however many servers the instance
+// has. Order of work: (1) members already in the cache cost nothing; (2) when the member cache of
+// a server is known to be complete (GuildMembers intent on and every member cached) a miss is a
+// definite "not a member"; (3) only the rest need a REST member fetch, and those are capped per
+// DM, per minute for the whole bot, remembered when the member does not exist, and tried first
+// where the user was found before. Without the GuildMembers intent the member caches are sparse,
+// so step 3 is the only way to find a real sender: it still works, a few servers per DM, and a
+// sender whose servers were not all checked is told to send the message again, which continues
+// with the servers not yet checked.
+
+/** Most REST member fetches one DM may cause. */
+export const MEMBER_PROBES_PER_DM = 8;
+/** Most REST member fetches all DMs together may cause per minute. */
+export const MEMBER_PROBES_PER_MINUTE = 120;
+/** A "not a member" answer is remembered this long. */
+export const NOT_MEMBER_TTL_MS = 2 * 60_000;
+/** The answer for one sender is reused this long (a per-user cooldown on the lookup). */
+export const LOOKUP_REUSE_MS = 10_000;
+const HINT_TTL_MS = 24 * 60 * 60_000;
+
+/** `${userId}|${guildKey}` -> expiry of a "not a member" answer. @type {Map<string, number>} */
+const notMember = new Map();
+/** userId -> servers the user was found in lately; only decides the order of the fetches. */
+const foundBefore = new Map();
+/** `${platform}|${userId}` -> { at, result } (result is a promise while the lookup runs). */
+const lookups = new Map();
+let probeWindow = { start: 0, count: 0 };
+sweepMap(notMember, (until, now) => until <= now);
+sweepMap(foundBefore, (h, now) => now - h.at > HINT_TTL_MS);
+sweepMap(lookups, (l, now) => now - l.at > LOOKUP_REUSE_MS);
+
+/** Test hook: forget every remembered answer and the probe budget. */
+export function _resetTicketLookup() {
+  notMember.clear();
+  foundBefore.clear();
+  lookups.clear();
+  probeWindow = { start: 0, count: 0 };
+}
+
+const cachedMember = (guild, userId) => {
+  const m = guild.members.cache?.get(userId);
+  return m && !m.partial ? m : null;
+};
+
+/** Is every member of the server in the cache, so that a miss means "not a member"? */
+function memberCacheComplete(guild) {
+  if (platformOfClient(guild.client) !== 'discord' || !config.intentGuildMembers) return false;
+  return Number.isFinite(guild.memberCount) && (guild.members.cache?.size ?? 0) >= guild.memberCount;
+}
+
+/** Take one REST member fetch from the per-minute budget; false when it is used up. */
+function takeProbe() {
+  const now = Date.now();
+  if (now - probeWindow.start >= 60_000) probeWindow = { start: now, count: 0 };
+  if (probeWindow.count >= MEMBER_PROBES_PER_MINUTE) return false;
+  probeWindow.count++;
+  return true;
+}
+
+/** One REST member fetch. @returns {Promise<boolean | null>} true member, false not a member, null unknown */
+async function probeMember(guild, userId) {
+  try {
+    // A platform may answer "no such member" with null instead of an error.
+    if (await guild.members.fetch(userId)) return true;
+    notMember.set(`${userId}|${guildKey(guild)}`, Date.now() + NOT_MEMBER_TTL_MS);
+    return false;
+  } catch (err) {
+    if (err?.code === 10007 || err?.code === 10013 || err?.status === 404) {
+      notMember.set(`${userId}|${guildKey(guild)}`, Date.now() + NOT_MEMBER_TTL_MS);
+      return false;
+    }
+    return null; // a rate limit or a network error says nothing about membership
   }
-  return out;
+}
+
+async function findTicketGuilds(user, client) {
+  const found = [];
+  const toProbe = [];
+  const now = Date.now();
+  for (const guild of client ? [...client.guilds.cache.values()] : allGuilds()) {
+    if (cachedMember(guild, user.id)) {
+      if (await isModuleEnabled(guildKey(guild), 'tickets')) found.push(guild);
+      continue;
+    }
+    if (memberCacheComplete(guild)) continue;
+    if ((notMember.get(`${user.id}|${guildKey(guild)}`) ?? 0) > now) continue;
+    toProbe.push(guild);
+  }
+
+  // Servers where this user was found before go first.
+  const hint = foundBefore.get(user.id)?.guilds;
+  if (hint) toProbe.sort((a, b) => Number(hint.has(guildKey(b))) - Number(hint.has(guildKey(a))));
+
+  let probes = 0;
+  let incomplete = false;
+  for (const guild of toProbe) {
+    if (!(await isModuleEnabled(guildKey(guild), 'tickets'))) continue;
+    if (probes >= MEMBER_PROBES_PER_DM || !takeProbe()) {
+      incomplete = true;
+      break;
+    }
+    probes++;
+    const isMember = await probeMember(guild, user.id);
+    if (isMember) found.push(guild);
+    else if (isMember === null) incomplete = true;
+  }
+
+  if (found.length) {
+    foundBefore.set(user.id, { guilds: new Set(found.map(guildKey)), at: Date.now() });
+  }
+  return { guilds: found, incomplete };
+}
+
+/**
+ * Guilds where the tickets module is enabled and the user is a member, and whether every
+ * candidate server was checked (`incomplete` when the fetch caps cut the lookup short). Pass the
+ * client the DM arrived on to look only at that platform's servers. The answer for one user is
+ * reused for a few seconds, so a burst of DMs does the work once.
+ * @returns {Promise<{ guilds: import('discord.js').Guild[], incomplete: boolean }>}
+ */
+export function lookupTicketGuilds(user, client) {
+  const key = `${client ? platformOfClient(client) : 'all'}|${user.id}`;
+  const recent = lookups.get(key);
+  if (recent && Date.now() - recent.at < LOOKUP_REUSE_MS) return recent.result;
+  const result = findTicketGuilds(user, client);
+  lookups.set(key, { at: Date.now(), result });
+  result.catch(() => lookups.delete(key));
+  return result;
+}
+
+/**
+ * Can this user open a ticket in this one server (tickets on, user a member)? Cheap: the member
+ * cache, or the DM lookup that just ran, or at most one fetch from the shared budget.
+ */
+export async function canOpenTicketIn(user, guild) {
+  if (!(await isModuleEnabled(guildKey(guild), 'tickets'))) return false;
+  if (cachedMember(guild, user.id)) return true;
+  const recent = lookups.get(`${platformOfClient(guild.client)}|${user.id}`);
+  if (recent && Date.now() - recent.at < LOOKUP_REUSE_MS) {
+    const { guilds } = await recent.result.catch(() => ({ guilds: [] }));
+    if (guilds.some((g) => guildKey(g) === guildKey(guild))) return true;
+  }
+  if (memberCacheComplete(guild) || !takeProbe()) return false;
+  return (await probeMember(guild, user.id)) === true;
 }
 
 const ALERT_MESSAGE_MAX = 1000;

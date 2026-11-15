@@ -5,7 +5,7 @@
 import { guildKey, guildByKey, platformOfClient } from '../../platform/platformOf.js';
 import { config } from '../../config.js';
 import { Events, StringSelectMenuBuilder, ActionRowBuilder } from 'discord.js';
-import { ticketGuildsForUser, ingestUserDM } from '../../modules/tickets.js';
+import { lookupTicketGuilds, canOpenTicketIn, ingestUserDM } from '../../modules/tickets.js';
 import { getOpenTicket } from '../../db/tickets.js';
 import { registerComponent } from '../lib/components.js';
 import { handleQuestionnaireMessage, looksLikeQuestionnairePrompt } from '../lib/dmQuestionnaire.js';
@@ -70,10 +70,15 @@ async function handleDM(message) {
   if (!payload.content && payload.attachments.length === 0) return;
 
   // Only the servers on the platform this DM arrived on: a user id means nothing on the other one.
-  const guilds = await ticketGuildsForUser(message.author, message.client);
+  const { guilds, incomplete } = await lookupTicketGuilds(message.author, message.client);
   if (guilds.length === 0) {
+    // `incomplete`: the lookup is capped per message, so some servers were not checked yet.
     await message
-      .reply("I'm not set up to take messages for any server you're in right now.")
+      .reply(
+        incomplete
+          ? 'I could not check all servers yet. Please send your message again in a few seconds.'
+          : "I'm not set up to take messages for any server you're in right now."
+      )
       .catch(() => {});
     return;
   }
@@ -113,10 +118,7 @@ async function handleDM(message) {
 async function handleSelect(interaction) {
   const picked = guildByKey(interaction.values[0]);
   // Still one the member may open a ticket in (a member there, tickets on): the menu could be old.
-  const allowed = picked
-    ? await ticketGuildsForUser(interaction.user, interaction.client ?? picked.client)
-    : [];
-  const guild = allowed.find((g) => guildKey(g) === guildKey(picked));
+  const guild = picked && (await canOpenTicketIn(interaction.user, picked)) ? picked : null;
   const payload = takeStash(interaction.user.id);
   if (!guild || !payload) {
     await interaction
