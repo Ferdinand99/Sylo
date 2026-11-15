@@ -39,39 +39,51 @@ export function parseInboxQuery(raw) {
   return { kind: m[1] ? m[1].toLowerCase() : null, number };
 }
 
-const KINDS = new Map(
-  Object.entries({
-    ticket: async (guildId, n) => {
-      const t = await getTicket(n);
-      return t && t.guild_id === guildId
-        ? { kind: 'ticket', number: t.id, status: t.status, href: `/guilds/${guildId}/tickets/${t.id}` }
-        : null;
-    },
-    suggestion: async (guildId, n) => {
-      const s = await getSuggestionByNumber(guildId, n);
-      return s
-        ? { kind: 'suggestion', number: s.number, status: s.status, href: `/guilds/${guildId}/m/suggestions` }
-        : null;
-    },
-    appeal: async (guildId, n) => {
-      const a = await getAppeal(guildId, n);
-      return a
-        ? { kind: 'appeal', number: Number(a.id), status: a.status, href: `/guilds/${guildId}/appeals` }
-        : null;
-    },
-    application: async (guildId, n) => {
-      const s = await getSubmission(guildId, n);
-      return s
-        ? {
-            kind: 'application',
-            number: s.id,
-            status: s.status,
-            href: `/guilds/${guildId}/applications/${s.id}`,
-          }
-        : null;
-    },
-  })
-);
+async function findTicket(guildId, n) {
+  const t = await getTicket(n);
+  return t && t.guild_id === guildId
+    ? { kind: 'ticket', number: t.id, status: t.status, href: `/guilds/${guildId}/tickets/${t.id}` }
+    : null;
+}
+
+async function findSuggestion(guildId, n) {
+  const s = await getSuggestionByNumber(guildId, n);
+  return s
+    ? { kind: 'suggestion', number: s.number, status: s.status, href: `/guilds/${guildId}/m/suggestions` }
+    : null;
+}
+
+async function findAppeal(guildId, n) {
+  const a = await getAppeal(guildId, n);
+  return a
+    ? { kind: 'appeal', number: Number(a.id), status: a.status, href: `/guilds/${guildId}/appeals` }
+    : null;
+}
+
+async function findApplication(guildId, n) {
+  const s = await getSubmission(guildId, n);
+  return s
+    ? { kind: 'application', number: s.id, status: s.status, href: `/guilds/${guildId}/applications/${s.id}` }
+    : null;
+}
+
+const KINDS = ['ticket', 'suggestion', 'appeal', 'application'];
+
+// One fixed lookup per kind: a kind from the query only ever selects one of these, never a method by name.
+function findItem(kind, guildId, n) {
+  switch (kind) {
+    case 'ticket':
+      return findTicket(guildId, n);
+    case 'suggestion':
+      return findSuggestion(guildId, n);
+    case 'appeal':
+      return findAppeal(guildId, n);
+    case 'application':
+      return findApplication(guildId, n);
+    default:
+      return null;
+  }
+}
 
 router.get(
   '/search/inbox',
@@ -79,13 +91,10 @@ router.get(
   asyncHandler(async (req, res) => {
     const parsed = parseInboxQuery(req.query.q);
     if (!parsed) return res.json({ items: [] });
-    // Only the lookups defined above (a Map, so a kind from the query never reaches anything else).
-    const kinds = parsed.kind ? [parsed.kind] : [...KINDS.keys()];
+    const kinds = parsed.kind ? [parsed.kind] : KINDS;
     const items = [];
     for (const kind of kinds) {
-      const lookup = KINDS.get(kind);
-      if (!lookup) continue;
-      const item = await lookup(req.guild.id, parsed.number);
+      const item = await findItem(kind, req.guild.id, parsed.number);
       if (item) items.push(item);
     }
     res.json({ items });
