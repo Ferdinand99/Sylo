@@ -21,7 +21,7 @@ nonisolated enum PreviewData {
         groups: [
             OverviewGroup(title: "Core", cards: [
                 OverviewCard(kind: .link, id: "general", name: "Settings", icon: "gear", hasToggle: false,
-                             isEnabled: nil, status: .link, webPath: "/guild/1"),
+                             isEnabled: nil, status: .link),
                 OverviewCard(kind: .module, id: "logging", name: "Logging", icon: "file-text", hasToggle: true,
                              isEnabled: true, status: .on,
                              lines: [StatusLine(label: "Log channel", value: "#mod-log", state: .on)]),

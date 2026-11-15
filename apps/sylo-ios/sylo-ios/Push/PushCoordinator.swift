@@ -36,10 +36,15 @@ final class PushCoordinator: NSObject {
     let settings: NotificationSettingsModel
 
     private let session: AppSession
-    @ObservationIgnored private var deviceToken: Data?
-    /// The server and token last sent, so a token is sent once per sign-in.
-    @ObservationIgnored private var sentToken: String?
+    /// iOS registration and the device token, kept apart from UIKit so the sign-out rules are tested.
+    @ObservationIgnored private let controller: PushDeviceController
     @ObservationIgnored private var isSending = false
+
+    /// The device token and what was registered with it.
+    private var device: PushDeviceState {
+        get { controller.state }
+        set { controller.state = newValue }
+    }
 
     /// - Parameter pigeon: The Postal Pigeon handles for servers that send through it; nil (previews)
     ///   leaves that way out.
@@ -47,6 +52,7 @@ final class PushCoordinator: NSObject {
         self.session = session
         self.authorization = authorization
         self.settings = NotificationSettingsModel(session: session, pigeon: pigeon)
+        self.controller = PushDeviceController(session: session, registrar: SystemRemoteNotifications())
         super.init()
     }
 
@@ -57,8 +63,10 @@ final class PushCoordinator: NSObject {
 
     // MARK: - Permission and device token
 
-    /// Reads the permission and, when it is given, asks iOS for the device token. Runs at every
-    /// launch and return to the front, since the token can change.
+    /// Reads the permission and, when it is given and the person is signed in, asks iOS for the device
+    /// token (after the servers of earlier sign-outs that could not be reached were told once more). Runs
+    /// at every launch and return to the front, since the token can change. Signed out, the app does not
+    /// ask: a device that is signed out has no use for a token.
     func refresh() async {
         let status = await Self.authorizationStatus()
         switch status {
@@ -67,7 +75,9 @@ final class PushCoordinator: NSObject {
         default: authorization = .notDetermined
         }
         if authorization == .authorized {
-            UIApplication.shared.registerForRemoteNotifications()
+            await controller.requestDeviceToken()
+        } else {
+            await session.revokePending()
         }
     }
 
@@ -81,22 +91,31 @@ final class PushCoordinator: NSObject {
         await refresh()
     }
 
-    /// The device token from iOS (``AppDelegate``).
+    /// The device token from iOS (``AppDelegate``). One that arrives after a sign-out is dropped.
     func didRegister(deviceToken: Data) {
-        self.deviceToken = deviceToken
+        guard controller.received(deviceToken: deviceToken) else { return }
         Task { await sendToken() }
     }
 
-    /// A new sign-in starts without a device token on the server: send it again.
+    /// A new sign-in starts without a device token on the server: send it again. After a sign-out the app
+    /// gave up its token, so iOS is asked for one first; it arrives in ``didRegister(deviceToken:)``.
     func didSignIn() async {
-        sentToken = nil
-        await sendToken()
+        device.forgetRegistration()
+        if device.needsDeviceToken {
+            await refresh()
+        } else {
+            await sendToken()
+        }
     }
 
     /// The person signed in, out or to another server: a Pigeon handle for a server they are no
     /// longer signed in to is taken down, and a server they just signed in to is set up again.
+    ///
+    /// Signed out, notifications stop on this device whether or not the server could be told: the app
+    /// unregisters from iOS and forgets the token and what it registered, and keeps what is needed to tell
+    /// the server later (``AppSession/revokePending(within:)``).
     func sessionChanged() async {
-        sentToken = nil
+        controller.phaseChanged()
         await settings.reconcileHandles()
         await sendToken()
     }
@@ -105,15 +124,16 @@ final class PushCoordinator: NSObject {
     /// the official relay: see ``NotificationSettingsModel/register(deviceToken:environment:)``),
     /// once per sign-in and token, unless notifications were turned off in the app for that server.
     func sendToken() async {
-        guard let deviceToken, !isSending, case .signedIn(let server) = session.phase,
-            !isTurnedOff(on: server)
+        guard let deviceToken = device.deviceToken, !isSending, case .signedIn(let server) = session.phase,
+            !isTurnedOff(on: server), !device.hasRegistered(at: server)
         else { return }
-        let key = "\(server.description) \(PushToken.hex(deviceToken))"
-        guard sentToken != key else { return }
         isSending = true
         defer { isSending = false }
+        // A registration an earlier, unreachable sign-out left on its server is taken down first.
+        await session.revokePending()
+        guard case .signedIn(server) = session.phase else { return }
         if await settings.register(deviceToken: deviceToken, environment: Self.environment) {
-            sentToken = key
+            device.registered(at: server, token: deviceToken)
         }
     }
 
@@ -124,15 +144,15 @@ final class PushCoordinator: NSObject {
         let key = Self.turnedOffKey(server)
         if isOn {
             UserDefaults.standard.removeObject(forKey: key)
-            sentToken = nil
-            if deviceToken == nil {
+            device.forgetRegistration()
+            if device.needsDeviceToken {
                 await refresh()
             } else {
                 await sendToken()
             }
         } else if await settings.unregister() {
             UserDefaults.standard.set(true, forKey: key)
-            sentToken = nil
+            device.forgetRegistration()
         }
     }
 
@@ -212,4 +232,11 @@ extension PushCoordinator: UNUserNotificationCenterDelegate {
             handleTap(on: devLog)
         }
     }
+}
+
+/// The real iOS calls behind ``PushDeviceController``.
+@MainActor
+struct SystemRemoteNotifications: RemoteNotificationRegistrar {
+    func register() { UIApplication.shared.registerForRemoteNotifications() }
+    func unregister() { UIApplication.shared.unregisterForRemoteNotifications() }
 }

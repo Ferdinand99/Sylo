@@ -1,13 +1,15 @@
 import SwiftUI
 import SyloKit
 
-/// The Health page for Sylo's operators, read only: whether the bot is up, its size, the database
-/// and backups, and the stored dev log (Sylo's own errors and warnings). Reached from Settings,
-/// and from a dev-log notification.
+/// The Health page for Sylo's operators: whether the bot is up, its size, the database and its
+/// backups (managed on their own screen), and the stored dev log (Sylo's own errors and warnings)
+/// with its two tests. Reached from Settings, and from a dev-log notification.
 struct HealthView: View {
+    let session: AppSession
     @State private var model: HealthModel
 
     init(session: AppSession) {
+        self.session = session
         _model = State(initialValue: HealthModel(session: session))
     }
 
@@ -18,7 +20,7 @@ struct HealthView: View {
             }
             if let report = model.report {
                 StatusSection(report: report)
-                DatabaseSection(report: report)
+                DatabaseSection(report: report, session: session)
             } else if model.isLoading {
                 Section { ProgressView() }
             }
@@ -57,6 +59,7 @@ private struct StatusSection: View {
 
 private struct DatabaseSection: View {
     let report: HealthReport
+    let session: AppSession
 
     var body: some View {
         Section {
@@ -78,16 +81,22 @@ private struct DatabaseSection: View {
                         .truncationMode(.middle)
                 }
             }
+            NavigationLink {
+                BackupsView(session: session)
+            } label: {
+                Label("Manage Backups", systemImage: "externaldrive")
+            }
         } header: {
             Text("Database")
         } footer: {
-            Text("Backups are made, restored and downloaded from the web dashboard.")
+            Text("Create, download, import, restore and delete backups. A backup holds the personal data of every server.")
         }
     }
 }
 
 private struct DevLogSection: View {
     @Bindable var model: HealthModel
+    @State private var isConfirmingErrorTest = false
 
     var body: some View {
         Section {
@@ -121,6 +130,28 @@ private struct DevLogSection: View {
                 case .failed(let reason): StatusMessage(reason, kind: .error)
                 case nil: EmptyView()
                 }
+            }
+            Section {
+                Button {
+                    isConfirmingErrorTest = true
+                } label: {
+                    Label("Trigger a Real Error", systemImage: "exclamationmark.octagon")
+                }
+                .disabled(model.isSendingErrorTest)
+                .confirmationDialog(
+                    "Trigger a real error?", isPresented: $isConfirmingErrorTest, titleVisibility: .visible
+                ) {
+                    Button("Trigger Error") { Task { await model.sendErrorTest() } }
+                } message: {
+                    Text("Sylo logs an error on purpose. It goes to the dev-log channel and to every operator who gets dev-log notifications. An identical test is not posted again within 5 minutes.")
+                }
+                switch model.errorTestResult {
+                case .sent: Label("Logged. Check the dev-log channel in a moment.", systemImage: "checkmark.circle")
+                case .failed(let reason): StatusMessage(reason, kind: .error)
+                case nil: EmptyView()
+                }
+            } footer: {
+                Text("Logs a real error on the server to test the whole error pipeline. Every operator who gets dev-log notifications is notified.")
             }
         }
     }

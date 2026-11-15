@@ -21,6 +21,9 @@ struct ModuleSettingsForm<Page: ModuleSettingsPage, Content: View>: View {
     @ViewBuilder let content: (Binding<Page.Settings>, Page) -> Content
 
     @State private var isConfirmingDiscard = false
+    @Environment(\.dashboardAccess) private var access
+    /// Read again after a save: the server dropped its health copy then (Sylo 5.2).
+    @Environment(ServerHealthModel.self) private var health: ServerHealthModel?
 
     init(
         _ title: LocalizedStringKey, model: ModuleSettingsModel<Page>, problem: String? = nil,
@@ -55,6 +58,7 @@ struct ModuleSettingsForm<Page: ModuleSettingsPage, Content: View>: View {
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(model.hasChanges)
+        .tracksUnsavedChanges(model.hasChanges)
         .toolbar {
             if model.hasChanges {
                 ToolbarItem(placement: .cancellationAction) {
@@ -65,6 +69,11 @@ struct ModuleSettingsForm<Page: ModuleSettingsPage, Content: View>: View {
             ToolbarItem(placement: .confirmationAction) {
                 if model.isSaving {
                     ProgressView()
+                } else if !access.canEdit {
+                    // Where the web's save bar says "View only: you can't save changes here".
+                    Text(verbatim: access.badgeTitle ?? "View only")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                 } else {
                     Button("Save") { Task { await model.save() } }
                         .toolbarSaveStyle()
@@ -81,6 +90,9 @@ struct ModuleSettingsForm<Page: ModuleSettingsPage, Content: View>: View {
             Text(message)
         }
         .sensoryFeedback(.success, trigger: model.saveCount)
+        .onChange(of: model.saveCount) {
+            Task { await health?.refreshAfterSave() }
+        }
         .task {
             if model.page == nil { await model.load() }
         }

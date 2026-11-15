@@ -1,8 +1,9 @@
 import SwiftUI
 import SyloKit
 
-/// Which modules have a settings screen in the app, and the screen for each. Modules without one
-/// keep their switch on the overview and open in the web dashboard.
+/// Which modules have a settings screen in the app, and the screen for each. Every module the
+/// server has one for is here; a module a newer server adds keeps its switch on the overview and
+/// has no screen to open until the app learns it.
 enum ModuleScreens {
     static func hasScreen(_ moduleID: String) -> Bool { ids.contains(moduleID) }
 
@@ -11,12 +12,33 @@ enum ModuleScreens {
         "counting", "free-games", "giveaways", "honeypot", "invite-tracker", "kick-alerts", "leveling",
         "logging", "moderation", "polls", "rss", "server-stats", "starboard", "sticky", "temp-voice",
         "tickets", "twitch-alerts", "verification", "welcome", "welcome-channel", "youtube-alerts",
+        "roles", "custom-commands",
         "events", "suggestions", "temp-roles", "auto-threads", "quote-board",
         "introductions", "economy", "applications",
+        "reminders", "channel-cleanup", "github", "game-stats",
     ]
 
+    /// The modules whose screen also holds work for the Inbox level (the suggestions to decide on, the
+    /// applications to review): they switch their own settings off instead of the whole screen.
+    private static let inboxScreens: Set<String> = ["suggestions", "applications"]
+
+    /// A module's screen with Sylo 5.2's two additions: the health check's problems for the module at the
+    /// top, and the dashboard access level (a level below Edit gets the screen switched off, with the reason).
     @ViewBuilder
     static func screen(for moduleID: String, server: ServerID, session: AppSession) -> some View {
+        if inboxScreens.contains(moduleID) {
+            content(for: moduleID, server: server, session: session)
+                .accessNotice()
+                .moduleHealth(moduleID)
+        } else {
+            content(for: moduleID, server: server, session: session)
+                .lockedBelow()
+                .moduleHealth(moduleID)
+        }
+    }
+
+    @ViewBuilder
+    private static func content(for moduleID: String, server: ServerID, session: AppSession) -> some View {
         switch moduleID {
         // Moderation and safety
         case "moderation": ModerationSettingsView(server: server, session: session)
@@ -40,6 +62,8 @@ enum ModuleScreens {
         case "events": EventsSettingsView(server: server, session: session)
         case "suggestions": SuggestionsSettingsView(server: server, session: session)
         case "temp-roles": TempRolesSettingsView(server: server, session: session)
+        case "roles": RolesView(server: server, session: session)
+        case "custom-commands": CustomCommandsView(server: server, session: session)
         case "quote-board": QuoteBoardSettingsView(server: server, session: session)
         case "introductions": IntroductionsSettingsView(server: server, session: session)
         case "economy": EconomySettingsView(server: server, session: session)
@@ -58,10 +82,13 @@ enum ModuleScreens {
         case "rss": RssSettingsView(server: server, session: session)
         case "free-games": FreeGamesSettingsView(server: server, session: session)
         case "apple-connect": AppleConnectSettingsView(server: server, session: session)
+        case "reminders": RemindersView(server: server, session: session)
+        case "channel-cleanup": ChannelCleanupView(server: server, session: session)
+        case "github": GithubAlertsView(server: server, session: session)
+        case "game-stats": GameStatsView(server: server, session: session)
         default:
-            ContentUnavailableView(
-                "Not in the App Yet", systemImage: "square.grid.2x2",
-                description: Text("Change this module's settings in the web dashboard for now."))
+            // Only reached for a module without a screen, and the overview never opens one.
+            EmptyView()
         }
     }
 }

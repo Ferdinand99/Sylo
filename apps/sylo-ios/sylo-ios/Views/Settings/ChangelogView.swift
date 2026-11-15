@@ -3,7 +3,7 @@ import SyloKit
 
 /// What's New: the Sylo server's release notes, newest first, ten releases at a time. Reached from
 /// Settings when the server sends its changelog to the app (`changelog` in its features); older
-/// servers open the dashboard's What's new page in the browser instead.
+/// servers open the server's public What's new page in the browser instead.
 struct ChangelogView: View {
     @State private var model: ChangelogModel
 
@@ -133,7 +133,7 @@ private struct ReleaseHeader: View {
     }
 }
 
-/// "This version", in the same hairline capsule with an accent dot as Settings' "Public beta".
+/// "This version", in a hairline capsule with an accent dot.
 private struct ThisVersionBadge: View {
     @ScaledMetric(relativeTo: .caption) private var dot = 6.0
 
@@ -207,7 +207,7 @@ private struct ChangeRow: View {
 
     init(item: ChangelogItem) {
         scope = item.scope
-        let text = Self.markdown(item.text)
+        let text = ServerMarkdown.attributed(item.text)
         self.text = text
 
         var refs = AttributedString()
@@ -259,11 +259,6 @@ private struct ChangeRow: View {
         }
     }
 
-    /// The server's inline Markdown, or the text as it is when it does not parse.
-    private static func markdown(_ text: String) -> AttributedString {
-        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
-    }
 }
 
 /// A link in a change, offered to VoiceOver as an action.

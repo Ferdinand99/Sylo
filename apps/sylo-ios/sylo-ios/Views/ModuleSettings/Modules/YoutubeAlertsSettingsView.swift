@@ -6,9 +6,11 @@ import SyloKit
 /// stream ends. Mirrors web-v2/src/moduleForms/YoutubeAlerts.jsx.
 struct YoutubeAlertsSettingsView: View {
     @State private var model: ModuleSettingsModel<YoutubeAlertsPage>
+    @State private var test: ModuleTestModel
 
     init(server: ServerID, session: AppSession) {
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
+        _test = State(initialValue: ModuleTestModel(server: server, module: "youtube-alerts", session: session))
     }
 
     var body: some View {
@@ -30,17 +32,19 @@ struct YoutubeAlertsSettingsView: View {
                         }
                     }
                     ChannelPicker(title: "Announce in", selection: $alert.discordChannelId,
-                                  channels: page.channels, noneTitle: "Choose a channel")
+                                  channels: page.channels, noneTitle: "Choose a channel", embed: true, health: true)
                     Picker("Notify on", selection: $alert.notify) {
                         ForEach(YoutubeAlertsNotify.allCases, id: \.self) { notify in
                             Text(notify.title).tag(notify)
                         }
                     }
                     RolePicker(title: "Ping role", selection: $alert.roleId, roles: page.roles)
-                    TextArea(title: "New-video message", text: $alert.videoMessage,
-                             limit: YoutubeAlertsSettings.maxMessageLength, lines: 2...6)
-                    TextArea(title: "Went-live message", text: $alert.liveMessage,
-                             limit: YoutubeAlertsSettings.maxMessageLength, lines: 2...6)
+                    LimitedTextField(title: "New-video message", text: $alert.videoMessage,
+                                     limit: YoutubeAlertsSettings.maxMessageLength, lines: 2...6)
+                    TextTemplateMenu(field: .youtubeVideo, text: $alert.videoMessage)
+                    LimitedTextField(title: "Went-live message", text: $alert.liveMessage,
+                                     limit: YoutubeAlertsSettings.maxMessageLength, lines: 2...6)
+                    TextTemplateMenu(field: .youtubeLive, text: $alert.liveMessage)
                     Picker("When a livestream ends", selection: $alert.onEnd) {
                         ForEach(YoutubeAlertsEndAction.allCases, id: \.self) { mode in
                             Text(mode.title).tag(mode)
@@ -65,6 +69,13 @@ struct YoutubeAlertsSettingsView: View {
             } footer: {
                 Text("A channel Sylo can't find, or one without a channel to announce in, is dropped when you save.")
             }
+
+            SendTestButton(model: test, hasUnsavedChanges: model.hasChanges,
+                           sample: "a sample alert",
+                           channelName: settings.alerts.first.flatMap { alert in
+                               page.channels.first { $0.id == alert.discordChannelId }?.name
+                           },
+                           note: settings.alerts.count > 1 ? "the first channel in the list" : "")
         }
     }
 }

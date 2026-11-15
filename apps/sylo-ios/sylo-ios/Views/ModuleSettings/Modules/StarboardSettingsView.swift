@@ -6,9 +6,11 @@ import SyloKit
 /// web-v2/src/moduleForms/Starboard.jsx.
 struct StarboardSettingsView: View {
     @State private var model: ModuleSettingsModel<StarboardPage>
+    @State private var test: ModuleTestModel
 
     init(server: ServerID, session: AppSession) {
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
+        _test = State(initialValue: ModuleTestModel(server: server, module: "starboard", session: session))
     }
 
     var body: some View {
@@ -20,7 +22,7 @@ struct StarboardSettingsView: View {
                 Section {
                     TextField("Name", text: $board.name, prompt: Text("Starboard"))
                     ChannelPicker(title: "Starboard channel", selection: $board.channelId, channels: page.channels,
-                                  noneTitle: "Choose a channel")
+                                  noneTitle: "Choose a channel", embed: true, health: true)
                     TextField("Emoji", text: $board.emojiText, prompt: Text(verbatim: "⭐"))
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
@@ -30,7 +32,7 @@ struct StarboardSettingsView: View {
                 } header: {
                     Text(verbatim: board.name.isEmpty ? "Starboard" : board.name)
                 } footer: {
-                    Text("The name (at most 60 characters) is shown on the dashboard only. Separate emoji with spaces; the first one is shown on the post.")
+                    Text("The name (at most 60 characters) only tells your boards apart here and in the dashboard; it is not shown in the server. Separate emoji with spaces; the first one is shown on the post.")
                 }
 
                 Section("Behaviour") {
@@ -91,6 +93,13 @@ struct StarboardSettingsView: View {
                     Text("No boards yet.")
                 }
             }
+
+            SendTestButton(model: test, hasUnsavedChanges: model.hasChanges,
+                           sample: "a sample starred message",
+                           channelName: settings.boards.first.flatMap { board in
+                               page.channels.first { $0.id == board.channelId }?.name
+                           },
+                           note: settings.boards.count > 1 ? "the first board in the list" : "")
         }
     }
 }

@@ -8,18 +8,25 @@ import FoundationNetworking
 public enum NetworkError: Error, Sendable, Equatable {
     /// 401: the token is missing, expired or revoked. Sign in again.
     case unauthorized
-    /// 403: signed in, but not allowed (not a manager of that server, or operators only).
-    case forbidden
-    /// 404: unknown server or module, a device already signed out, or a Sylo too old for the app.
-    case notFound
+    /// 403: signed in, but not allowed (not a manager of that server, or operators only), with the
+    /// server's text when it sent one. Write the case without a message as ``forbidden``.
+    case forbidden(message: String?)
+    /// 404: unknown server or module, a device already signed out, or a Sylo too old for the app,
+    /// with the server's text when it sent one. Write the case without a message as ``notFound``.
+    case notFound(message: String?)
     /// 400, with the server's `error` field (`invalid_grant` for a failed code exchange).
     case badRequest(message: String?)
     /// 429: too many requests from this address.
     case rateLimited
-    /// 5xx.
-    case server(status: Int)
-    /// Any other status the app does not handle on its own (for example 409).
-    case http(status: Int)
+    /// 413, or a download that is longer than the app is willing to keep, with the server's text
+    /// when it sent one. Write the case without a message as ``tooLarge``.
+    case tooLarge(message: String?)
+    /// 5xx. The status compares and matches as a number (`.server(status: 502)`); the server's text,
+    /// when there was one, travels inside it (see ``serverMessage``).
+    case server(status: HTTPStatus)
+    /// Any other status the app does not handle on its own (for example 409), matched like
+    /// ``server(status:)``.
+    case http(status: HTTPStatus)
     /// An HTML page, a redirect or other non-JSON where Sylo would answer JSON: a wrong address,
     /// or a proxy login in front of the API paths.
     case notASyloServer
@@ -38,6 +45,80 @@ public enum NetworkError: Error, Sendable, Equatable {
     /// Another `URLError`, by its code.
     case transport(code: Int)
 
+    // The cases that carry the server's text can still be written, compared and matched without it:
+    // `throw NetworkError.forbidden`, `error == .notFound` and `case .forbidden:` all work, and two
+    // errors are equal whatever text they carry.
+    public static var forbidden: NetworkError { .forbidden(message: nil) }
+    public static var notFound: NetworkError { .notFound(message: nil) }
+    public static var tooLarge: NetworkError { .tooLarge(message: nil) }
+
+    public static func == (lhs: NetworkError, rhs: NetworkError) -> Bool {
+        switch (lhs, rhs) {
+        case (.unauthorized, .unauthorized), (.forbidden, .forbidden), (.notFound, .notFound),
+             (.rateLimited, .rateLimited), (.tooLarge, .tooLarge), (.notASyloServer, .notASyloServer),
+             (.timeout, .timeout), (.offline, .offline), (.unreachable, .unreachable),
+             (.secureConnectionFailed, .secureConnectionFailed), (.cancelled, .cancelled),
+             (.invalidURL, .invalidURL):
+            return true
+        case let (.badRequest(a), .badRequest(b)): return a == b
+        case let (.server(a), .server(b)): return a == b
+        case let (.http(a), .http(b)): return a == b
+        case let (.decoding(a), .decoding(b)): return a == b
+        case let (.encoding(a), .encoding(b)): return a == b
+        case let (.transport(a), .transport(b)): return a == b
+        default: return false
+        }
+    }
+
+    /// What the server said about a failed call (its JSON `error` or `message` text), or nil when it
+    /// said nothing or the answer was not JSON.
+    /// Only words meant for a person: a code (`invalid_request`) or a framework's stock phrase
+    /// (`Not found`, `Internal server error`) is not text, so it gives nil here; see ``serverCode``.
+    public var serverMessage: String? {
+        guard let text = rawServerText, !Self.isCode(text), !Self.isStockPhrase(text) else { return nil }
+        return text
+    }
+
+    /// The server's machine code when its `error` was one (`taken`, `invalid_platform`,
+    /// `already_connected`: lowercase letters, digits and underscores), else nil. For a package that
+    /// maps the codes it knows to its own words.
+    public var serverCode: String? {
+        guard let text = rawServerText, Self.isCode(text) else { return nil }
+        return text
+    }
+
+    /// The server's `error` text as it came, cleaned (see ``serverMessage(in:)``), code or not.
+    var rawServerText: String? {
+        switch self {
+        case .badRequest(let message), .forbidden(let message), .notFound(let message), .tooLarge(let message):
+            return message
+        case .server(let status), .http(let status):
+            return status.message
+        default:
+            return nil
+        }
+    }
+
+    /// `^[a-z][a-z0-9_]*$`.
+    static func isCode(_ text: String) -> Bool {
+        guard let first = text.unicodeScalars.first, ("a"..."z").contains(first) else { return false }
+        return text.unicodeScalars.allSatisfy { ("a"..."z").contains($0) || ("0"..."9").contains($0) || $0 == "_" }
+    }
+
+    /// The generic answers Express and proxies give when nothing better is known.
+    static func isStockPhrase(_ text: String) -> Bool {
+        var phrase = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        while phrase.hasSuffix(".") || phrase.hasSuffix("!") { phrase.removeLast() }
+        return stockPhrases.contains(phrase)
+    }
+
+    private static let stockPhrases: Set<String> = [
+        "not found", "internal server error", "payload too large", "request entity too large",
+        "bad request", "forbidden", "unauthorized", "bad gateway", "service unavailable",
+        "gateway timeout", "conflict", "too many requests", "method not allowed",
+        "unprocessable entity", "error", "unknown error", "server error", "something went wrong",
+    ]
+
     /// Maps any error from a request to a `NetworkError`.
     public init(_ error: any Error) {
         switch error {
@@ -53,14 +134,16 @@ public enum NetworkError: Error, Sendable, Equatable {
     public var isRetryable: Bool {
         switch self {
         case .timeout, .offline, .unreachable: true
-        case .server(let status): [502, 503, 504].contains(status)
+        case .server(let status): [502, 503, 504].contains(status.code)
         default: false
         }
     }
 
     /// A short sentence for the person: what happened and what to do.
     public var userMessage: String {
-        switch self {
+        // The server's own words say more than ours; a code or a stock phrase is not words.
+        if let text = serverMessage { return text }
+        return switch self {
         case .unauthorized: "You've been signed out. Sign in again to continue."
         case .forbidden: "You don't have access to this. Ask the server's owner if you think you should."
         case .notFound: "That's no longer there. Refresh and try again."
@@ -68,6 +151,7 @@ public enum NetworkError: Error, Sendable, Equatable {
             "Sign-in didn't finish. Try signing in again."
         case .badRequest: "The server couldn't do that. Refresh and try again."
         case .rateLimited: "Too many requests. Wait a minute, then try again."
+        case .tooLarge: "That file is too large."
         case .server: "The server ran into a problem. Try again in a moment."
         case .http(let status): "Something went wrong (error \(status)). Try again."
         case .notASyloServer: "This address doesn't answer like a Sylo server. Check the address."
@@ -107,22 +191,60 @@ public enum NetworkError: Error, Sendable, Equatable {
     static func from(status: Int, body: Data, isJSON: Bool) -> NetworkError {
         // Sylo answers 401 and 403 as JSON; an HTML page is a proxy's login in the way, not a sign-out.
         if status == 401 || status == 403, !body.isEmpty, !isJSON { return .notASyloServer }
+        let message = isJSON ? serverMessage(in: body) : nil
         switch status {
         case 300..<400: return .notASyloServer
         case 401: return .unauthorized
-        case 403: return .forbidden
-        case 400: return .badRequest(message: isJSON ? serverMessage(in: body) : nil)
-        case 404: return .notFound
+        case 403: return .forbidden(message: message)
+        case 400: return .badRequest(message: message)
+        case 404: return .notFound(message: message)
+        case 413: return .tooLarge(message: message)
         case 429: return .rateLimited
-        case 500..<600: return .server(status: status)
-        default: return .http(status: status)
+        case 500..<600: return .server(status: HTTPStatus(status, message: message))
+        default: return .http(status: HTTPStatus(status, message: message))
         }
     }
 
-    private struct ErrorBody: Decodable { let error: String? }
+    private struct ErrorBody: Decodable {
+        let error: String?
+        let message: String?
 
-    private static func serverMessage(in body: Data) -> String? {
-        (try? JSONDecoder().decode(ErrorBody.self, from: body))?.error
+        private enum CodingKeys: String, CodingKey { case error, message }
+
+        init(from decoder: any Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            // A key that is not text (an error object) is not a message; it must not lose the other.
+            error = (try? c.decodeIfPresent(String.self, forKey: .error)) ?? nil
+            message = (try? c.decodeIfPresent(String.self, forKey: .message)) ?? nil
+        }
+    }
+
+    /// The `error` (or else `message`) text of a JSON error answer, cleaned for showing: line breaks
+    /// become spaces, control and format characters (bidirectional overrides, zero-width characters)
+    /// are dropped, the ends are trimmed, and it is cut at 300 unicode scalars. Nil when nothing is left.
+    static func serverMessage(in body: Data) -> String? {
+        guard let parsed = try? JSONDecoder().decode(ErrorBody.self, from: body) else { return nil }
+        for candidate in [parsed.error, parsed.message] {
+            if let text = candidate.flatMap(cleaned), !text.isEmpty { return text }
+        }
+        return nil
+    }
+
+    static func cleaned(_ text: String) -> String? {
+        var scalars = String.UnicodeScalarView()
+        for scalar in text.unicodeScalars {
+            switch scalar.properties.generalCategory {
+            case .control where scalar == "\n" || scalar == "\r" || scalar == "\t":
+                scalars.append(" ")
+            case .control, .format:
+                continue
+            default:
+                scalars.append(scalar)
+            }
+            if scalars.count >= 300 { break }
+        }
+        let trimmed = String(scalars).trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private static func describe(_ error: DecodingError) -> String {
@@ -136,4 +258,27 @@ public enum NetworkError: Error, Sendable, Equatable {
         let where_ = path.map { $0.intValue.map(String.init) ?? $0.stringValue }.joined(separator: ".")
         return where_.isEmpty ? context.debugDescription : "\(where_): \(context.debugDescription)"
     }
+}
+
+/// An HTTP status that also carries what the server said about it. It reads as a number: it is
+/// written with an integer literal (`.http(status: 409)`), compares equal to another status with the
+/// same code whatever text each carries, and prints as the code.
+public struct HTTPStatus: Sendable, Hashable, Comparable, ExpressibleByIntegerLiteral, CustomStringConvertible {
+    public let code: Int
+    /// The server's JSON `error` or `message` text, nil when there was none. Not part of equality.
+    public let message: String?
+
+    public init(_ code: Int, message: String? = nil) {
+        self.code = code
+        self.message = message
+    }
+
+    public init(integerLiteral value: Int) {
+        self.init(value)
+    }
+
+    public static func == (lhs: HTTPStatus, rhs: HTTPStatus) -> Bool { lhs.code == rhs.code }
+    public static func < (lhs: HTTPStatus, rhs: HTTPStatus) -> Bool { lhs.code < rhs.code }
+    public func hash(into hasher: inout Hasher) { hasher.combine(code) }
+    public var description: String { String(code) }
 }

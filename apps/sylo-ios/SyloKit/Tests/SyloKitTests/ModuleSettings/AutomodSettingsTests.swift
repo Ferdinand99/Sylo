@@ -43,7 +43,7 @@ struct AutomodSettingsTests {
         let settings = page.settings
         #expect(settings.timeoutMinutes == 30)
         #expect(settings.exemptChannels == ["222222222222222222"])
-        #expect(settings.exemptRoles == ["111111111111111111"])
+        #expect(settings.immunityRoles == ["111111111111111111"])
         #expect(settings.native.enabled)
         #expect(settings.native.words)
         #expect(!settings.native.mentions)
@@ -80,7 +80,7 @@ struct AutomodSettingsTests {
         #expect(settings.deleteMessage)
         #expect(settings.timeoutMinutes == 10)
         #expect(settings.exemptChannels.isEmpty)
-        #expect(settings.exemptRoles.isEmpty)
+        #expect(settings.immunityRoles.isEmpty)
         #expect(!settings.native.enabled)
         #expect(settings.native.presets.isEmpty)
         let rules = settings.rules
@@ -107,7 +107,7 @@ struct AutomodSettingsTests {
         let page = try JSONDecoder().decode(AutomodPage.self, from: Data(Self.pageJSON.utf8))
         let data = try JSONEncoder().encode(page.settings)
         let body = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
-        #expect(Set(body.keys) == ["deleteMessage", "timeoutMinutes", "exemptChannels", "exemptRoles", "native",
+        #expect(Set(body.keys) == ["deleteMessage", "timeoutMinutes", "exemptChannels", "immunityRoles", "native",
                                    "rules"])
         let native = try #require(body["native"] as? [String: Any])
         #expect(Set(native.keys) == ["enabled", "words", "mentions", "spam", "presets"])
@@ -128,6 +128,43 @@ struct AutomodSettingsTests {
         #expect(rules["links"]?["allowed"] as? String == "youtube.com, twitch.tv")
         #expect(rules["words"]?["list"] as? String == "badword, another phrase")
         #expect(rules["invites"]?["action"] as? String == "warn")
+    }
+
+    @Test("the immunity roles are saved as immunityRoles and exemptRoles is never sent")
+    func immunityRolesAreSaved() throws {
+        let page = try JSONDecoder().decode(AutomodPage.self, from: Data(Self.pageJSON.utf8))
+        var settings = page.settings
+        settings.immunityRoles = ["111111111111111111", "333333333333333333"]
+        let body = try #require(
+            try JSONSerialization.jsonObject(with: JSONEncoder().encode(settings)) as? [String: Any])
+        #expect(body["immunityRoles"] as? [String] == ["111111111111111111", "333333333333333333"])
+        #expect(body["exemptRoles"] == nil)
+        // Clearing them sends an empty list, which the server reads as "clear".
+        settings.immunityRoles = []
+        let cleared = try #require(
+            try JSONSerialization.jsonObject(with: JSONEncoder().encode(settings)) as? [String: Any])
+        #expect((cleared["immunityRoles"] as? [String])?.isEmpty == true)
+        #expect(settings != page.settings)
+    }
+
+    @Test("a save puts immunityRoles on the wire through the model")
+    @MainActor
+    func immunityRolesOnTheWire() async throws {
+        let page = try JSONDecoder().decode(AutomodPage.self, from: Data(Self.pageJSON.utf8))
+        let clients = StubClients { endpoint in
+            if endpoint is Endpoints.LoadModuleSettings<AutomodPage> { return page }
+            if let saving = endpoint as? Endpoints.SaveModuleSettings<AutomodPage> {
+                return SavedModuleSettings(settings: saving.settings)
+            }
+            throw NetworkError.notFound
+        }
+        let session = makeSignedInSession(clients: clients)
+        let model = ModuleSettingsModel<AutomodPage>(server: "1", session: session)
+        await model.load()
+        model.draft?.immunityRoles.append("444444444444444444")
+        #expect(await model.save())
+        let saved = clients.calls.compactMap { $0.endpoint as? Endpoints.SaveModuleSettings<AutomodPage> }
+        #expect(saved.first?.settings.immunityRoles == ["111111111111111111", "444444444444444444"])
     }
 
     @Test("choosing a mode sets enabled and action like the web form")

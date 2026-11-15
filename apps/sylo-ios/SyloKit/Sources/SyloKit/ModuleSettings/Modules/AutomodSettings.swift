@@ -6,8 +6,9 @@ import Foundation
 //
 // The web form sends its whole config back, with the allowed domains and the word list as typed
 // text (comma or newline separated); the server splits them. It ignores `deleteMessage` (always
-// true) and `exemptRoles` (the immunity roles, saved with their own endpoint), which are sent
-// back unchanged.
+// true), which is sent back unchanged. The immunity roles are read as `exemptRoles` and saved with
+// the rest of the page as `immunityRoles` (absent keeps what is stored, [] clears them). The server
+// ignores `exemptRoles` in a save on purpose, so it is never sent.
 
 /// The Auto-moderation settings page.
 public struct AutomodPage: ModuleSettingsPage {
@@ -108,17 +109,18 @@ public struct AutomodSettings: Codable, Sendable, Equatable {
     public var timeoutMinutes: Int
     /// Channels automod never acts in.
     public var exemptChannels: [String]
-    /// The immunity roles (read only here; the server keeps its own copy on save).
-    public let exemptRoles: [String]
+    /// The immunity roles: members with one of these are never touched by auto-moderation or the
+    /// warning auto-actions. Read from the server's `exemptRoles`, saved as `immunityRoles`.
+    public var immunityRoles: [String]
     public var native: Native
     public var rules: Rules
 
     public init(deleteMessage: Bool = true, timeoutMinutes: Int = 10, exemptChannels: [String] = [],
-                exemptRoles: [String] = [], native: Native = Native(), rules: Rules = Rules()) {
+                immunityRoles: [String] = [], native: Native = Native(), rules: Rules = Rules()) {
         self.deleteMessage = deleteMessage
         self.timeoutMinutes = timeoutMinutes
         self.exemptChannels = exemptChannels
-        self.exemptRoles = exemptRoles
+        self.immunityRoles = immunityRoles
         self.native = native
         self.rules = rules
     }
@@ -126,19 +128,35 @@ public struct AutomodSettings: Codable, Sendable, Equatable {
     /// Discord's timeout cap, in minutes (28 days).
     public static let timeoutRange = 1...40320
 
-    private enum CodingKeys: String, CodingKey {
+    /// What the server sends. The immunity roles come as `exemptRoles`.
+    private enum ReadKeys: String, CodingKey {
         case deleteMessage, timeoutMinutes, exemptChannels, exemptRoles, native, rules
     }
 
+    /// What a save sends: the web form's keys, with `immunityRoles` instead of `exemptRoles`.
+    private enum WriteKeys: String, CodingKey {
+        case deleteMessage, timeoutMinutes, exemptChannels, immunityRoles, native, rules
+    }
+
     public init(from decoder: any Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let c = try decoder.container(keyedBy: ReadKeys.self)
         self.init(
             deleteMessage: try c.decode(forKey: .deleteMessage, or: true),
             timeoutMinutes: try c.decode(forKey: .timeoutMinutes, or: 10),
             exemptChannels: try c.decode(forKey: .exemptChannels, or: []),
-            exemptRoles: try c.decode(forKey: .exemptRoles, or: []),
+            immunityRoles: try c.decode(forKey: .exemptRoles, or: []),
             native: try c.decode(forKey: .native, or: Native()),
             rules: try c.decode(forKey: .rules, or: Rules()))
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: WriteKeys.self)
+        try c.encode(deleteMessage, forKey: .deleteMessage)
+        try c.encode(timeoutMinutes, forKey: .timeoutMinutes)
+        try c.encode(exemptChannels, forKey: .exemptChannels)
+        try c.encode(immunityRoles, forKey: .immunityRoles)
+        try c.encode(native, forKey: .native)
+        try c.encode(rules, forKey: .rules)
     }
 
     /// Mirrors the mappable checks onto Discord's own AutoMod (Discord servers only).

@@ -2,13 +2,38 @@ import SwiftUI
 import SyloKit
 
 /// Leveling: level-up announcements, XP cooldown and rate, role rewards, voice XP, XP multipliers,
-/// and no-XP roles and channels. Mirrors the settings part of web-v2/src/moduleForms/Leveling.jsx
-/// (the leaderboard preview and the set-XP / reset tools stay on the web).
+/// and no-XP roles and channels, then the tools to set one member's XP or wipe everyone's. Mirrors
+/// web-v2/src/moduleForms/Leveling.jsx (the leaderboard has its own screen).
 struct LevelingSettingsView: View {
     @State private var model: ModuleSettingsModel<LevelingPage>
+    @State private var actions: MemberActionModel
+    @State private var xpMember: MemberChoice?
+    @State private var xpText = ""
+    @State private var isConfirmingReset = false
+    /// Whether the last notice came from the wipe (it is shown under that button, not the XP form).
+    @State private var noticeIsWipe = false
+    private let server: ServerID
+    private let session: AppSession
 
     init(server: ServerID, session: AppSession) {
+        self.server = server
+        self.session = session
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
+        _actions = State(initialValue: MemberActionModel(server: server, session: session))
+    }
+
+    /// What was typed as the XP, nil when it is not a whole number.
+    private var typedXP: Int? { Int(xpText.trimmingCharacters(in: .whitespacesAndNewlines)) }
+
+    private func setXP() {
+        guard let member = xpMember, let xp = typedXP else { return }
+        noticeIsWipe = false
+        Task {
+            if await actions.setXP(member: member, xp: xp) {
+                xpMember = nil
+                xpText = ""
+            }
+        }
     }
 
     var body: some View {
@@ -23,11 +48,11 @@ struct LevelingSettingsView: View {
                 }
                 if settings.announce == .channel {
                     ChannelPicker(title: "Channel", selection: $settings.announceChannel, channels: page.channels,
-                                  noneTitle: "Where they levelled up")
+                                  noneTitle: "Where they levelled up", health: true)
                 }
                 if settings.announce != .off {
-                    TextArea(title: "Level-up message", text: $settings.announceMessage,
-                             limit: LevelingSettings.maxMessageLength, lines: 2...6)
+                    LimitedTextField(title: "Level-up message", text: $settings.announceMessage,
+                                     limit: LevelingSettings.maxMessageLength, lines: 2...6)
                 }
             } header: {
                 Text("Leveling up")
@@ -76,7 +101,7 @@ struct LevelingSettingsView: View {
             ForEach($settings.rewards) { $reward in
                 Section {
                     NumberField(title: "Level", value: $reward.level, range: LevelingSettings.Reward.levelRange)
-                    RolePicker(title: "Role", selection: $reward.roleId, roles: page.roles, noneTitle: "Choose a role")
+                    RolePicker(title: "Role", selection: $reward.roleId, roles: page.roles, noneTitle: "Choose a role", health: true)
                     Button("Remove Reward", role: .destructive) {
                         settings.rewards.removeAll { $0.id == reward.id }
                     }
@@ -157,7 +182,55 @@ struct LevelingSettingsView: View {
                     Text("No channels give XP, except the ones chosen.")
                 }
             }
+
+            Section {
+                MemberPicker("Member", server: server, session: session, selection: $xpMember)
+                LabeledContent("New XP total") {
+                    TextField("XP", text: $xpText)
+                        .keyboardType(.numberPad)
+                        .multilineTextAlignment(.trailing)
+                        .autocorrectionDisabled()
+                }
+                Button("Update XP") { setXP() }
+                    .disabled(xpMember == nil || typedXP == nil || actions.isWorking)
+                if let notice = actions.notice, !noticeIsWipe {
+                    StatusMessage(notice, kind: .notice)
+                }
+            } header: {
+                Text("Set XP for a member")
+            } footer: {
+                Text("Replaces the member's XP total. Their level and reward roles follow.")
+            }
+
+            Section {
+                Button("Reset All Leveling Data…", role: .destructive) { isConfirmingReset = true }
+                    .disabled(actions.isWorking)
+                if let notice = actions.notice, noticeIsWipe {
+                    StatusMessage(notice, kind: .notice)
+                }
+            } footer: {
+                Text("Wipes every member's XP, level and message count on this server. This can't be undone.")
+            }
         }
+        .typedConfirmation(
+            "Wipe All Leveling Data?",
+            message: "Every member's XP, level and message count on this server is deleted. This can't be undone.",
+            word: MemberActionLimits.resetXPWord, isPresented: $isConfirmingReset,
+            confirmTitle: "Wipe All Leveling Data"
+        ) {
+            noticeIsWipe = true
+            Task { _ = await actions.resetAllXP() }
+        }
+        .alert("Couldn't Update XP", isPresented: isShowingActionError, presenting: actions.errorMessage) { _ in
+            Button("OK") {}
+        } message: { message in
+            Text(message)
+        }
+        .sensoryFeedback(.success, trigger: actions.doneCount)
+    }
+
+    private var isShowingActionError: Binding<Bool> {
+        Binding(get: { actions.errorMessage != nil }, set: { if !$0 { actions.errorMessage = nil } })
     }
 }
 

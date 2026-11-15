@@ -4,12 +4,12 @@ import Foundation
 // src/web/routes/v2Economy.js; web form web-v2/src/moduleForms/Economy.jsx): a server currency
 // members earn by chatting, voice, /daily and /work, with a bank, payments and optional robbing.
 //
-// The app edits every setting of the Settings tab. The shop items, the staff changes to a member's
-// money and the danger-zone reset stay in the web dashboard; the app adds a read only balance
-// lookup (see Economy/EconomyMembers.swift). The server builds the whole config from what it is
-// sent, so a save always carries every field the server sent. Sylo 5.2 adds `collectibleChannelId` and
-// `collectionPublic` (the shop's collectibles; the items, their pictures and rarities stay in the web
-// dashboard). A server before 5.2 does not send them, so the app does not send them back either.
+// The app edits every setting of the Settings tab, and has screens of its own for the shop items,
+// the members' balances and inventories, the activity log and the danger-zone reset (Economy/ and
+// Views/ModuleSettings/Modules/Shop). The server builds the whole config from what it is sent, so a
+// save always carries every field the server sent. Sylo 5.2 adds `collectibleChannelId` and
+// `collectionPublic` (the shop's collectibles). A server before 5.2 does not send them, so the app
+// does not send them back either.
 
 /// The Economy settings page.
 public struct EconomyPage: ModuleSettingsPage {
@@ -249,4 +249,8 @@ public struct EconomySettings: Codable, Sendable, Equatable {
         collectibleChannelId = try? c.decodeIfPresent(String.self, forKey: .collectibleChannelId)
         collectionPublic = try? c.decodeIfPresent(Bool.self, forKey: .collectionPublic)
     }
+}
+
+extension EconomySettings: SaveValidated {
+    public var saveProblem: String? { currencyProblem }
 }

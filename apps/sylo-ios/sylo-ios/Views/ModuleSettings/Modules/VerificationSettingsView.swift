@@ -29,34 +29,30 @@ struct VerificationSettingsView: View {
 
             Section {
                 RolePicker(title: "Verified role", selection: $settings.verifiedRoleId, roles: page.roles,
-                           noneTitle: "Choose a role")
+                           noneTitle: "Choose a role", health: true)
                 ChannelPicker(title: "Verify channel", selection: $settings.channelId, channels: page.channels,
-                              noneTitle: "Choose a channel")
+                              noneTitle: "Choose a channel", embed: true, health: true)
             } footer: {
                 Text("The role is granted on success. Sylo's own role must be higher than this one in Server Settings › Roles, or it can't give it out.")
             }
 
             Section("Message title") {
-                TextField("Title", text: $settings.title)
-                    .onChange(of: settings.title) {
-                        if settings.title.count > VerificationSettings.maxTitleLength {
-                            settings.title = String(settings.title.prefix(VerificationSettings.maxTitleLength))
-                        }
-                    }
+                LimitedTextField(title: "Title", text: $settings.title,
+                                 limit: VerificationSettings.maxTitleLength)
             }
 
             Section("Message body") {
-                TextArea(title: "Message", text: $settings.message,
-                         limit: VerificationSettings.maxMessageLength, lines: 2...8)
+                LimitedTextField(title: "Message", text: $settings.message,
+                                 limit: VerificationSettings.maxMessageLength, lines: 2...8)
             }
 
             Section("Reply after verifying") {
-                TextArea(title: "Reply", text: $settings.successMessage,
-                         limit: VerificationSettings.maxSuccessMessageLength, lines: 1...4)
+                LimitedTextField(title: "Reply", text: $settings.successMessage,
+                                 limit: VerificationSettings.maxSuccessMessageLength, lines: 1...4)
             }
 
             Section {
-                ChannelPicker(title: "Log channel", selection: $settings.logChannelId, channels: page.channels)
+                ChannelPicker(title: "Log channel", selection: $settings.logChannelId, channels: page.channels, embed: true, health: true)
             } footer: {
                 Text("Optional.")
             }

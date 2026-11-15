@@ -6,14 +6,26 @@ import SyloKit
 /// Mirrors web-v2/src/moduleForms/Appeals.jsx.
 struct AppealsSettingsView: View {
     @State private var model: ModuleSettingsModel<AppealsPage>
+    private let server: ServerID
+    private let session: AppSession
 
     init(server: ServerID, session: AppSession) {
+        self.server = server
+        self.session = session
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
     }
 
     var body: some View {
         ModuleSettingsForm("Ban Appeals", model: model) { $settings, page in
-            ModuleIntro("When a member is banned, Sylo DMs them a private link to an appeal form. Their answers show up on the dashboard's Appeals tab, and the decision (with a single-use rejoin invite on accept) is shown on that same link when they reopen it.")
+            ModuleIntro("When a member is banned, Sylo DMs them a private link to an appeal form. Their answers show up under Appeals in the Moderation tab, and the decision (with a single-use rejoin invite on accept) is shown on that same link when they reopen it.")
+
+            Section {
+                NavigationLink {
+                    AppealsReviewView(server: server, session: session, showsSettingsLink: false)
+                } label: {
+                    Label("Review Appeals", systemImage: "tray.full")
+                }
+            }
 
             Section {
                 if !page.dashboardUrlSet {
@@ -27,11 +39,11 @@ struct AppealsSettingsView: View {
             Section {
                 ForEach(settings.questions.indices, id: \.self) { index in
                     if index == 0 {
-                        AppealsLimitedField(title: "Question 1 (required)", text: $settings.questions[index],
-                                            limit: AppealsSettings.maxQuestionLength)
+                        LimitedTextField(title: "Question 1 (required)", text: $settings.questions[index],
+                                         limit: AppealsSettings.maxQuestionLength)
                     } else {
-                        AppealsLimitedField(title: "Question \(index + 1) (optional)", text: $settings.questions[index],
-                                            limit: AppealsSettings.maxQuestionLength)
+                        LimitedTextField(title: "Question \(index + 1) (optional)", text: $settings.questions[index],
+                                         limit: AppealsSettings.maxQuestionLength)
                     }
                 }
             } header: {
@@ -42,7 +54,7 @@ struct AppealsSettingsView: View {
 
             Section {
                 Toggle("Unban when an appeal is accepted", isOn: $settings.autoUnbanOnAccept)
-                ChannelPicker(title: "Review channel", selection: $settings.reviewChannelId, channels: page.channels)
+                ChannelPicker(title: "Review channel", selection: $settings.reviewChannelId, channels: page.channels, embed: true, health: true)
                 NumberField(title: "Cooldown after a denial", value: $settings.cooldownDays,
                             range: AppealsSettings.cooldownRange, unit: "days")
             } footer: {
@@ -50,8 +62,8 @@ struct AppealsSettingsView: View {
             }
 
             Section {
-                TextArea(title: "e.g. Appeals are reviewed within 48 hours.", text: $settings.appealMessage,
-                         limit: AppealsSettings.maxMessageLength, lines: 2...6)
+                LimitedTextField(title: "e.g. Appeals are reviewed within 48 hours.", text: $settings.appealMessage,
+                                 limit: AppealsSettings.maxMessageLength, lines: 2...6)
             } header: {
                 Text("Extra line in the ban DM")
             } footer: {
@@ -59,8 +71,8 @@ struct AppealsSettingsView: View {
             }
 
             Section {
-                AppealsLimitedField(title: "https://discord.gg/…", text: $settings.appealServerInvite,
-                                    limit: AppealsSettings.maxInviteLength)
+                LimitedTextField(title: "https://discord.gg/…", text: $settings.appealServerInvite,
+                                 limit: AppealsSettings.maxInviteLength)
                     .keyboardType(.URL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -76,20 +88,6 @@ struct AppealsSettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }
-    }
-}
-
-/// A one-line text field cut to a character limit.
-private struct AppealsLimitedField: View {
-    let title: LocalizedStringKey
-    @Binding var text: String
-    let limit: Int
-
-    var body: some View {
-        TextField(title, text: $text)
-            .onChange(of: text) {
-                if text.count > limit { text = String(text.prefix(limit)) }
-            }
     }
 }
 

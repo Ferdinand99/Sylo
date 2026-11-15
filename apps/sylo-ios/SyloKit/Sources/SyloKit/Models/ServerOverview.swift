@@ -7,15 +7,20 @@ public struct ServerOverview: Decodable, Sendable, Equatable {
     public let openTickets: Int
     public let openAppeals: Int
     public let groups: [OverviewGroup]
+    /// What needs attention (Sylo 5.1 and later send parts of it; the health check is 5.2). nil from a
+    /// server that sends none. See ``attentionItems``.
+    public let attention: OverviewAttention?
 
-    public init(server: OverviewServer, openTickets: Int = 0, openAppeals: Int = 0, groups: [OverviewGroup]) {
+    public init(server: OverviewServer, openTickets: Int = 0, openAppeals: Int = 0, groups: [OverviewGroup],
+                attention: OverviewAttention? = nil) {
         self.server = server
         self.openTickets = openTickets
         self.openAppeals = openAppeals
         self.groups = groups
+        self.attention = attention
     }
 
-    private enum CodingKeys: String, CodingKey { case guild, openTickets, openAppeals, groups }
+    private enum CodingKeys: String, CodingKey { case guild, openTickets, openAppeals, groups, attention }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -23,6 +28,8 @@ public struct ServerOverview: Decodable, Sendable, Equatable {
         openTickets = try c.decodeIfPresent(Int.self, forKey: .openTickets) ?? 0
         openAppeals = try c.decodeIfPresent(Int.self, forKey: .openAppeals) ?? 0
         groups = try c.decodeLossyArray(of: OverviewGroup.self, forKey: .groups)
+        // `try?`: an attention block of an odd shape must never empty the overview.
+        attention = try? c.decodeIfPresent(OverviewAttention.self, forKey: .attention)
     }
 }
 
@@ -106,8 +113,6 @@ public struct OverviewCard: Decodable, Sendable, Hashable, Identifiable {
     /// Privileged Discord intents the bot lacks for this module (why ``status`` is `.blocked`).
     public let missingIntents: [String]
     public let status: ModuleStatus
-    /// The card's page in the web dashboard, relative to the server address.
-    public let webPath: String?
     public let lines: [StatusLine]
 
     /// The id to toggle, for a module card.
@@ -116,7 +121,7 @@ public struct OverviewCard: Decodable, Sendable, Hashable, Identifiable {
     public init(
         kind: OverviewCardKind, id: String, name: String, icon: String = "", description: String? = nil,
         hasToggle: Bool, isEnabled: Bool?, isBeta: Bool = false, missingIntents: [String] = [],
-        status: ModuleStatus, webPath: String? = nil, lines: [StatusLine] = []
+        status: ModuleStatus, lines: [StatusLine] = []
     ) {
         self.kind = kind
         self.id = id
@@ -128,12 +133,11 @@ public struct OverviewCard: Decodable, Sendable, Hashable, Identifiable {
         self.isBeta = isBeta
         self.missingIntents = missingIntents
         self.status = status
-        self.webPath = webPath
         self.lines = lines
     }
 
     private enum CodingKeys: String, CodingKey {
-        case kind, id, name, icon, description, hasToggle, enabled, beta, missingIntents, status, href, lines
+        case kind, id, name, icon, description, hasToggle, enabled, beta, missingIntents, status, lines
     }
 
     public init(from decoder: any Decoder) throws {
@@ -148,7 +152,6 @@ public struct OverviewCard: Decodable, Sendable, Hashable, Identifiable {
         isBeta = try c.decodeIfPresent(Bool.self, forKey: .beta) ?? false
         missingIntents = try c.decodeIfPresent([String].self, forKey: .missingIntents) ?? []
         status = try c.decodeIfPresent(ModuleStatus.self, forKey: .status) ?? .other("")
-        webPath = try c.decodeIfPresent(String.self, forKey: .href)
         lines = try c.decodeLossyArray(of: StatusLine.self, forKey: .lines)
     }
 }

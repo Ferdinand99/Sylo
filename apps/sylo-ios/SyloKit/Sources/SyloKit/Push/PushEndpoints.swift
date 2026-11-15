@@ -16,6 +16,13 @@ public enum PushRelay {
     public static func isOfficial(_ url: URL) -> Bool {
         (try? ServerURL(url.absoluteString)) == official
     }
+
+    /// Whether the app may hand this Sylo server the raw APNs device token (a server that sends with its own
+    /// APNs key): only the hosted Sylo. Any other server gets the relay's token or a Pigeon handle, never the
+    /// device token itself.
+    public static func mayReceiveDeviceToken(_ server: ServerURL) -> Bool {
+        server == official
+    }
 }
 
 // The push notification calls. Notifications are tied to this device's app token, so signing out

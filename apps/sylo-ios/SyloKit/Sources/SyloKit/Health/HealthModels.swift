@@ -157,6 +157,28 @@ public struct HealthReport: Decodable, Sendable, Equatable {
     }
 }
 
+extension HealthReport {
+    /// ``uptime`` in seconds: the server writes it as "3d 04h 12m" or, under an hour, "05m 12s" (with
+    /// whole minutes only once it is an hour or more). Nil when it is missing or in another shape.
+    public var uptimeSeconds: Int? {
+        guard let uptime else { return nil }
+        var total = 0
+        var parts = 0
+        for token in uptime.split(separator: " ") {
+            guard let unit = token.last, let value = Int(token.dropLast()), value >= 0 else { return nil }
+            switch unit {
+            case "d": total += value * 86_400
+            case "h": total += value * 3_600
+            case "m": total += value * 60
+            case "s": total += value
+            default: return nil
+            }
+            parts += 1
+        }
+        return parts > 0 ? total : nil
+    }
+}
+
 /// How serious a dev-log event is.
 public enum DevLogLevel: String, Sendable, Hashable, Codable {
     case error
@@ -297,6 +319,15 @@ extension Endpoints {
     public struct SendDevLogTest: APIEndpoint {
         public typealias Response = DevLogTestResult
         public var path: String { "/api/v2/health/dev-log-test" }
+        public var method: HTTPMethod { .post }
+        public init() {}
+    }
+
+    /// `POST /api/v2/health/dev-log-error-test`: logs a real error on the server, to prove the whole
+    /// error pipeline (dev-log channel, notifications to the operators' devices) works.
+    public struct SendDevLogErrorTest: APIEndpoint {
+        public typealias Response = OKResponse
+        public var path: String { "/api/v2/health/dev-log-error-test" }
         public var method: HTTPMethod { .post }
         public init() {}
     }

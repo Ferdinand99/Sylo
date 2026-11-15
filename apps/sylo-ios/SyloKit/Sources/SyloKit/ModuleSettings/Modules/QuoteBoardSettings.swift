@@ -2,8 +2,8 @@ import Foundation
 
 // Quote board (src/modules/quoteBoard.js, normaliseQuoteBoardConfig; page route
 // src/web/routes/v2Quotes.js; web form web-v2/src/moduleForms/QuoteBoard.jsx): members save
-// memorable messages as numbered quotes and bring them back later. The app edits the settings and
-// lists the latest quotes; searching and deleting quotes is left to the web dashboard.
+// memorable messages as numbered quotes and bring them back later. The app edits the settings,
+// lists and searches the quotes and deletes them (Quotes/QuoteEndpoints.swift).
 
 /// The Quote board settings page.
 public struct QuoteBoardPage: ModuleSettingsPage {
@@ -84,7 +84,7 @@ public struct QuoteBoardSettings: Codable, Sendable, Equatable {
     }
 }
 
-/// One saved quote in the list under the settings (read only here).
+/// One saved quote in the list under the settings.
 public struct QuoteSummary: Decodable, Sendable, Hashable, Identifiable {
     /// The per-server number ("#7"); never reused.
     public let number: Int

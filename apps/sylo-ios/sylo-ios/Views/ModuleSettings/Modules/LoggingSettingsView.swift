@@ -5,15 +5,17 @@ import SyloKit
 /// web-v2/src/moduleForms/Logging.jsx.
 struct LoggingSettingsView: View {
     @State private var model: ModuleSettingsModel<LoggingPage>
+    @State private var test: ModuleTestModel
 
     init(server: ServerID, session: AppSession) {
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
+        _test = State(initialValue: ModuleTestModel(server: server, module: "logging", session: session))
     }
 
     var body: some View {
         ModuleSettingsForm("Server Logging", model: model) { $settings, page in
             Section {
-                ChannelPicker(title: "Log channel", selection: $settings.channel, channels: page.channels)
+                ChannelPicker(title: "Log channel", selection: $settings.channel, channels: page.channels, embed: true, health: true)
             } footer: {
                 Text("Posts member, message, role and channel events to this channel as they happen.")
             }
@@ -28,6 +30,10 @@ struct LoggingSettingsView: View {
                     }
                 }
             }
+
+            SendTestButton(model: test, hasUnsavedChanges: model.hasChanges,
+                           sample: "a sample log message",
+                           channelName: page.channels.first { $0.id == settings.channel }?.name)
         }
     }
 }

@@ -57,42 +57,7 @@ struct ModuleRow: View {
 /// The "Beta" tag for modules that are new and still settling in.
 struct BetaBadge: View {
     var body: some View {
-        Text("Beta")
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .foregroundStyle(.tint)
-            .background(.tint.opacity(0.15), in: Capsule())
-    }
-}
-
-/// A card without a switch: opens its page in the web dashboard.
-struct LinkCardRow: View {
-    let card: OverviewCard
-    let url: URL?
-
-    @ScaledMetric(relativeTo: .body) private var iconWidth = 28
-
-    var body: some View {
-        if let url {
-            Link(destination: url) {
-                Label {
-                    HStack {
-                        Text(card.name)
-                        Spacer()
-                        Image(systemName: "arrow.up.forward")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                } icon: {
-                    Image(systemName: ModuleSymbol.name(forIcon: card.icon))
-                        .foregroundStyle(.tint)
-                        .frame(width: iconWidth)
-                }
-            }
-            .foregroundStyle(.primary)
-            .accessibilityHint("Opens in the web dashboard")
-        }
+        StatusTag("Beta", tint: .accentColor, tintsText: true)
     }
 }
 
@@ -101,8 +66,6 @@ struct LinkCardRow: View {
         ForEach(PreviewData.overview.groups.flatMap(\.cards)) { card in
             if card.hasToggle {
                 ModuleRow(card: card, isPending: false) { _ in }
-            } else {
-                LinkCardRow(card: card, url: URL(string: "https://app.sylobot.com"))
             }
         }
     }
