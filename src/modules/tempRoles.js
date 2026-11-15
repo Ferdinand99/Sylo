@@ -341,7 +341,7 @@ export async function removeTempRole({ guild, userId, roleId, by = null, reason 
 
   let roleRemoved = false;
   let warning;
-  let member = null;
+  let member;
   try {
     member = role ? await memberOf(guild, userId) : null;
   } catch (err) {
