@@ -265,16 +265,38 @@ export function scheduleRescan(guild, board) {
 /** The channel whose permissions apply: a thread follows its parent. */
 const permissionSource = (channel) => (channel?.isThread?.() ? channel.parent : channel);
 
-/** Can every role that reads the board channel also read the source channel? (A missing answer is no.) */
+/** The people the board channel names itself in its overwrites (not through a role). */
+function memberOverwriteTargets(guild, channel) {
+  const overwrites = permissionSource(channel)?.permissionOverwrites;
+  const list = overwrites?.cache ? [...overwrites.cache.values()] : (overwrites?.toJSON?.() ?? []);
+  const members = [];
+  for (const o of list) {
+    if (o?.type !== 1 && o?.type !== 'member') continue; // OverwriteType.Member
+    // A member who is not in the cache cannot be asked; most are people who left.
+    const member = guild.members?.cache?.get?.(o.id) ?? guild.members?.get?.(o.id);
+    if (member) members.push(member);
+  }
+  return members;
+}
+
+/**
+ * Can everyone who reads the board channel also read the source channel? Every role (@everyone
+ * included) that can read the board, and every member the board names in an overwrite. A bot's own
+ * role is not an audience; Booster and integration roles are held by people, so they count. A
+ * missing answer is no.
+ */
 function audienceFits(guild, source, dest) {
   const roles = new Set([guild.roles?.everyone, ...(guild.roles?.cache?.values?.() ?? [])]);
   roles.delete(undefined);
   roles.delete(null);
-  const sees = (channel, role) =>
-    permissionSource(channel)?.permissionsFor?.(role)?.has?.('ViewChannel') === true;
+  const sees = (channel, who) =>
+    permissionSource(channel)?.permissionsFor?.(who)?.has?.('ViewChannel') === true;
   for (const role of roles) {
-    if (role.managed) continue;
+    if (role.tags?.botId) continue;
     if (sees(dest, role) && !sees(source, role)) return false;
+  }
+  for (const member of memberOverwriteTargets(guild, dest)) {
+    if (sees(dest, member) && !sees(source, member)) return false;
   }
   return roles.size > 0;
 }
@@ -287,7 +309,8 @@ function audienceFits(guild, source, dest) {
  *  - an age-restricted source: only on a board channel that is age-restricted too (a platform age
  *    gate; no setting overrides it);
  *  - a source that is hidden from some of the board's readers: every role that can view the board channel
- *    (@everyone included; bot-managed roles are not an audience) must also be able to view the source,
+ *    (@everyone included; a bot's own role is not an audience) and every member the board names in an
+ *    overwrite must also be able to view the source,
  *    so a server that gates every channel behind a Member or Verified role keeps working. Otherwise only
  *    when an admin picked that channel for the board ("only these channels", `channelMode: 'deny'`).
  * @param {any} guild

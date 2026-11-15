@@ -12,7 +12,9 @@ import { log } from '../../lib/log.js';
 /**
  * The labels to clear from legacy name-only appeals when this person is erased from a server. Only a
  * person who has a dashboard account, and who holds staff access (Inbox or Edit) in that server now,
- * can have decided an appeal there: nobody else gets a name match at all.
+ * can have decided an appeal there: nobody else gets a name match at all. What remains: two staff
+ * accounts that carry the same stored label (both "Alex") can clear each other's name-only appeals,
+ * rows that predate decided_by_user_id; it takes current staff access, so it is accepted.
  * @param {string} guildKey  the server's key (platform form)
  * @param {string} userId  their id on that server's platform
  * @returns {Promise<string[]>}

@@ -16,7 +16,14 @@ const SRC = '100000000000001002';
 const EVERYONE = { id: G, name: '@everyone', managed: false };
 const VERIFIED = { id: '500000000000000001', name: 'Verified', managed: false };
 const STAFF = { id: '500000000000000002', name: 'Staff', managed: false };
-const BOT_ROLE = { id: '500000000000000003', name: 'SomeBot', managed: true };
+const BOT_ROLE = { id: '500000000000000003', name: 'SomeBot', managed: true, tags: { botId: '1' } };
+// the Server Booster role is managed too, but people hold it
+const BOOSTER = {
+  id: '500000000000000004',
+  name: 'Booster',
+  managed: true,
+  tags: { premiumSubscriberRole: true },
+};
 
 const channel = (id, view, extra = {}) => ({
   id,
@@ -28,11 +35,14 @@ const channel = (id, view, extra = {}) => ({
   ...extra,
 });
 
-function world({ board, source, platform = 'discord' }) {
+function world({ board, source, platform = 'discord', memberOverwrite = null }) {
   const sent = [];
   const deleted = [];
   const post = { id: 'oldpost', delete: async () => deleted.push('oldpost') };
   const dest = channel(BOARD, board, {
+    ...(memberOverwrite && {
+      permissionOverwrites: { cache: new Map([[memberOverwrite, { id: memberOverwrite, type: 1 }]]) },
+    }),
     send: async (p) => {
       sent.push(p);
       return { id: `post${sent.length}`, react: async () => {} };
@@ -40,13 +50,13 @@ function world({ board, source, platform = 'discord' }) {
     messages: { fetch: async () => post },
   });
   const src = channel(SRC, source);
-  const roles = new Map([EVERYONE, VERIFIED, STAFF, BOT_ROLE].map((r) => [r.id, r]));
+  const roles = new Map([EVERYONE, VERIFIED, STAFF, BOT_ROLE, BOOSTER].map((r) => [r.id, r]));
   const guild = {
     id: G,
     nsfw: false,
     channels: { cache: new Map([dest, src].map((c) => [c.id, c])) },
     roles: { everyone: EVERYONE, cache: roles },
-    members: { me: {}, cache: new Map(), fetch: async () => null },
+    members: { me: {}, cache: new Map([['m1', { id: 'm1' }]]), fetch: async () => null },
     emojis: { cache: new Map() },
   };
   const client = { guilds: { cache: new Map([[G, guild]]) } };
@@ -111,6 +121,22 @@ test('a staff-only source on a staff-only board is copied; on a board that @ever
   const open = world({ board: [EVERYONE.id, VERIFIED.id, STAFF.id], source: [VERIFIED.id, STAFF.id] });
   await react(open);
   assert.equal(open.sent.length, 0);
+});
+
+test('a booster or integration role is held by people: it is an audience even though it is managed', async () => {
+  // the board is in a supporters channel that Booster and Staff read; the source is staff-only
+  const w = world({ board: [BOOSTER.id, STAFF.id], source: [STAFF.id] });
+  await react(w);
+  assert.equal(w.sent.length, 0);
+});
+
+test('a person the board names in an overwrite must be able to read the source too', async () => {
+  const hidden = world({ board: ['m1'], source: [STAFF.id], memberOverwrite: 'm1' });
+  await react(hidden);
+  assert.equal(hidden.sent.length, 0);
+  const shared = world({ board: ['m1'], source: ['m1'], memberOverwrite: 'm1' });
+  await react(shared);
+  assert.equal(shared.sent.length, 1);
 });
 
 test('a bot-managed role that reads the board is not an audience', async () => {
