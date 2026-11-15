@@ -194,22 +194,31 @@ export async function reactors(rx, cap = MAX_VOTERS_PER_OPTION) {
   return all;
 }
 
-// A member lookup that found nobody (they left) is remembered for a minute, so a poll that is
-// tallied again and again does not ask the API about the same departed user each time.
+// A member lookup that found nobody (Unknown Member: they left) is remembered for a minute, so a
+// poll that is tallied again and again does not ask the API about the same departed user each
+// time. Any other failure (a 5xx, a timeout) is not remembered and is not "departed".
+const isUnknownMember = (err) => err?.code === 10007 || err?.status === 404 || err?.httpStatus === 404;
 const NO_MEMBER_TTL_MS = 60_000;
 const NO_MEMBER_MAX = 5000;
 const noMember = new Map(); // `${guildId}:${userId}` -> expiry (ms)
 
-/** The guild member for `uid`, or null. `memo` makes it one lookup per user within a tally. */
+/**
+ * The guild member for `uid`; null when they are not in the server; undefined when the lookup
+ * failed for another reason. `memo` makes it one lookup per user within a tally.
+ */
 async function memberOf(guild, uid, memo) {
   if (memo.has(uid)) return memo.get(uid);
   let member = guild.members.cache.get(uid) ?? null;
   if (!member) {
     const key = `${guildKey(guild)}:${uid}`;
     if ((noMember.get(key) ?? 0) <= Date.now()) {
-      member = await guild.members.fetch(uid).catch(() => null);
+      try {
+        member = (await guild.members.fetch(uid)) ?? null;
+      } catch (err) {
+        member = isUnknownMember(err) ? null : undefined;
+      }
       if (member) noMember.delete(key);
-      else {
+      else if (member === null) {
         if (noMember.size >= NO_MEMBER_MAX) noMember.clear();
         noMember.set(key, Date.now() + NO_MEMBER_TTL_MS);
       }
@@ -222,7 +231,8 @@ async function memberOf(guild, uid, memo) {
 /**
  * Count the votes on a poll message. With `strict`, a reactor who can no longer be found in the
  * server (they left) is not an eligible voter — used for the early-close check, so reactions from
- * accounts that have gone cannot keep it busy.
+ * accounts that have gone cannot keep it busy. A lookup that failed for another reason is not
+ * "left": that reactor is judged as before.
  */
 async function tally(message, poll, config, { strict = false } = {}) {
   const out = poll.options.map(() => ({ count: 0, voters: new Set() }));
@@ -234,7 +244,7 @@ async function tally(message, poll, config, { strict = false } = {}) {
     for (const [uid, user] of users) {
       if (user.bot) continue;
       const member = await memberOf(message.guild, uid, members);
-      if (strict && !member) continue;
+      if (strict && member === null) continue;
       if (!allowedToVote(member, config)) continue;
       out[i].voters.add(uid);
       out[i].count += 1;
@@ -249,7 +259,7 @@ async function tally(message, poll, config, { strict = false } = {}) {
 // so a burst of reactions ran many tallies at once. Now one check runs per poll at a time, at most
 // one every MAX_VOTES_CHECK_MS, and reactions that arrive meanwhile share a single trailing check.
 let maxVotesCheckMs = 5000;
-const maxVotesChecks = new Map(); // messageId -> { running, dirty, timer, last }
+const maxVotesChecks = new Map(); // messageId -> { running, dirty, timer, last, message, config }
 
 /** For tests. */
 export const _setMaxVotesCheckMs = (ms) => {
@@ -274,10 +284,12 @@ function checkMaxVotes(message, config) {
     if (maxVotesChecks.size >= 2000) {
       for (const [k, v] of maxVotesChecks) if (!v.running && !v.timer) maxVotesChecks.delete(k);
     }
-    st = { running: false, dirty: false, timer: null, last: 0 };
+    st = { running: false, dirty: false, timer: null, last: 0, message, config };
     maxVotesChecks.set(id, st);
   }
   const state = st;
+  state.message = message; // a delayed check uses the newest message and config, not the first reaction's
+  state.config = config;
   if (state.running || state.timer) {
     state.dirty = true; // fold into the check that is running or waiting
     return Promise.resolve();
@@ -289,7 +301,7 @@ function checkMaxVotes(message, config) {
     state.dirty = false;
     let closed = false;
     try {
-      closed = await closeIfMaxVotes(id, message, config);
+      closed = await closeIfMaxVotes(id, state.message, state.config);
     } catch (err) {
       log.error('module:polls', 'max-votes check failed:', err.message);
     } finally {

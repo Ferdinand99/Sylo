@@ -30,35 +30,42 @@ export function imageDimensions(buf) {
   return null;
 }
 
-// The decoder draws the image-descriptor frames, not the logical screen, and a file can declare a
-// 1×1 screen around a 6000×6000 frame. So report the largest of the screen and every frame
-// descriptor reached by hopping over the data sub-blocks (linear, no decoding).
+// The decoder draws the image-descriptor frames, not the logical screen, and widens the picture to
+// the far corner of a frame (left + width, top + height), so a file can declare a 1×1 screen around
+// a 6000×6000 frame, or a tiny frame placed at (9999, 9999). Report the largest extent of the screen
+// and every frame, found by hopping over the data sub-blocks (linear, no decoding). Anything the
+// walk does not understand (an unknown block, a truncated block, no frame at all) is null: refused.
 function gifDimensions(buf) {
   let width = buf.readUInt16LE(6);
   let height = buf.readUInt16LE(8);
   const flags = buf[10];
   let i = 13 + (flags & 0x80 ? 3 * 2 ** ((flags & 7) + 1) : 0);
+  // Skip a run of data sub-blocks and its zero terminator; false when the file ends inside it.
   const skipSubBlocks = () => {
     while (i < buf.length && buf[i] !== 0) i += 1 + buf[i];
-    i += 1; // the zero-length terminator
+    i += 1;
+    return i <= buf.length;
   };
-  for (let blocks = 0; i < buf.length && blocks < 4096; blocks++) {
+  let frames = 0;
+  while (i < buf.length) {
     const type = buf[i];
+    if (type === 0x3b) break; // trailer
     if (type === 0x21) {
       i += 2; // extension introducer and label
-      skipSubBlocks();
+      if (!skipSubBlocks()) return null;
     } else if (type === 0x2c) {
-      if (i + 10 > buf.length) break;
-      width = Math.max(width, buf.readUInt16LE(i + 5));
-      height = Math.max(height, buf.readUInt16LE(i + 7));
+      if (i + 10 > buf.length) return null;
+      width = Math.max(width, buf.readUInt16LE(i + 1) + buf.readUInt16LE(i + 5));
+      height = Math.max(height, buf.readUInt16LE(i + 3) + buf.readUInt16LE(i + 7));
+      frames += 1;
       const local = buf[i + 9];
       i += 10 + (local & 0x80 ? 3 * 2 ** ((local & 7) + 1) : 0) + 1; // + the LZW minimum code size
-      skipSubBlocks();
+      if (!skipSubBlocks()) return null;
     } else {
-      break; // trailer (0x3B) or anything we do not understand
+      return null; // not a block a GIF has
     }
   }
-  return { width, height };
+  return frames > 0 ? { width, height } : null;
 }
 
 function jpegDimensions(buf) {

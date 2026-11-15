@@ -38,15 +38,24 @@ test('every guild is polled within a few ticks, Fluxer included', async () => {
   _resetResumeAt();
 
   const polled = new Set();
+  const order = []; // every fetch, in order
   const original = log.error;
   log.error = (scope, msg) => {
-    if (scope === 'rss') polled.add(String(msg).split(':')[0]);
+    if (scope !== 'rss') return;
+    const host = String(msg).split(':')[0];
+    polled.add(host);
+    order.push(host);
   };
   try {
     await _tick();
+    const firstTick = order.length;
+    assert.equal(firstTick, 80, 'the budget is spent');
     assert.ok(polled.size <= 80, `one tick polls at most 80 feeds (${polled.size})`);
     assert.ok(!polled.has('10.99.0.1'), 'the first tick cannot reach the Fluxer guild');
     await _tick();
+    // The second tick starts with the first feed the first one did not reach (guild 6, feed 6), not
+    // with guild 6's first feed again.
+    assert.equal(order[firstTick], '10.6.0.6');
     await _tick();
   } finally {
     log.error = original;

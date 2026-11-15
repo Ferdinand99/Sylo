@@ -153,17 +153,19 @@ export async function renderWelcomeCard(o) {
   if (!bgFile) return drawWelcomeCard(o, null);
   const giveBack = await takeRenderPlace();
   if (!giveBack) {
-    log.warn('welcome-card', 'too many card renders at once — card skipped');
-    return null;
+    // Too many backgrounds are being decoded: draw this card without one rather than skip it.
+    log.warn('welcome-card', 'too many card renders at once — drawing without the background');
+    return drawWelcomeCard(o, null);
   }
   try {
-    return await drawWelcomeCard(o, bgFile);
+    return await drawWelcomeCard(o, bgFile, giveBack);
   } finally {
     giveBack();
   }
 }
 
-async function drawWelcomeCard(o, bgFile) {
+/** `giveBack` (optional) is called as soon as the background is drawn, before the avatar is fetched. */
+async function drawWelcomeCard(o, bgFile, giveBack) {
   const { createCanvas, loadImage } = canvasMod;
   const accent = /^#[0-9a-f]{6}$/i.test(o.accent || '') ? o.accent : '#5b7cfa';
 
@@ -194,6 +196,7 @@ async function drawWelcomeCard(o, bgFile) {
     ctx.fillRect(0, 0, W, H);
   }
   ctx.restore();
+  giveBack?.(); // the big bitmap is done with: the place must not be held while the avatar downloads
 
   // Inner accent border.
   roundRect(ctx, 8, 8, W - 16, H - 16, 22);

@@ -18,11 +18,7 @@ function png(width, height) {
 }
 
 function gif(width, height) {
-  const b = Buffer.alloc(13);
-  b.write('GIF89a', 0, 'ascii');
-  b.writeUInt16LE(width, 6);
-  b.writeUInt16LE(height, 8);
-  return b;
+  return gifWithFrame({ width, height }, { width, height });
 }
 
 function jpeg(width, height) {
@@ -80,7 +76,7 @@ test('imageDimensions reads a BMP header', () => {
 });
 
 // The pre-decode guard is only worth anything if it reads what the decoder uses.
-function gifWithFrame(screen, frame) {
+function gifWithFrame(screen, frame, { prefix = Buffer.alloc(0), tail = Buffer.from([0x3b]) } = {}) {
   const head = Buffer.alloc(13);
   head.write('GIF89a', 0, 'ascii');
   head.writeUInt16LE(screen.width, 6);
@@ -88,10 +84,12 @@ function gifWithFrame(screen, frame) {
   // image descriptor, no local colour table, LZW min code size, one data sub-block, terminator
   const desc = Buffer.alloc(10);
   desc[0] = 0x2c;
+  desc.writeUInt16LE(frame.left ?? 0, 1);
+  desc.writeUInt16LE(frame.top ?? 0, 3);
   desc.writeUInt16LE(frame.width, 5);
   desc.writeUInt16LE(frame.height, 7);
-  const data = Buffer.from([0x02, 0x02, 0x44, 0x01, 0x00, 0x3b]);
-  return Buffer.concat([head, desc, data]);
+  const data = Buffer.from([0x02, 0x02, 0x44, 0x01, 0x00]);
+  return Buffer.concat([head, prefix, desc, data, tail]);
 }
 
 test('imageDimensions: a GIF reports its largest frame, not only the logical screen', () => {
@@ -103,6 +101,34 @@ test('imageDimensions: a GIF reports its largest frame, not only the logical scr
     width: 300,
     height: 200,
   });
+});
+
+test('imageDimensions: a GIF frame placed far from the origin widens the picture to its far corner', () => {
+  const tiny = gifWithFrame({ width: 1, height: 1 }, { left: 9999, top: 9999, width: 1, height: 1 });
+  assert.deepEqual(imageDimensions(tiny), { width: 10000, height: 10000 });
+  const wide = gifWithFrame({ width: 1, height: 1 }, { left: 60000, top: 0, width: 5000, height: 2 });
+  assert.deepEqual(imageDimensions(wide), { width: 65000, height: 2 });
+});
+
+test('imageDimensions: a run of extensions before the frame does not hide it', () => {
+  const comment = Buffer.from([0x21, 0xfe, 0x00]); // an empty comment extension
+  const prefix = Buffer.concat(Array.from({ length: 5000 }, () => comment));
+  const g = gifWithFrame({ width: 1, height: 1 }, { width: 6000, height: 6000 }, { prefix });
+  assert.deepEqual(imageDimensions(g), { width: 6000, height: 6000 });
+});
+
+test('imageDimensions: a GIF with an unknown or truncated block, or no frame, is refused', () => {
+  const frame = { width: 10, height: 10 };
+  assert.equal(
+    imageDimensions(gifWithFrame({ width: 1, height: 1 }, frame, { prefix: Buffer.from([0x99]) })),
+    null
+  );
+  const whole = gifWithFrame({ width: 1, height: 1 }, frame);
+  assert.equal(imageDimensions(whole.subarray(0, 18)), null, 'cut inside the image descriptor');
+  assert.equal(imageDimensions(whole.subarray(0, whole.length - 3)), null, 'cut inside the data');
+  const header = Buffer.alloc(13);
+  header.write('GIF89a', 0, 'ascii');
+  assert.equal(imageDimensions(header), null, 'no frame at all');
 });
 
 test('fetchCardImage refuses a GIF whose frame is larger than its logical screen', async () => {

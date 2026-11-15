@@ -15,7 +15,9 @@ const CH = '700000000000000711';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const id = (n) => String(200000000000000000n + BigInt(n));
 
-function env({ options, departed, present }) {
+const unknownMember = () => Object.assign(new Error('Unknown Member'), { code: 10007 });
+
+function env({ options, departed, present, memberError = unknownMember }) {
   const calls = { reactionPages: 0, memberFetches: 0 };
   const members = new Map(present.map((uid) => [uid, { id: uid, roles: { cache: new Map() } }]));
   const guild = {
@@ -24,7 +26,7 @@ function env({ options, departed, present }) {
       cache: members,
       fetch: async () => {
         calls.memberFetches += 1;
-        throw new Error('Unknown Member');
+        throw memberError();
       },
     },
   };
@@ -87,7 +89,9 @@ test('a burst of reactions on a max-votes poll runs one check, not one per react
   await Promise.all(Array.from({ length: 10 }, react)); // still inside the window
   assert.equal(calls.reactionPages, 20);
 
-  await sleep(900); // the reactions that arrived meanwhile share one trailing check
+  // The reactions that arrived meanwhile share one trailing check (wait for it, with a generous deadline).
+  for (let waited = 0; calls.reactionPages < 40 && waited < 10_000; waited += 25) await sleep(25);
+  await sleep(150);
   assert.equal(calls.reactionPages, 40);
   assert.equal(calls.memberFetches, 30, 'departed users are remembered, not asked about again');
   assert.ok(await getPoll('poll-burst'), 'accounts that have left do not close the poll');
@@ -105,4 +109,49 @@ test('the poll closes once enough eligible voters have reacted', async () => {
   });
   assert.equal(await getPoll('poll-close'), null, 'three real voters reach max_votes');
   assert.ok(calls.reactionPages >= 2);
+});
+
+test('only Unknown Member is remembered as departed; a failed lookup is asked again and is not "left"', async () => {
+  _setMaxVotesCheckMs(0);
+  const react = (message, user) =>
+    dispatch('reactionAdd', G, {
+      reaction: message.reactions.cache.get(LETTERS[0]),
+      user: { id: user, bot: false },
+    });
+  const gone = [id(700), id(701), id(702)];
+
+  // Unknown Member: asked once, then remembered.
+  const a = env({ options: 20, departed: gone, present: [id(1)] });
+  a.message.id = 'poll-gone';
+  await newPoll('poll-gone', 20, 30);
+  await react(a.message, id(1));
+  await react(a.message, id(1));
+  assert.equal(a.calls.memberFetches, 3);
+
+  // A server error: asked again each time, and the reactors still count (no vote roles are set), so
+  // a poll whose cap is met closes even though the lookups failed.
+  const strangers = [id(800), id(801), id(802)];
+  const b = env({
+    options: 20,
+    departed: strangers,
+    present: [id(1)],
+    memberError: () => new Error('HTTP 503'),
+  });
+  b.message.id = 'poll-503';
+  await newPoll('poll-503', 20, 30);
+  await react(b.message, id(1));
+  await react(b.message, id(1));
+  assert.equal(b.calls.memberFetches, 6);
+  assert.ok(await getPoll('poll-503'), 'three voters do not reach 30');
+
+  const c = env({
+    options: 2,
+    departed: strangers,
+    present: [id(1)],
+    memberError: () => new Error('HTTP 503'),
+  });
+  c.message.id = 'poll-503-close';
+  await newPoll('poll-503-close', 2, 4);
+  await react(c.message, id(1));
+  assert.equal(await getPoll('poll-503-close'), null, 'failed lookups are not treated as members who left');
 });
