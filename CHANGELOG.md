@@ -1,5 +1,36 @@
 # Changelog
 
+## [5.2.0](https://github.com/Ferdinand99/Sylo/compare/v5.1.2...v5.2.0) (2026-11-15)
+
+
+### Features
+
+* **dashboard:** dashboard access levels ([#344](https://github.com/Ferdinand99/Sylo/issues/344)) ([4aa149b](https://github.com/Ferdinand99/Sylo/commit/4aa149b58a7dd444dc2c0af2dc935c8215d2555d))
+* **dashboard:** import and duplicate need the Edit level, and never carry the dashboard access roles ([eac01bf](https://github.com/Ferdinand99/Sylo/commit/eac01bf4c63c16713ac5572d2f1977941f40dff5))
+* **dashboard:** import, duplicate and message templates ([#345](https://github.com/Ferdinand99/Sylo/issues/345)) ([d46bb99](https://github.com/Ferdinand99/Sylo/commit/d46bb998fc4a0d11bbcae5829e72c55e2e040b2f))
+* **dashboard:** needs attention, module cards, grouped navigation, mentions and live preview ([#326](https://github.com/Ferdinand99/Sylo/issues/326)) ([4dc04d6](https://github.com/Ferdinand99/Sylo/commit/4dc04d6eb9d8adceee03eb429089e0547aff31f2))
+* **dashboard:** review fixes and polish ([#346](https://github.com/Ferdinand99/Sylo/issues/346)) ([e61d9ea](https://github.com/Ferdinand99/Sylo/commit/e61d9ea82c45b3249289ba6bfd4ce18ba0cd3a48))
+* **dashboard:** setup wizard ([#343](https://github.com/Ferdinand99/Sylo/issues/343)) ([03ad599](https://github.com/Ferdinand99/Sylo/commit/03ad59952f9833b74faa05e7d71da5481011a63a))
+* **ios:** full dashboard parity and the 5.2 features for app 1.2 ([#357](https://github.com/Ferdinand99/Sylo/issues/357)) ([4e4d202](https://github.com/Ferdinand99/Sylo/commit/4e4d202ad379d7bcf51cf3536a908425afbd21b7))
+* **ios:** manage the Sylo 5.1 modules from the app ([#318](https://github.com/Ferdinand99/Sylo/issues/318)) ([084c7f7](https://github.com/Ferdinand99/Sylo/commit/084c7f7e2ab63c8419b5b5361406e7aab5403e73))
+* **mobile:** advertise the 5.2 dashboard features to the app ([724ee9d](https://github.com/Ferdinand99/Sylo/commit/724ee9d1803c8ae1c44bd4df1aff95b704b4a9aa))
+
+
+### Bug Fixes
+
+* **dashboard:** access history names, operator import of owner-only modules, mobile docs ([#352](https://github.com/Ferdinand99/Sylo/issues/352)) ([0421ca6](https://github.com/Ferdinand99/Sylo/commit/0421ca6748e0834977bec06c15c2e73ef4a805b0))
+* **dashboard:** clear the command palette's close timer on unmount ([#363](https://github.com/Ferdinand99/Sylo/issues/363)) ([1b29077](https://github.com/Ferdinand99/Sylo/commit/1b290773f366ed8724ff33aa9db7226f2c6e46ea))
+* **dashboard:** setup wizard on access levels, and checks privacy against the channel as the platform has it ([e3c90ad](https://github.com/Ferdinand99/Sylo/commit/e3c90ad03d91b25b33b6548d9bf3e88246f2e703))
+* escape the member id in the audit regex and only dispatch known inbox kinds ([#360](https://github.com/Ferdinand99/Sylo/issues/360)) ([ff1cd34](https://github.com/Ferdinand99/Sylo/commit/ff1cd34f3ee7bff38a218cfb77065b707cb9c800))
+* **messages:** pass the mention policy through a channel move ([f3d8683](https://github.com/Ferdinand99/Sylo/commit/f3d868300057857a57ecb7d4ed5192b37614747a))
+* **mobile:** name this server in the app's sign-in and connect callbacks ([#353](https://github.com/Ferdinand99/Sylo/issues/353)) ([e695d60](https://github.com/Ferdinand99/Sylo/commit/e695d602f0ed413beb3801231d4616abe7bf70f2))
+* **search:** keep the inbox lookups in a Map ([#361](https://github.com/Ferdinand99/Sylo/issues/361)) ([47f7625](https://github.com/Ferdinand99/Sylo/commit/47f76254a8de1aab4d417ce820df667688ae2126))
+* **search:** select the inbox lookup with a switch ([#362](https://github.com/Ferdinand99/Sylo/issues/362)) ([2e295f8](https://github.com/Ferdinand99/Sylo/commit/2e295f803687b16a60f92ab966635896cea512ec))
+* **security:** authz ([#355](https://github.com/Ferdinand99/Sylo/issues/355)) ([21b2332](https://github.com/Ferdinand99/Sylo/commit/21b233243e02846a845e7ccea02bd52f858ef0e2))
+* **security:** availability ([#356](https://github.com/Ferdinand99/Sylo/issues/356)) ([686371a](https://github.com/Ferdinand99/Sylo/commit/686371a10f296bcd0caf8c5514cf87b70dab5be1))
+* **security:** privacy ([#354](https://github.com/Ferdinand99/Sylo/issues/354)) ([415edb7](https://github.com/Ferdinand99/Sylo/commit/415edb7463c7584a340512c58d9673c20fe9f25e))
+* **shop:** a purchase whose member runs /forget at the same moment is refused, not a TypeError ([#348](https://github.com/Ferdinand99/Sylo/issues/348)) ([3cb5f05](https://github.com/Ferdinand99/Sylo/commit/3cb5f05d613fb30fdbaaf93083ffe4675cd443e1))
+
 ## [5.1.2](https://github.com/Ferdinand99/Sylo/compare/v5.1.1...v5.1.2) (2026-11-14)
 
 
