@@ -478,6 +478,8 @@ test('forgetUser takes a staff member off the appeals, application histories and
   );
   insertMsg.run(t.lastInsertRowid, STAFF_ID, 'staff', 'reply one', now);
   insertMsg.run(t.lastInsertRowid, OTHER_STAFF, 'staff', 'reply two', now);
+  // "Ticket closed by staff." is written with the staff id as its author, kind 'system'
+  insertMsg.run(t.lastInsertRowid, STAFF_ID, 'system', 'Ticket closed by staff.', now);
 
   const history = JSON.stringify([
     { at: now, by: MEMBER, action: 'submitted', note: 'dm' },
@@ -492,11 +494,11 @@ test('forgetUser takes a staff member off the appeals, application histories and
     (await describeUserData(GS, STAFF_ID)).items.map((i) => [i.key, i.count])
   );
   assert.equal(before.appealsDecided, 1);
-  assert.equal(before.ticketStaffMessages, 1);
+  assert.equal(before.ticketStaffMessages, 2, 'the reply and the close note');
 
   const result = await forgetUser(GS, STAFF_ID, { names: ['StaffName'] });
   assert.equal(result.appealsDecided, 2, 'by id, and the one that only has the name');
-  assert.equal(result.ticketStaffMessages, 1);
+  assert.equal(result.ticketStaffMessages, 2);
   assert.equal(result.applicationHistory, 1);
 
   const appeals = db
@@ -514,6 +516,7 @@ test('forgetUser takes a staff member off the appeals, application histories and
   assert.deepEqual(messages, [
     { author_id: '', content: 'reply one' },
     { author_id: OTHER_STAFF, content: 'reply two' },
+    { author_id: '', content: 'Ticket closed by staff.' },
   ]);
   const kept = JSON.parse(
     db.prepare('SELECT history FROM applications_submissions WHERE guild_id = ?').get(GS).history

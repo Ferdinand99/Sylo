@@ -250,7 +250,7 @@ const userStmts = {
   // The column is NOT NULL, so an empty string stands for "nobody".
   ticketStaffMessages: prepare(`
     UPDATE ticket_messages SET author_id = ''
-    WHERE author_kind = 'staff' AND author_id = ?
+    WHERE author_kind IN ('staff', 'system') AND author_id = ?
       AND ticket_id IN (SELECT id FROM tickets WHERE guild_id = ?)
   `),
   // The history of an application names who did what by id. Only the rows whose history mentions the id.
@@ -305,7 +305,8 @@ async function scrubApplicationHistory(guildId, userId) {
  * honeypot catches and counting penalties. They exist to protect the server, so a member
  * cannot erase them (or reset their warning count) with /forget; staff can remove a case in
  * the dashboard. `keptCases` says how many cases stayed.
- * `names`: display names the person is known by (their username), for the appeals they decided before Sylo
+ * `names`: the labels the person's dashboard account carries (src/web/lib/legacyDeciderNames.js, only for
+ * someone with staff access in the server), for the appeals they decided before Sylo
  * stored who decided by id: those only have the name ("<name> (dashboard)").
  * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, eventsHosted: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, introductions: number, welcomeSent: number, applications: number, applicationsDecided: number, economyAccounts: number, economyTransactions: number, economyNames: number, economyInventory: number, economyFulfilled: number, invites: number, pollsCreated: number, giveawaysHosted: number, tempVoiceOwned: number, verificationKicks: number, ticketsClosed: number, appealsDecided: number, ticketStaffMessages: number, applicationHistory: number, configHistory: number }}
  */
@@ -649,13 +650,13 @@ const USER_DATA_SOURCES = [
   },
   {
     key: 'ticketStaffMessages',
-    label: 'Modmail replies they wrote as staff (/forget drops the name)',
+    label: 'Modmail replies and close notes they wrote as staff (/forget drops the name)',
     order: 'ug',
     countSql:
-      "SELECT COUNT(*) AS n FROM ticket_messages WHERE author_kind = 'staff' AND author_id = ? AND ticket_id IN (SELECT id FROM tickets WHERE guild_id = ?)",
+      "SELECT COUNT(*) AS n FROM ticket_messages WHERE author_kind IN ('staff', 'system') AND author_id = ? AND ticket_id IN (SELECT id FROM tickets WHERE guild_id = ?)",
     // When, not what: the text belongs to the ticket of the member they wrote to.
     rowsSql:
-      "SELECT id, ticket_id, created_at FROM ticket_messages WHERE author_kind = 'staff' AND author_id = ? AND ticket_id IN (SELECT id FROM tickets WHERE guild_id = ?) ORDER BY id",
+      "SELECT id, ticket_id, created_at FROM ticket_messages WHERE author_kind IN ('staff', 'system') AND author_id = ? AND ticket_id IN (SELECT id FROM tickets WHERE guild_id = ?) ORDER BY id",
   },
   {
     key: 'tempRoles',

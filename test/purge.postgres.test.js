@@ -136,5 +136,79 @@ test(
       assert.equal(after.items.find((i) => i.key === 'warnings').count, 1, 'the case is kept');
       assert.ok((await describeUserData(g, KEEP)).total > 0, 'other member kept');
     });
+
+    await t.test(
+      'forgetUser and exportUserData on a staff member: decider by id, history, staff replies, no staff identity in the export',
+      async () => {
+        const { createAppeal, decideAppeal } = await import('../src/db/appeals.js');
+        const { closeTicket } = await import('../src/db/tickets.js');
+        const { insertSubmission, claimDecision, getSubmission } = await import('../src/db/applications.js');
+        const g = `${G}-staff`;
+        const member = `m-${Date.now()}`;
+        const staff = `s-${Date.now()}`;
+
+        const ticket = await createTicket(g, member);
+        await addTicketMessage(ticket.id, { authorId: staff, authorKind: 'staff', content: 'reply' });
+        await closeTicket(ticket.id, staff);
+        await addTicketMessage(ticket.id, {
+          authorId: staff,
+          authorKind: 'system',
+          content: 'Ticket closed by staff.',
+        });
+        const decided = await createAppeal(g, { userId: member, answers: [] });
+        await decideAppeal(g, decided, {
+          status: 'denied',
+          decidedBy: 'Staffer (dashboard)',
+          decidedById: staff,
+          reason: 'no',
+        });
+        const legacy = await createAppeal(g, { userId: `${member}-b`, answers: [] });
+        await decideAppeal(g, legacy, { status: 'denied', decidedBy: 'Staffer (dashboard)', reason: 'no' });
+        const subId = await insertSubmission({
+          guildId: g,
+          formId: 1,
+          formName: 'Staff',
+          userId: member,
+          source: 'dm',
+          questions: [],
+          answers: {},
+        });
+        const sub = await getSubmission(g, subId);
+        await claimDecision(g, subId, {
+          status: 'denied',
+          by: staff,
+          reason: '',
+          history: [...sub.history, { at: Date.now(), by: staff, action: 'denied', note: '' }],
+        });
+
+        // The member's export names no staff.
+        const dump = JSON.stringify(await exportUserData(g, member));
+        assert.ok(!dump.includes(staff), 'no staff id in the export');
+        assert.ok(!dump.includes('Staffer'), 'no staff name in the export');
+        const own = JSON.parse((await exportUserData(g, member)).data.applications[0].history);
+        assert.deepEqual(
+          own.map((e) => e.by),
+          [member, null]
+        );
+
+        const before = Object.fromEntries(
+          (await describeUserData(g, staff)).items.map((i) => [i.key, i.count])
+        );
+        assert.equal(before.appealsDecided, 1);
+        assert.equal(before.ticketStaffMessages, 2);
+
+        const result = await forgetUser(g, staff, { names: ['Staffer'] });
+        assert.equal(result.appealsDecided, 2, 'by id, and the one that only has the name');
+        assert.equal(result.ticketStaffMessages, 2);
+        assert.equal(result.applicationHistory, 1);
+        assert.equal((await describeUserData(g, staff)).erasable, 0);
+        assert.equal(
+          (await getSubmission(g, subId)).history.filter((e) => e.by === staff).length,
+          0,
+          'the id is off the history'
+        );
+        await purgeGuild(g);
+      }
+    );
   }
 );

@@ -6,6 +6,7 @@ import { forgetUser } from '../../db/purge.js';
 import { forgetIntroductionCard } from '../../modules/introductions.js';
 import { forgetApplicationPosts } from '../../modules/applications.js';
 import { endShopRolesForForget } from '../../modules/lib/shop.js';
+import { legacyDeciderNames } from '../../web/lib/legacyDeciderNames.js';
 
 export const data = new SlashCommandBuilder()
   .setName('forget')
@@ -52,7 +53,7 @@ export async function execute(interaction) {
     keepIntroduction: !card.ok,
     keepApplicationIds: apps.failedIds,
     keepTempRoles: shopRoles.failed,
-    names: [interaction.user.username],
+    names: await legacyDeciderNames(interaction.guildId, interaction.user.id),
   });
   const embed = new EmbedBuilder()
     .setColor(0x58d68d)
