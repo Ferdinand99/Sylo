@@ -34,9 +34,12 @@ import {
 import {
   checkLevelRewardGrants,
   checkModuleGrants,
+  checkRoleGrants,
   guardRoleGrants,
   RoleGrantError,
+  specGrants,
 } from '../middleware/roleGrants.js';
+import { composedMentionPolicy } from '../lib/composedMentions.js';
 import {
   accessRouter,
   requestCan,
@@ -2086,28 +2089,23 @@ router.post(
     if (!/^\d{17,20}$/.test(rec.channel_id)) {
       return res.status(400).json({ error: 'Pick a channel before publishing.', rec: composedRecJson(rec) });
     }
+    // A new post (first publish, a re-publish after unpublish, another channel) is a new place the role buttons
+    // and menus hand out their roles: the person publishing must be able to hand out every one of them.
+    if (!rec.message_id) await checkRoleGrants(specGrants(normalisedSpec));
     try {
       if (rec.message_id) {
         await editComposed(guild, rec.channel_id, rec.message_id, normalisedSpec);
         return res.json({ rec: composedRecJson(rec), status: 'updated' });
       }
-      // Sylo posts with its own right to mention roles: only a person who has it themselves (the owner, a live
-      // Manage Server holder; open mode has no one to check) may have roles in the text pinged.
-      const mayPing =
-        !config.authEnabled || (await holdsManageServerLive(guild.id, userIdForGuild(req, guild.id)));
-      const message = await sendComposed(
-        guild,
-        rec.channel_id,
-        normalisedSpec,
-        mayPing ? { allowedMentions: { parse: ['users', 'roles'] } } : {}
-      );
+      const { allowedMentions, rolesSilent } = await composedMentionPolicy(req, guild, normalisedSpec);
+      const message = await sendComposed(guild, rec.channel_id, normalisedSpec, { allowedMentions });
       rec = await updateComposed(guild.id, rec.id, {
         name,
         channelId: rec.channel_id,
         messageId: message.id,
         spec: normalisedSpec,
       });
-      return res.json({ rec: composedRecJson(rec), status: 'sent' });
+      return res.json({ rec: composedRecJson(rec), status: 'sent', rolesSilent });
     } catch (err) {
       return res.status(400).json({ error: err.message, rec: composedRecJson(rec) });
     }

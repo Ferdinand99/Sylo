@@ -90,18 +90,44 @@ test('the reminder Test send pings when the server has allowed it', async () => 
   assert.deepEqual(sent[0].allowedMentions, { parse: ['roles', 'everyone'] });
 });
 
-const publish = (post) =>
-  post('/messages/new', { spec: { content: TEXT }, name: 'x', channelId: CHANNEL, action: 'publish' });
+const PRIVATE_ROLE = '700000000000000999';
+const OPEN_ROLE = '700000000000000998';
+const roleOf = (id, name, mentionable) => ({ id, name, position: 1, mentionable });
 
-test('Message Creator does not let a bot master ping roles', async () => {
+const publish = (post, content = TEXT) =>
+  post('/messages/new', { spec: { content }, name: 'x', channelId: CHANNEL, action: 'publish' });
+
+test.beforeEach(() => {
+  guild.roles.cache.set(PRIVATE_ROLE, roleOf(PRIVATE_ROLE, 'Council', false));
+  guild.roles.cache.set(OPEN_ROLE, roleOf(OPEN_ROLE, 'Events', true));
+});
+test.afterEach(() => guild.roles.cache.clear());
+
+const BOTH = `hi <@&${PRIVATE_ROLE}> <@&${OPEN_ROLE}>`;
+
+test('Message Creator lets a bot master ping a mentionable role, and says which roles stayed silent', async () => {
   const post = await person([]);
-  const res = await publish(post);
+  const res = await publish(post, BOTH);
   assert.equal(res.status, 200);
-  assert.deepEqual(sent[0].allowedMentions, { parse: ['users'] });
+  assert.deepEqual(sent[0].allowedMentions, { parse: ['users'], roles: [OPEN_ROLE] });
+  assert.deepEqual((await res.json()).rolesSilent, ['Council']);
+});
+
+test('a bot master pinging only mentionable roles gets an empty rolesSilent', async () => {
+  const post = await person([]);
+  const body = await (await publish(post, `<@&${OPEN_ROLE}>`)).json();
+  assert.deepEqual(body.rolesSilent, []);
+});
+
+test('Message Creator pings any role for someone with Mention Everyone', async () => {
+  const post = await person(['MentionEveryone']);
+  const res = await publish(post, BOTH);
+  assert.deepEqual(sent[0].allowedMentions, { parse: ['users', 'roles'] });
+  assert.deepEqual((await res.json()).rolesSilent, []);
 });
 
 test('Message Creator pings roles for someone with Manage Server', async () => {
   const post = await person(['ManageGuild']);
-  assert.equal((await publish(post)).status, 200);
+  assert.equal((await publish(post, BOTH)).status, 200);
   assert.deepEqual(sent[0].allowedMentions, { parse: ['users', 'roles'] });
 });

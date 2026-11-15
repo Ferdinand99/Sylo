@@ -178,10 +178,16 @@ export default function MessageBuilder() {
     const sent = { name, form };
     try {
       const body = { name, channelId, action, spec: formToSpec(form) };
-      const { rec, status, error } = await saveComposedMessage(guildId, id, body);
+      const { rec, status, error, rolesSilent } = await saveComposedMessage(guildId, id, body);
       if (error) {
         notify(error);
       } else {
+        if (rolesSilent?.length) {
+          notify(
+            `${rolesSilent.map((r) => `@${r}`).join(', ')} ${rolesSilent.length === 1 ? 'was' : 'were'} shown but not pinged: only the server owner, someone with Manage Server or Mention Everyone, or a mentionable role can be pinged through Sylo.`,
+            'info'
+          );
+        }
         notify(
           {
             saved: 'Draft saved.',
@@ -280,7 +286,8 @@ export default function MessageBuilder() {
         <h2 className="v2-group-title v2-section-gap">Message</h2>
         <p className="v2-field-hint">
           This is a live preview — click straight into any part of it to edit. To ping a role, type @ in the
-          message text and pick it; mentions placed inside an embed don't notify anyone.
+          message text and pick it. Only the owner, someone with Manage Server or Mention Everyone, or a role
+          that is mentionable, is pinged through Sylo; mentions placed inside an embed don't notify anyone.
         </p>
 
         <TemplatePicker
