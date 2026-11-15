@@ -14,6 +14,7 @@ import {
   submissionByMessage,
 } from '../src/db/applications.js';
 import { purgeGuild } from '../src/db/purge.js';
+import { setBotMasterRoles } from '../src/db/guildSettings.js';
 import { _resetApplications, decideSubmission, retryRoles } from '../src/modules/applications.js';
 import {
   APP_ROLE,
@@ -516,4 +517,22 @@ test('a decider may only give roles they could hand out themselves', async () =>
   const deny = commandAs(env, staff, 'deny', { id: sub.id, reason: 'no' });
   await applicationCommand(deny);
   assert.equal((await getSubmission(GID, sub.id)).status, 'denied');
+});
+
+test('a bot-master role is handed out in the chat only by Manage Server, as in the dashboard', async () => {
+  await setBotMasterRoles(GID, [APP_ROLE.member]);
+  const formId = await makeForm({ managerRoleIds: [APP_ROLE.manager], acceptAddRoleIds: [APP_ROLE.member] });
+  const sub = await submit(formId);
+
+  // A form manager whose rank is high enough, without Manage Server: refused.
+  const { interaction, log } = pressAs(env, `apps:accept:${sub.id}`, staff);
+  await routeComponent(interaction);
+  assert.match(log.followUps[0].content, /gives Edit access to the dashboard/);
+  assert.equal((await getSubmission(GID, sub.id)).status, 'pending');
+
+  // The same person with Manage Server may.
+  staff.permissions = { has: (p) => p === 'ManageGuild' };
+  const again = pressAs(env, `apps:accept:${sub.id}`, staff);
+  await routeComponent(again.interaction);
+  assert.equal((await getSubmission(GID, sub.id)).status, 'accepted');
 });

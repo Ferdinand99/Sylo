@@ -73,7 +73,7 @@ import { isMessageGone, isNotFound, isPermissionDenied } from '../platform/messa
 import { sweepMap } from '../lib/sweepMap.js';
 import { log } from '../lib/log.js';
 import { botRefusal } from './tempRoles.js';
-import { grantRefusal } from '../web/middleware/roleGrants.js';
+import { chatGrantRefusal } from '../web/middleware/roleGrants.js';
 import { cleanAnswer, cut } from './introductions.js';
 import {
   DEFAULT_RETENTION_DAYS,
@@ -1023,7 +1023,7 @@ export async function decideSubmission({
       if (actor?.dashboard !== true) {
         for (const rid of decisionGrantIds(form, sub, action)) {
           const role = guild.roles?.cache?.get?.(rid);
-          const why = role ? grantRefusal(guild, actor?.member ?? null, role) : null;
+          const why = role ? await chatGrantRefusal(guild, actor?.member ?? null, role) : null;
           if (why) return { ok: false, error: why, code: 'forbidden' };
         }
       }

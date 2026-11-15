@@ -53,6 +53,9 @@ const ELEVATED = [
   'ViewAuditLog',
 ];
 
+const botMasterRefusal = (role) =>
+  `${role.name} gives Edit access to the dashboard: only the server owner or someone with Manage Server can hand it out.`;
+
 export class RoleGrantError extends Error {
   constructor(message) {
     super(message);
@@ -108,7 +111,7 @@ export function moduleGrantSites(moduleId, cfg = {}) {
         .filter((r) => r?.roleAction !== 'remove')
         .map((r) => ({
           roleId: String(r?.roleId ?? ''),
-          site: `rule:${r?.id ?? ''}:${sorted(r?.targetUsers)}:${sorted(r?.targetRoles)}:${r?.channelId ?? ''}`,
+          site: `rule:${r?.id ?? ''}:${sorted(r?.targetUsers)}:${sorted(r?.targetRoles)}:${r?.channelId ?? ''}:${r?.mode === 'random' ? `random${Number(r?.chance) || 50}` : 'always'}`,
         }));
     case 'custom-commands':
       return list(cfg.commands).flatMap((c) =>
@@ -187,9 +190,7 @@ async function checkNewGrants(before, after) {
   const { edit } = await getDashboardAccessRoles(guildKey(req.guild));
   const botMaster = roles.find((r) => edit.includes(r.id));
   if (botMaster && !(await holdsManageServerLive(guildKey(req.guild), userId))) {
-    throw new RoleGrantError(
-      `${botMaster.name} gives Edit access to the dashboard: only the server owner or someone with Manage Server can hand it out.`
-    );
+    throw new RoleGrantError(botMasterRefusal(botMaster));
   }
 }
 
@@ -211,6 +212,20 @@ async function checkPingRaise(moduleId, prev, next) {
   throw new RoleGrantError(
     'Only the server owner or someone with Manage Server can make giveaways ping @here or @everyone.'
   );
+}
+
+/**
+ * grantRefusal for a person deciding in the chat (the Accept and Deny buttons, a command), who has no
+ * dashboard request: the same rank and permission rule, plus the one for a bot-master (Edit) role, which
+ * only the owner, Administrators and Manage Server holders may hand out.
+ * @returns {Promise<string|null>}
+ */
+export async function chatGrantRefusal(guild, member, role) {
+  const why = grantRefusal(guild, member, role);
+  if (why) return why;
+  const { edit } = await getDashboardAccessRoles(guildKey(guild));
+  const manages = member.id === guild.ownerId || hasPerm(member, 'Administrator') || hasPerm(member, 'ManageGuild');
+  return edit.includes(role.id) && !manages ? botMasterRefusal(role) : null;
 }
 
 /** The sentence for a refusal where money would buy a role the person may not hand out. */
