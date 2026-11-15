@@ -102,6 +102,15 @@ function baseUrl(req) {
   return `${req.protocol}://${req.get('host')}`;
 }
 
+/**
+ * This instance's issuer identifier for the app's callbacks (RFC 9207 style): the origin of the
+ * same public URL the OAuth redirect URI is built from. Scheme, host and port only: no path, no
+ * trailing slash, whatever DASHBOARD_URL carries.
+ */
+export function issuerOf(req) {
+  return new URL(baseUrl(req)).origin;
+}
+
 // --- who is signed in --------------------------------------------------------------
 
 /**
@@ -408,13 +417,15 @@ export function beginOAuth(req, res, provider, { connect, mobileConnect = null }
 
 /**
  * Where the app's browser sheet ends: the fixed app scheme, a platform Sylo knows, and either a
- * result code Sylo made or a fixed error word. Nothing from the request is put in it.
+ * result code Sylo made or a fixed error word, plus `iss`, this instance's own origin, so the app
+ * can tell a callback from another server (mix-up attack). Nothing else from the request is put in it.
  */
-export const connectedUrl = (platform, { error, result } = {}) =>
+export const connectedUrl = (req, platform, { error, result } = {}) =>
   `sylo://connected?${new URLSearchParams({
     platform,
     ...(result ? { result } : {}),
     ...(error ? { error } : {}),
+    iss: issuerOf(req),
   })}`;
 
 /**
@@ -434,8 +445,9 @@ function takeMobileConnect(req, provider) {
  * identity is kept under a result code bound to the account and app token the flow started with,
  * and the app completes the link with its own token (POST /api/mobile/connect/complete).
  */
-async function finishMobileConnect(res, provider, flow, identity) {
-  const to = (outcome) => res.redirect(connectedUrl(provider.platform, outcome));
+async function finishMobileConnect(req, res, provider, flow, identity) {
+  issuerOf(req); // an unusable address fails here, before a result code is made that nobody could use
+  const to = (outcome) => res.redirect(connectedUrl(req, provider.platform, outcome));
   // Sign-out or revocation while the sheet was open ends the flow.
   if (!(await isApiTokenLive(flow.tokenId))) return to({ error: 'token-revoked' });
   const existing = await findIdentity(identity.platform, identity.platformUserId);
@@ -558,12 +570,12 @@ export function mountAuth(app) {
           const invalid = error || !code || !state || state !== expected || startedOn !== provider.platform;
           if (invalid) {
             return res.redirect(
-              connectedUrl(provider.platform, {
+              connectedUrl(req, provider.platform, {
                 error: error === 'access_denied' ? 'access-denied' : 'invalid-response',
               })
             );
           }
-          if (mobile.expired) return res.redirect(connectedUrl(provider.platform, { error: 'expired' }));
+          if (mobile.expired) return res.redirect(connectedUrl(req, provider.platform, { error: 'expired' }));
           let identity;
           try {
             identity = await provider.fetchIdentity(
@@ -571,9 +583,9 @@ export function mountAuth(app) {
             );
           } catch (err) {
             log.error('auth', `${provider.label} connect from the app failed:`, err.message);
-            return res.redirect(connectedUrl(provider.platform, { error: 'provider-error' }));
+            return res.redirect(connectedUrl(req, provider.platform, { error: 'provider-error' }));
           }
-          return await finishMobileConnect(res, provider, mobile, identity);
+          return await finishMobileConnect(req, res, provider, mobile, identity);
         }
         if (error || !code || !state || state !== expected || startedOn !== provider.platform) {
           return loginError(

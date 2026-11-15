@@ -99,11 +99,13 @@ authorization-code flow with PKCE (RFC 7636, S256 only).
    login when `platform` is given or only one is configured, else the login
    chooser. Someone already signed in in that browser skips this step.
 4. The login returns to `GET /auth/mobile/confirm`: "Sign in to the Sylo app?",
-   showing the account name and platforms, with **Allow** and **Cancel**.
+   showing the account name and platforms and the address of this server (so a person
+   can notice a server they did not expect), with **Allow** and **Cancel**.
 5. **Allow** posts the form back (with a per-flow nonce). Sylo creates a
-   one-time code and redirects to `sylo://auth?code=…&state=…`. **Cancel** goes
-   to `sylo://auth?error=access_denied&state=…`.
-6. The app checks that `state` is the one it sent, then exchanges the code:
+   one-time code and redirects to `sylo://auth?code=…&state=…&iss=<server>`. **Cancel**
+   goes to `sylo://auth?error=access_denied&state=…&iss=<server>`.
+6. The app checks that `state` is the one it sent and that `iss` is the server it
+   chose (see [the issuer](#the-iss-parameter)), then exchanges the code:
 
    ```http
    POST /api/mobile/token
@@ -134,6 +136,39 @@ authorization-code flow with PKCE (RFC 7636, S256 only).
 8. Signing out in the app calls `DELETE /api/mobile/token` with that header,
    which answers `204` and revokes the token at once.
 
+### The iss parameter
+
+Both app callbacks (`sylo://auth` here, `sylo://connected` under
+[Adding the other login](#adding-the-other-login)) carry `iss`, the address of the
+server that made them, in the style of RFC 9207. It is the origin of this instance's
+public URL (`DASHBOARD_URL`, else the address the browser used): scheme, host and port
+only, with no path and no trailing slash, for example `https://sylo.example.com` or
+`http://192.168.1.20:3000`. It is URL-encoded in the callback and is on error callbacks
+too.
+
+It exists to stop a mix-up attack: a malicious self-hosted Sylo server could send the
+sign-in sheet on to a different Sylo server and then redeem the code that server
+issues. The app must therefore compare `iss` with the origin of the server the person
+chose, and **reject the callback on a mismatch** (do not exchange the code, do not
+finish the link). Compare origins, not strings: the host is case-insensitive and a
+default port may be left out. The confirmation pages also show the server address, so a
+person can notice a server they did not expect.
+
+Two things follow for operators:
+
+- Behind a reverse proxy, set `DASHBOARD_URL` to the public address (the same one people
+  type into the app). Without it, `iss` is built from the request, which behind a proxy
+  that ends TLS can be `http://…` or an internal name, and the app then rejects its own
+  server.
+- Separate Sylo instances need distinct origins. Only the origin is compared, so two
+  instances served from different paths of one host (`https://host/a`, `https://host/b`)
+  are not told apart by `iss`.
+
+Servers older than this change leave `iss` out. An app that still supports them may
+accept a callback without `iss`; one that does not can require it. A callback that has
+`iss` must always match. Apps that ignore unknown parameters keep working with newer
+servers.
+
 ---
 
 ## Adding the other login
@@ -162,8 +197,8 @@ keeps someone else's link from attaching your login to their account.
    up here, `409 { "error": "already_connected" }` when the account has it. The code
    names the account and the token that asked.
 2. The app opens `GET /auth/mobile/connect?code=…` in the browser sheet, on the same
-   address. The page asks "Add Fluxer to the Sylo account *name*?" and says which
-   account that is. If the browser is signed in to the dashboard as somebody else, it
+   address. The page asks "Add Fluxer to the Sylo account *name*?", says which
+   account that is and shows the address of this server. If the browser is signed in to the dashboard as somebody else, it
    warns that someone else may have started this.
 3. **Continue** leads to the other platform's login, which is asked to show its consent
    screen (`prompt=consent`), so the person sees which of their accounts there is used.
@@ -172,14 +207,17 @@ keeps someone else's link from attaching your login to their account.
    and ends the sheet at
 
    ```
-   sylo://connected?platform=fluxer&result=<code>
+   sylo://connected?platform=fluxer&result=<code>&iss=<server>
    ```
 
-   or, when nothing was kept, `sylo://connected?platform=fluxer&error=<word>` with one of
+   or, when nothing was kept, `sylo://connected?platform=fluxer&error=<word>&iss=<server>` with one of
    `access-denied` (cancelled), `invalid-response`, `expired` (took more than ten
    minutes), `provider-error`, `token-revoked` (the app was signed out meanwhile),
    `identity-linked` (that login already belongs to another account) or `already-linked`
    (the account already has a login on that platform).
+
+   `iss` is this server's origin, as in [the sign-in](#the-iss-parameter): the app must
+   reject a callback whose `iss` is not the server it chose, before it uses `result`.
 5. The app completes the link with the same token:
 
    ```http

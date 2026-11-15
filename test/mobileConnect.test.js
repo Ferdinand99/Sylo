@@ -18,6 +18,7 @@ import {
   profiles,
   setProfiles,
   signIn,
+  appOrigin,
   startOAuthApp,
   stateOf,
   uid,
@@ -82,6 +83,14 @@ const nonceOf = async (res) => {
   return m ? decodeURIComponent(m[1]) : null;
 };
 const identityKinds = async (accountId) => (await identitiesOf(accountId)).map((i) => i.platform).sort();
+// Where the sheet ends, without `iss` (the callback must name this server; test/mobileIssuer.test.js
+// covers it in depth).
+const endOf = (res) => {
+  const url = new URL(res.headers.get('location'));
+  assert.equal(url.searchParams.get('iss'), appOrigin(), 'the callback names this server');
+  url.searchParams.delete('iss');
+  return url.href;
+};
 const resultOf = (res) => new URL(res.headers.get('location')).searchParams.get('result');
 
 /**
@@ -142,7 +151,8 @@ test('the whole flow: a code, the sheet, a result code, and only the completion 
   assert.equal(back.searchParams.get('platform'), 'fluxer');
   const result = back.searchParams.get('result');
   assert.match(result, /^[A-Za-z0-9_-]{43}$/);
-  assert.deepEqual([...back.searchParams.keys()].sort(), ['platform', 'result']);
+  assert.deepEqual([...back.searchParams.keys()].sort(), ['iss', 'platform', 'result']);
+  assert.equal(back.searchParams.get('iss'), appOrigin());
 
   // The callback linked nothing.
   assert.deepEqual(await identityKinds(p.accountId), ['discord']);
@@ -448,7 +458,7 @@ test('signing the app out (revoking its token) ends a flow in flight, at every s
   await revokeApiTokenValue(a.token);
   const page1 = await page(browser(), code);
   assert.equal(page1.status, 302);
-  assert.equal(page1.headers.get('location'), `${APP_FLUXER}&error=token-revoked`);
+  assert.equal(endOf(page1), `${APP_FLUXER}&error=token-revoked`);
 
   // between the confirmation and the callback
   const b = await person();
@@ -458,7 +468,7 @@ test('signing the app out (revoking its token) ends a flow in flight, at every s
   await revokeApiTokenValue(b.token);
   profiles.fluxer = b.fluxer;
   const callback = await sheet.get(`/auth/fluxer/callback?code=abc&state=${stateOf(cont)}`);
-  assert.equal(callback.headers.get('location'), `${APP_FLUXER}&error=token-revoked`);
+  assert.equal(endOf(callback), `${APP_FLUXER}&error=token-revoked`);
   assert.equal(
     (await prepare('SELECT * FROM mobile_connect_results').all()).filter((r) => r.account_id === b.accountId)
       .length,
@@ -537,7 +547,7 @@ test('the browser is only ever sent to the app address or the platform login, ne
     const go = await b.get(`/auth/mobile/connect/continue?nonce=${encodeURIComponent(cn)}`);
     const end = await b.get(`/auth/fluxer/callback?${query(stateOf(go))}${evil}`);
     assert.equal(end.status, 302, name);
-    assert.equal(end.headers.get('location'), `${APP_FLUXER}&error=${error}`, name);
+    assert.equal(endOf(end), `${APP_FLUXER}&error=${error}`, name);
     assert.deepEqual(await identityKinds(q.accountId), ['discord'], name);
   }
 });
@@ -568,7 +578,7 @@ test('a login that already belongs to another account ends at the app with an er
 
   const p = await person();
   const { callback } = await browserFlow(browser(), await codeFor(p.token), taken);
-  assert.equal(callback.headers.get('location'), `${APP_FLUXER}&error=identity-linked`);
+  assert.equal(endOf(callback), `${APP_FLUXER}&error=identity-linked`);
   assert.deepEqual(await identityKinds(p.accountId), ['discord']);
   assert.equal((await findIdentity('fluxer', taken.id)).accountId, takenAccount);
 });
@@ -604,7 +614,7 @@ test('an account that got the platform in the meantime ends with an error, at th
   });
   profiles.fluxer = p.fluxer;
   const callback = await b.get(`/auth/fluxer/callback?code=abc&state=${stateOf(cont)}`);
-  assert.equal(callback.headers.get('location'), `${APP_FLUXER}&error=already-linked`);
+  assert.equal(endOf(callback), `${APP_FLUXER}&error=already-linked`);
   assert.ok(!(await findIdentity('fluxer', p.fluxer.id)));
 
   // between the callback and the completion
@@ -634,7 +644,7 @@ test('opening the link when the account already has that platform ends at the ap
   });
   const res = await page(browser(), code);
   assert.equal(res.status, 302);
-  assert.equal(res.headers.get('location'), `${APP_FLUXER}&error=already-linked`);
+  assert.equal(endOf(res), `${APP_FLUXER}&error=already-linked`);
 });
 
 test('the round-trip must finish within ten minutes', async () => {
@@ -647,7 +657,7 @@ test('the round-trip must finish within ten minutes', async () => {
   Date.now = () => real() + 11 * 60 * 1000;
   try {
     const callback = await b.get(`/auth/fluxer/callback?code=abc&state=${stateOf(cont)}`);
-    assert.equal(callback.headers.get('location'), `${APP_FLUXER}&error=expired`);
+    assert.equal(endOf(callback), `${APP_FLUXER}&error=expired`);
   } finally {
     Date.now = real;
   }
