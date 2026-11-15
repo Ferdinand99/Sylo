@@ -1,3 +1,4 @@
+import './helpers/tmpDb.js'; // /help reads the server's command prefix
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MessageFlags } from 'discord.js';

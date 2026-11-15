@@ -105,3 +105,11 @@ test('timestamps in embed text that Fluxer does not render become plain UTC text
   assert.equal(e.description, `Description keeps <t:${ts}:R>`);
   assert.equal(e.fields[0].value, `Value keeps <t:${ts}:R>`);
 });
+
+test('the private mark is read and never sent on', () => {
+  const marked = toFluxerPayload({ content: 'x', flags: MessageFlags.Ephemeral, private: true });
+  assert.equal(marked.private, true);
+  assert.deepEqual(marked.payload, { content: 'x' });
+  assert.equal(toFluxerPayload({ content: 'x', private: false }).private, false);
+  assert.equal('private' in toFluxerPayload({ content: 'x' }), false);
+});

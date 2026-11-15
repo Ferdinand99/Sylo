@@ -68,5 +68,5 @@ export function toFluxerPayload(input, { edit = false } = {}) {
       plainEmbedTimestamps(typeof e?.toJSON === 'function' ? e.toJSON() : e)
     );
   if (payload.files) payload.files = payload.files.map(toFile);
-  return { payload, ephemeral, wantsResponse, private: marked };
+  return { payload, ephemeral, wantsResponse, ...(marked !== undefined && { private: marked }) };
 }
