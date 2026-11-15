@@ -111,6 +111,30 @@ test('the poll closes once enough eligible voters have reacted', async () => {
   assert.ok(calls.reactionPages >= 2);
 });
 
+test('a Fluxer member-not-found error is remembered as departed, like the Discord one', async () => {
+  _setMaxVotesCheckMs(0);
+  // FluxerError { code: 'MEMBER_NOT_FOUND', cause: { statusCode: 404 } }, and the 404 in `cause` alone.
+  const fluxerShapes = [
+    () =>
+      Object.assign(new Error('Member not found'), { code: 'MEMBER_NOT_FOUND', cause: { statusCode: 404 } }),
+    () => Object.assign(new Error('lookup failed'), { cause: { statusCode: 404 } }),
+  ];
+  for (const [n, memberError] of fluxerShapes.entries()) {
+    const gone = [id(1000 + n * 10), id(1001 + n * 10), id(1002 + n * 10)];
+    const e = env({ options: 20, departed: gone, present: [id(1)], memberError });
+    e.message.id = `poll-fluxer-${n}`;
+    await newPoll(`poll-fluxer-${n}`, 20, 30);
+    const react = () =>
+      dispatch('reactionAdd', G, {
+        reaction: e.message.reactions.cache.get(LETTERS[0]),
+        user: { id: id(1), bot: false },
+      });
+    await react();
+    await react();
+    assert.equal(e.calls.memberFetches, 3, `shape ${n}: asked once, then remembered`);
+  }
+});
+
 test('only Unknown Member is remembered as departed; a failed lookup is asked again and is not "left"', async () => {
   _setMaxVotesCheckMs(0);
   const react = (message, user) =>

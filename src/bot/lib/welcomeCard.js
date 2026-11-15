@@ -164,17 +164,8 @@ export async function renderWelcomeCard(o) {
   }
 }
 
-/** `giveBack` (optional) is called as soon as the background is drawn, before the avatar is fetched. */
-async function drawWelcomeCard(o, bgFile, giveBack) {
-  const { createCanvas, loadImage } = canvasMod;
-  const accent = /^#[0-9a-f]{6}$/i.test(o.accent || '') ? o.accent : '#5b7cfa';
-
-  const W = 1000;
-  const H = 340;
-  const canvas = createCanvas(W, H);
-  const ctx = canvas.getContext('2d');
-
-  // Background: a cover-fit image behind a scrim, else an accent gradient.
+/** A cover-fit image behind a scrim, else an accent gradient. */
+async function paintBackground(ctx, bgFile, W, H, loadImage) {
   let bg = bgFile ? await loadImageBounded(loadImage, bgFile) : null;
   // Belt and braces: whatever the header said, an image that decoded larger than allowed is not drawn.
   if (bg && !(bg.width * bg.height <= MAX_CARD_IMAGE_PIXELS)) bg = null;
@@ -196,7 +187,22 @@ async function drawWelcomeCard(o, bgFile, giveBack) {
     ctx.fillRect(0, 0, W, H);
   }
   ctx.restore();
-  giveBack?.(); // the big bitmap is done with: the place must not be held while the avatar downloads
+}
+
+/** `giveBack` (optional) is called as soon as the background is drawn, before the avatar is fetched. */
+async function drawWelcomeCard(o, bgFile, giveBack) {
+  const { createCanvas, loadImage } = canvasMod;
+  const accent = /^#[0-9a-f]{6}$/i.test(o.accent || '') ? o.accent : '#5b7cfa';
+
+  const W = 1000;
+  const H = 340;
+  const canvas = createCanvas(W, H);
+  const ctx = canvas.getContext('2d');
+
+  // The decoded background lives only inside paintBackground: its reference is gone before the
+  // render place is given back, so the bitmap can be freed while the avatar downloads.
+  await paintBackground(ctx, bgFile, W, H, loadImage);
+  giveBack?.();
 
   // Inner accent border.
   roundRect(ctx, 8, 8, W - 16, H - 16, 22);

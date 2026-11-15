@@ -16,6 +16,7 @@ import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { getPoll, duePolls, deletePoll } from '../db/polls.js';
 import { log } from '../lib/log.js';
 import { every } from './schedule.js';
+import { isNotFound } from '../platform/messageErrors.js';
 
 // Regional-indicator A … T — one per option, up to 20.
 export const LETTERS = Array.from({ length: 20 }, (_, i) => String.fromCodePoint(0x1f1e6 + i));
@@ -197,7 +198,8 @@ export async function reactors(rx, cap = MAX_VOTERS_PER_OPTION) {
 // A member lookup that found nobody (Unknown Member: they left) is remembered for a minute, so a
 // poll that is tallied again and again does not ask the API about the same departed user each
 // time. Any other failure (a 5xx, a timeout) is not remembered and is not "departed".
-const isUnknownMember = (err) => err?.code === 10007 || err?.status === 404 || err?.httpStatus === 404;
+// Discord: Unknown Member / Unknown User; Fluxer: a FluxerError with code MEMBER_NOT_FOUND and the 404 in `cause`.
+const isUnknownMember = (err) => isNotFound(err, [10007, 10013, 'MEMBER_NOT_FOUND', 'UNKNOWN_MEMBER']);
 const NO_MEMBER_TTL_MS = 60_000;
 const NO_MEMBER_MAX = 5000;
 const noMember = new Map(); // `${guildId}:${userId}` -> expiry (ms)
