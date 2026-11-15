@@ -224,7 +224,8 @@ export async function chatGrantRefusal(guild, member, role) {
   const why = grantRefusal(guild, member, role);
   if (why) return why;
   const { edit } = await getDashboardAccessRoles(guildKey(guild));
-  const manages = member.id === guild.ownerId || hasPerm(member, 'Administrator') || hasPerm(member, 'ManageGuild');
+  const manages =
+    member.id === guild.ownerId || hasPerm(member, 'Administrator') || hasPerm(member, 'ManageGuild');
   return edit.includes(role.id) && !manages ? botMasterRefusal(role) : null;
 }
 

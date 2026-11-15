@@ -3,13 +3,7 @@
 // posted to the Economy log channel when the server has set one. The code checks the permission
 // itself, so it holds on Fluxer too, where the platform has no access control for commands.
 import { InteractionContextType, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
-import {
-  LIMITS,
-  MAX_BALANCE,
-  formatMoney,
-  refusalText,
-  staffAdjust,
-} from '../../modules/economy.js';
+import { LIMITS, MAX_BALANCE, formatMoney, refusalText, staffAdjust } from '../../modules/economy.js';
 import { fundingRefusal, grantRefusal } from '../../web/middleware/roleGrants.js';
 import { soldRoleIds } from '../../modules/lib/economyFunding.js';
 import { economyGate, reply } from '../lib/economyCmd.js';

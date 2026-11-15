@@ -138,7 +138,10 @@ test('switching a module on checks every grant it holds', async () => {
   const { post } = await signedIn();
   const res = await post('roles', { enabled: true });
   assert.equal(res.status, 403);
-  assert.match((await res.json()).error, /Switching Reaction roles & autoroles on is refused.*Council is above/s);
+  assert.match(
+    (await res.json()).error,
+    /Switching Reaction roles & autoroles on is refused.*Council is above/s
+  );
   assert.equal((await getGuildModule(D_GUILD, 'roles')).enabled, false);
   // Switching it off is not a grant.
   await setGuildModule(D_GUILD, 'roles', { enabled: true });
@@ -173,7 +176,11 @@ test('a bulk switch-on that includes a refused module changes none of them', asy
   const { post } = await signedIn();
   const res = await post('bulk', { ids: ['afk', 'roles'], enabled: true });
   assert.equal(res.status, 403);
-  assert.equal((await getGuildModule(D_GUILD, 'afk')).enabled, false, 'the allowed one was not switched on either');
+  assert.equal(
+    (await getGuildModule(D_GUILD, 'afk')).enabled,
+    false,
+    'the allowed one was not switched on either'
+  );
   assert.equal((await getGuildModule(D_GUILD, 'roles')).enabled, false);
   const fine = await post('bulk', { ids: ['afk'], enabled: true });
   assert.equal(fine.status, 200);

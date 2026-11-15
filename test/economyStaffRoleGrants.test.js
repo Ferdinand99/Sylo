@@ -38,7 +38,11 @@ async function signedIn(top, perms = ['ManageGuild']) {
     setProfiles();
     const b = browser();
     await signIn(b, 'discord');
-    sessions.set(key, { b, id: profiles.discord.id, token: (await (await b.get('/api/v2/csrf')).json()).token });
+    sessions.set(key, {
+      b,
+      id: profiles.discord.id,
+      token: (await (await b.get('/api/v2/csrf')).json()).token,
+    });
   }
   const { b, id, token } = sessions.get(key);
   guild.members.cache.set(id, {
@@ -147,7 +151,11 @@ test('raising what members earn is refused while the shop sells a role above the
   assert.equal(cooldown.status, 403, 'a shorter cooldown pays more');
   const start = await adjust.post('/config', { workMin: 50, workMax: 150, startingBalance: 1000000 });
   assert.equal(start.status, 403);
-  assert.equal((await adjust.post('/reset', { confirm: 'RESET' })).status, 200, 'no starting balance: nothing to fund');
+  assert.equal(
+    (await adjust.post('/reset', { confirm: 'RESET' })).status,
+    200,
+    'no starting balance: nothing to fund'
+  );
 });
 
 test('a starting balance makes the reset a credit, so it is refused too', async () => {
@@ -163,8 +171,14 @@ test('lowering income, or changing something else, stays open', async () => {
   await setGuildModule(D_GUILD, 'economy', { enabled: true, config: { workMin: 50, workMax: 150 } });
   await sell(HIGH);
   const adjust = await signedIn(10);
-  assert.equal((await adjust.post('/config', { workMin: 10, workMax: 20, currencyName: 'gold' })).status, 200);
-  assert.equal((await adjust.post('/config', { workMin: 10, workMax: 20, currencyName: 'silver' })).status, 200);
+  assert.equal(
+    (await adjust.post('/config', { workMin: 10, workMax: 20, currencyName: 'gold' })).status,
+    200
+  );
+  assert.equal(
+    (await adjust.post('/config', { workMin: 10, workMax: 20, currencyName: 'silver' })).status,
+    200
+  );
 });
 
 test('raising income is open when the shop sells nothing the actor could not hand out', async () => {

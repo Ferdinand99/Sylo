@@ -97,7 +97,12 @@ test('a message an Administrator published in #staff cannot be unpublished and r
 });
 
 test('a draft with a role above the actor cannot be published', async () => {
-  const rec = await createComposed(D_GUILD, { name: 'Draft', channelId: '', messageId: null, spec: spec(HIGH.id) });
+  const rec = await createComposed(D_GUILD, {
+    name: 'Draft',
+    channelId: '',
+    messageId: null,
+    spec: spec(HIGH.id),
+  });
   const post = await bot();
   const res = await post(`/messages/${rec.id}`, {
     name: 'Draft',

@@ -51,7 +51,7 @@ function world() {
   return { removed };
 }
 
-test('the sweep takes the role off yesterday\'s celebrant by id, though the cached role list is empty', async () => {
+test("the sweep takes the role off yesterday's celebrant by id, though the cached role list is empty", async () => {
   const { removed } = world();
   await setGuildModule(GID, 'birthdays', { enabled: true, config: { roleId: ROLE } });
   await setBirthday({ guildId: GID, userId: U1, month: 11, day: 12 });

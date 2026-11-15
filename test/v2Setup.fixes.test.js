@@ -436,7 +436,12 @@ test('without the right to change channel permissions, "create" with the change 
   assert.match(refused.message, /You need Manage Channels and Manage Roles/);
   assert.equal(edits.length, before, 'no overwrite was edited');
   // The same request from someone who may change them goes through.
-  const [ok] = await applySetup({ guild: app.guild, actor: 'Dashboard', selections, mayChangeChannels: true });
+  const [ok] = await applySetup({
+    guild: app.guild,
+    actor: 'Dashboard',
+    selections,
+    mayChangeChannels: true,
+  });
   assert.equal(ok.status, 'applied', ok.message);
 });
 
