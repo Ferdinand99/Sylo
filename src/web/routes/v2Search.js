@@ -77,7 +77,8 @@ router.get(
   asyncHandler(async (req, res) => {
     const parsed = parseInboxQuery(req.query.q);
     if (!parsed) return res.json({ items: [] });
-    const kinds = parsed.kind ? [parsed.kind] : Object.keys(KINDS);
+    // Only the lookups defined above: a kind from the query never picks anything else off the object.
+    const kinds = (parsed.kind ? [parsed.kind] : Object.keys(KINDS)).filter((k) => Object.hasOwn(KINDS, k));
     const items = [];
     for (const kind of kinds) {
       const item = await KINDS[kind](req.guild.id, parsed.number);

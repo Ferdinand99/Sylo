@@ -144,7 +144,9 @@ export async function getAuditEntry(guildId, id) {
 
 // A member id is a whole run of digits: the id of a channel or a role that happens to contain these digits is
 // not it. (A snowflake is 17 to 20 digits, so a shorter id can sit inside a longer one.)
-const boundedId = (userId) => new RegExp(`(?<!\\d)${userId}(?!\\d)`, 'g');
+// The id is escaped: it is digits today, but a regular expression is never built from raw input.
+const escapeRegExp = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const boundedId = (userId) => new RegExp(`(?<!\\d)${escapeRegExp(userId)}(?!\\d)`, 'g');
 const hasId = (text, userId) => typeof text === 'string' && boundedId(userId).test(text);
 
 // A member id goes out of a stored change as an empty value: a list loses the entry, text loses the id.
