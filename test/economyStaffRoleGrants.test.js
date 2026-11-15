@@ -201,7 +201,11 @@ test('a module that is on with no saved settings is compared with the defaults, 
   const res = await adjust.post('/config', { currencyName: 'gold' });
   assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
   await setGuildModule(D_GUILD, 'economy', { enabled: true, config: {} });
-  assert.equal((await adjust.post('/config', { workMax: 100000 })).status, 403, 'a real raise is still refused');
+  assert.equal(
+    (await adjust.post('/config', { workMax: 100000 })).status,
+    403,
+    'a real raise is still refused'
+  );
 });
 
 test('switching the economy on is still refused while the shop sells a role above the actor', async () => {
@@ -210,5 +214,8 @@ test('switching the economy on is still refused while the shop sells a role abov
   const adjust = await signedIn(10);
   const res = await adjust.toggle(true);
   assert.equal(res.status, 403);
-  assert.match((await res.json()).error, /Switching .* on is refused.*someone whose highest role is above Legend/s);
+  assert.match(
+    (await res.json()).error,
+    /Switching .* on is refused.*someone whose highest role is above Legend/s
+  );
 });

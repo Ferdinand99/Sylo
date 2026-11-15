@@ -101,8 +101,10 @@ export function setModuleConfigGuard(fn) {
 /** Who to ask, by what the refusal says: a rank refusal is not helped by Manage Server. */
 function whoCanSwitchOn(message) {
   const rank = /([^.]+?) is above or equal to your highest role/.exec(message);
-  if (rank) return `Ask someone whose highest role is above ${rank[1].trim()}, or the server owner, to switch it on.`;
-  if (/Manage Roles/.test(message)) return 'Ask someone with Manage Roles, or the server owner, to switch it on.';
+  if (rank)
+    return `Ask someone whose highest role is above ${rank[1].trim()}, or the server owner, to switch it on.`;
+  if (/Manage Roles/.test(message))
+    return 'Ask someone with Manage Roles, or the server owner, to switch it on.';
   return 'Ask the server owner or someone with Manage Server to switch it on.';
 }
 

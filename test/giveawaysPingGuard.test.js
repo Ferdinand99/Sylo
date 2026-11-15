@@ -77,6 +77,9 @@ test('switching the module on with a raised ping is refused in plain words', asy
   const res = await post('/modules/giveaways', { enabled: true });
   assert.equal(res.status, 403);
   const { error } = await res.json();
-  assert.match(error, /Switching .* on is refused\. Only the server owner or someone with Manage Server can make giveaways ping/);
+  assert.match(
+    error,
+    /Switching .* on is refused\. Only the server owner or someone with Manage Server can make giveaways ping/
+  );
   assert.doesNotMatch(error, /pay for/);
 });
