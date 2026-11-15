@@ -31,7 +31,7 @@ test('sign-in callbacks (allow and cancel) carry the origin of the configured UR
   await signIn(b, 'discord');
   const { text: html } = await getWithHost(b, '/auth/mobile/confirm', 'other.example.net');
   assert.ok(html.includes(`<code>${ISSUER}</code>`), 'the page shows the configured origin');
-  assert.ok(!html.includes('other.example.net'), 'not the Host header');
+  assert.ok(!/other\.example\.net/.test(html), 'not the Host header');
   assert.equal(cancelHref(html).searchParams.get('iss'), ISSUER);
 
   const nonce = /name="nonce" value="([^"]+)"/.exec(html)[1];

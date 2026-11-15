@@ -92,7 +92,7 @@ test('the permission health report names a feed by its host, never its address',
     ],
   });
   const text = JSON.stringify(needs);
-  assert.ok(text.includes('feeds.example.com'));
+  assert.ok(/feeds\.example\.com/.test(text));
   assert.ok(!text.includes('u7Hq2pXk9Lm3') && !text.includes('fd83k2'));
   const named = JSON.stringify(
     NEEDS.rss({ feeds: [{ name: 'Podcast', url: SECRET_URL, channelId: '100000000000000001' }] })
