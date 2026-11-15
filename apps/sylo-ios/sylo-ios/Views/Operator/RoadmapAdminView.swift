@@ -132,11 +132,6 @@ struct RoadmapAdminView: View {
     }
 }
 
-/// Markdown as the author wrote it, shown formatted; text that is not valid Markdown is shown as it is.
-private func markdown(_ text: String) -> AttributedString {
-    let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-    return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
-}
 
 private struct PendingRow: View {
     let post: RoadmapAdminPost
@@ -149,7 +144,7 @@ private struct PendingRow: View {
             Text(verbatim: post.title)
                 .font(.headline)
             if !post.description.isEmpty {
-                Text(markdown(post.description))
+                Text(ServerMarkdown.attributed(post.description))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -201,7 +196,7 @@ private struct PublicRow: View {
                 }
             }
             if !post.description.isEmpty {
-                Text(markdown(post.description))
+                Text(ServerMarkdown.attributed(post.description))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

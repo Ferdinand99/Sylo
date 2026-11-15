@@ -217,15 +217,19 @@ public struct ApplicationSubmissionList: Decodable, Sendable, Equatable {
     public let total: Int
     public let page: Int
     public let pageSize: Int
+    /// The decision reasons are blank because the person has View access (Sylo 5.2).
+    public let contentHidden: Bool
 
-    public init(submissions: [ApplicationSubmission] = [], total: Int? = nil, page: Int = 1, pageSize: Int = 25) {
+    public init(submissions: [ApplicationSubmission] = [], total: Int? = nil, page: Int = 1, pageSize: Int = 25,
+                contentHidden: Bool = false) {
         self.submissions = submissions
         self.total = total ?? submissions.count
         self.page = page
         self.pageSize = pageSize
+        self.contentHidden = contentHidden
     }
 
-    private enum CodingKeys: String, CodingKey { case submissions, total, page, pageSize }
+    private enum CodingKeys: String, CodingKey { case submissions, total, page, pageSize, contentHidden }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -234,7 +238,8 @@ public struct ApplicationSubmissionList: Decodable, Sendable, Equatable {
             submissions: submissions,
             total: try c.decodeIfPresent(Int.self, forKey: .total),
             page: try c.decode(forKey: .page, or: 1),
-            pageSize: try c.decode(forKey: .pageSize, or: 25))
+            pageSize: try c.decode(forKey: .pageSize, or: 25),
+            contentHidden: (try? c.decodeIfPresent(Bool.self, forKey: .contentHidden)) ?? false)
     }
 }
 

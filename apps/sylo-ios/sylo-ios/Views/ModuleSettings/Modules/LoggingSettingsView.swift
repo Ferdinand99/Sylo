@@ -15,7 +15,7 @@ struct LoggingSettingsView: View {
     var body: some View {
         ModuleSettingsForm("Server Logging", model: model) { $settings, page in
             Section {
-                ChannelPicker(title: "Log channel", selection: $settings.channel, channels: page.channels)
+                ChannelPicker(title: "Log channel", selection: $settings.channel, channels: page.channels, embed: true, health: true)
             } footer: {
                 Text("Posts member, message, role and channel events to this channel as they happen.")
             }

@@ -8,9 +8,13 @@ struct RemindersView: View {
     @State private var model: RemindersModel
     @State private var editor: ReminderEditorTarget?
     @State private var deleting: Reminder?
+    @State private var duplicates: DuplicateModel
+    private let session: AppSession
 
     init(server: ServerID, session: AppSession) {
+        self.session = session
         _model = State(initialValue: RemindersModel(server: server, session: session))
+        _duplicates = State(initialValue: DuplicateModel(server: server, session: session))
     }
 
     var body: some View {
@@ -41,6 +45,7 @@ struct RemindersView: View {
                 Text(message)
             }
             .sensoryFeedback(.success, trigger: model.successCount)
+            .duplicating(duplicates) { await model.load() }
     }
 
     @ViewBuilder
@@ -97,12 +102,16 @@ struct RemindersView: View {
                 .contextMenu {
                     Button("Edit", systemImage: "pencil") { editor = .edit(reminder) }
                     toggleButton(for: reminder)
+                    DuplicateButton(model: duplicates, kind: .reminder, id: String(reminder.id))
                     Button("Delete", systemImage: "trash", role: .destructive) { deleting = reminder }
                 }
             }
             Button("New Reminder", systemImage: "plus") { editor = .new }
+                .disabled(model.maxReminders.map { model.reminders.count >= $0 } ?? false)
         } header: {
-            Text("Your reminders (\(model.reminders.count))")
+            // "n / limit" with the server's own limit (Sylo 5.2); a server that does not say shows the count.
+            Text(model.maxReminders.map { "Your reminders (\(model.reminders.count) / \($0))" }
+                 ?? "Your reminders (\(model.reminders.count))")
         } footer: {
             if model.reminders.isEmpty {
                 Text("None yet. Create one to post a message on a schedule.")

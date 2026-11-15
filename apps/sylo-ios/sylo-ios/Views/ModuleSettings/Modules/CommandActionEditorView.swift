@@ -14,14 +14,14 @@ struct CommandActionEditorView: View {
             case .addRole, .removeRole:
                 Section {
                     RolePicker(title: "Role", selection: $action.roleId, roles: model.roles,
-                               noneTitle: "Choose a role")
+                               noneTitle: "Choose a role", health: true)
                 } footer: {
                     Text("Applied to whoever ran the command.")
                 }
             case .send:
                 Section {
                     ChannelPicker(title: "Channel", selection: $action.channelId, channels: model.channels,
-                                  noneTitle: "Choose a channel")
+                                  noneTitle: "Choose a channel", health: true)
                 }
                 messageSections
             case .reply:

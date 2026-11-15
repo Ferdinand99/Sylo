@@ -7,6 +7,7 @@ struct LeaderboardView: View {
     @Environment(AppSession.self) private var session
     @State private var model: LeaderboardModel
     @State private var slugInput = ""
+    @Environment(\.dashboardAccess) private var access
 
     init(server: ServerID, session: AppSession) {
         _model = State(initialValue: LeaderboardModel(server: server, session: session))
@@ -83,7 +84,7 @@ struct LeaderboardView: View {
             Toggle("Public leaderboard", isOn: Binding(
                 get: { page.isPublic },
                 set: { isOn in Task { await model.setPublic(isOn) } }))
-                .disabled(model.isSaving)
+                .disabled(model.isSaving || !access.canEdit)
             if let message = model.publicError {
                 StatusMessage(message, kind: .error)
             }
@@ -111,12 +112,13 @@ struct LeaderboardView: View {
                         .autocorrectionDisabled()
                         .submitLabel(.done)
                         .onSubmit { Task { await model.saveVanity(slugInput) } }
+                        .disabled(!access.canEdit)
                 }
                 if slugInput.trimmingCharacters(in: .whitespacesAndNewlines) != (page.vanitySlug ?? "") {
                     Button(slugInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Remove Short Link" : "Save Short Link") {
                         Task { await model.saveVanity(slugInput) }
                     }
-                    .disabled(model.isSaving)
+                    .disabled(model.isSaving || !access.canEdit)
                 }
                 if let message = model.vanityError {
                     StatusMessage(message, kind: .error)

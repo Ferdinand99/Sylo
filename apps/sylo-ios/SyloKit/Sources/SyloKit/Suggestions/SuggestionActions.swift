@@ -53,18 +53,22 @@ public struct SuggestionListAnswer: Decodable, Sendable, Equatable {
     /// How many suggestions in the whole server could be moved back (the list is cut); 0 from a
     /// server that does not offer it.
     public let outside: Int
+    /// How many suggestions there are per status, whatever the filter (Sylo 5.2); nil from an older server.
+    public let counts: SuggestionCounts?
 
-    public init(suggestions: [SuggestionSummary] = [], outside: Int = 0) {
+    public init(suggestions: [SuggestionSummary] = [], outside: Int = 0, counts: SuggestionCounts? = nil) {
         self.suggestions = suggestions
         self.outside = outside
+        self.counts = counts
     }
 
-    private enum CodingKeys: String, CodingKey { case suggestions, outside }
+    private enum CodingKeys: String, CodingKey { case suggestions, outside, counts }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         suggestions = try c.decodeLossyArray(of: SuggestionSummary.self, forKey: .suggestions)
         outside = try c.decode(forKey: .outside, or: 0)
+        counts = try? c.decodeIfPresent(SuggestionCounts.self, forKey: .counts)
     }
 }
 
@@ -261,6 +265,8 @@ public final class SuggestionListModel {
     public private(set) var suggestions: [SuggestionSummary] = []
     /// How many suggestions could be moved back.
     public private(set) var outside = 0
+    /// The numbers on the filter chips; nil when the server does not send them (the chips then show none).
+    public private(set) var counts: SuggestionCounts?
     /// Whether ``suggestions`` is known: adopted from the page or fetched.
     public private(set) var hasLoaded = false
     public private(set) var isLoading = false
@@ -291,6 +297,7 @@ public final class SuggestionListModel {
             generation += 1
             suggestions = page.suggestions
             outside = page.outside
+            counts = page.counts
             hasLoaded = true
             errorMessage = nil
         } else {
@@ -309,6 +316,7 @@ public final class SuggestionListModel {
             guard mine == generation else { return }
             suggestions = answer.suggestions
             outside = answer.outside
+            counts = answer.counts
             hasLoaded = true
             errorMessage = nil
         } catch {
@@ -409,4 +417,64 @@ public final class SuggestionListModel {
         await load()
         return true
     }
+}
+
+// MARK: - Counts for the filter chips (Sylo 5.2)
+
+/// How many suggestions there are per status, whatever the filter (`counts` of the config and list answers),
+/// for the chips "Open · Approved · Denied · Implemented · All". nil from a server that does not send them.
+public struct SuggestionCounts: Decodable, Sendable, Equatable {
+    public let all: Int
+    public let open: Int
+    public let considering: Int
+    public let approved: Int
+    public let denied: Int
+    public let implemented: Int
+
+    public init(all: Int? = nil, open: Int = 0, considering: Int = 0, approved: Int = 0, denied: Int = 0,
+                implemented: Int = 0) {
+        self.open = open
+        self.considering = considering
+        self.approved = approved
+        self.denied = denied
+        self.implemented = implemented
+        self.all = all ?? (open + considering + approved + denied + implemented)
+    }
+
+    private enum CodingKeys: String, CodingKey { case all, open, considering, approved, denied, implemented }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let all: Int? = c.contains(.all) ? c.lenientCount(.all) : nil
+        self.init(all: all, open: c.lenientCount(.open), considering: c.lenientCount(.considering),
+                  approved: c.lenientCount(.approved), denied: c.lenientCount(.denied),
+                  implemented: c.lenientCount(.implemented))
+    }
+
+    /// The number a chip shows. "Open" covers open and considering ones, as the server's `open` filter does.
+    public func count(for filter: SuggestionFilter) -> Int {
+        switch filter {
+        case .all: all
+        case .open: open + considering
+        case .approved: approved
+        case .denied: denied
+        case .implemented: implemented
+        }
+    }
+}
+
+extension SuggestionFilter {
+    /// The chip's title.
+    public var chipTitle: String {
+        switch self {
+        case .all: "All"
+        case .open: "Open"
+        case .approved: "Approved"
+        case .denied: "Denied"
+        case .implemented: "Implemented"
+        }
+    }
+
+    /// The chips in the dashboard's order: Open, Approved, Denied, Implemented, All.
+    public static let chipOrder: [SuggestionFilter] = [.open, .approved, .denied, .implemented, .all]
 }

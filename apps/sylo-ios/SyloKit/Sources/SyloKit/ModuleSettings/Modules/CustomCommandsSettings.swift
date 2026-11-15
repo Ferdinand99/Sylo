@@ -301,12 +301,17 @@ public struct CustomCommand: Sendable, Equatable, Identifiable {
     /// The name is now a built-in command's, so the command is switched off until it is renamed. Read
     /// only; never sent.
     public var reserved: Bool
+    /// Discord registers only the first 100 commands as slash commands (Sylo 5.2); this one is past that
+    /// and is not registered there. Read only; never sent.
+    public var beyondLimit: Bool
 
     public init(
         id: String = "", name: String = "", description: String = "",
         actions: [CommandAction] = [CommandAction.blank(.reply)], allowedRoles: [String] = [],
-        allowedChannels: [String] = [], cooldownSeconds: Int = 0, reserved: Bool = false
+        allowedChannels: [String] = [], cooldownSeconds: Int = 0, reserved: Bool = false,
+        beyondLimit: Bool = false
     ) {
+        self.beyondLimit = beyondLimit
         self.id = id
         self.name = name
         self.description = description
@@ -351,7 +356,7 @@ public struct CustomCommand: Sendable, Equatable, Identifiable {
 
 extension CustomCommand: Codable {
     private enum CodingKeys: String, CodingKey {
-        case id, name, description, actions, allowedRoles, allowedChannels, cooldownSeconds, reserved
+        case id, name, description, actions, allowedRoles, allowedChannels, cooldownSeconds, reserved, beyondLimit
     }
 
     /// Reads a stored command. Anything missing or of the wrong type is empty; an action that cannot be
@@ -374,7 +379,8 @@ extension CustomCommand: Codable {
             allowedRoles: (try? c.decodeIfPresent([String].self, forKey: .allowedRoles)) ?? [],
             allowedChannels: (try? c.decodeIfPresent([String].self, forKey: .allowedChannels)) ?? [],
             cooldownSeconds: cooldown,
-            reserved: (try? c.decodeIfPresent(Bool.self, forKey: .reserved)) ?? false)
+            reserved: (try? c.decodeIfPresent(Bool.self, forKey: .reserved)) ?? false,
+            beyondLimit: (try? c.decodeIfPresent(Bool.self, forKey: .beyondLimit)) ?? false)
     }
 
     /// Writes the save body the dashboard sends: `{id, name, description, actions, allowedRoles,
@@ -401,18 +407,27 @@ public struct CustomCommandsPage: Decodable, Sendable, Equatable {
     public let roles: [RoleOption]
     /// The tokens the server fills in; empty on a server that does not say.
     public let placeholders: [String]
+    /// How many commands Discord registers as slash commands (Sylo 5.2: 100); nil on Fluxer, which has no
+    /// slash commands, and on a server that does not say.
+    public let registeredLimit: Int?
+    /// How many commands are past that limit and not registered.
+    public let overLimit: Int
 
     public init(
         commands: [CustomCommand] = [], channels: [ChannelOption] = [], roles: [RoleOption] = [],
-        placeholders: [String] = []
+        placeholders: [String] = [], registeredLimit: Int? = nil, overLimit: Int = 0
     ) {
         self.commands = commands
         self.channels = channels
         self.roles = roles
         self.placeholders = placeholders
+        self.registeredLimit = registeredLimit
+        self.overLimit = overLimit
     }
 
-    private enum CodingKeys: String, CodingKey { case commands, channels, roles, placeholders }
+    private enum CodingKeys: String, CodingKey {
+        case commands, channels, roles, placeholders, registeredLimit, overLimit
+    }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -420,6 +435,8 @@ public struct CustomCommandsPage: Decodable, Sendable, Equatable {
         channels = try c.decodeLossyArray(of: ChannelOption.self, forKey: .channels)
         roles = try c.decodeLossyArray(of: RoleOption.self, forKey: .roles)
         placeholders = (try? c.decodeIfPresent([String].self, forKey: .placeholders)) ?? []
+        registeredLimit = (try? c.decodeIfPresent(Int.self, forKey: .registeredLimit)) ?? nil
+        overLimit = c.lenientCount(.overLimit)
     }
 }
 
@@ -501,6 +518,10 @@ public final class CustomCommandsModel {
     /// The tokens the server fills in.
     public private(set) var placeholders: [String] = CommandPlaceholders.standard
     public private(set) var limits: ModuleFieldLimits = .unlimited
+    /// How many commands Discord registers (Sylo 5.2: 100); nil on Fluxer or an older server.
+    public private(set) var registeredLimit: Int?
+    /// How many commands are past ``registeredLimit`` and not registered on Discord.
+    public private(set) var overLimit = 0
     /// What goes before a command's name: `/` on Discord, the server's prefix on Fluxer. Empty when the
     /// server's settings could not be read, so a name is never shown with the wrong prefix.
     public private(set) var commandPrefix = "/"
@@ -564,6 +585,8 @@ public final class CustomCommandsModel {
             commandPrefix = guild.map(CommandsModel.prefix(from:)) ?? ""
             platform = guild?.platform
             commands = page.commands
+            registeredLimit = page.registeredLimit
+            overLimit = page.overLimit
             channels = page.channels
             roles = page.roles
             placeholders = page.placeholders.isEmpty ? CommandPlaceholders.standard : page.placeholders

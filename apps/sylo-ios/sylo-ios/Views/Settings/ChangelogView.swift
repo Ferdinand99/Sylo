@@ -133,7 +133,7 @@ private struct ReleaseHeader: View {
     }
 }
 
-/// "This version", in the same hairline capsule with an accent dot as Settings' "Public beta".
+/// "This version", in a hairline capsule with an accent dot.
 private struct ThisVersionBadge: View {
     @ScaledMetric(relativeTo: .caption) private var dot = 6.0
 
@@ -207,7 +207,7 @@ private struct ChangeRow: View {
 
     init(item: ChangelogItem) {
         scope = item.scope
-        let text = Self.markdown(item.text)
+        let text = ServerMarkdown.attributed(item.text)
         self.text = text
 
         var refs = AttributedString()
@@ -259,11 +259,6 @@ private struct ChangeRow: View {
         }
     }
 
-    /// The server's inline Markdown, or the text as it is when it does not parse.
-    private static func markdown(_ text: String) -> AttributedString {
-        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
-    }
 }
 
 /// A link in a change, offered to VoiceOver as an action.

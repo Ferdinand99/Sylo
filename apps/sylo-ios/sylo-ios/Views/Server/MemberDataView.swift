@@ -13,11 +13,14 @@ struct MemberDataView: View {
     @State private var model: MemberDataModel
     @State private var member: MemberChoice?
     @State private var isForgetting = false
+    @Environment(\.dashboardAccess) private var access
 
-    init(server: ServerID, session: AppSession) {
+    /// - Parameter member: Looked up at once (from the search); none leaves the picker empty.
+    init(server: ServerID, session: AppSession, member: MemberChoice? = nil) {
         self.server = server
         self.session = session
         _model = State(initialValue: MemberDataModel(server: server, session: session))
+        _member = State(initialValue: member)
     }
 
     var body: some View {
@@ -116,6 +119,7 @@ struct MemberDataView: View {
                 Button("Delete This Member's Data…", role: .destructive) {
                     isForgetting = true
                 }
+                .disabled(!access.canEdit)
             } footer: {
                 if lookup.data.erasable == 0 {
                     Text("Only safety records are stored, and deleting a member's data keeps those.")

@@ -1,6 +1,6 @@
 import Foundation
 
-// Tickets / modmail (src/modules/tickets.js; GET/POST in src/web/routes/v2Api.js; web form
+// Tickets (src/modules/tickets.js; GET/POST in src/web/routes/v2Api.js; web form
 // web-v2/src/moduleForms/Tickets.jsx): members open a ticket by DMing the bot; staff reply from
 // the Tickets tab. These are the messages, who counts as staff, and how long closed tickets stay.
 

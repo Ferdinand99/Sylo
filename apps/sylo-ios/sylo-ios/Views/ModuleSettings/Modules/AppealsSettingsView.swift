@@ -54,7 +54,7 @@ struct AppealsSettingsView: View {
 
             Section {
                 Toggle("Unban when an appeal is accepted", isOn: $settings.autoUnbanOnAccept)
-                ChannelPicker(title: "Review channel", selection: $settings.reviewChannelId, channels: page.channels)
+                ChannelPicker(title: "Review channel", selection: $settings.reviewChannelId, channels: page.channels, embed: true, health: true)
                 NumberField(title: "Cooldown after a denial", value: $settings.cooldownDays,
                             range: AppealsSettings.cooldownRange, unit: "days")
             } footer: {

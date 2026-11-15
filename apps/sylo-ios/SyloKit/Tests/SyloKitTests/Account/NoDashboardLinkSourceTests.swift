@@ -112,15 +112,12 @@ struct NoDashboardLinkSourceTests {
     /// Where text is turned into Markdown for display, which makes its links tappable. The text
     /// comes from the server, so each place is listed with why it is no way into an admin task.
     private static let allowedMarkdownRendering: [String: Int] = [
-        // A release note's inline Markdown; its links are pulled out and shown as the Open buttons
-        // of the allowlisted changelog link above.
-        "sylo-ios/Views/Settings/ChangelogView.swift": 1,
+        // Server Markdown (release notes, roadmap posts) is turned into text in one place, which leaves only
+        // https links tappable: a release note's links are pulled out and shown as the Open buttons of the
+        // allowlisted changelog link above, and a link to anything but https is plain text.
+        "SyloKit/Sources/SyloKit/Presentation/ServerMarkdown.swift": 1,
         // What a message will look like; only http and https links stay tappable.
         "sylo-ios/Views/Shared/EmbedPreviewCard.swift": 1,
-        // The operator's own preview of a roadmap post they are writing.
-        "sylo-ios/Views/Operator/RoadmapAdminView.swift": 1,
-        // A roadmap post's description. The operator reviews every post before it is published.
-        "sylo-ios/Views/Settings/RoadmapView.swift": 1,
     ]
 
     @Test("Markdown is rendered (links included) only where the allowlist says")

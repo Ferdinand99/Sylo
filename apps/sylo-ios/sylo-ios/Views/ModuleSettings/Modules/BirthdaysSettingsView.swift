@@ -18,7 +18,7 @@ struct BirthdaysSettingsView: View {
 
             Section {
                 ChannelPicker(title: "Announcement channel", selection: $settings.channel, channels: page.channels,
-                              noneTitle: "None (no message)")
+                              noneTitle: "None (no message)", embed: true, health: true)
             }
 
             Section {
@@ -31,7 +31,7 @@ struct BirthdaysSettingsView: View {
             }
 
             Section {
-                RolePicker(title: "Birthday role", selection: $settings.roleId, roles: page.roles)
+                RolePicker(title: "Birthday role", selection: $settings.roleId, roles: page.roles, health: true)
             } footer: {
                 Text("Optional: granted for the day, removed after. Sylo's highest role must sit above this one, and it needs the Manage Roles permission.")
             }

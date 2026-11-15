@@ -25,7 +25,7 @@ struct IntroductionsSettingsView: View {
 
             Section {
                 ChannelPicker(title: "Introductions channel", selection: $settings.channelId, channels: page.channels,
-                              noneTitle: "Choose a channel")
+                              noneTitle: "Choose a channel", embed: true, health: true)
             } footer: {
                 Text(page.introductions == 1 ? "1 card posted so far." : "\(page.introductions) cards posted so far.")
             }

@@ -18,7 +18,7 @@ struct FreeGamesSettingsView: View {
 
             Section {
                 ChannelPicker(title: "Announcement channel", selection: $settings.channelId, channels: page.channels,
-                              noneTitle: "Choose a channel")
+                              noneTitle: "Choose a channel", embed: true, health: true)
             } footer: {
                 if settings.channelId.isEmpty {
                     Text("Nothing is posted until you choose a channel.")

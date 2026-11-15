@@ -19,7 +19,7 @@ struct StickySettingsView: View {
             ForEach($settings.stickies) { $sticky in
                 Section {
                     ChannelPicker(title: "Channel", selection: $sticky.channelId, channels: page.channels,
-                                  noneTitle: "Choose a channel")
+                                  noneTitle: "Choose a channel", health: true)
                     LimitedTextField(title: "Message", text: $sticky.content,
                              limit: StickySettings.Sticky.maxContentLength, lines: 2...8)
                     if sticky.embed != nil {

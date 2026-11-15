@@ -48,7 +48,7 @@ struct LevelingSettingsView: View {
                 }
                 if settings.announce == .channel {
                     ChannelPicker(title: "Channel", selection: $settings.announceChannel, channels: page.channels,
-                                  noneTitle: "Where they levelled up")
+                                  noneTitle: "Where they levelled up", health: true)
                 }
                 if settings.announce != .off {
                     LimitedTextField(title: "Level-up message", text: $settings.announceMessage,
@@ -101,7 +101,7 @@ struct LevelingSettingsView: View {
             ForEach($settings.rewards) { $reward in
                 Section {
                     NumberField(title: "Level", value: $reward.level, range: LevelingSettings.Reward.levelRange)
-                    RolePicker(title: "Role", selection: $reward.roleId, roles: page.roles, noneTitle: "Choose a role")
+                    RolePicker(title: "Role", selection: $reward.roleId, roles: page.roles, noneTitle: "Choose a role", health: true)
                     Button("Remove Reward", role: .destructive) {
                         settings.rewards.removeAll { $0.id == reward.id }
                     }

@@ -21,6 +21,16 @@ extension View {
             confirmTitle: confirmTitle, onConfirm: { _ in onConfirm() }))
     }
 
+    /// The same alert, handing over what was typed so the model can check it again before it sends anything.
+    func typedConfirmation(
+        _ title: LocalizedStringKey, message: LocalizedStringKey, word: String, isPresented: Binding<Bool>,
+        confirmTitle: LocalizedStringKey, onConfirmTyped: @escaping (_ typed: String) -> Void
+    ) -> some View {
+        modifier(TypedConfirmationModifier(
+            title: Text(title), message: Text(message), word: word, isPresented: isPresented,
+            confirmTitle: confirmTitle, onConfirm: onConfirmTyped))
+    }
+
     /// The same alert for one of the operator's questions (``OperatorConfirmation``): its title and message
     /// are shown exactly as given, because they hold a backup's or a file's name, and what must be typed is
     /// the question's own word. A word with lowercase letters (a backup name) is typed without automatic

@@ -25,7 +25,7 @@ struct EventsSettingsView: View {
 
             Section {
                 ChannelPicker(title: "Default channel", selection: $settings.channel, channels: page.channels,
-                              noneTitle: "Where the command is used")
+                              noneTitle: "Where the command is used", embed: true, health: true)
             } footer: {
                 Text("Where a new event is posted when the command names no channel.")
             }

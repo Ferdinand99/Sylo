@@ -11,6 +11,7 @@ struct WelcomeChannelSettingsView: View {
     @State private var isConfirmingRemove = false
     @State private var isConfirmingClear = false
     @State private var isConfirmingCreate = false
+    @Environment(AppSession.self) private var session
 
     /// What the server fills in on the message text and in the embeds.
     private static let variables = [
@@ -30,7 +31,7 @@ struct WelcomeChannelSettingsView: View {
 
             Section {
                 ChannelPicker(title: "Channel", selection: $settings.channelId, channels: page.channels,
-                              noneTitle: "Choose a channel")
+                              noneTitle: "Choose a channel", health: true)
                 Button("Create Read-Only #welcome", systemImage: "plus.bubble") {
                     isConfirmingCreate = true
                 }
@@ -55,6 +56,11 @@ struct WelcomeChannelSettingsView: View {
             } footer: {
                 Text("Optional, shown above the embeds. Placeholders: {server}, {memberCount}.")
             }
+
+            MessageToolsSection(
+                channelID: settings.channelId, content: $settings.content, embeds: $settings.embeds, links: nil,
+                tokens: true, maxEmbeds: WelcomeChannelSettings.maxEmbeds,
+                contentLimit: WelcomeChannelSettings.maxContentLength)
 
             Section("Preview") {
                 MessagePreviewCard(content: settings.content, embeds: settings.embeds)

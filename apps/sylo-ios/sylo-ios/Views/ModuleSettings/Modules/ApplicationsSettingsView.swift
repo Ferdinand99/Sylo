@@ -14,6 +14,7 @@ struct ApplicationsSettingsView: View {
     @State private var isConfirmingRemove = false
     /// Owned here so the Edit button inside the forms section can switch the whole list to reordering.
     @State private var editMode = EditMode.inactive
+    @Environment(\.dashboardAccess) private var access
     private let server: ServerID
     private let session: AppSession
 
@@ -46,6 +47,8 @@ struct ApplicationsSettingsView: View {
                 Text("Read what members sent in, then accept or deny with an optional reason. Answers can be exported, retried and deleted there.")
             }
 
+            // The forms and settings are Edit work; the submissions above are for the Inbox level.
+            Group {
             ApplicationFormsSection(
                 server: server, session: session, page: page, onChanged: { await model.load() })
 
@@ -88,6 +91,8 @@ struct ApplicationsSettingsView: View {
             } footer: {
                 Text(Self.panelFooter(defaultText: page.defaultPanelText))
             }
+            }
+            .disabled(!access.canEdit)
         }
         .environment(\.editMode, $editMode)
         .task { await note.load() }

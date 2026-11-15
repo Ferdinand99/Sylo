@@ -18,6 +18,8 @@ enum ConnectWire {
     static let resultQuery = "result"
     static let platformQuery = "platform"
     static let errorQuery = "error"
+    /// The server that wrote the callback, as its public origin (added by newer servers).
+    static let issuerQuery = "iss"
     /// The error words of the callback (`sylo://connected?error=…`), hyphenated.
     static let cancelledError = "access-denied"
     static let invalidResponseError = "invalid-response"
@@ -83,6 +85,9 @@ public enum ConnectError: Error, Equatable, Sendable {
     case serverError(String)
     /// The address this server would open is not usable.
     case invalidServerURL
+    /// The callback names another server than the one the person chose (its `iss`, shown as a plain
+    /// address). Its result is not sent anywhere.
+    case issuerMismatch(String)
 }
 
 /// What a finished connect sheet hands back: the platform and the result code that
@@ -111,7 +116,13 @@ public enum ConnectCallback {
     /// Checks the URL the sign-in sheet returned and returns its result code.
     /// - Parameter expected: The platform the person asked to connect; a callback naming another one
     ///   is refused. A callback that names none is accepted as this one.
-    public static func result(from url: URL, expected: Platform) throws(ConnectError) -> ConnectResult {
+    /// - Parameter serverOrigin: The origin of the server the person is signed in to
+    ///   (``ServerURL/origin``). When the callback names an issuer (`iss`), it must be this server: another
+    ///   server's callback is refused and its result is never used. A callback without `iss` (an older
+    ///   Sylo) is accepted. With no `serverOrigin`, any `iss` is refused.
+    public static func result(
+        from url: URL, expected: Platform, serverOrigin: String? = nil
+    ) throws(ConnectError) -> ConnectResult {
         guard
             let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
             components.scheme?.lowercased() == callbackScheme,
@@ -121,6 +132,11 @@ public enum ConnectCallback {
         else { throw .wrongCallback }
 
         let items = components.queryItems ?? []
+        let issuers = items.filter { $0.name == ConnectWire.issuerQuery }.map { $0.value ?? "" }
+        if case .mismatch(let claimed) = CallbackIssuer.check(
+            issuers: issuers.isEmpty ? nil : issuers, serverOrigin: serverOrigin) {
+            throw .issuerMismatch(claimed)
+        }
         if let error = items.first(where: { $0.name == ConnectWire.errorQuery })?.value, !error.isEmpty {
             throw error == ConnectWire.cancelledError ? .cancelled : .serverError(error)
         }

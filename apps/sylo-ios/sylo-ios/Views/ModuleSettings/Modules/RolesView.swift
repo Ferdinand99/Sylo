@@ -9,8 +9,12 @@ struct RolesView: View {
     @State private var editor: ReactionRoleTarget?
     @State private var deleting: ReactionRoleMessage?
     @State private var isConfirmingDiscard = false
+    @State private var duplicates: DuplicateModel
+    private let session: AppSession
 
     init(server: ServerID, session: AppSession) {
+        self.session = session
+        _duplicates = State(initialValue: DuplicateModel(server: server, session: session))
         _model = State(initialValue: RolesModel(server: server, session: session))
         _note = State(initialValue: ModulePlatformNoteModel(server: server, module: "roles", session: session))
     }
@@ -33,6 +37,7 @@ struct RolesView: View {
         }
         .navigationTitle("Reaction Roles")
         .navigationBarTitleDisplayMode(.inline)
+        .duplicating(duplicates) { await model.load() }
         // Like the module settings: no way back while the autoroles have unsaved changes.
         .navigationBarBackButtonHidden(model.autorolesChanged)
         .tracksUnsavedChanges(model.autorolesChanged)
@@ -104,13 +109,14 @@ struct RolesView: View {
                     }
                     .contextMenu {
                         Button("Edit", systemImage: "pencil") { editor = .edit(set) }
+                        DuplicateButton(model: duplicates, kind: .reactionRoleSet, id: String(set.id))
                         Button("Delete", systemImage: "trash", role: .destructive) { deleting = set }
                     }
                 }
                 Button("New Reaction Role", systemImage: "plus") { editor = .new }
                     .disabled(!model.canAddSet)
             } header: {
-                Text("Reaction roles (\(model.reactionMessages.count))")
+                Text("Reaction roles (\(model.reactionMessages.count) / \(model.maxSets))")
             } footer: {
                 if !model.canAddSet {
                     Text("This server already has the maximum of \(model.maxSets) reaction-role messages.")
@@ -119,7 +125,7 @@ struct RolesView: View {
 
             Section {
                 MultiPicker(title: "Roles", selection: $model.autoroles, options: model.roles, prefix: "@",
-                            limit: model.maxAutoroles)
+                            limit: model.maxAutoroles, health: true)
             } header: {
                 Text("Autoroles on join")
             } footer: {

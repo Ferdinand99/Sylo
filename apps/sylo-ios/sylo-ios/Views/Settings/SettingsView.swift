@@ -342,10 +342,7 @@ struct SettingsView: View {
     private var aboutSection: some View {
         Section("About") {
             LabeledContent("App version") {
-                HStack(spacing: 8) {
-                    PublicBetaBadge()
-                    Text(verbatim: Self.appVersion)
-                }
+                Text(verbatim: Self.appVersion)
             }
             // In the app when this Sylo server sends its changelog (its info is fetched with the
             // notification settings when the session has none); older servers open the V2
@@ -404,27 +401,6 @@ struct SettingsView: View {
 
     private static let privacyPolicy = URL(string: "https://github.com/Ferdinand99/Sylo/blob/main/docs/privacy-policy.md")!
     private static let terms = URL(string: "https://github.com/Ferdinand99/Sylo/blob/main/docs/terms-of-service.md")!
-}
-
-/// "Public beta", as on sylobot.com: a hairline capsule with a small accent dot. The text stays
-/// secondary so it reads on every row background; the accent is only in the dot.
-private struct PublicBetaBadge: View {
-    @ScaledMetric(relativeTo: .caption) private var dot = 6.0
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(.tint)
-                .frame(width: dot, height: dot)
-            Text("Public beta")
-        }
-        .font(.caption.weight(.medium))
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .overlay(Capsule().strokeBorder(.separator))
-        .accessibilityElement(children: .combine)
-    }
 }
 
 /// Ticket notifications: whether this Sylo server can send them, the permission, on or off, and a

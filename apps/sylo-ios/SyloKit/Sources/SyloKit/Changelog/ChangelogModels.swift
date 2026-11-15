@@ -61,7 +61,7 @@ public struct ChangelogRelease: Decodable, Sendable, Equatable, Identifiable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         version = try c.decode(String.self, forKey: .version)
         date = try c.decodeIfPresent(String.self, forKey: .date)
-        url = try c.decodeURLIfPresent(forKey: .url)
+        url = ServerMarkdown.openable(try c.decodeURLIfPresent(forKey: .url))
         sections = try c.decodeLossyArray(of: ChangelogSection.self, forKey: .sections)
     }
 }
@@ -131,7 +131,7 @@ public struct ChangelogRef: Decodable, Sendable, Hashable {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         label = try c.decode(String.self, forKey: .label)
-        url = try c.decodeURLIfPresent(forKey: .url)
+        url = ServerMarkdown.openable(try c.decodeURLIfPresent(forKey: .url))
     }
 }
 

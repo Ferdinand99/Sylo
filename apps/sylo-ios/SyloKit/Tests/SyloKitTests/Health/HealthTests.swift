@@ -165,7 +165,8 @@ struct DevLogSettingTests {
         let refuse = LockedFlag()
         let clients = StubClients { endpoint in
             switch endpoint {
-            case is Endpoints.ServerInfo: return ServerInfo(features: [.appLogin, .liveAccess, .push])
+            case is Endpoints.ServerInfo:
+                return ServerInfo(features: [.appLogin, .liveAccess, .push], pushRelay: URL(string: "https://app.sylobot.com"))
             case is Endpoints.PushSettings:
                 return PushSettingsInfo(isEnabled: true, mutedServers: [], devLog: .errors)
             case let set as Endpoints.SetDevLogNotifications:

@@ -79,7 +79,7 @@ struct EventEditorView: View {
                     Section {
                         ChannelPicker(title: "Post in", selection: $draft.channelID, channels: channels,
                                       noneTitle: "Select a channel")
-                        RolePicker(title: "Participant role", selection: $draft.roleID, roles: roles)
+                        RolePicker(title: "Participant role", selection: $draft.roleID, roles: roles, health: true)
                     } footer: {
                         Text("The participant role is optional: people have it while they are signed up.")
                     }

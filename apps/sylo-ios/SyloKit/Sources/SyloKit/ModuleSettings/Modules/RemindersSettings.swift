@@ -249,14 +249,18 @@ public struct RemindersPage: Decodable, Sendable, Equatable {
     /// The zone the server counts the weekdays in (an IANA name). nil on a server that does not say:
     /// the days are then labelled "server time".
     public let timeZone: String?
+    /// The most reminders one server may have (Sylo 5.2, for the "n / limit" counter); nil on a server
+    /// that does not say.
+    public let maxReminders: Int?
 
     public init(
         reminders: [Reminder] = [], allowPings: Bool? = nil, channels: [ChannelOption] = [],
         schedulePresets: [ReminderPreset] = ReminderPreset.standard,
         weekdays: [ScheduleWeekday] = ScheduleWeekday.standard, minIntervalMinutes: Int = 1,
-        maxIntervalMinutes: Int = 40320, timeZone: String? = nil
+        maxIntervalMinutes: Int = 40320, timeZone: String? = nil, maxReminders: Int? = nil
     ) {
         self.timeZone = timeZone
+        self.maxReminders = maxReminders
         self.reminders = reminders
         self.allowPings = allowPings
         self.channels = channels
@@ -268,7 +272,7 @@ public struct RemindersPage: Decodable, Sendable, Equatable {
 
     private enum CodingKeys: String, CodingKey {
         case reminders, allowPings, channels, schedulePresets, weekdays, minIntervalMinutes, maxIntervalMinutes
-        case timeZone
+        case timeZone, maxReminders
     }
 
     public init(from decoder: any Decoder) throws {
@@ -283,7 +287,8 @@ public struct RemindersPage: Decodable, Sendable, Equatable {
             weekdays: days.isEmpty ? ScheduleWeekday.standard : days,
             minIntervalMinutes: (try? c.decodeIfPresent(Int.self, forKey: .minIntervalMinutes)) ?? 1,
             maxIntervalMinutes: (try? c.decodeIfPresent(Int.self, forKey: .maxIntervalMinutes)) ?? 40320,
-            timeZone: (try? c.decodeIfPresent(String.self, forKey: .timeZone)) ?? nil)
+            timeZone: (try? c.decodeIfPresent(String.self, forKey: .timeZone)) ?? nil,
+            maxReminders: (try? c.decodeIfPresent(Int.self, forKey: .maxReminders)) ?? nil)
     }
 }
 
@@ -616,6 +621,8 @@ public final class RemindersModel {
     public private(set) var maxIntervalMinutes = 40320
     /// The server's zone, when it says (see ``ServerClock``).
     public private(set) var timeZone: String?
+    /// The most reminders the server keeps, when it says (Sylo 5.2).
+    public private(set) var maxReminders: Int?
     public private(set) var isLoading = false
     public private(set) var hasLoaded = false
     /// Why the page could not be loaded (the last list, if any, stays).
@@ -666,6 +673,7 @@ public final class RemindersModel {
             minIntervalMinutes = page.minIntervalMinutes
             maxIntervalMinutes = page.maxIntervalMinutes
             timeZone = page.timeZone
+            maxReminders = page.maxReminders
             hasLoaded = true
             errorMessage = nil
         } catch {

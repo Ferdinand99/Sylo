@@ -127,7 +127,7 @@ private struct PostRow: View {
                 Text(verbatim: post.title)
                     .font(.headline)
                 if !post.description.isEmpty {
-                    Text(Self.markdown(post.description))
+                    Text(ServerMarkdown.attributed(post.description))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -162,11 +162,6 @@ private struct PostRow: View {
         }
     }
 
-    /// The post's markdown as text; plain text when it does not parse.
-    private static func markdown(_ source: String) -> AttributedString {
-        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        return (try? AttributedString(markdown: source, options: options)) ?? AttributedString(source)
-    }
 }
 
 /// The form for a new suggestion.

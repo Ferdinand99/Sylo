@@ -61,9 +61,10 @@ struct NotificationSettingsPigeonTests {
     nonisolated static let instance = try! ServerURL("https://sylo.example.com")
 
     private func makeModel(
-        _ rig: PigeonRig, usingPigeon: Bool = true
+        _ rig: PigeonRig, usingPigeon: Bool = true, server: ServerURL? = nil
     ) -> (NotificationSettingsModel, AppSession) {
-        let session = makeSignedInSession(clients: rig.clients)
+        let session = server.map { makeSignedInSession(clients: rig.clients, server: $0) }
+            ?? makeSignedInSession(clients: rig.clients)
         return (NotificationSettingsModel(session: session, pigeon: usingPigeon ? rig.manager : nil), session)
     }
 
@@ -191,7 +192,7 @@ struct NotificationSettingsPigeonTests {
     func strangerPigeonWithPush() async throws {
         let rig = PigeonRig(info: Self.strangerWithPushInfo)
         defer { rig.cleanUp() }
-        let (model, _) = makeModel(rig)
+        let (model, _) = makeModel(rig, server: .hosted)
         await model.loadAvailability()
         #expect(model.isAvailable)
         #expect(model.unavailableReason == nil)
@@ -217,7 +218,7 @@ struct NotificationSettingsPigeonTests {
     func withoutPigeon() async throws {
         let both = PigeonRig(info: Self.bothInfo)
         defer { both.cleanUp() }
-        let (older, _) = makeModel(both, usingPigeon: false)
+        let (older, _) = makeModel(both, usingPigeon: false, server: .hosted)
         #expect(await older.register(deviceToken: Data([0xAB]), environment: .production))
         #expect(both.registrations.first?.deviceToken == "ab")
         #expect(both.pigeon.calls.isEmpty)

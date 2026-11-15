@@ -11,6 +11,11 @@ struct ChannelPicker: View {
     @Binding var selection: String
     let channels: [ChannelOption]
     var noneTitle: LocalizedStringKey = "None"
+    /// The module posts an embed here, so a channel where Sylo lacks Embed Links gets a note too (Sylo 5.2).
+    var embed = false
+    /// Show the health note (Sylo 5.2) under the picker. Only where the module posts in the channel, as on the web;
+    /// off by default, so every other caller is exactly what it was.
+    var health = false
 
     var body: some View {
         Picker(title, selection: $selection) {
@@ -23,6 +28,10 @@ struct ChannelPicker: View {
             }
         }
         .pickerStyle(.navigationLink)
+        // Sylo 5.2's health check: a note when Sylo cannot post in the picked channel.
+        if health {
+            HealthNote(subject: .channel(selection, embed: embed), isOn: true)
+        }
     }
 }
 
@@ -32,6 +41,9 @@ struct RolePicker: View {
     @Binding var selection: String
     let roles: [RoleOption]
     var noneTitle: LocalizedStringKey = "None"
+    /// Show the health note (Sylo 5.2) under the picker. Only where the module gives or takes away the role, as on
+    /// the web; off by default, so every other caller is exactly what it was.
+    var health = false
 
     var body: some View {
         Picker(title, selection: $selection) {
@@ -44,6 +56,10 @@ struct RolePicker: View {
             }
         }
         .pickerStyle(.navigationLink)
+        // Sylo 5.2's health check: a note when Sylo cannot give the picked role.
+        if health {
+            HealthNote(subject: .role(selection), isOn: true)
+        }
     }
 }
 
@@ -57,6 +73,9 @@ struct MultiPicker<Option: NamedOption>: View {
     /// The most the server keeps. Once reached, only a picked entry can still be changed (to
     /// unpick it). nil means no limit.
     var limit: Int?
+    /// Show the health note (Sylo 5.2) for each pick Sylo cannot use. Only where the module gives or takes away the
+    /// roles, as on the web; off by default, so every other caller is exactly what it was.
+    var health = false
 
     var body: some View {
         NavigationLink {
@@ -66,6 +85,16 @@ struct MultiPicker<Option: NamedOption>: View {
                 Text(summary)
             }
         }
+        // Sylo 5.2's health check: each picked role or channel Sylo cannot use gets a note with its name.
+        if health {
+            HealthNote(
+                subject: prefix == "#" ? .channels(selection, names: names, embed: false) : .roles(selection, names: names),
+                isOn: true)
+        }
+    }
+
+    private var names: [String: String] {
+        Dictionary(options.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
     }
 
     private var summary: String {

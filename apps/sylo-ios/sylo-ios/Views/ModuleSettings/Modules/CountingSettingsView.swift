@@ -31,7 +31,7 @@ struct CountingSettingsView: View {
     var body: some View {
         ModuleSettingsForm("Counting", model: model) { $settings, page in
             Section {
-                ChannelPicker(title: "Counting channel", selection: $settings.channelId, channels: page.channels)
+                ChannelPicker(title: "Counting channel", selection: $settings.channelId, channels: page.channels, health: true)
             } footer: {
                 if settings.resetOnFail {
                     Text("Members count upward in this channel, one number per message. A wrong number breaks the streak and it starts over from 1.")
@@ -50,7 +50,7 @@ struct CountingSettingsView: View {
 
             Section {
                 RolePicker(title: "Penalty role", selection: $settings.penaltyRoleId, roles: page.roles,
-                           noneTitle: "None (no penalty)")
+                           noneTitle: "None (no penalty)", health: true)
                 if !settings.penaltyRoleId.isEmpty {
                     NumberField(title: "Bench for", value: $settings.penaltyMinutes,
                                 range: CountingSettings.penaltyRange, unit: "min")

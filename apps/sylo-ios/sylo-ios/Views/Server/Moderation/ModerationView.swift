@@ -14,6 +14,8 @@ struct ModerationView: View {
     @State private var isConfirmingLockAll = false
     @State private var isConfirmingEndLockdown = false
     @State private var isVisible = false
+    /// Warnings, case changes, unbans and lockdowns are Edit work (Sylo 5.2 access levels).
+    @Environment(\.dashboardAccess) private var access
 
     private let server: ServerID
     private let session: AppSession
@@ -48,6 +50,7 @@ struct ModerationView: View {
 
             Section {
                 Button("Warn a Member", systemImage: "exclamationmark.bubble") { isWarning = true }
+                    .disabled(!access.canEdit)
             } footer: {
                 Text("A warning is saved as a case, sent to the member by DM, and counted toward the warning thresholds in the moderation settings.")
             }
@@ -138,15 +141,17 @@ struct ModerationView: View {
                     CaseRow(moderationCase: moderationCase)
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(moderationCase.active ? "Delete" : "Restore",
-                           systemImage: moderationCase.active ? "trash" : "arrow.uturn.backward") {
-                        caseState.toggling = moderationCase
-                    }
-                    .tint(moderationCase.active ? .red : .green)
-                    .disabled(model.isWorking)
-                    Button("Edit Reason", systemImage: "pencil") { caseState.editing = moderationCase }
-                        .tint(.blue)
+                    if access.canEdit {
+                        Button(moderationCase.active ? "Delete" : "Restore",
+                               systemImage: moderationCase.active ? "trash" : "arrow.uturn.backward") {
+                            caseState.toggling = moderationCase
+                        }
+                        .tint(moderationCase.active ? .red : .green)
                         .disabled(model.isWorking)
+                        Button("Edit Reason", systemImage: "pencil") { caseState.editing = moderationCase }
+                            .tint(.blue)
+                            .disabled(model.isWorking)
+                    }
                 }
             }
         } header: {
@@ -169,11 +174,13 @@ struct ModerationView: View {
             ForEach(overview.bans) { ban in
                 BanRow(name: ban.name, id: ban.id, detail: ban.reason)
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button("Unban", systemImage: "person.badge.plus") {
-                            banToLift = PendingUnban(userId: ban.id, name: ban.name)
+                        if access.canEdit {
+                            Button("Unban", systemImage: "person.badge.plus") {
+                                banToLift = PendingUnban(userId: ban.id, name: ban.name)
+                            }
+                            .tint(.green)
+                            .disabled(model.isWorking)
                         }
-                        .tint(.green)
-                        .disabled(model.isWorking)
                     }
             }
         } header: {
@@ -191,11 +198,13 @@ struct ModerationView: View {
                        detail: [String(localized: "unbanned in \(ban.remaining)"), ban.reason]
                            .filter { !$0.isEmpty }.joined(separator: " \u{00B7} "))
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button("Unban Now", systemImage: "person.badge.plus") {
-                            banToLift = PendingUnban(userId: ban.userId, name: ban.name)
+                        if access.canEdit {
+                            Button("Unban Now", systemImage: "person.badge.plus") {
+                                banToLift = PendingUnban(userId: ban.userId, name: ban.name)
+                            }
+                            .tint(.green)
+                            .disabled(model.isWorking)
                         }
-                        .tint(.green)
-                        .disabled(model.isWorking)
                     }
             }
         } header: {
@@ -215,9 +224,9 @@ struct ModerationView: View {
                 systemImage: overview.lockdownActive ? "lock.fill" : "lock.open")
                 .foregroundStyle(overview.lockdownActive ? Color.orange : Color.secondary)
             Button("Lock All Channels", systemImage: "lock", role: .destructive) { isConfirmingLockAll = true }
-                .disabled(model.isWorking)
+                .disabled(model.isWorking || !access.canEdit)
             Button("End Lockdown", systemImage: "lock.open") { isConfirmingEndLockdown = true }
-                .disabled(model.isWorking || !overview.lockdownActive)
+                .disabled(model.isWorking || !overview.lockdownActive || !access.canEdit)
         } footer: {
             Text("A lockdown stops members from sending messages in every text channel. Channels that were already locked on their own stay as they are.")
         }
@@ -225,9 +234,11 @@ struct ModerationView: View {
             ForEach(overview.channelLocks) { lock in
                 LockRow(lock: lock)
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button("Unlock", systemImage: "lock.open") { lockToLift = lock }
-                            .tint(.green)
-                            .disabled(model.isWorking)
+                        if access.canEdit {
+                            Button("Unlock", systemImage: "lock.open") { lockToLift = lock }
+                                .tint(.green)
+                                .disabled(model.isWorking)
+                        }
                     }
             }
         } header: {

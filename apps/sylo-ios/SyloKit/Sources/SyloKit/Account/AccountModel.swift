@@ -201,7 +201,8 @@ public final class AccountModel {
             let callback = try await authenticate(server.connectURL(code: grant.code))
             // Only the URL that this call's own sheet returned is read: a `sylo://connected` link that
             // arrives any other way is ignored (the app has no open-URL handler).
-            let finished = try ConnectCallback.result(from: callback, expected: connection.platform)
+            let finished = try ConnectCallback.result(
+                from: callback, expected: connection.platform, serverOrigin: server.origin)
             // The sheet only logged in; this call links the platform to the account.
             _ = try await session.send(Endpoints.CompleteConnect(result: finished.result))
         } catch ConnectError.cancelled {
@@ -209,7 +210,7 @@ public final class AccountModel {
         } catch NetworkError.cancelled {
             return false
         } catch let error as ConnectError {
-            platformError = Self.message(for: error)
+            platformError = Self.message(for: error, chosen: server.origin)
             return false
         } catch {
             let error = NetworkError(error)
@@ -220,10 +221,12 @@ public final class AccountModel {
         return true
     }
 
-    private static func message(for error: ConnectError) -> String {
+    private static func message(for error: ConnectError, chosen: String) -> String {
         switch error {
         case .cancelled: "Cancelled."
         case .wrongCallback, .missingResult, .invalidServerURL: "Connecting didn't finish. Try again."
+        case .issuerMismatch(let claimed):
+            "This connection came from a different server (\(claimed)), but you chose \(chosen). Check the address you entered, or ask whoever runs your server, then try again."
         case .sheetFailed(let reason): "Couldn't open the sign-in sheet: \(reason)"
         case .serverError(let code): Self.connectFailure(code)
         }

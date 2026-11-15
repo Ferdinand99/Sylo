@@ -8,8 +8,12 @@ struct CustomCommandsView: View {
     @State private var note: ModulePlatformNoteModel
     @State private var editor: CustomCommandTarget?
     @State private var deleting: CustomCommand?
+    @State private var duplicates: DuplicateModel
+    private let session: AppSession
 
     init(server: ServerID, session: AppSession) {
+        self.session = session
+        _duplicates = State(initialValue: DuplicateModel(server: server, session: session))
         _model = State(initialValue: CustomCommandsModel(server: server, session: session))
         _note = State(initialValue: ModulePlatformNoteModel(server: server, module: "custom-commands", session: session))
     }
@@ -50,6 +54,7 @@ struct CustomCommandsView: View {
             CustomCommandEditorView(target: target, model: model)
         }
         .sensoryFeedback(.success, trigger: model.successCount)
+        .duplicating(duplicates) { await model.load() }
         .task {
             await note.load()
             if !model.hasLoaded { await model.load() }
@@ -70,7 +75,16 @@ struct CustomCommandsView: View {
                     Button {
                         editor = .edit(command)
                     } label: {
-                        CustomCommandRow(command: command, name: model.displayName(command.name))
+                        VStack(alignment: .leading, spacing: 4) {
+                            CustomCommandRow(command: command, name: model.displayName(command.name))
+                            // Past the limit Discord registers (Sylo 5.2): saved, but not a slash command.
+                            if command.beyondLimit {
+                                Label("Not registered on Discord: past the first \(model.registeredLimit ?? 100) commands.",
+                                      systemImage: "exclamationmark.triangle.fill")
+                                    .font(.footnote)
+                                    .foregroundStyle(.orange)
+                            }
+                        }
                     }
                     .buttonStyle(.plain)
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -78,16 +92,31 @@ struct CustomCommandsView: View {
                     }
                     .contextMenu {
                         Button("Edit", systemImage: "pencil") { editor = .edit(command) }
+                        DuplicateButton(model: duplicates, kind: .customCommand, id: command.id)
                         Button("Delete", systemImage: "trash", role: .destructive) { deleting = command }
                     }
                 }
                 Button("New Command", systemImage: "plus") { editor = .new }
                     .disabled(!model.canAddCommand)
             } header: {
-                Text("Your commands (\(model.commands.count))")
+                // "n / 100 registered on Discord": how many Discord takes as slash commands (Sylo 5.2).
+                if let limit = model.registeredLimit {
+                    let registered = max(0, model.commands.count - model.overLimit)
+                    Text("Your commands (\(model.commands.count)) \u{00B7} \(registered) / \(limit) registered on Discord")
+                } else {
+                    Text("Your commands (\(model.commands.count))")
+                }
             } footer: {
-                if !model.canAddCommand {
-                    Text("This server already has the maximum of \(model.maxCommands) commands.")
+                VStack(alignment: .leading, spacing: 4) {
+                    if !model.canAddCommand {
+                        Text("This server already has the maximum of \(model.maxCommands) commands.")
+                    }
+                    if let limit = model.registeredLimit, model.overLimit > 0 {
+                        Text("Discord registers only \(limit) commands. \(model.overLimit) of yours are past that and not available as slash commands. There is no way to reorder them here: delete commands to bring the rest back.")
+                            .foregroundStyle(.orange)
+                    } else if let limit = model.registeredLimit, model.commands.count >= limit {
+                        Text("Discord registers at most \(limit) commands. Commands you add after this are saved but not registered.")
+                    }
                 }
             }
         }

@@ -14,6 +14,7 @@ struct SuggestionsSettingsView: View {
     @State private var isAskingReason = false
     @State private var deleting: SuggestionSummary?
     @State private var isConfirmingMoveAll = false
+    @Environment(\.dashboardAccess) private var access
 
     init(server: ServerID, session: AppSession) {
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
@@ -76,14 +77,16 @@ struct SuggestionsSettingsView: View {
             ModuleIntro("Members post ideas and everyone votes with thumbs up and down. Staff approve, deny or mark a suggestion as implemented, in chat or right here.")
             PlatformNoteSection(model: note)
 
+            // The settings are Edit work; deciding on suggestions below is for the Inbox level.
+            Group {
             Section {
                 ChannelPicker(title: "Suggestions channel", selection: $settings.channel, channels: page.channels,
-                              noneTitle: "Where the command is used")
+                              noneTitle: "Where the command is used", embed: true, health: true)
             }
 
             Section {
                 ChannelPicker(title: "Log channel", selection: $settings.logChannel, channels: page.channels,
-                              noneTitle: "Decided ones stay")
+                              noneTitle: "Decided ones stay", embed: true, health: true)
                 Picker("When decided", selection: $settings.logMode) {
                     Text("Copy, keep the original").tag(SuggestionsLogMode.copy)
                     Text("Move, delete the original").tag(SuggestionsLogMode.move)
@@ -123,6 +126,8 @@ struct SuggestionsSettingsView: View {
             } footer: {
                 Text("May decide on suggestions without Manage Server.")
             }
+            }
+            .disabled(!access.canEdit)
 
             suggestionsSection(page)
         }
@@ -147,18 +152,21 @@ struct SuggestionsSettingsView: View {
                 Text("\(outside) suggestions are not in the suggestions channel, for example after an earlier move to the log channel.")
                     .font(.subheadline)
                 Button("Move All Back", systemImage: "arrow.uturn.backward") { isConfirmingMoveAll = true }
-                    .disabled(list.isWorking)
+                    .disabled(list.isWorking || !access.canActOnInbox)
             }
         }
 
         Section {
-            Picker("Show", selection: $list.filter) {
-                Text("All").tag(SuggestionFilter.all)
-                Text("Open and Considering").tag(SuggestionFilter.open)
-                Text("Approved").tag(SuggestionFilter.approved)
-                Text("Denied").tag(SuggestionFilter.denied)
-                Text("Implemented").tag(SuggestionFilter.implemented)
+            // Open, Approved, Denied, Implemented and All, each with how many there are (Sylo 5.2).
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(SuggestionFilter.chipOrder, id: \.self) { filter in
+                        filterChip(filter)
+                    }
+                }
+                .padding(.horizontal, 2)
             }
+            .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
             Picker("Order", selection: $list.sort) {
                 Text("Newest First").tag(SuggestionSort.new)
                 Text("Most Votes First").tag(SuggestionSort.top)
@@ -170,22 +178,39 @@ struct SuggestionsSettingsView: View {
                 Text(list.isLoading ? "Loading…" : "Nothing here yet.").foregroundStyle(.secondary)
             }
             ForEach(suggestions) { item in
-                HStack(alignment: .top) {
-                    SuggestionLine(item: item)
-                    Spacer(minLength: 0)
-                    Menu {
-                        actions(for: item)
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .imageScale(.large)
-                            .accessibilityLabel("Actions for suggestion #\(item.number)")
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .top) {
+                        SuggestionLine(item: item)
+                        Spacer(minLength: 0)
+                        Menu {
+                            actions(for: item)
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .imageScale(.large)
+                                .accessibilityLabel("Actions for suggestion #\(item.number)")
+                        }
+                        .disabled(list.isWorking || !access.canActOnInbox)
                     }
-                    .disabled(list.isWorking)
+                    // Quick Approve and Deny on an open one; both open the reason form with the status set, as
+                    // on the web (Sylo 5.2).
+                    if access.canActOnInbox, item.status == .open || item.status == .considering {
+                        HStack(spacing: 8) {
+                            Button("Approve", systemImage: "checkmark.circle") { ask(.approve, for: item) }
+                            Button("Deny", systemImage: "xmark.circle") { ask(.deny, for: item) }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(list.isWorking)
+                    }
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button("Delete", systemImage: "trash", role: .destructive) { deleting = item }
+                    if access.canActOnInbox {
+                        Button("Delete", systemImage: "trash", role: .destructive) { deleting = item }
+                    }
                 }
-                .contextMenu { actions(for: item) }
+                .contextMenu {
+                    if access.canActOnInbox { actions(for: item) }
+                }
             }
         } header: {
             Text("Suggestions (\(suggestions.count))")
@@ -194,6 +219,24 @@ struct SuggestionsSettingsView: View {
                 StatusMessage(message, kind: .error)
             }
         }
+    }
+
+    /// One filter chip: its title and how many suggestions it holds.
+    private func filterChip(_ filter: SuggestionFilter) -> some View {
+        let isSelected = list.filter == filter
+        let count = list.counts?.count(for: filter)
+        return Button {
+            list.filter = filter
+        } label: {
+            Text(verbatim: count.map { "\(filter.chipTitle) \(DateText.count($0))" } ?? filter.chipTitle)
+                .font(.subheadline.weight(isSelected ? .semibold : .regular))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .foregroundStyle(isSelected ? Color.onAccent : Color.primary)
+                .background(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.secondary.opacity(0.15)), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     /// Set a status, move back, delete: the same list from the menu and from a long press.

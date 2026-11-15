@@ -46,6 +46,12 @@ struct TicketListView: View {
                         StatusMessage(message, kind: .error)
                     }
                 }
+                if list.contentHidden {
+                    // Sylo 5.2: View access lists the tickets without what the members wrote.
+                    Section {
+                        StatusMessage("You have view-only access, so message previews are hidden. Opening a ticket needs Inbox access.", kind: .notice)
+                    }
+                }
                 if !list.open.isEmpty {
                     Section("Open") {
                         ForEach(list.open) { ticket in

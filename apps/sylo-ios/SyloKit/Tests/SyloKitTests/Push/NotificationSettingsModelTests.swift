@@ -5,7 +5,11 @@ import Testing
 @MainActor
 @Suite("Notification settings model")
 struct NotificationSettingsModelTests {
-    nonisolated static let pushInfo = ServerInfo(features: [.appLogin, .liveAccess, .push])
+    /// A Sylo that sends through the official relay: usable on any server.
+    nonisolated static let pushInfo = ServerInfo(
+        features: [.appLogin, .liveAccess, .push], pushRelay: URL(string: "https://app.sylobot.com/"))
+    /// A Sylo that sends with its own APNs key: only the hosted Sylo is given the raw token.
+    nonisolated static let directInfo = ServerInfo(features: [.appLogin, .liveAccess, .push])
     nonisolated static let oldInfo = ServerInfo(features: [.appLogin, .liveAccess])
     nonisolated static let relayInfo = ServerInfo(
         features: [.appLogin, .liveAccess, .push], pushRelay: URL(string: "https://app.sylobot.com/"))
@@ -138,10 +142,10 @@ struct NotificationSettingsModelTests {
         }
     }
 
-    @Test("registering sends the token in lowercase hex with the environment, and turns it on")
+    @Test("the official hosted Sylo, with its own APNs key, gets the token in lowercase hex with the environment")
     func registers() async throws {
-        let clients = Self.clients()
-        let model = NotificationSettingsModel(session: makeSignedInSession(clients: clients))
+        let clients = Self.clients(info: Self.directInfo)
+        let model = NotificationSettingsModel(session: makeSignedInSession(clients: clients, server: .hosted))
         let ok = await model.register(deviceToken: Data([0xAB, 0x01, 0xFF]), environment: .development)
         #expect(ok)
         #expect(model.isEnabled)
@@ -150,8 +154,39 @@ struct NotificationSettingsModelTests {
         #expect(sent.relayToken == nil)
         #expect(sent.environment == .development)
         #expect(clients.calls.last?.token == "sylo_live")
-        #expect(clients.calls.last?.server == Self.instance)
+        #expect(clients.calls.last?.server == .hosted)
         #expect(calls(Endpoints.RegisterWithRelay.self, in: clients).isEmpty)
+    }
+
+    @Test("any other server that announces push without a relay never gets the raw token")
+    func directTokenOnlyForTheOfficialHost() async {
+        for address in ["https://sylo.example.com", "https://sylo.example.com/sylo", "http://192.168.1.20:3000",
+                        "https://app.sylobot.com.evil.example", "https://app.sylobot.com:8443"] {
+            let server = try! ServerURL(address)
+            let clients = Self.clients(info: Self.directInfo)
+            let model = NotificationSettingsModel(session: makeSignedInSession(clients: clients, server: server))
+            await model.loadAvailability()
+            #expect(!model.isAvailable, "\(address)")
+            #expect(model.unavailableReason == NotificationSettingsModel.noRelayMessage, "\(address)")
+            #expect(await model.register(deviceToken: Data([0xAB, 0x01]), environment: .production) == false)
+            #expect(!model.isEnabled)
+            #expect(calls(Endpoints.RegisterPush.self, in: clients).isEmpty, "\(address)")
+            #expect(calls(Endpoints.RegisterWithRelay.self, in: clients).isEmpty, "\(address)")
+            #expect(calls(Endpoints.PushSettings.self, in: clients).isEmpty, "\(address)")
+        }
+    }
+
+    @Test("the official hosted Sylo is available with its own key; a relay or Pigeon works anywhere")
+    func availabilityByHost() async {
+        let hosted = NotificationSettingsModel(
+            session: makeSignedInSession(clients: Self.clients(info: Self.directInfo), server: .hosted))
+        await hosted.loadAvailability()
+        #expect(hosted.isAvailable)
+        #expect(hosted.unavailableReason == nil)
+
+        let relayed = await loadedModel(Self.clients(info: Self.relayInfo))
+        #expect(relayed.isAvailable)
+        #expect(relayed.unavailableReason == nil)
     }
 
     @Test("through the official relay: the relay gets the device token, the Sylo server only the relay token")
@@ -240,12 +275,12 @@ struct NotificationSettingsModelTests {
     func modeChanged() async {
         let clients = StubClients { endpoint in
             switch endpoint {
-            case is Endpoints.ServerInfo: return Self.pushInfo
+            case is Endpoints.ServerInfo: return Self.directInfo
             case is Endpoints.RegisterPush: throw NetworkError.badRequest(message: "relay_token_required")
             default: return OKResponse()
             }
         }
-        let model = NotificationSettingsModel(session: makeSignedInSession(clients: clients))
+        let model = NotificationSettingsModel(session: makeSignedInSession(clients: clients, server: .hosted))
         #expect(await model.register(deviceToken: Data([1]), environment: .production) == false)
         #expect(model.errorMessage == NotificationSettingsModel.modeChangedMessage)
 
@@ -270,10 +305,10 @@ struct NotificationSettingsModelTests {
         ]
         for (error, message) in cases {
             let clients = StubClients { endpoint in
-                if endpoint is Endpoints.ServerInfo { return Self.pushInfo }
+                if endpoint is Endpoints.ServerInfo { return Self.directInfo }
                 throw error
             }
-            let model = NotificationSettingsModel(session: makeSignedInSession(clients: clients))
+            let model = NotificationSettingsModel(session: makeSignedInSession(clients: clients, server: .hosted))
             #expect(await model.register(deviceToken: Data([1]), environment: .production) == false)
             #expect(!model.isEnabled)
             #expect(model.errorMessage == message, "\(error)")

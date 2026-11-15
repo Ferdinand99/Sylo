@@ -13,6 +13,7 @@ struct ServerView: View {
     @Binding var tab: ServerTab
 
     @Environment(AppSession.self) private var session
+    @Environment(\.scenePhase) private var scenePhase
     @State private var overview: OverviewModel
     @State private var tickets: TicketsModel
     @State private var settings: GuildSettingsModel
@@ -20,6 +21,11 @@ struct ServerView: View {
     /// The open appeals for the Moderation tab's badge: the newest of what the server screen, the
     /// overview and the appeals screen (wherever it was opened from) have seen.
     @State private var openAppeals: OpenAppealsModel
+    /// The permission and role-hierarchy check (Sylo 5.2); module screens and role and channel pickers read it.
+    @State private var health: ServerHealthModel
+    /// The setup wizard, shared by the overview's offer, Server settings and the search.
+    @State private var wizard: SetupWizardModel
+    @State private var isSearching = false
 
     enum ServerTab: Hashable {
         case modules, tickets, moderation, settings
@@ -30,13 +36,17 @@ struct ServerView: View {
         _tab = tab
         _overview = State(initialValue: OverviewModel(server: summary.id, session: session))
         _tickets = State(initialValue: TicketsModel(server: summary.id, session: session))
-        _settings = State(initialValue: GuildSettingsModel(server: summary.id, session: session))
+        // A server that sent a dashboard level has the access route (Sylo 5.2).
+        _settings = State(initialValue: GuildSettingsModel(
+            server: summary.id, session: session, hasAccessLevels: summary.access != nil))
         _openAppeals = State(initialValue: OpenAppealsModel(server: summary.id, session: session))
+        _health = State(initialValue: ServerHealthModel(server: summary.id, session: session))
+        _wizard = State(initialValue: SetupWizardModel(server: summary.id, session: session))
     }
 
     var body: some View {
         TabView(selection: $tab) {
-            OverviewView(summary: summary, model: overview)
+            OverviewView(summary: summary, model: overview, wizard: wizard, openTab: { tab = $0 })
                 .tabItem { Label("Modules", systemImage: "square.grid.2x2") }
                 .tag(ServerTab.modules)
             TicketListView(model: tickets)
@@ -47,7 +57,7 @@ struct ServerView: View {
                 .tabItem { Label("Moderation", systemImage: "shield") }
                 .badge(openAppeals.count ?? 0)
                 .tag(ServerTab.moderation)
-            GuildSettingsForm(model: settings)
+            GuildSettingsForm(model: settings, wizard: wizard)
                 .tabItem { Label("Settings", systemImage: "gearshape") }
                 .tag(ServerTab.settings)
         }
@@ -57,14 +67,42 @@ struct ServerView: View {
         .navigationBarBackButtonHidden(settings.hasChanges)
         .tracksUnsavedChanges(settings.hasChanges, scope: .server)
         .toolbar { settingsToolbar }
+        .toolbar {
+            // "View only" or "Inbox only" next to the search; Command-K opens the search on an iPad with a keyboard.
+            if summary.effectiveAccess.badgeTitle != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    AccessBadge(access: summary.effectiveAccess)
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    isSearching = true
+                } label: {
+                    Label("Search", systemImage: "magnifyingglass")
+                }
+                .keyboardShortcut("k", modifiers: .command)
+            }
+        }
+        .sheet(isPresented: $isSearching) {
+            ServerSearchView(
+                summary: summary, session: session, overview: overview.overview, pages: searchPages, wizard: wizard
+            ) { target in
+                tab = target
+            }
+            .environment(session)
+            .environment(\.dashboardAccess, summary.effectiveAccess)
+            .environment(health)
+            .environment(\.serverPlatform, summary.platform)
+            .environment(openAppeals)
+        }
         .navigationDestination(for: ModuleRoute.self) { route in
-            ModuleScreens.screen(for: route.moduleID, server: summary.id, session: session)
+            scoped(ModuleScreens.screen(for: route.moduleID, server: summary.id, session: session))
         }
         .navigationDestination(for: ServerPageRoute.self) { route in
-            ServerPages.screen(for: route.cardID, server: summary.id, session: session)
+            scoped(ServerPages.screen(for: route.cardID, server: summary.id, session: session))
         }
         .navigationDestination(for: TicketRoute.self) { route in
-            TicketThreadView(server: summary.id, route: route, session: session)
+            scoped(TicketThreadView(server: summary.id, route: route, session: session))
         }
         .confirmationDialog("Discard your changes?", isPresented: $isConfirmingDiscard, titleVisibility: .visible) {
             Button("Discard Changes", role: .destructive) { settings.discardChanges() }
@@ -76,6 +114,9 @@ struct ServerView: View {
         }
         .sensoryFeedback(.success, trigger: settings.saveCount)
         .environment(openAppeals)
+        .environment(health)
+        .environment(\.serverPlatform, summary.platform)
+        .environment(\.dashboardAccess, summary.effectiveAccess)
         // A newer overview count replaces an older one.
         .onChange(of: overview.overview?.openAppeals) { _, count in
             if let count { openAppeals.update(count) }
@@ -83,6 +124,42 @@ struct ServerView: View {
         // The Tickets and Moderation badges are right before either tab is ever opened.
         .task { await tickets.load() }
         .task { await openAppeals.refresh() }
+        .task { await health.load() }
+        // What this Sylo announces (`setup-wizard`, `config-import`, `duplicate`, ...): views show a control only for it.
+        .task { _ = await session.serverFeatures() }
+        // A read of the features that failed (an offline start) is asked again when the app comes back, so the 5.2
+        // controls do not stay hidden.
+        .onChange(of: scenePhase) {
+            guard scenePhase == .active, !session.featuresKnown else { return }
+            Task {
+                _ = await session.serverFeatures()
+                await health.load()
+            }
+        }
+    }
+
+    /// A pushed screen reads the server's models and access from its environment. Values set on this view
+    /// after its `navigationDestination` modifiers do not reach a screen the stack pushes (the stack is above
+    /// this view), so every destination sets them on the screen itself. Without this, pushed module screens
+    /// show no health notes, no role and channel picker notes, and none of the View-only or Inbox-only limits.
+    private func scoped<Content: View>(_ content: Content) -> some View {
+        content
+            .environment(openAppeals)
+            .environment(health)
+            .environment(\.serverPlatform, summary.platform)
+            .environment(\.dashboardAccess, summary.effectiveAccess)
+    }
+
+    /// The pages the search can open: those of the app, and the wizard and the import where this server has them.
+    private var searchPages: [SearchPage] {
+        var pages: [SearchPage] = [.tickets, .moderation, .settings, .auditLog, .memberData, .insights, .leaderboard, .appeals]
+        if ServerPages.hasScreen("commands") { pages.append(.commands) }
+        if ServerPages.hasScreen("messages") { pages.append(.messages) }
+        if summary.effectiveAccess.canEdit {
+            if session.has(.setupWizard) { pages.append(.setupWizard) }
+            if session.has(.configImport) { pages.append(.importConfig) }
+        }
+        return pages
     }
 
     private var title: String {

@@ -32,7 +32,7 @@ struct YoutubeAlertsSettingsView: View {
                         }
                     }
                     ChannelPicker(title: "Announce in", selection: $alert.discordChannelId,
-                                  channels: page.channels, noneTitle: "Choose a channel")
+                                  channels: page.channels, noneTitle: "Choose a channel", embed: true, health: true)
                     Picker("Notify on", selection: $alert.notify) {
                         ForEach(YoutubeAlertsNotify.allCases, id: \.self) { notify in
                             Text(notify.title).tag(notify)
@@ -41,8 +41,10 @@ struct YoutubeAlertsSettingsView: View {
                     RolePicker(title: "Ping role", selection: $alert.roleId, roles: page.roles)
                     LimitedTextField(title: "New-video message", text: $alert.videoMessage,
                                      limit: YoutubeAlertsSettings.maxMessageLength, lines: 2...6)
+                    TextTemplateMenu(field: .youtubeVideo, text: $alert.videoMessage)
                     LimitedTextField(title: "Went-live message", text: $alert.liveMessage,
                                      limit: YoutubeAlertsSettings.maxMessageLength, lines: 2...6)
+                    TextTemplateMenu(field: .youtubeLive, text: $alert.liveMessage)
                     Picker("When a livestream ends", selection: $alert.onEnd) {
                         ForEach(YoutubeAlertsEndAction.allCases, id: \.self) { mode in
                             Text(mode.title).tag(mode)

@@ -37,6 +37,9 @@ public final class AppSession {
     public private(set) var generation = 0
     private var client: (any APIClient)?
     private var cachedLimits: AllModuleLimits?
+    private var cachedFeatures: Set<ServerFeature>?
+    /// The read of `/api/mobile/info` that is on its way, so concurrent callers share it.
+    private var featuresRead: Task<Set<ServerFeature>?, Never>?
     /// Files handed out by ``download(_:)`` in this sign-in; deleted at sign-out.
     private var issuedFiles: [DownloadedFile] = []
     /// Which member search this server has, learned by the first search and kept for the sign-in.
@@ -46,18 +49,26 @@ public final class AppSession {
     private let preference: any ServerPreference
     private let deviceName: String
     private let makeClient: ClientFactory
+    /// Sign-outs the server could not be told about yet (see ``PendingRevocation``).
+    private let pending: any PendingRevocationStore
+    /// The replay that is running now, so a second caller waits for it instead of starting another.
+    private var replay: Task<Void, Never>?
+    /// How long a caller waits for a replay (``revokePending(within:)``); tests shorten it.
+    var revokeTimeout: Duration = .seconds(10)
 
     /// - Parameters:
     ///   - deviceName: Sent with the sign-in, shown in the account's device list.
     ///   - makeClient: Builds the client for a server, with the token or nil.
     public init(
         tokens: any TokenStore, preference: any ServerPreference, deviceName: String,
+        pendingRevocations: any PendingRevocationStore = InMemoryPendingRevocationStore(),
         makeClient: @escaping ClientFactory
     ) {
         self.tokens = tokens
         self.preference = preference
         self.deviceName = deviceName
         self.makeClient = makeClient
+        self.pending = pendingRevocations
     }
 
     /// The server in use, whether signed in or not.
@@ -180,7 +191,7 @@ public final class AppSession {
             // The person closed the sheet or pressed Cancel: nothing to say.
         } catch NetworkError.cancelled {
         } catch let error as SignInError {
-            errorMessage = Self.message(for: error)
+            errorMessage = Self.message(for: error, chosen: server.origin)
         } catch let error as NetworkError {
             errorMessage = error.userMessage
         } catch is TokenStoreError {
@@ -190,13 +201,139 @@ public final class AppSession {
         }
     }
 
-    /// Signs this device out: forgets the token here at once, then asks the server to revoke it
-    /// (best effort; offline, the token simply stays unused until it expires).
+    /// Signs this device out: forgets the token here at once, then asks the server to take down this
+    /// device's notifications and revoke the token. When the server cannot be reached, a
+    /// ``PendingRevocation`` (the server, and the token to revoke, in an app-only store) is kept and replayed
+    /// by ``revokePending(within:)`` until the server answers, so a registration it still holds cannot
+    /// deliver again later. Notifications stop on the device itself without the server: the app drops its
+    /// registration with iOS and forgets what it sent (``PushDeviceState/signedOut()``).
     public func signOut() async {
         guard case .signedIn(let server) = phase else { return }
-        let client = self.client
+        let pushesToServer = has(.push) || has(.pushPigeon)
+        // Written before the token goes, so a crash in between cannot lose it.
+        if let stored = (try? tokens.token(for: key(server))) ?? nil {
+            addPending(PendingRevocation(server: server, token: stored.token, hadPush: pushesToServer))
+        }
         signOutLocally(of: server)
-        _ = try? await client?.send(Endpoints.SignOut())
+        // The same limited path as every other caller, so a server that is down cannot hold sign-out up.
+        await revokePending()
+    }
+
+    // MARK: - Pending revocations
+
+    /// Whether a sign-out is still waiting to be told to its server.
+    public var hasPendingRevocations: Bool { !((try? pending.load()) ?? []).isEmpty }
+
+    /// Tells the servers of earlier sign-outs that could not be reached to take down this device's push
+    /// registration and revoke the token, each only the server it was issued by. Call it at launch, when the app
+    /// comes to the front, and before the device registers for notifications again. Gives up waiting after
+    /// `limit` (the item stays for the next time), so a server that is down never holds the app up for long.
+    public func revokePending(within limit: Duration? = nil) async {
+        // A replay is already running (it has its own limit): wait for it, so nobody registers for
+        // notifications before it has finished or timed out.
+        if let running = replay {
+            await running.value
+            return
+        }
+        guard hasPendingRevocations else { return }
+        let task = Task { await self.replayPending() }
+        replay = task
+        let wait = limit ?? revokeTimeout
+        let timer = Task {
+            try? await Task.sleep(for: wait)
+            task.cancel()
+        }
+        await task.value
+        timer.cancel()
+        replay = nil
+    }
+
+    private func addPending(_ item: PendingRevocation) {
+        var items = (try? pending.load()) ?? []
+        items.removeAll { $0.server == item.server && $0.token == item.token }
+        items.append(item)
+        if items.count > PendingRevocation.maxKept { items.removeFirst(items.count - PendingRevocation.maxKept) }
+        try? pending.save(items)
+    }
+
+    private enum Step {
+        /// The server answered (success, 404), or said the token is already dead (401: `dead`).
+        case done(dead: Bool)
+        /// Try again later. `answered` is true when the server sent an HTTP answer (an error status); only
+        /// those count as a try. Not being able to reach it at all (offline, timeout, TLS) does not, so a
+        /// phone that stays offline never uses up the tries.
+        case retry(answered: Bool)
+        case cancelled
+    }
+
+    private func attempt<E: APIEndpoint>(_ client: any APIClient, _ endpoint: E) async -> Step {
+        do {
+            _ = try await client.send(endpoint)
+            return .done(dead: false)
+        } catch {
+            let error = NetworkError(error)
+            if error == .unauthorized { return .done(dead: true) }
+            if case .notFound = error { return .done(dead: false) }
+            if error == .cancelled { return .cancelled }
+            return .retry(answered: Self.isServerAnswer(error))
+        }
+    }
+
+    /// Whether the server itself sent an answer (any HTTP status), as opposed to the call not getting through.
+    private static func isServerAnswer(_ error: NetworkError) -> Bool {
+        switch error {
+        case .timeout, .offline, .unreachable, .secureConnectionFailed, .cancelled, .transport, .invalidURL, .encoding:
+            false
+        default:
+            true
+        }
+    }
+
+    /// One try for every pending revocation. Each goes to its own server with its own token.
+    private func replayPending() async {
+        let items = (try? pending.load()) ?? []
+        guard !items.isEmpty else { return }
+        var finished = Set<UUID>()
+        var attempts: [UUID: Int] = [:]
+        let now = Date()
+        for item in items {
+            if item.isStale(now: now) {
+                finished.insert(item.id)
+                continue
+            }
+            let client = makeClient(item.server, item.token)
+            var allDone = true
+            var answered = false
+            var dead = false
+            var wasCancelled = false
+            if item.hadPush {
+                switch await attempt(client, Endpoints.UnregisterPush()) {
+                case .done(let tokenDead): dead = tokenDead
+                case .retry(let heard): allDone = false; answered = answered || heard
+                case .cancelled: wasCancelled = true
+                }
+            }
+            if !dead, !wasCancelled {
+                switch await attempt(client, Endpoints.SignOut()) {
+                case .done: break
+                case .retry(let heard): allDone = false; answered = answered || heard
+                case .cancelled: wasCancelled = true
+                }
+            }
+            if wasCancelled { continue }
+            if allDone || dead {
+                finished.insert(item.id)
+            } else {
+                if answered { attempts[item.id] = item.attempts + 1 }
+            }
+        }
+        // Reloaded, so a sign-out that happened meanwhile is not lost.
+        var current = (try? pending.load()) ?? []
+        current.removeAll { finished.contains($0.id) }
+        for index in current.indices {
+            if let tried = attempts[current[index].id] { current[index].attempts = tried }
+        }
+        try? pending.save(current)
     }
 
     /// Deletes the account on this server, then forgets the token here. There is no sign-out call:
@@ -300,6 +437,50 @@ public final class AppSession {
         return loaded
     }
 
+    /// What this server's app API supports (`features` of `GET /api/mobile/info`), asked once per sign-in
+    /// and kept. Empty when the server cannot be asked right now (asked again next time); the sign-in
+    /// screen's copy is the fallback. A feature an older Sylo lacks is simply not in the set.
+    ///
+    /// Calls that arrive while one read is on its way wait for it, so a server screen that asks from several
+    /// places sends one request. A read that failed is not kept: the next call (a screen appearing, the app
+    /// coming back to the foreground) asks again, so the 5.2 controls do not stay hidden after an offline start.
+    public func serverFeatures() async -> Set<ServerFeature> {
+        if let cachedFeatures { return cachedFeatures }
+        let fallback = Set(serverInfo?.features ?? [])
+        if let reading = featuresRead { return await reading.value ?? fallback }
+        let generation = self.generation
+        let reading = Task { () -> Set<ServerFeature>? in
+            do {
+                let info = try await self.send(Endpoints.ServerInfo())
+                let features = Set(info.features)
+                if generation == self.generation { self.cachedFeatures = features }
+                return features
+            } catch {
+                return nil
+            }
+        }
+        featuresRead = reading
+        let result = await reading.value
+        if featuresRead == reading { featuresRead = nil }
+        return result ?? fallback
+    }
+
+    /// Whether this server announces `feature` (see ``serverFeatures()``).
+    public func supports(_ feature: ServerFeature) async -> Bool {
+        await serverFeatures().contains(feature)
+    }
+
+    /// Whether the server has answered `/api/mobile/info` in this sign-in. Until it has, a missing feature may only
+    /// mean "not asked yet, or the read failed", so nothing is concluded from it.
+    public var featuresKnown: Bool { cachedFeatures != nil }
+
+    /// Whether this server announces `feature`, from what ``serverFeatures()`` has already read (false until it
+    /// has). For a view's body: it re-reads when the features arrive, so a control for a feature an older Sylo
+    /// lacks is simply not shown.
+    public func has(_ feature: ServerFeature) -> Bool {
+        (cachedFeatures ?? Set(serverInfo?.features ?? [])).contains(feature)
+    }
+
     /// Sends a call that needs no sign-in to another server (the notification relay), with a
     /// client that has no token: the Sylo server's token never goes anywhere else.
     public func send<E: APIEndpoint>(_ endpoint: E, to server: ServerURL) async throws -> E.Response {
@@ -319,6 +500,8 @@ public final class AppSession {
         generation += 1
         client = makeClient(server, token)
         cachedLimits = nil
+        cachedFeatures = nil
+        featuresRead = nil
         memberSearchRoute = .general
         phase = .signedIn(server)
     }
@@ -328,6 +511,8 @@ public final class AppSession {
         try? tokens.delete(for: key(server))
         client = nil
         cachedLimits = nil
+        cachedFeatures = nil
+        featuresRead = nil
         memberSearchRoute = .general
         for file in issuedFiles { file.discard() }
         issuedFiles = []
@@ -348,10 +533,12 @@ public final class AppSession {
     /// different paths keep separate tokens.
     private func key(_ server: ServerURL) -> String { server.description }
 
-    private static func message(for error: SignInError) -> String {
+    private static func message(for error: SignInError, chosen: String) -> String {
         switch error {
         case .invalidServerURL: ServerURLError.invalid.userMessage
         case .serverError: "The server couldn't sign you in. Try again."
+        case .issuerMismatch(let claimed):
+            "This sign-in came from a different server (\(claimed)), but you chose \(chosen). Check the address you entered, or ask whoever runs your server, then sign in again."
         case .cancelled, .stateMismatch, .wrongCallback, .missingCode: unfinishedSignIn
         }
     }

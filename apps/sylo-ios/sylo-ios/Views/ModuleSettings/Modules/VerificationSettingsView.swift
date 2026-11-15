@@ -29,9 +29,9 @@ struct VerificationSettingsView: View {
 
             Section {
                 RolePicker(title: "Verified role", selection: $settings.verifiedRoleId, roles: page.roles,
-                           noneTitle: "Choose a role")
+                           noneTitle: "Choose a role", health: true)
                 ChannelPicker(title: "Verify channel", selection: $settings.channelId, channels: page.channels,
-                              noneTitle: "Choose a channel")
+                              noneTitle: "Choose a channel", embed: true, health: true)
             } footer: {
                 Text("The role is granted on success. Sylo's own role must be higher than this one in Server Settings › Roles, or it can't give it out.")
             }
@@ -52,7 +52,7 @@ struct VerificationSettingsView: View {
             }
 
             Section {
-                ChannelPicker(title: "Log channel", selection: $settings.logChannelId, channels: page.channels)
+                ChannelPicker(title: "Log channel", selection: $settings.logChannelId, channels: page.channels, embed: true, health: true)
             } footer: {
                 Text("Optional.")
             }

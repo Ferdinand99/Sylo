@@ -64,8 +64,14 @@ public struct MemberChoice: Sendable, Hashable, Identifiable {
     public var hasName: Bool { name != id }
 }
 
+extension ServerFeature {
+    /// `GET /api/v2/guilds/:id/members?q=`: the general member search.
+    public static let memberSearch = ServerFeature(rawValue: "member-search")
+}
+
 /// Which member search a server has: the general one, the Temporary roles one (a server from before
-/// the general one), or neither. Learned by the first search and kept by the session.
+/// the general one), or neither. The general one is used only when the server announces `member-search`;
+/// what a search learns is kept by the session.
 public enum MemberSearchRoute: Sendable, Equatable {
     case general
     case tempRoles
@@ -156,9 +162,9 @@ public final class MemberSearchModel {
     /// The member id the typed text spells out, when it is an id or a mention.
     public var pastedID: String? { MemberReference.id(in: query) }
 
-    /// Searches for the typed text: the server's `/members`, and on a 404 the Temporary roles
-    /// search (remembered for the sign-in, so later searches go straight there). Empty text clears
-    /// the results.
+    /// Searches for the typed text: the server's `/members` when it announces `member-search`, otherwise the
+    /// Temporary roles search directly. A 404 on the announced route still moves on to the older one
+    /// (remembered for the sign-in). Empty text clears the results.
     public func search() async {
         let typed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         newest += 1
@@ -194,7 +200,12 @@ public final class MemberSearchModel {
     }
 
     private func load(_ text: String) async throws -> MemberSearchResult {
-        if session.memberSearchRoute == .general {
+        // The general search is used only when the server announces `member-search`. Any other server goes
+        // straight to the older route, with no probe (and no 404) first. That choice is not stored, so a server
+        // whose info could not be read yet is asked again by the next search.
+        var general = false
+        if session.memberSearchRoute == .general { general = await session.supports(.memberSearch) }
+        if general {
             do {
                 return try await session.send(Endpoints.SearchMembers(server: server, text: text))
             } catch let failure as NetworkError {

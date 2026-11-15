@@ -160,6 +160,8 @@ public final class ShopItemsModel {
     /// The rarity tiers the server names, or the five standard ones.
     public private(set) var rarities: [ShopRarity] = ShopRarity.standard
     public private(set) var maxItems: Int?
+    /// How much of the collectible-picture quota is used; nil when the server does not say.
+    public private(set) var pictures: ShopPictureUsage?
     public private(set) var isLoading = false
     public private(set) var hasLoaded = false
     /// A save, delete, reorder or picture call is running.
@@ -200,6 +202,7 @@ public final class ShopItemsModel {
             items = list.items
             roles = list.roles
             maxItems = list.maxItems
+            pictures = list.pictures
             if let tiers = list.rarities, !tiers.isEmpty { rarities = tiers } else { rarities = ShopRarity.standard }
             listShowsCollectibles = list.showsCollectibles
             hasLoaded = true
@@ -242,13 +245,16 @@ public final class ShopItemsModel {
         defer { isBusy = false }
         do {
             if let existing = draft.id {
-                items = try await session.send(Endpoints.UpdateShopItem(server: server, id: existing, item: body)).items
+                let updated = try await session.send(Endpoints.UpdateShopItem(server: server, id: existing, item: body))
+                items = updated.items
+                if let usage = updated.pictures { pictures = usage }
                 changeCount += 1
                 return existing
             }
             let before = Set(items.map(\.id))
             let answer = try await session.send(Endpoints.CreateShopItem(server: server, item: body))
             items = answer.items
+            if let usage = answer.pictures { pictures = usage }
             changeCount += 1
             if let id = answer.id { return id }
             let added = answer.items.map(\.id).filter { !before.contains($0) }
@@ -308,6 +314,7 @@ public final class ShopItemsModel {
         do {
             let answer = try await session.upload(Endpoints.UploadShopItemPicture(server: server, id: id, picture: picture))
             items = answer.items
+            if let usage = answer.pictures { pictures = usage }
             changeCount += 1
             return true
         } catch {
@@ -334,7 +341,9 @@ public final class ShopItemsModel {
         isBusy = true
         defer { isBusy = false }
         do {
-            items = try await call().items
+            let answer = try await call()
+            items = answer.items
+            if let usage = answer.pictures { pictures = usage }
             changeCount += 1
             return true
         } catch {

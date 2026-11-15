@@ -18,19 +18,23 @@ public struct SuggestionsPage: ModuleSettingsPage {
     /// earlier move to the log channel) and can be moved back; 0 from a server that does not
     /// offer moving back.
     public let outside: Int
+    /// How many suggestions there are per status, for the filter chips (Sylo 5.2); nil from a server
+    /// that does not send them.
+    public let counts: SuggestionCounts?
 
     public init(settings: SuggestionsSettings, channels: [ChannelOption] = [], roles: [RoleOption] = [],
-                suggestions: [SuggestionSummary] = [], outside: Int = 0) {
+                suggestions: [SuggestionSummary] = [], outside: Int = 0, counts: SuggestionCounts? = nil) {
         self.settings = settings
         self.channels = channels
         self.roles = roles
         self.suggestions = suggestions
         self.outside = outside
+        self.counts = counts
     }
 
     private enum CodingKeys: String, CodingKey {
         case settings = "config"
-        case channels, roles, suggestions, outside
+        case channels, roles, suggestions, outside, counts
     }
 
     public init(from decoder: any Decoder) throws {
@@ -40,6 +44,7 @@ public struct SuggestionsPage: ModuleSettingsPage {
         roles = try c.decode(forKey: .roles, or: [])
         suggestions = try c.decodeLossyArray(of: SuggestionSummary.self, forKey: .suggestions)
         outside = try c.decode(forKey: .outside, or: 0)
+        counts = try? c.decodeIfPresent(SuggestionCounts.self, forKey: .counts)
     }
 }
 

@@ -129,15 +129,19 @@ public struct AppealsReview: Decodable, Sendable, Equatable {
     public let moduleEnabled: Bool
     /// Whether the appeal form has questions; without them members cannot appeal.
     public let configured: Bool
+    /// The answers and decision reasons are blank because the person has View access (Sylo 5.2).
+    public let contentHidden: Bool
 
-    public init(appeals: [Appeal] = [], open: Int? = nil, moduleEnabled: Bool = true, configured: Bool = true) {
+    public init(appeals: [Appeal] = [], open: Int? = nil, moduleEnabled: Bool = true, configured: Bool = true,
+                contentHidden: Bool = false) {
         self.appeals = appeals
         self.open = open ?? appeals.filter(\.isOpen).count
         self.moduleEnabled = moduleEnabled
         self.configured = configured
+        self.contentHidden = contentHidden
     }
 
-    private enum CodingKeys: String, CodingKey { case appeals, open, moduleEnabled, configured }
+    private enum CodingKeys: String, CodingKey { case appeals, open, moduleEnabled, configured, contentHidden }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -145,7 +149,8 @@ public struct AppealsReview: Decodable, Sendable, Equatable {
             appeals: try c.decodeLossyArray(of: Appeal.self, forKey: .appeals),
             open: try c.decodeIfPresent(Int.self, forKey: .open),
             moduleEnabled: try c.decode(forKey: .moduleEnabled, or: true),
-            configured: try c.decode(forKey: .configured, or: true))
+            configured: try c.decode(forKey: .configured, or: true),
+            contentHidden: (try? c.decodeIfPresent(Bool.self, forKey: .contentHidden)) ?? false)
     }
 }
 
