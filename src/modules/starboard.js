@@ -265,6 +265,20 @@ export function scheduleRescan(guild, board) {
 /** The channel whose permissions apply: a thread follows its parent. */
 const permissionSource = (channel) => (channel?.isThread?.() ? channel.parent : channel);
 
+/** Can every role that reads the board channel also read the source channel? (A missing answer is no.) */
+function audienceFits(guild, source, dest) {
+  const roles = new Set([guild.roles?.everyone, ...(guild.roles?.cache?.values?.() ?? [])]);
+  roles.delete(undefined);
+  roles.delete(null);
+  const sees = (channel, role) =>
+    permissionSource(channel)?.permissionsFor?.(role)?.has?.('ViewChannel') === true;
+  for (const role of roles) {
+    if (role.managed) continue;
+    if (sees(dest, role) && !sees(source, role)) return false;
+  }
+  return roles.size > 0;
+}
+
 /**
  * May a message from this channel be republished on this board? The board's readers are not the
  * source channel's readers, so a copy must not widen the audience. Fails closed: whatever cannot be
@@ -272,9 +286,10 @@ const permissionSource = (channel) => (channel?.isThread?.() ? channel.parent : 
  *  - a private thread: never;
  *  - an age-restricted source: only on a board channel that is age-restricted too (a platform age
  *    gate; no setting overrides it);
- *  - a source @everyone cannot view: only when an admin picked that channel for the board ("only
- *    these channels", `channelMode: 'deny'`). Not "the board is visible to @everyone", because many
- *    servers gate every channel behind a role.
+ *  - a source that is hidden from some of the board's readers: every role that can view the board channel
+ *    (@everyone included; bot-managed roles are not an audience) must also be able to view the source,
+ *    so a server that gates every channel behind a Member or Verified role keeps working. Otherwise only
+ *    when an admin picked that channel for the board ("only these channels", `channelMode: 'deny'`).
  * @param {any} guild
  * @param {{ channelMode: string, channelList: string[] }} board
  * @param {any} source  the channel the message is in
@@ -285,9 +300,7 @@ export function sourceFitsBoard(guild, board, source, dest) {
     if (!source || !dest) return false;
     if (source.isThread?.() && source.type === ChannelType.PrivateThread) return false;
     if (isAgeRestricted(guild, source) && !isAgeRestricted(guild, dest)) return false;
-    const everyone = guild.roles?.everyone;
-    const readable = permissionSource(source)?.permissionsFor?.(everyone)?.has?.('ViewChannel');
-    if (everyone && readable === true) return true;
+    if (audienceFits(guild, source, dest)) return true;
     return board.channelMode === 'deny' && board.channelList.includes(source.id);
   } catch {
     return false;
@@ -440,7 +453,18 @@ async function handleReaction({ reaction, user }, rawConfig, guildId, added) {
     }
     // The copy would be read by the board's audience, not the source's.
     const source = message.channel ?? guild.channels.cache.get(message.channelId);
-    if (!sourceFitsBoard(guild, board, source, guild.channels.cache.get(board.channelId))) continue;
+    const dest = guild.channels.cache.get(board.channelId);
+    if (!sourceFitsBoard(guild, board, source, dest)) {
+      // A post made before this check, or of a channel made private since, comes down: each new
+      // reaction is the recheck. (Only when both channels are known: a gap in the cache is not a verdict.)
+      const posted = source && dest ? await getStarboardEntry(guildId, board.id, message.id) : null;
+      if (posted?.post_msg_id) {
+        const post = await fetchPost(guild, board.channelId, posted.post_msg_id);
+        if (post) await post.delete().catch(() => {});
+        await setStarboardPost(guildId, board.id, message.id, null, null);
+      }
+      continue;
+    }
 
     if (message.author?.bot && board.ignoreBotMessages) {
       if (added && board.removeBotReactions) reaction.users.remove(user.id).catch(() => {});
