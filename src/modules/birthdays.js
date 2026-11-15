@@ -81,7 +81,7 @@ async function celebrantsToday(guildId, now) {
   return rows;
 }
 
-async function celebrateGuild(guildId, now) {
+async function celebrateGuild(guildId, now, pastDays = [new Date(now.getTime() - 86_400_000)]) {
   const guild = guildByKey(guildId);
   if (!guild) return;
   const cfg = normaliseBirthdaysConfig((await getGuildModule(guildId, 'birthdays')).config);
@@ -97,12 +97,16 @@ async function celebrateGuild(guildId, now) {
         if (!celebrantIds.has(member.id)) await member.roles.remove(role, 'Birthday over').catch(() => {});
       }
       // The role's member list is the cache, which a server without the Server Members intent does not keep
-      // current: yesterday's celebrants are looked up by name as well, and take the role off when they hold it.
-      const yesterday = await celebrantsToday(guildId, new Date(now.getTime() - 86_400_000));
-      for (const row of yesterday) {
-        if (celebrantIds.has(row.user_id)) continue;
-        const m = await liveMember(guild, row.user_id).catch(() => null);
-        if (m?.roles.cache.has(role.id)) await m.roles.remove(role, 'Birthday over').catch(() => {});
+      // current: the celebrants of every day since the last sweep (after downtime, more than yesterday) are
+      // looked up by their stored ids as well, and take the role off when they hold it.
+      const seen = new Set();
+      for (const day of pastDays) {
+        for (const row of await celebrantsToday(guildId, day)) {
+          if (celebrantIds.has(row.user_id) || seen.has(row.user_id)) continue;
+          seen.add(row.user_id);
+          const m = await liveMember(guild, row.user_id).catch(() => null);
+          if (m?.roles.cache.has(role.id)) await m.roles.remove(role, 'Birthday over').catch(() => {});
+        }
       }
       for (const id of celebrantIds) {
         const m = await liveMember(guild, id).catch(() => null);
@@ -133,16 +137,34 @@ async function celebrateGuild(guildId, now) {
   }
 }
 
+/**
+ * The days that ended since the last sweep ("2026-11-3" as stored), oldest first, at most a month back:
+ * yesterday when there is no earlier run. After downtime that is every day the sweep missed.
+ */
+function daysSince(last, now) {
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(String(last ?? ''));
+  if (!m) return [yesterday];
+  const days = [];
+  const from = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  for (let d = new Date(from); d <= yesterday && days.length < 31; d.setDate(d.getDate() + 1)) {
+    days.push(new Date(d));
+  }
+  return days.length ? days : [yesterday];
+}
+
 /** Run the daily sweep if the calendar day has rolled over since last time. */
 export async function runBirthdaySweep(now = new Date()) {
   const today = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
-  if ((await getAppSetting(LAST_RUN_KEY)) === today) return;
+  const last = await getAppSetting(LAST_RUN_KEY);
+  if (last === today) return;
   await setAppSetting(LAST_RUN_KEY, today);
+  const pastDays = daysSince(last, now);
 
   for (const guild of allGuilds()) {
     if (!(await isModuleEnabled(guildKey(guild), 'birthdays'))) continue;
     try {
-      await celebrateGuild(guildKey(guild), now);
+      await celebrateGuild(guildKey(guild), now, pastDays);
     } catch (err) {
       log.error('module:birthdays', `sweep for ${guildKey(guild)} failed:`, err.message);
     }
