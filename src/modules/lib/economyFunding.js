@@ -29,12 +29,13 @@ const MORE_WHEN_HIGHER = [
 const MORE_WHEN_LOWER = ['messageCooldownSeconds', 'messageMinLength', 'workCooldownMinutes'];
 
 /**
- * Does this save raise what members earn or start with? An empty `prev` (the module was never saved, or is
- * being switched on) counts as a raise: everything it pays comes into effect.
+ * Does this save raise what members earn or start with? Switching the module on does: everything it pays
+ * comes into effect. A module saved before (or switched on without ever saving settings: an empty config)
+ * is compared as it works now, with the defaults.
  */
-export function raisesIncome(prev, next) {
-  if (!prev || Object.keys(prev).length === 0) return true;
-  const was = normaliseEconomyConfig(prev);
+export function raisesIncome(prev, next, { switchingOn = false } = {}) {
+  if (switchingOn) return true;
+  const was = normaliseEconomyConfig(prev ?? {});
   const now = normaliseEconomyConfig(next ?? {});
   return (
     (!was.messageEnabled && now.messageEnabled) ||

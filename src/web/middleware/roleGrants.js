@@ -250,9 +250,9 @@ export async function checkFundingGrants(guildId, what) {
  * The module write guard's check, for a route that must refuse before it does anything else
  * (publishing a role menu posts to the channel before the save reaches the guard).
  */
-export async function checkModuleGrants(moduleId, prev, next) {
+export async function checkModuleGrants(moduleId, prev, next, { switchingOn = false } = {}) {
   await checkPingRaise(moduleId, prev, next);
-  if (moduleId === 'economy' && raisesIncome(prev, next)) {
+  if (moduleId === 'economy' && raisesIncome(prev, next, { switchingOn })) {
     const guildId = actors.getStore()?.guild ? guildKey(actors.getStore().guild) : null;
     if (guildId) await checkFundingGrants(guildId, 'raise what members earn');
   }
@@ -285,7 +285,9 @@ export async function checkLevelRewardGrants(guild, userId, xp) {
   await checkNewGrants(held, rewardRolesToAdd(cfg, levelFromXp(xp), held));
 }
 
-setModuleConfigGuard(({ moduleId, prev, next }) => checkModuleGrants(moduleId, prev, next));
+setModuleConfigGuard(({ moduleId, prev, next, switchingOn }) =>
+  checkModuleGrants(moduleId, prev, next, { switchingOn })
+);
 setComposedSpecGuard(({ prev, next }) => checkNewGrants(specGrants(prev), specGrants(next)));
 
 /**

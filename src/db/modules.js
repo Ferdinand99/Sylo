@@ -98,16 +98,24 @@ export function setModuleConfigGuard(fn) {
   configGuard = fn;
 }
 
+/** Who to ask, by what the refusal says: a rank refusal is not helped by Manage Server. */
+function whoCanSwitchOn(message) {
+  const rank = /([^.]+?) is above or equal to your highest role/.exec(message);
+  if (rank) return `Ask someone whose highest role is above ${rank[1].trim()}, or the server owner, to switch it on.`;
+  if (/Manage Roles/.test(message)) return 'Ask someone with Manage Roles, or the server owner, to switch it on.';
+  return 'Ask the server owner or someone with Manage Server to switch it on.';
+}
+
 /**
  * Run the config guard for switching a module on: everything its stored config hands out counts as new. A
  * refusal says that switching on is the cause. Does nothing for a module that is on, and in the bot's own writes.
  */
 async function guardSwitchOn(guildId, moduleId, config) {
   try {
-    await configGuard({ guildId, moduleId, prev: {}, next: config ?? {} });
+    await configGuard({ guildId, moduleId, prev: {}, next: config ?? {}, switchingOn: true });
   } catch (err) {
     if (err?.name === 'RoleGrantError') {
-      err.message = `Switching ${getModule(moduleId)?.name ?? moduleId} on is refused: it would hand out or pay for something you could not give yourself. ${err.message} Ask the server owner or someone with Manage Server to switch it on.`;
+      err.message = `Switching ${getModule(moduleId)?.name ?? moduleId} on is refused. ${err.message} ${whoCanSwitchOn(err.message)}`;
     }
     throw err;
   }

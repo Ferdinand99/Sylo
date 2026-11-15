@@ -70,3 +70,13 @@ test('someone with Manage Server may raise it', async () => {
   assert.equal((await post('/modules/giveaways/config', { ping: 'everyone' })).status, 200);
   assert.equal(await pingOf(), 'everyone');
 });
+
+test('switching the module on with a raised ping is refused in plain words', async () => {
+  await setGuildModule(D_GUILD, 'giveaways', { enabled: false, config: { ping: 'everyone' } });
+  const post = await person([]);
+  const res = await post('/modules/giveaways', { enabled: true });
+  assert.equal(res.status, 403);
+  const { error } = await res.json();
+  assert.match(error, /Switching .* on is refused\. Only the server owner or someone with Manage Server can make giveaways ping/);
+  assert.doesNotMatch(error, /pay for/);
+});

@@ -62,6 +62,12 @@ async function signedIn(top, perms = ['ManageGuild']) {
       body: JSON.stringify(body),
     });
   const adjust = (body) => post(`/members/${TARGET}/adjust`, body);
+  adjust.toggle = (enabled) =>
+    b.get(`/api/v2/guilds/${D_GUILD}/modules/economy`, {
+      method: 'POST',
+      headers: { 'x-csrf-token': token, 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    });
   adjust.post = post;
   return adjust;
 }
@@ -186,4 +192,23 @@ test('raising income is open when the shop sells nothing the actor could not han
   await sell(LOW);
   const adjust = await signedIn(10);
   assert.equal((await adjust.post('/config', { workMin: 50, workMax: 100000 })).status, 200);
+});
+
+test('a module that is on with no saved settings is compared with the defaults, so unrelated saves stay open', async () => {
+  await setGuildModule(D_GUILD, 'economy', { enabled: true, config: {} });
+  await sell(HIGH);
+  const adjust = await signedIn(10);
+  const res = await adjust.post('/config', { currencyName: 'gold' });
+  assert.equal(res.status, 200, JSON.stringify(await res.clone().json()));
+  await setGuildModule(D_GUILD, 'economy', { enabled: true, config: {} });
+  assert.equal((await adjust.post('/config', { workMax: 100000 })).status, 403, 'a real raise is still refused');
+});
+
+test('switching the economy on is still refused while the shop sells a role above the actor', async () => {
+  await setGuildModule(D_GUILD, 'economy', { enabled: false, config: {} });
+  await sell(HIGH);
+  const adjust = await signedIn(10);
+  const res = await adjust.toggle(true);
+  assert.equal(res.status, 403);
+  assert.match((await res.json()).error, /Switching .* on is refused.*someone whose highest role is above Legend/s);
 });
