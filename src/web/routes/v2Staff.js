@@ -281,6 +281,7 @@ staffRouter.post(
     const result = await decideAndNotify(guild, appeal, {
       status: decision,
       decidedBy: moderatorDisplayName(req),
+      decidedById: actingUserId(req, guild.id, null),
       reason,
     });
     if (!result.recorded) return fail(res, 'This appeal has already been decided.', 409);

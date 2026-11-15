@@ -52,8 +52,9 @@ export async function overrideBlockReason(interaction) {
  * @param {import('discord.js').MessageContextMenuCommandInteraction} interaction
  */
 async function runContextMenu(interaction) {
-  inc('sylo_commands_total', { command: interaction.commandName });
   const menu = interaction.client.contextMenus?.get(interaction.commandName);
+  // /health and /metrics are public: only built-in names are labels, never a name somebody configured.
+  inc('sylo_commands_total', { command: menu ? interaction.commandName : 'custom' });
   if (!menu) {
     log.warn('bot', `Received unknown menu command: ${interaction.commandName}`);
     return;
@@ -102,9 +103,10 @@ export async function execute(interaction) {
   }
   if (!interaction.isChatInputCommand()) return;
 
-  inc('sylo_commands_total', { command: interaction.commandName });
-
   const command = interaction.client.commands.get(interaction.commandName);
+  // /health and /metrics are public: only built-in names are labels. A guild's custom command (or an
+  // unknown name) is counted under one fixed label, so no server's configuration shows there.
+  inc('sylo_commands_total', { command: command ? interaction.commandName : 'custom' });
   if (!command) {
     try {
       if (await handleCustomSlash(interaction)) return;

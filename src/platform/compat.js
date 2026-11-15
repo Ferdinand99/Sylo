@@ -313,14 +313,20 @@ export function installFluxerCompat(sdk, { Collection, voice } = {}) {
   );
 
   // What a role may do in a channel, as discord.js works it out for `permissionsFor(role)`: the
-  // role's own permissions, then the @everyone overwrite of the channel, then the role's own.
-  // (The SDK only computes this for a member, through member.permissionsIn.) Administrator is
-  // everything, and Role.permissions already returns every bit for it.
+  // role's own permissions together with those of @everyone (every member also holds @everyone, so a
+  // role with no permissions of its own gets its base from it), then the @everyone overwrite of the
+  // channel, then the role's own. (The SDK only computes this for a member, through
+  // member.permissionsIn.) Administrator is everything, and Role.permissions already returns every
+  // bit for it. Asked about @everyone itself, the answer is its own permissions, as before.
   const rolePermissionsIn = (channel, role) => {
     const base = role.permissions;
     if (base.isAdmin) return base;
     const overwrites = channel.permissionOverwrites?.toJSON?.() ?? [];
     let bits = base.bitfield;
+    if (role.id !== channel.guildId) {
+      const everyone = channel.guild?.roles?.get?.(channel.guildId);
+      if (everyone) bits |= everyone.permissions.bitfield;
+    }
     for (const id of new Set([channel.guildId, role.id])) {
       const overwrite = overwrites.find((o) => o.type === OverwriteType.Role && o.id === id);
       if (overwrite) bits = (bits & ~BigInt(overwrite.deny || '0')) | BigInt(overwrite.allow || '0');

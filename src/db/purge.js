@@ -241,8 +241,56 @@ const userStmts = {
   // Staff side: who closed someone's ticket or decided someone's appeal. The ticket and the
   // appeal stay with their owner; only the staff member's id comes off.
   ticketsClosed: prepare('UPDATE tickets SET closed_by = NULL WHERE guild_id = ? AND closed_by = ?'),
-  appealsDecided: prepare('UPDATE appeals SET decided_by = NULL WHERE guild_id = ? AND decided_by = ?'),
+  // decided_by is the name shown on the appeal; decided_by_user_id is the staff member's platform id, which is
+  // how they are found. (Rows from before that column only have the name, see `names` on forgetUser.)
+  appealsDecided: prepare(
+    'UPDATE appeals SET decided_by = NULL, decided_by_user_id = NULL WHERE guild_id = ? AND (decided_by_user_id = ? OR (decided_by_user_id IS NULL AND decided_by = ?))'
+  ),
+  // Staff replies in other members' tickets carry the staff member's id; the text stays with the ticket.
+  // The column is NOT NULL, so an empty string stands for "nobody".
+  ticketStaffMessages: prepare(`
+    UPDATE ticket_messages SET author_id = ''
+    WHERE author_kind IN ('staff', 'system') AND author_id = ?
+      AND ticket_id IN (SELECT id FROM tickets WHERE guild_id = ?)
+  `),
+  // The history of an application names who did what by id. Only the rows whose history mentions the id.
+  applicationHistoryOf: prepare(
+    'SELECT id, history FROM applications_submissions WHERE guild_id = ? AND history LIKE ?'
+  ),
+  setApplicationHistory: prepare(
+    'UPDATE applications_submissions SET history = ? WHERE guild_id = ? AND id = ?'
+  ),
 };
+
+/**
+ * Take a member's id off the history of the applications in a guild (who submitted, decided or withdrew).
+ * Their own submissions are deleted anyway; this covers other members' applications they decided.
+ * @returns {Promise<number>} how many entries were changed
+ */
+async function scrubApplicationHistory(guildId, userId) {
+  let changed = 0;
+  const rows = await userStmts.applicationHistoryOf.all(guildId, `%${JSON.stringify(String(userId))}%`);
+  for (const row of rows) {
+    let list;
+    try {
+      list = JSON.parse(row.history);
+    } catch {
+      continue;
+    }
+    if (!Array.isArray(list)) continue;
+    let touched = 0;
+    for (const entry of list) {
+      if (entry && String(entry.by) === String(userId)) {
+        entry.by = null;
+        touched += 1;
+      }
+    }
+    if (!touched) continue;
+    await userStmts.setApplicationHistory.run(JSON.stringify(list), guildId, row.id);
+    changed += touched;
+  }
+  return changed;
+}
 
 /**
  * Erase a single member's data within one guild. Covers the tables that key on
@@ -257,7 +305,10 @@ const userStmts = {
  * honeypot catches and counting penalties. They exist to protect the server, so a member
  * cannot erase them (or reset their warning count) with /forget; staff can remove a case in
  * the dashboard. `keptCases` says how many cases stayed.
- * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, eventsHosted: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, introductions: number, welcomeSent: number, applications: number, applicationsDecided: number, economyAccounts: number, economyTransactions: number, economyNames: number, economyInventory: number, economyFulfilled: number, invites: number, pollsCreated: number, giveawaysHosted: number, tempVoiceOwned: number, verificationKicks: number, ticketsClosed: number, appealsDecided: number, configHistory: number }}
+ * `names`: the labels the person's dashboard account carries (src/web/lib/legacyDeciderNames.js, only for
+ * someone with staff access in the server), for the appeals they decided before Sylo
+ * stored who decided by id: those only have the name ("<name> (dashboard)").
+ * @returns {{ keptCases: number, leveling: number, tickets: number, ticketMessages: number, appeals: number, afk: number, birthdays: number, giveawayEntries: number, eventSignups: number, eventsHosted: number, suggestionVotes: number, suggestions: number, suggestionDecisions: number, tempRoles: number, tempRoleAdders: number, quotes: number, quotesSaved: number, introductions: number, welcomeSent: number, applications: number, applicationsDecided: number, economyAccounts: number, economyTransactions: number, economyNames: number, economyInventory: number, economyFulfilled: number, invites: number, pollsCreated: number, giveawaysHosted: number, tempVoiceOwned: number, verificationKicks: number, ticketsClosed: number, appealsDecided: number, ticketStaffMessages: number, applicationHistory: number, configHistory: number }}
  */
 // `keepIntroduction`: leave the introduction row (the card message could not be deleted, so the row
 // is what lets it be removed later). `keepTempRoles`: role ids whose temporary-role record stays
@@ -268,7 +319,7 @@ const userStmts = {
 export async function forgetUser(
   guildId,
   userId,
-  { keepIntroduction = false, keepTempRoles = [], keepApplicationIds = [] } = {}
+  { keepIntroduction = false, keepTempRoles = [], keepApplicationIds = [], names = [] } = {}
 ) {
   const keptCases = Number((await userStmts.keptCases.get(guildId, userId)).n) || 0;
   const leveling =
@@ -332,7 +383,12 @@ export async function forgetUser(
   const tempVoiceOwned = (await userStmts.tempVoiceOwned.run(guildId, userId)).changes;
   const verificationKicks = (await userStmts.verificationKicks.run(guildId, userId)).changes;
   const ticketsClosed = (await userStmts.ticketsClosed.run(guildId, userId)).changes;
-  const appealsDecided = (await userStmts.appealsDecided.run(guildId, userId)).changes;
+  let appealsDecided = (await userStmts.appealsDecided.run(guildId, userId, userId)).changes;
+  for (const name of new Set(names.map((n) => String(n ?? '').trim()).filter(Boolean))) {
+    appealsDecided += (await userStmts.appealsDecided.run(guildId, userId, `${name} (dashboard)`)).changes;
+  }
+  const ticketStaffMessages = (await userStmts.ticketStaffMessages.run(userId, guildId)).changes;
+  const applicationHistory = await scrubApplicationHistory(guildId, userId);
   // A saved setting in the change history can name the member (who an auto-reaction targets): the id comes out.
   const configHistory = await scrubMemberFromHistory(guildId, userId);
   return {
@@ -369,6 +425,8 @@ export async function forgetUser(
     verificationKicks,
     ticketsClosed,
     appealsDecided,
+    ticketStaffMessages,
+    applicationHistory,
     configHistory,
   };
 }
@@ -447,7 +505,9 @@ const USER_DATA_SOURCES = [
     label: 'Modmail tickets they opened',
     order: 'gu',
     countSql: 'SELECT COUNT(*) AS n FROM tickets WHERE guild_id = ? AND user_id = ?',
-    rowsSql: 'SELECT * FROM tickets WHERE guild_id = ? AND user_id = ? ORDER BY id',
+    // Not closed_by: which staff member closed it is that person's data, not the member's.
+    rowsSql:
+      'SELECT id, guild_id, user_id, status, created_at, last_at, closed_at, staff_seen_at FROM tickets WHERE guild_id = ? AND user_id = ? ORDER BY id',
   },
   {
     key: 'ticketMessages',
@@ -464,7 +524,9 @@ const USER_DATA_SOURCES = [
     label: 'Ban appeals',
     order: 'gu',
     countSql: 'SELECT COUNT(*) AS n FROM appeals WHERE guild_id = ? AND user_id = ?',
-    rowsSql: 'SELECT * FROM appeals WHERE guild_id = ? AND user_id = ? ORDER BY id',
+    // Not decided_by / decided_by_user_id: who on the staff decided it is that person's data, not the member's.
+    rowsSql:
+      'SELECT id, guild_id, user_id, user_tag, ban_reason, answers, status, decision_reason, created_at, decided_at, invite_url FROM appeals WHERE guild_id = ? AND user_id = ? ORDER BY id',
   },
   {
     key: 'afk',
@@ -580,10 +642,21 @@ const USER_DATA_SOURCES = [
   {
     key: 'appealsDecided',
     label: 'Ban appeals they decided as staff (/forget drops the name)',
-    order: 'gu',
-    countSql: 'SELECT COUNT(*) AS n FROM appeals WHERE guild_id = ? AND decided_by = ?',
+    order: 'guu',
+    countSql:
+      'SELECT COUNT(*) AS n FROM appeals WHERE guild_id = ? AND (decided_by_user_id = ? OR decided_by = ?)',
     rowsSql:
-      'SELECT id, status, decision_reason, decided_at FROM appeals WHERE guild_id = ? AND decided_by = ? ORDER BY id',
+      'SELECT id, status, decision_reason, decided_at FROM appeals WHERE guild_id = ? AND (decided_by_user_id = ? OR decided_by = ?) ORDER BY id',
+  },
+  {
+    key: 'ticketStaffMessages',
+    label: 'Modmail replies and close notes they wrote as staff (/forget drops the name)',
+    order: 'ug',
+    countSql:
+      "SELECT COUNT(*) AS n FROM ticket_messages WHERE author_kind IN ('staff', 'system') AND author_id = ? AND ticket_id IN (SELECT id FROM tickets WHERE guild_id = ?)",
+    // When, not what: the text belongs to the ticket of the member they wrote to.
+    rowsSql:
+      "SELECT id, ticket_id, created_at FROM ticket_messages WHERE author_kind IN ('staff', 'system') AND author_id = ? AND ticket_id IN (SELECT id FROM tickets WHERE guild_id = ?) ORDER BY id",
   },
   {
     key: 'tempRoles',
@@ -635,8 +708,10 @@ const USER_DATA_SOURCES = [
     label: 'Applications (your answers; /forget also deletes their posts)',
     order: 'gu',
     countSql: 'SELECT COUNT(*) AS n FROM applications_submissions WHERE guild_id = ? AND user_id = ?',
+    // The history names who decided or acted by id: other people's ids come out, only the member's own stay.
     rowsSql:
       'SELECT id, form_id, form_name, status, source, questions, answers, reason, decided_at, history, created_at FROM applications_submissions WHERE guild_id = ? AND user_id = ? ORDER BY id',
+    mapRow: (row, userId) => ({ ...row, history: ownHistoryOnly(row.history, userId) }),
   },
   {
     key: 'applicationsDecided',
@@ -757,7 +832,27 @@ const USER_DATA_SOURCES = [
   },
 ].map((s) => (s.countFn ? s : { ...s, countStmt: prepare(s.countSql), rowsStmt: prepare(s.rowsSql) }));
 
-const bindArgs = (order, guildId, userId) => (order === 'ug' ? [userId, guildId] : [guildId, userId]);
+const bindArgs = (order, guildId, userId) => {
+  if (order === 'ug') return [userId, guildId];
+  if (order === 'guu') return [guildId, userId, userId];
+  return [guildId, userId];
+};
+
+/** An application's history (JSON text) with every `by` that is not this member's own set to null. */
+function ownHistoryOnly(history, userId) {
+  let list;
+  try {
+    list = JSON.parse(history);
+  } catch {
+    return '[]';
+  }
+  if (!Array.isArray(list)) return '[]';
+  return JSON.stringify(
+    list.map((e) =>
+      e && typeof e === 'object' ? { ...e, by: String(e.by) === String(userId) ? e.by : null } : e
+    )
+  );
+}
 
 /**
  * Count, without deleting, everything {@link forgetUser} would remove or
@@ -791,10 +886,11 @@ export async function describeUserData(guildId, userId) {
 export async function exportUserData(guildId, userId) {
   const data = {};
   const summary = [];
-  for (const { key, label, rowsStmt, rowsFn, order } of USER_DATA_SOURCES) {
-    const rows = rowsFn
+  for (const { key, label, rowsStmt, rowsFn, mapRow, order } of USER_DATA_SOURCES) {
+    const found = rowsFn
       ? await rowsFn(guildId, userId)
       : await rowsStmt.all(...bindArgs(order, guildId, userId));
+    const rows = mapRow ? found.map((row) => mapRow(row, userId)) : found;
     data[key] = rows;
     summary.push({ key, label, count: rows.length });
   }

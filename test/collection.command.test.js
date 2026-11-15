@@ -285,7 +285,8 @@ test("/inventory @member does not list another member's collectibles while colle
   assert.match(await lines(b, c), /do not hold any items/);
 });
 
-test('on Fluxer with collections private, /collection goes to your DMs, paged there; closed DMs get a short notice', async () => {
+// Where a private reply ends up on Fluxer (the DM) is the adapter's job: test/prefixInteraction.test.js.
+test('on Fluxer with collections private, /collection is a private reply whose page buttons work in a DM', async () => {
   const fluxer = { isReady: () => true, guilds: { cache: new Map() }, users: { fetch: async () => null } };
   runtime.clients.fluxer = fluxer;
   try {
@@ -293,38 +294,25 @@ test('on Fluxer with collections private, /collection goes to your DMs, paged th
     G = `fluxer:${G}`;
     await setGuildModule(G, 'economy', { enabled: true, config: {} });
     const a = member(A);
-    const dms = [];
-    a.user.send = async (payload) => dms.push(payload);
     const ids = [];
     for (let k = 1; k <= 12; k++) ids.push(await badge(`Badge ${k}`));
     await own(a, ...ids);
 
     const i = interaction(a);
     await collection.execute(i);
-    assert.equal(dms.length, 1, 'the collection went to the DMs');
-    assert.equal(dms[0].embeds.length, 10);
-    assert.match(dms[0].content, /Collection of <@8300000000000001>/);
     assert.equal(i.replies.length, 1);
-    assert.equal(i.replies[0].embeds, undefined, 'nothing of it in the channel');
-    assert.match(i.replies[0].content, /Sent to your DMs/);
-    // the page button in the DM carries the member and the server, and works without a server in the interaction
-    const next = buttons(dms[0]).find((c) => c.style === 2 && !c.disabled);
+    const sent = i.replies[0];
+    assert.equal(sent.flags, MessageFlags.Ephemeral, 'private: the adapter sends it to the DMs on Fluxer');
+    assert.equal(sent.embeds.length, 10);
+    assert.match(sent.content, /Collection of <@8300000000000001>/);
+    // the page button carries the member and the server, and works without a server in the interaction (a DM)
+    const next = buttons(sent).find((c) => c.style === 2 && !c.disabled);
     assert.equal(next.custom_id, `coll:2:${A}:${G}`);
     const page = press(a, next.custom_id);
     page.guild = null;
     page.guildId = null;
     await routeComponent(page);
     assert.equal(page.out[0].update.embeds.length, 2);
-
-    // DMs closed: a short notice, and still nothing of the collection in the channel
-    a.user.send = async () => {
-      throw new Error('Cannot send messages to this user');
-    };
-    const closed = interaction(a);
-    await collection.execute(closed);
-    assert.equal(closed.replies.length, 1);
-    assert.match(closed.replies[0].content, /could not send you a DM/);
-    assert.equal(closed.replies[0].embeds, undefined);
   } finally {
     runtime.clients.fluxer = null;
   }

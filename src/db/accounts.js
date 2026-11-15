@@ -231,7 +231,11 @@ export async function unlinkIdentity(accountId, platform, { keepSession = null }
  * (levels, birthdays, tickets …) is not touched: members remove that with /forget in each server.
  */
 export async function deleteAccount(accountId) {
-  const people = (await identitiesOf(accountId)).map((i) => i.platformUserId);
+  // The keys the writers use (primaryUserId in web/lib/accountAuth.js): a bare id for Discord, "<platform>:<id>"
+  // for every other login. A Fluxer login's bare id is not a key of this person, and could be somebody's Discord id.
+  const people = (await identitiesOf(accountId)).map((i) =>
+    i.platform === 'discord' ? i.platformUserId : `${i.platform}:${i.platformUserId}`
+  );
   await revokeAccountTokens(accountId);
   await s.deleteAccountCodes.run(accountId);
   await s.deleteAccountConnectCodes.run(accountId);

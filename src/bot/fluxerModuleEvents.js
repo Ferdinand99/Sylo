@@ -5,6 +5,7 @@
 // keyed "fluxer:<id>". Voice states come from the tracker in platform/voiceStates.js.
 import { dispatch as realDispatch } from '../modules/dispatch.js';
 import { purgeGuild } from '../db/purge.js';
+import { clearTempBan } from '../db/tempBans.js';
 import { makePlatformGuildId } from '../lib/platformId.js';
 import { fluxerReactionAdd } from '../platform/fluxerEvents.js';
 import { beginModeration } from '../modules/lib/messageModeration.js';
@@ -65,7 +66,13 @@ export function registerFluxerModuleEvents(
   });
 
   on('guildBanAdd', (ban) => send('guildBanAdd', ban.guildId, ban));
-  on('guildBanRemove', (ban) => send('guildBanRemove', ban.guildId, ban));
+  on('guildBanRemove', async (ban) => {
+    // Not a module's business: a lifted ban ends its temporary-ban timer whether or not any module is on.
+    const key = keyOf(ban.guildId);
+    const userId = ban.user?.id ?? ban.userId;
+    if (key && userId) await clearTempBan(key, userId);
+    return send('guildBanRemove', ban.guildId, ban);
+  });
 
   // Voice states are tracked by us (members carry none); each change is a module event.
   voice?.track(client, (oldState, newState) =>

@@ -8,7 +8,8 @@
 // shape on both platforms, so it passes through unchanged.
 import { MessageFlags } from 'discord.js';
 
-const DISCORD_ONLY_KEYS = ['ephemeral', 'flags', 'withResponse', 'fetchReply', 'components'];
+// `private` is Sylo's own mark on a reply (see MessageInteraction): it is read here and never sent on.
+const DISCORD_ONLY_KEYS = ['ephemeral', 'flags', 'withResponse', 'fetchReply', 'components', 'private'];
 
 function toFile(file) {
   if (!file || typeof file !== 'object') return file;
@@ -52,13 +53,14 @@ function plainEmbedTimestamps(embed) {
 /**
  * @param {string | object} input
  * @param {{ edit?: boolean }} [opts]
- * @returns {{ payload: object, ephemeral: boolean, wantsResponse: boolean }}
+ * @returns {{ payload: object, ephemeral: boolean, wantsResponse: boolean, private: boolean | undefined }}
  */
 export function toFluxerPayload(input, { edit = false } = {}) {
   const payload = typeof input === 'string' ? { content: input } : { ...input };
   const flags = typeof payload.flags === 'number' ? payload.flags : 0;
   const ephemeral = Boolean(payload.ephemeral) || (flags & MessageFlags.Ephemeral) === MessageFlags.Ephemeral;
   const wantsResponse = Boolean(payload.withResponse);
+  const marked = typeof payload.private === 'boolean' ? payload.private : undefined;
   for (const key of DISCORD_ONLY_KEYS) delete payload[key];
   if (payload.content === '' && !edit) delete payload.content; // an edit may use '' to clear the text
   if (payload.embeds)
@@ -66,5 +68,5 @@ export function toFluxerPayload(input, { edit = false } = {}) {
       plainEmbedTimestamps(typeof e?.toJSON === 'function' ? e.toJSON() : e)
     );
   if (payload.files) payload.files = payload.files.map(toFile);
-  return { payload, ephemeral, wantsResponse };
+  return { payload, ephemeral, wantsResponse, ...(marked !== undefined && { private: marked }) };
 }

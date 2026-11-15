@@ -93,7 +93,7 @@ export async function execute(interaction) {
         { name: 'Note', value: text }
       )
       .setTimestamp(Date.now());
-    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral, private: true });
     await postModLog(interaction.guild, embed);
     return;
   }
@@ -109,7 +109,7 @@ export async function execute(interaction) {
   }
 
   if (sub === 'view') {
-    await interaction.reply({ embeds: [caseEmbed(existing)], flags: MessageFlags.Ephemeral });
+    await interaction.reply({ embeds: [caseEmbed(existing)], flags: MessageFlags.Ephemeral, private: true });
     return;
   }
 
@@ -120,7 +120,7 @@ export async function execute(interaction) {
     const embed = caseEmbed(updated, `Case #${number} reason updated`)
       .setColor(MOD_COLOR)
       .addFields({ name: 'Edited by', value: interaction.user.tag });
-    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral, private: true });
     await postModLog(interaction.guild, embed);
     return;
   }
@@ -144,6 +144,6 @@ export async function execute(interaction) {
       { name: 'Deleted by', value: interaction.user.tag }
     )
     .setTimestamp(Date.now());
-  await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+  await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral, private: true });
   await postModLog(interaction.guild, embed);
 }

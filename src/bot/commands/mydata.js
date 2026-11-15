@@ -101,7 +101,7 @@ export async function execute(interaction) {
     });
   }
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral, private: true });
 
   const dump = await exportUserData(interaction.guildId, interaction.user.id);
   const guildName = interaction.guild.name;

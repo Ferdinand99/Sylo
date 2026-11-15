@@ -12,6 +12,7 @@ import { installFluxerCompat } from '../src/platform/compat.js';
 import { runtime } from '../src/runtime.js';
 import { isPublicSource } from '../src/modules/quoteBoard.js';
 import { channelIsPublic } from '../src/modules/lib/eventPage.js';
+import { sourceFitsBoard } from '../src/modules/starboard.js';
 
 installFluxerCompat(sdk, { Collection });
 
@@ -151,7 +152,11 @@ test('a member is answered by the SDK, ahead of a role with the same id', () => 
   guild.members.delete(SAME);
   const asRole = channel.permissionsFor(SAME);
   assert.ok(asRole instanceof sdk.PermissionsBitField);
-  assert.equal(asRole.has('ViewChannel'), false);
+  assert.equal(
+    asRole.has('ManageGuild'),
+    false,
+    'a role with no permissions of its own holds only what @everyone does'
+  );
 });
 
 test('the quote board and the event pages now see a public Fluxer channel as public', () => {
@@ -386,4 +391,65 @@ test('viewable and manageable use the same calculation for the bot own member', 
   reopened.guild.members.me = memberOf(reopened, [MOD], '900000000000000760');
   assert.equal(reopened.channel.viewable, true);
   assert.equal(reopened.channel.manageable, true);
+});
+
+// A role with no permissions of its own (a colour, ping or opt-out role) gets its base from @everyone, as
+// in discord.js. Through the real helper: it must not read as "cannot see" wherever no overwrite grants
+// the view, or an audience comparison (the starboard) would skip the people such a role hides from.
+test('a role without permissions of its own starts from @everyone, then the overwrites', () => {
+  const PLAIN = '900000000000000503';
+  const plainIn = (w) => {
+    w.guild.roles.set(PLAIN, new sdk.Role(w.guild.client, roleData(PLAIN, 0n, 1), GID));
+    return w.channel.permissionsFor(PLAIN).has('ViewChannel');
+  };
+  assert.equal(plainIn(world()), true, '@everyone may view, so the plain role may');
+  assert.equal(plainIn(world({ everyone: F.SendMessages })), false, 'nobody may view');
+  assert.equal(
+    plainIn(world({ overwrites: [overwrite(PLAIN, { deny: F.ViewChannel })] })),
+    false,
+    'a deny overwrite for the role'
+  );
+  assert.equal(
+    plainIn(world({ overwrites: [overwrite(GID, { deny: F.ViewChannel })] })),
+    false,
+    '@everyone is denied and the role is not let back in'
+  );
+  assert.equal(
+    plainIn(
+      world({
+        overwrites: [overwrite(GID, { deny: F.ViewChannel }), overwrite(PLAIN, { allow: F.ViewChannel })],
+      })
+    ),
+    true,
+    'the role is let in again'
+  );
+  // @everyone itself is unchanged
+  const w = world();
+  assert.equal(w.channel.permissionsFor(w.everyone).has('ViewChannel'), true);
+});
+
+test('the starboard on the real Fluxer permission layer: a source a role is denied is not copied', () => {
+  const PLAIN = '900000000000000503';
+  const w = world();
+  w.guild.roles.set(PLAIN, new sdk.Role(w.guild.client, roleData(PLAIN, 0n, 1), GID));
+  const channelWith = (id, overwrites) => {
+    const c = sdk.Channel.from(w.guild.client, {
+      id,
+      type: 0,
+      guild_id: GID,
+      name: `c${id.slice(-2)}`,
+      permission_overwrites: overwrites,
+      nsfw: false,
+      nsfw_override: null,
+    });
+    w.guild.channels.set(c.id, c);
+    return c;
+  };
+  const board = { channelMode: 'allow', channelList: [] };
+  const dest = channelWith('900000000000000610', []);
+  const plainSource = channelWith('900000000000000611', []);
+  // "Under 18" has a deny overwrite on the adult channel; @everyone sees both channels
+  const adults = channelWith('900000000000000612', [overwrite(PLAIN, { deny: F.ViewChannel })]);
+  assert.equal(sourceFitsBoard(w.guild, board, plainSource, dest), true);
+  assert.equal(sourceFitsBoard(w.guild, board, adults, dest), false);
 });

@@ -1,7 +1,7 @@
 import './helpers/tmpDb.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SlashCommandBuilder, InteractionContextType, PermissionFlagsBits } from 'discord.js';
+import { SlashCommandBuilder, InteractionContextType, PermissionFlagsBits, MessageFlags } from 'discord.js';
 import { handleMessage, splitCommand } from '../src/bot/framework/router.js';
 import { setCommandOverride } from '../src/db/commandOverrides.js';
 import { setCommandPrefix } from '../src/db/guildSettings.js';
@@ -327,4 +327,47 @@ test('splitCommand tries the mention before the prefix', () => {
   assert.deepEqual(splitCommand('<ping', '<', BOT_ID), { name: 'ping', rest: '' });
   assert.deepEqual(splitCommand('??ping', '??', BOT_ID), { name: 'ping', rest: '' });
   assert.equal(splitCommand('?ping', '??', BOT_ID), null);
+});
+
+// A private reply to a prefix command (like !history @member: a member's moderation notes) is never
+// posted in the channel: it goes to the caller's DMs, and when that fails the channel only gets a notice.
+test('a private reply to a prefixed command goes to the caller’s DMs, not the channel', async () => {
+  const history = new SlashCommandBuilder().setName('history').setDescription('h');
+  const commands = new Map([
+    [
+      'history',
+      {
+        data: history,
+        execute: async (interaction) =>
+          interaction.reply({
+            embeds: [{ title: 'Cases for someone', description: 'warned for harassment' }],
+            flags: MessageFlags.Ephemeral,
+          }),
+      },
+    ],
+  ]);
+  const { message, replies } = fakeMessage({ content: '!history' });
+  const channelSends = [];
+  message.channel.send = async (p) => {
+    channelSends.push(p);
+    return {};
+  };
+  const dms = [];
+  message.author.send = async (p) => {
+    dms.push(p);
+    return { id: 'dm1' };
+  };
+  await run(message, commands);
+  assert.equal(dms.length, 1);
+  assert.match(JSON.stringify(dms[0]), /harassment/);
+  assert.ok(!JSON.stringify([...replies, ...channelSends]).includes('harassment'));
+
+  // DMs closed: nothing of it in the channel either
+  message.author.send = async () => {
+    throw new Error('Cannot send messages to this user');
+  };
+  replies.length = 0;
+  await run(message, commands);
+  assert.ok(!JSON.stringify([...replies, ...channelSends]).includes('harassment'));
+  assert.match(replies[0].content, /DM/);
 });

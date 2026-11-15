@@ -6,6 +6,7 @@ import { registerComponent, _resetComponents } from '../src/bot/lib/components.j
 import { prepareOutgoing, attachActions } from '../src/platform/outgoing.js';
 import { handleReactionAdd } from '../src/platform/reactionBridge.js';
 import { saveComponentActions } from '../src/db/componentReactions.js';
+import { runtime } from '../src/runtime.js';
 
 const RAW_GUILD = '900000000000000095';
 const GUILD = `fluxer:${RAW_GUILD}`;
@@ -143,7 +144,7 @@ test('a message with a collector hands the interaction to it instead of the regi
   assert.equal(routed, 0);
 });
 
-test('an ephemeral reply is sent as a mention in the channel and removed after the TTL', async () => {
+test('a plain-text ephemeral reply is sent as a mention in the channel and removed after the TTL', async () => {
   _resetComponents();
   registerComponent('t', 'x', (i) => i.reply({ content: 'Verified!', flags: MessageFlags.Ephemeral }));
   await save([{ kind: 'button', customId: 'x', emoji: '🎉', label: 'x' }]);
@@ -152,6 +153,54 @@ test('an ephemeral reply is sent as a mention in the channel and removed after t
   assert.equal(log.sends[0].content, `<@${UID}> Verified!`);
   await new Promise((r) => setTimeout(r, 40));
   assert.deepEqual(log.deletes, [`<@${UID}> Verified!`]); // the panel itself is not deleted
+});
+
+test('an ephemeral reply with an embed goes to the reactor’s DMs; the channel gets a notice, removed after the TTL', async () => {
+  _resetComponents();
+  registerComponent('t', 'x', (i) =>
+    i.reply({
+      embeds: [{ title: 'Cases', description: 'warned for harassment' }],
+      flags: MessageFlags.Ephemeral,
+    })
+  );
+  await save([{ kind: 'button', customId: 'x', emoji: '🎉', label: 'x' }]);
+  const { reaction, user, log } = fakeWorld();
+  const dms = [];
+  user.send = async (p) => {
+    dms.push(p);
+    return { id: 'dm1', edit: async () => {}, react: async () => {} };
+  };
+  await handleReactionAdd(reaction('🎉'), user, { privateTtlMs: 5 });
+  assert.match(JSON.stringify(dms[0]), /harassment/, 'to the person who reacted, not the panel’s author');
+  assert.equal(log.sends.length, 1);
+  assert.ok(!JSON.stringify(log.sends).includes('harassment'), 'nothing private in the channel');
+  assert.ok(log.sends[0].content.includes(`<@${UID}>`));
+  await new Promise((r) => setTimeout(r, 40));
+  assert.deepEqual(log.deletes, [log.sends[0].content]); // the panel itself is not deleted
+});
+
+test('a reaction on a panel in a DM (a private reply) runs for the server it belongs to, and replies in the DM', async () => {
+  _resetComponents();
+  const seen = [];
+  registerComponent('t', 'x', (i) => {
+    seen.push(i);
+    return i.reply({ embeds: [{ title: 'next page' }], flags: MessageFlags.Ephemeral });
+  });
+  await save([{ kind: 'button', customId: 'x', emoji: '🎉', label: 'x' }]);
+  const { reaction, user, log, message } = fakeWorld();
+  const guild = message.guild;
+  message.guild = null; // in a DM
+  runtime.clients.fluxer = { guilds: { cache: new Map([[RAW_GUILD, guild]]) } };
+  try {
+    await handleReactionAdd(reaction('🎉'), user, { privateTtlMs: 5 });
+  } finally {
+    runtime.clients.fluxer = null;
+  }
+  assert.equal(seen[0].guildId, GUILD);
+  assert.equal(seen[0].member, guild.members.cache.get(UID));
+  assert.equal(log.sends.length, 1);
+  assert.equal(log.sends[0].embeds[0].title, 'next page', 'sent where it is: no second DM, no mention');
+  assert.equal(log.sends[0].content, undefined);
 });
 
 test('a public reply is sent as is and kept', async () => {

@@ -169,6 +169,7 @@ async function list(interaction) {
   return interaction.reply({
     embeds: [embed],
     flags: MessageFlags.Ephemeral,
+    private: true,
     allowedMentions: { parse: [] },
   });
 }

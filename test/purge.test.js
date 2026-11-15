@@ -375,6 +375,7 @@ const USER_ID_COLUMNS = {
   'birthdays.user_id': 'handled',
   'appeals.user_id': 'handled',
   'appeals.decided_by': 'handled',
+  'appeals.decided_by_user_id': 'handled',
   'temp_voice_channels.owner_id': 'handled',
   'invite_counts.user_id': 'handled',
   'invite_joins.user_id': 'handled',
@@ -449,4 +450,122 @@ test('every column that holds a user id is handled by forgetUser, kept on purpos
   );
   const stale = Object.keys(USER_ID_COLUMNS).filter((f) => !found.includes(f));
   assert.deepEqual(stale, [], `listed here but no longer in the schema: ${stale.join(', ')}`);
+});
+
+// The copies of a staff member's id that live on other members' records, in the formats the bot writes at
+// runtime: the dashboard stores "<name> (dashboard)" next to the id, an application history holds `by`
+// entries, and a staff reply in somebody else's ticket carries the staff id as its author.
+test('forgetUser takes a staff member off the appeals, application histories and ticket replies of other members', async () => {
+  const GS = '555000000000000001';
+  const MEMBER = '555000000000000002';
+  const STAFF_ID = '555000000000000003';
+  const OTHER_STAFF = '555000000000000004';
+  const now = Date.now();
+  const insertAppeal = db.prepare(
+    'INSERT INTO appeals (guild_id, user_id, status, decided_by, decided_by_user_id, created_at) VALUES (?,?,?,?,?,?)'
+  );
+  insertAppeal.run(GS, MEMBER, 'denied', 'StaffName (dashboard)', STAFF_ID, now);
+  insertAppeal.run(GS, MEMBER, 'denied', 'Other (dashboard)', OTHER_STAFF, now);
+  // An appeal decided before the id was stored: only the display name is there.
+  insertAppeal.run(GS, MEMBER, 'denied', 'StaffName (dashboard)', null, now);
+  insertAppeal.run(GS, MEMBER, 'denied', 'Dashboard', null, now);
+
+  const t = db
+    .prepare('INSERT INTO tickets (guild_id, user_id, status, created_at, last_at) VALUES (?,?,?,?,?)')
+    .run(GS, MEMBER, 'open', now, now);
+  const insertMsg = db.prepare(
+    'INSERT INTO ticket_messages (ticket_id, author_id, author_kind, content, created_at) VALUES (?,?,?,?,?)'
+  );
+  insertMsg.run(t.lastInsertRowid, STAFF_ID, 'staff', 'reply one', now);
+  insertMsg.run(t.lastInsertRowid, OTHER_STAFF, 'staff', 'reply two', now);
+  // "Ticket closed by staff." is written with the staff id as its author, kind 'system'
+  insertMsg.run(t.lastInsertRowid, STAFF_ID, 'system', 'Ticket closed by staff.', now);
+
+  const history = JSON.stringify([
+    { at: now, by: MEMBER, action: 'submitted', note: 'dm' },
+    { at: now, by: STAFF_ID, action: 'denied', note: '' },
+    { at: now, by: null, action: 'roles_failed', note: 'denied' },
+  ]);
+  db.prepare(
+    'INSERT INTO applications_submissions (guild_id, form_id, form_name, user_id, status, history, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)'
+  ).run(GS, 1, 'Staff', MEMBER, 'denied', history, now, now);
+
+  const before = Object.fromEntries(
+    (await describeUserData(GS, STAFF_ID)).items.map((i) => [i.key, i.count])
+  );
+  assert.equal(before.appealsDecided, 1);
+  assert.equal(before.ticketStaffMessages, 2, 'the reply and the close note');
+
+  const result = await forgetUser(GS, STAFF_ID, { names: ['StaffName'] });
+  assert.equal(result.appealsDecided, 2, 'by id, and the one that only has the name');
+  assert.equal(result.ticketStaffMessages, 2);
+  assert.equal(result.applicationHistory, 1);
+
+  const appeals = db
+    .prepare('SELECT decided_by, decided_by_user_id FROM appeals WHERE guild_id = ? ORDER BY id')
+    .all(GS);
+  assert.deepEqual(appeals, [
+    { decided_by: null, decided_by_user_id: null },
+    { decided_by: 'Other (dashboard)', decided_by_user_id: OTHER_STAFF },
+    { decided_by: null, decided_by_user_id: null },
+    { decided_by: 'Dashboard', decided_by_user_id: null },
+  ]);
+  const messages = db
+    .prepare('SELECT author_id, content FROM ticket_messages WHERE ticket_id = ? ORDER BY id')
+    .all(t.lastInsertRowid);
+  assert.deepEqual(messages, [
+    { author_id: '', content: 'reply one' },
+    { author_id: OTHER_STAFF, content: 'reply two' },
+    { author_id: '', content: 'Ticket closed by staff.' },
+  ]);
+  const kept = JSON.parse(
+    db.prepare('SELECT history FROM applications_submissions WHERE guild_id = ?').get(GS).history
+  );
+  assert.deepEqual(
+    kept.map((e) => e.by),
+    [MEMBER, null, null]
+  );
+  assert.equal((await describeUserData(GS, STAFF_ID)).erasable, 0);
+});
+
+test('exportUserData does not name the staff who handled the member’s ticket, appeal or application', async () => {
+  const GE = '555000000000000011';
+  const MEMBER = '555000000000000012';
+  const STAFF_ID = '555000000000000013';
+  const now = Date.now();
+  db.prepare(
+    'INSERT INTO tickets (guild_id, user_id, status, created_at, last_at, closed_at, closed_by) VALUES (?,?,?,?,?,?,?)'
+  ).run(GE, MEMBER, 'closed', now, now, now, STAFF_ID);
+  db.prepare(
+    'INSERT INTO appeals (guild_id, user_id, status, decided_by, decided_by_user_id, created_at) VALUES (?,?,?,?,?,?)'
+  ).run(GE, MEMBER, 'denied', 'DummyMod (dashboard)', STAFF_ID, now);
+  db.prepare(
+    'INSERT INTO applications_submissions (guild_id, form_id, form_name, user_id, status, decided_by, history, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)'
+  ).run(
+    GE,
+    1,
+    'Staff',
+    MEMBER,
+    'denied',
+    STAFF_ID,
+    JSON.stringify([
+      { at: now, by: MEMBER, action: 'submitted', note: 'dm' },
+      { at: now, by: STAFF_ID, action: 'denied', note: '' },
+    ]),
+    now,
+    now
+  );
+
+  const dump = await exportUserData(GE, MEMBER);
+  const text = JSON.stringify(dump);
+  assert.ok(!text.includes(STAFF_ID), 'the staff id is nowhere in the export');
+  assert.ok(!text.includes('DummyMod'), 'nor the staff display name');
+  assert.equal(dump.data.tickets.length, 1);
+  assert.equal(dump.data.appeals.length, 1);
+  const history = JSON.parse(dump.data.applications[0].history);
+  assert.deepEqual(
+    history.map((e) => e.by),
+    [MEMBER, null],
+    'the member’s own entry stays'
+  );
 });

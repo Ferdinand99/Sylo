@@ -21,6 +21,7 @@ import { getGuildModule, setGuildModule } from '../db/modules.js';
 import { postModLog } from '../bot/lib/modlog.js';
 import { notifyTarget, MOD_COLOR } from '../bot/lib/moderation.js';
 import { addCase } from '../db/modCases.js';
+import { clearTempBan } from '../db/tempBans.js';
 import { recordHoneypotCatch } from '../db/honeypotCatches.js';
 import { log } from '../lib/log.js';
 
@@ -121,6 +122,8 @@ async function punish(guild, member, entry, reason) {
     } else if (entry.action === 'ban' && guild.members.me?.permissions.has('BanMembers')) {
       await notifyTarget(member.user, { guildName: guild.name, action: 'banned', reason });
       await guild.bans.create(member.id, { reason });
+      // A permanent ban now: an earlier temporary ban's timer must not lift it.
+      await clearTempBan(guildKey(guild), member.id);
       done = 'banned';
     }
   } catch (err) {

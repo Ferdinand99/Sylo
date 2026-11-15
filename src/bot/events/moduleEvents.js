@@ -4,6 +4,7 @@
 import { guildKey, guildKeyOf } from '../../platform/platformOf.js';
 import { Events } from 'discord.js';
 import { dispatch } from '../../modules/dispatch.js';
+import { clearTempBan } from '../../db/tempBans.js';
 import '../../modules/index.js'; // side-effect: registers module handlers
 
 /** @param {import('discord.js').Client} client */
@@ -15,7 +16,12 @@ export function register(client) {
   );
 
   client.on(Events.GuildBanAdd, (ban) => dispatch('guildBanAdd', guildKeyOf(ban), ban));
-  client.on(Events.GuildBanRemove, (ban) => dispatch('guildBanRemove', guildKeyOf(ban), ban));
+  client.on(Events.GuildBanRemove, (ban) => {
+    // Not a module's business: a lifted ban ends its temporary-ban timer whether or not any module is on,
+    // or the stale timer would lift a later ban.
+    void clearTempBan(guildKeyOf(ban), ban.user?.id).catch(() => {});
+    return dispatch('guildBanRemove', guildKeyOf(ban), ban);
+  });
 
   client.on(Events.VoiceStateUpdate, (oldState, newState) => {
     const guildId = guildKeyOf(newState) ?? guildKeyOf(oldState);

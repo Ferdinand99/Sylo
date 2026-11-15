@@ -8,8 +8,16 @@
 //   roleList: [], channelMode, channelList: [] } ] }
 // `key` for an emoji is its custom id, or the unicode character. [] = any emoji.
 import { guildByKey, guildKey } from '../platform/platformOf.js';
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionsBitField } from 'discord.js';
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ChannelType,
+  EmbedBuilder,
+  PermissionsBitField,
+} from 'discord.js';
 import { on } from './dispatch.js';
+import { isAgeRestricted } from './quoteBoard.js';
 import { log } from '../lib/log.js';
 import {
   getStarboardEntry,
@@ -254,6 +262,74 @@ export function scheduleRescan(guild, board) {
   return run;
 }
 
+/** The channel whose permissions apply: a thread follows its parent. */
+const permissionSource = (channel) => (channel?.isThread?.() ? channel.parent : channel);
+
+/** The people the board channel names itself in its overwrites (not through a role). */
+function memberOverwriteTargets(guild, channel) {
+  const overwrites = permissionSource(channel)?.permissionOverwrites;
+  const list = overwrites?.cache ? [...overwrites.cache.values()] : (overwrites?.toJSON?.() ?? []);
+  const members = [];
+  for (const o of list) {
+    if (o?.type !== 1 && o?.type !== 'member') continue; // OverwriteType.Member
+    // A member who is not in the cache cannot be asked; most are people who left.
+    const member = guild.members?.cache?.get?.(o.id) ?? guild.members?.get?.(o.id);
+    if (member) members.push(member);
+  }
+  return members;
+}
+
+/**
+ * Can everyone who reads the board channel also read the source channel? Every role (@everyone
+ * included) that can read the board, and every member the board names in an overwrite. A bot's own
+ * role is not an audience; Booster and integration roles are held by people, so they count. A
+ * missing answer is no.
+ */
+function audienceFits(guild, source, dest) {
+  const roles = new Set([guild.roles?.everyone, ...(guild.roles?.cache?.values?.() ?? [])]);
+  roles.delete(undefined);
+  roles.delete(null);
+  const sees = (channel, who) =>
+    permissionSource(channel)?.permissionsFor?.(who)?.has?.('ViewChannel') === true;
+  for (const role of roles) {
+    if (role.tags?.botId) continue;
+    if (sees(dest, role) && !sees(source, role)) return false;
+  }
+  for (const member of memberOverwriteTargets(guild, dest)) {
+    if (sees(dest, member) && !sees(source, member)) return false;
+  }
+  return roles.size > 0;
+}
+
+/**
+ * May a message from this channel be republished on this board? The board's readers are not the
+ * source channel's readers, so a copy must not widen the audience. Fails closed: whatever cannot be
+ * read (a missing channel, a thread whose parent is not known, an error) means no.
+ *  - a private thread: never;
+ *  - an age-restricted source: only on a board channel that is age-restricted too (a platform age
+ *    gate; no setting overrides it);
+ *  - a source that is hidden from some of the board's readers: every role that can view the board channel
+ *    (@everyone included; a bot's own role is not an audience) and every member the board names in an
+ *    overwrite must also be able to view the source,
+ *    so a server that gates every channel behind a Member or Verified role keeps working. Otherwise only
+ *    when an admin picked that channel for the board ("only these channels", `channelMode: 'deny'`).
+ * @param {any} guild
+ * @param {{ channelMode: string, channelList: string[] }} board
+ * @param {any} source  the channel the message is in
+ * @param {any} dest  the board's channel
+ */
+export function sourceFitsBoard(guild, board, source, dest) {
+  try {
+    if (!source || !dest) return false;
+    if (source.isThread?.() && source.type === ChannelType.PrivateThread) return false;
+    if (isAgeRestricted(guild, source) && !isAgeRestricted(guild, dest)) return false;
+    if (audienceFits(guild, source, dest)) return true;
+    return board.channelMode === 'deny' && board.channelList.includes(source.id);
+  } catch {
+    return false;
+  }
+}
+
 // Which non-thread text channels a board should look at, honouring its
 // channel restriction and the bot's read permissions.
 function watchedChannels(guild, board) {
@@ -263,6 +339,7 @@ function watchedChannels(guild, board) {
     if (!c.isTextBased?.() || (typeof c.isThread === 'function' && c.isThread())) return false;
     if (c.id === board.channelId) return false;
     if (me && !c.permissionsFor(me)?.has(need)) return false;
+    if (!sourceFitsBoard(guild, board, c, guild.channels.cache.get(board.channelId))) return false;
     if (board.channelList.length) {
       const inList = board.channelList.includes(c.id);
       if (board.channelMode === 'deny' ? !inList : inList) return false;
@@ -396,6 +473,20 @@ async function handleReaction({ reaction, user }, rawConfig, guildId, added) {
     if (board.channelList.length) {
       const inList = board.channelList.includes(message.channelId);
       if (board.channelMode === 'deny' ? !inList : inList) continue; // deny = "only these channels"
+    }
+    // The copy would be read by the board's audience, not the source's.
+    const source = message.channel ?? guild.channels.cache.get(message.channelId);
+    const dest = guild.channels.cache.get(board.channelId);
+    if (!sourceFitsBoard(guild, board, source, dest)) {
+      // A post made before this check, or of a channel made private since, comes down: each new
+      // reaction is the recheck. (Only when both channels are known: a gap in the cache is not a verdict.)
+      const posted = source && dest ? await getStarboardEntry(guildId, board.id, message.id) : null;
+      if (posted?.post_msg_id) {
+        const post = await fetchPost(guild, board.channelId, posted.post_msg_id);
+        if (post) await post.delete().catch(() => {});
+        await setStarboardPost(guildId, board.id, message.id, null, null);
+      }
+      continue;
     }
 
     if (message.author?.bot && board.ignoreBotMessages) {
