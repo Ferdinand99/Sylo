@@ -272,7 +272,7 @@ export async function settleNewPost(guild, post, oldPost, persist) {
  * @param {(post: { channelId: string, messageId: string }) => Promise<void>} [persist]
  * @returns {Promise<{ channelId: string, messageId: string, status: 'sent' | 'updated', message: object }>}
  */
-export async function publishComposed(guild, posted, channelId, spec, persist) {
+export async function publishComposed(guild, posted, channelId, spec, persist, sendOptions = {}) {
   const had = Boolean(posted?.messageId && posted?.channelId);
   const moved = had && posted.channelId !== channelId;
   if (had && !moved) {
@@ -285,7 +285,7 @@ export async function publishComposed(guild, posted, channelId, spec, persist) {
   }
   let message;
   try {
-    message = await sendComposed(guild, channelId, spec);
+    message = await sendComposed(guild, channelId, spec, sendOptions);
   } catch (err) {
     throw moved ? newChannelError(err) : err;
   }
