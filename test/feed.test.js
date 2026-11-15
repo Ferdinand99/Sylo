@@ -82,3 +82,60 @@ test('parseFeed keeps at most 100 entries', () => {
   const entries = parseFeed(`<rss><channel><title>x</title>${items.join('')}</channel></rss>`);
   assert.equal(entries.length, 100);
 });
+
+// A hostile feed body must cost time linear in its size. These are the shapes that made the old
+// regexes backtrack cubically (16 KB took seconds); the bodies below are far larger and must still
+// parse in well under a second, and the real fields must still be found.
+function timed(fn) {
+  const t0 = process.hrtime.bigint();
+  const out = fn();
+  return { out, ms: Number(process.hrtime.bigint() - t0) / 1e6 };
+}
+
+test('parseFeed: crafted Atom feed-author shape parses in linear time', () => {
+  const xml = '<feed <author>'.repeat(40_000); // 600 KB, no <name>
+  const { ms } = timed(() => parseFeed(xml));
+  assert.ok(ms < 1500, `took ${ms} ms`);
+});
+
+test('parseFeed: crafted enclosure / media:content shapes parse in linear time', () => {
+  const rss = `<rss><channel><item>${'<enclosure url="x" '.repeat(15_000)}</item></channel></rss>`;
+  const media = `<rss><channel><item>${'<media:content url="x" '.repeat(15_000)}</item></channel></rss>`;
+  for (const xml of [rss, media]) {
+    const { out, ms } = timed(() => parseFeed(xml));
+    assert.ok(ms < 1500, `took ${ms} ms`);
+    assert.equal(out[0].image, null);
+  }
+});
+
+test('parseFeed: crafted unterminated <link> and <channel> shapes parse in linear time', () => {
+  const link = `<feed><entry>${'<link '.repeat(60_000)}`;
+  const chan = `<rss>${'<channel>'.repeat(30_000)}`;
+  const title = `<rss><channel><item>${'<title '.repeat(40_000)}`;
+  for (const xml of [link, chan, title]) {
+    const { ms } = timed(() => parseFeed(xml));
+    assert.ok(ms < 1500, `took ${ms} ms`);
+  }
+});
+
+test('parseFeed: hostile prefix does not hide the real fields', () => {
+  const xml =
+    '<feed <author>'.repeat(500) +
+    '<feed xmlns="http://www.w3.org/2005/Atom"><author><name>Real Author</name></author>' +
+    '<entry><link rel="self" href="https://e.com/self"/><link rel="alternate" href="https://e.com/a"/>' +
+    '<title>T</title><media:thumbnail url="https://e.com/t.png"/></entry></feed>';
+  const [e] = parseFeed(xml);
+  assert.equal(e.title, 'T');
+  assert.equal(e.link, 'https://e.com/a');
+  assert.equal(e.author, 'Real Author');
+  assert.equal(e.image, 'https://e.com/t.png');
+});
+
+test('parseFeed: enclosure and media:content images need an image type', () => {
+  const xml = `<rss><channel><item><title>x</title>
+    <media:content url="https://e.com/v.mp4" type="video/mp4"/>
+    <enclosure url="https://e.com/p.jpg" length="1" type="image/jpeg"/></item></channel></rss>`;
+  assert.equal(parseFeed(xml)[0].image, 'https://e.com/p.jpg');
+  const audio = `<rss><channel><item><enclosure url="https://e.com/a.mp3" type="audio/mpeg"/></item></channel></rss>`;
+  assert.equal(parseFeed(audio)[0].image, null);
+});

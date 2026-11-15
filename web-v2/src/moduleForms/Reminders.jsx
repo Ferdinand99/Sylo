@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import PickerHealth from '../components/PickerHealth.jsx';
 import { useParams } from 'react-router-dom';
 import {
   getReminders,
   createReminder,
   updateReminder,
   deleteReminder,
+  duplicateReminder,
   toggleReminder,
   testReminder,
   setReminderPings,
@@ -12,10 +14,13 @@ import {
 import { notify } from '../notify.js';
 import Badge from '../components/Badge.jsx';
 import LoadError from '../components/LoadError.jsx';
-import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import { counter, limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import EmbedEditor from '../components/EmbedEditor.jsx';
 import { describeTime } from '../formatTime.js';
+import ListPageHead from '../components/ListPageHead.jsx';
+import RowActions from '../components/RowActions.jsx';
+import EmptyList from '../components/EmptyList.jsx';
 
 function msToLocalInput(ms) {
   if (!ms) return '';
@@ -143,6 +148,7 @@ function ReminderForm({
             </option>
           ))}
         </select>
+        <PickerHealth kind="channel" value={channelId} />
       </div>
 
       <div className="v2-field">
@@ -391,6 +397,16 @@ export default function Reminders() {
     }
   }
 
+  async function onDuplicate(id) {
+    try {
+      const { name } = await duplicateReminder(guildId, id);
+      await load();
+      notify(`Created "${name}". It is paused until you resume it.`, 'info');
+    } catch (err) {
+      notify(err.message);
+    }
+  }
+
   const formProps = {
     guildId,
     channels: d.channels,
@@ -403,10 +419,21 @@ export default function Reminders() {
 
   return (
     <>
-      <h1 className="v2-section-title">Reminders</h1>
-      <p className="v2-field-hint">
-        Post a text or embed message to a channel — once, or on a repeating schedule.
-      </p>
+      <ListPageHead
+        title="Reminders"
+        // With nothing in the list the empty state below carries the one accent button.
+        action={
+          creating || d.reminders.length === 0 ? null : (
+            <button type="button" className="v2-btn-primary" onClick={() => setCreating(true)}>
+              + New reminder
+            </button>
+          )
+        }
+      >
+        <p className="v2-field-hint">
+          Post a text or embed message to a channel — once, or on a repeating schedule.
+        </p>
+      </ListPageHead>
 
       <div className="v2-group">
         <h2 className="v2-group-title">Pings</h2>
@@ -427,9 +454,13 @@ export default function Reminders() {
       </div>
 
       <div className="v2-group">
-        <h2 className="v2-group-title">Your reminders ({d.reminders.length})</h2>
+        <h2 className="v2-group-title">Your reminders ({counter(d.reminders.length, d.maxReminders)})</h2>
         {d.reminders.length === 0 ? (
-          <p className="v2-note">None yet — create one below.</p>
+          <EmptyList
+            start={creating ? null : { label: 'Add your first reminder', onClick: () => setCreating(true) }}
+          >
+            Post a message in a channel on a schedule, once or on repeat, without anyone having to remember.
+          </EmptyList>
         ) : (
           <div className="v2-list">
             {d.reminders.map((r) => {
@@ -459,17 +490,15 @@ export default function Reminders() {
                     ) : null}
                   </div>
                   {editingId === r.id ? null : (
-                    <div className="v2-row-actions">
-                      <button type="button" className="v2-btn-ghost" onClick={() => setEditingId(r.id)}>
-                        Edit
-                      </button>
-                      <button type="button" className="v2-btn-ghost" onClick={() => onToggle(r.id)}>
-                        {r.enabled ? 'Pause' : 'Resume'}
-                      </button>
-                      <button type="button" className="v2-btn-danger-ghost" onClick={() => onDelete(r.id)}>
-                        Delete
-                      </button>
-                    </div>
+                    <RowActions
+                      edit={{ onClick: () => setEditingId(r.id) }}
+                      menuLabel={`More actions for ${r.name}`}
+                      items={[
+                        { label: r.enabled ? 'Pause' : 'Resume', onClick: () => onToggle(r.id) },
+                        { label: 'Duplicate', onClick: () => onDuplicate(r.id) },
+                        { label: 'Delete', danger: true, onClick: () => onDelete(r.id) },
+                      ]}
+                    />
                   )}
                 </div>
               );
@@ -488,11 +517,7 @@ export default function Reminders() {
             onCancel={() => setCreating(false)}
           />
         </div>
-      ) : (
-        <button type="button" className="v2-btn-primary" onClick={() => setCreating(true)}>
-          + New reminder
-        </button>
-      )}
+      ) : null}
     </>
   );
 }

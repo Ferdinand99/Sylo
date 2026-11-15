@@ -173,6 +173,8 @@ async function tick() {
   }
 }
 
-every('channel-cleanup', TICK_MS, () => {
-  tick().catch((err) => log.error('module:channel-cleanup', 'tick failed:', err.message));
-});
+// Return the promise: the scheduler skips a tick while the previous one is still running, so a slow
+// batch of cleanups is not started a second time.
+every('channel-cleanup', TICK_MS, () =>
+  tick().catch((err) => log.error('module:channel-cleanup', 'tick failed:', err.message))
+);

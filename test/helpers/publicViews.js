@@ -133,6 +133,7 @@ export const SAMPLES = {
       name: 'ferdi',
       platforms: ['Discord', 'Fluxer'],
       nonce: 'n0nce',
+      server: 'https://sylo.example.com',
       cancelUrl: 'sylo://auth?error=access_denied',
     },
   },

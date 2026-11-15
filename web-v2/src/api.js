@@ -10,6 +10,12 @@ export class ApiError extends Error {
     this.reason = body?.reason;
     this.errors = body?.errors;
     this.view = body?.view;
+    // An access-level refusal (src/web/middleware/access.js): the level the request needed.
+    this.required = body?.required;
+    // A refusal the page can act on (the settings changed since an audit entry: confirm to undo anyway).
+    this.code = body?.code;
+    this.laterChanges = body?.laterChanges;
+    this.token = body?.token;
   }
 }
 
@@ -88,10 +94,22 @@ const postJson = (path, body) =>
 
 export const getGuilds = () => apiFetch('/api/v2/guilds').then((d) => d.guilds);
 export const getOverview = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/overview`);
+// The permission and role-hierarchy health check; `refresh` asks the server to look again now.
+export const getGuildHealth = (guildId, { refresh = false } = {}) =>
+  apiFetch(`/api/v2/guilds/${gid(guildId)}/health${refresh ? '?refresh=1' : ''}`);
 export const setModuleEnabled = (guildId, moduleId, enabled) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/${moduleId}`, { enabled });
 export const setModulesEnabledBulk = (guildId, ids, enabled) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/bulk`, { ids, enabled });
+// The names of members by id, for the mentions already saved in a text.
+export const getMemberNames = (guildId, ids) =>
+  apiFetch(`/api/v2/guilds/${gid(guildId)}/members/names?ids=${ids.map(encodeURIComponent).join(',')}`);
+// Members of the server by name (the ones Sylo has cached), for the @ suggestions in message fields.
+export const searchMembers = (guildId, q) =>
+  apiFetch(`/api/v2/guilds/${gid(guildId)}/members/search?q=${encodeURIComponent(q)}`);
+// Inbox items of the server by number ("ticket 12", "#5"), for the command palette.
+export const searchInbox = (guildId, q) =>
+  apiFetch(`/api/v2/guilds/${gid(guildId)}/search/inbox?q=${encodeURIComponent(q)}`);
 export const getPlatformInfo = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/platform`);
 
 // The setting limits of every module (see components/useModuleLimits.js).
@@ -177,6 +195,14 @@ export const updateShopItem = (guildId, id, body) => postJson(`${shopBase(guildI
 export const setShopItemEnabled = (guildId, id, enabled) =>
   postJson(`${shopBase(guildId)}/shop/items/${id}/enabled`, { enabled });
 export const reorderShopItems = (guildId, ids) => postJson(`${shopBase(guildId)}/shop/items/order`, { ids });
+// The picture of a collectible: a multipart upload (the field "file"; the browser sets the content type).
+export const uploadShopItemImage = (guildId, id, file) => {
+  const body = new FormData();
+  body.append('file', file);
+  return apiFetch(`${shopBase(guildId)}/shop/items/${id}/image`, { method: 'POST', body });
+};
+export const deleteShopItemImage = (guildId, id) =>
+  postJson(`${shopBase(guildId)}/shop/items/${id}/image/delete`, {});
 export const deleteShopItem = (guildId, id) => postJson(`${shopBase(guildId)}/shop/items/${id}/delete`, {});
 export const grantShopItem = (guildId, userId, body) =>
   postJson(`${shopBase(guildId)}/members/${encodeURIComponent(userId)}/inventory/grant`, body);
@@ -253,6 +279,9 @@ export const setLeaderboardVanity = (guildId, slug) =>
 
 export const getGuildSettings = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/settings`);
 export const saveGuildSettings = (guildId, body) => postJson(`/api/v2/guilds/${gid(guildId)}/settings`, body);
+// Dashboard access: the signed-in person's level in the server, and the roles for each level.
+export const getGuildAccess = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/access`);
+export const saveGuildAccess = (guildId, body) => postJson(`/api/v2/guilds/${gid(guildId)}/access`, body);
 
 export const getPersonalizer = () => apiFetch('/api/v2/personalizer');
 export const getPersonalizerPresence = () => apiFetch('/api/v2/personalizer/presence');
@@ -412,8 +441,43 @@ export const sendModuleTest = (guildId, moduleId) =>
   postJson(`${g(guildId)}/modules/${encodeURIComponent(moduleId)}/test`, {});
 
 // Server data: audit log, config export, member data (see src/web/routes/v2GuildData.js).
-export const getAuditLog = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/audit`);
+// One page of the audit log (newest first): `action` limits it to one kind of change, `before` is the id of
+// the last entry already shown.
+export const getAuditLog = (guildId, { action, before, limit } = {}) => {
+  const q = new URLSearchParams();
+  if (action) q.set('action', action);
+  if (before) q.set('before', String(before));
+  if (limit) q.set('limit', String(limit));
+  const qs = q.toString();
+  return apiFetch(`/api/v2/guilds/${gid(guildId)}/audit${qs ? `?${qs}` : ''}`);
+};
+// What one audit entry changed (before and after, with names for the ids) and whether it can be undone,
+// and the undo itself: `confirm: true` with the `token` of the view the person confirmed, once they have
+// accepted that later changes are lost.
+export const getAuditChange = (guildId, id) =>
+  apiFetch(`/api/v2/guilds/${gid(guildId)}/audit/${encodeURIComponent(String(id))}/change`);
+export const undoAuditChange = (guildId, id, { confirm = false, token = '' } = {}) =>
+  postJson(
+    `/api/v2/guilds/${gid(guildId)}/audit/${encodeURIComponent(String(id))}/undo`,
+    confirm ? { confirm: true, token } : {}
+  );
 export const exportGuildConfig = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/export`);
+// Import of an export file: the preview changes nothing; apply needs `confirm` to be the word the preview names.
+export const previewConfigImport = (guildId, file) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/import/preview`, { export: file });
+export const applyConfigImport = (guildId, file, items, confirm) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/import/apply`, { export: file, items, confirm });
+// "Duplicate" in the "⋯" menu of a list row. Each answers { ok, id, name }.
+const duplicate = (guildId, path) => postJson(`/api/v2/guilds/${gid(guildId)}/${path}/duplicate`, {});
+export const duplicateReminder = (guildId, id) => duplicate(guildId, `modules/reminders/${id}`);
+export const duplicateComposedMessage = (guildId, id) => duplicate(guildId, `messages/${id}`);
+export const duplicateReactionRole = (guildId, id) => duplicate(guildId, `modules/roles/rr/${id}`);
+export const duplicateCustomCommand = (guildId, id) =>
+  duplicate(guildId, `modules/custom-commands/cmd/${id}`);
+export const duplicateShopItem = (guildId, id) => duplicate(guildId, `modules/economy/shop/items/${id}`);
+// The setup wizard: what Sylo proposes for this server, and applying the ticked items.
+export const getSetupSuggestion = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/setup/suggest`);
+export const applySetup = (guildId, body) => postJson(`/api/v2/guilds/${gid(guildId)}/setup/apply`, body);
 export const getMemberData = (guildId, user) =>
   apiFetch(`/api/v2/guilds/${gid(guildId)}/member-data?user=${encodeURIComponent(user ?? '')}`);
 export const forgetMemberData = (guildId, userId, reason) =>

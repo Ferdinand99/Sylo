@@ -1,5 +1,10 @@
 import { Link, useParams } from 'react-router-dom';
-import { getComposedMessages, unpublishComposedMessage, deleteComposedMessage } from '../api.js';
+import {
+  getComposedMessages,
+  unpublishComposedMessage,
+  deleteComposedMessage,
+  duplicateComposedMessage,
+} from '../api.js';
 import LoadError from '../components/LoadError.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { useApiData } from '../useApiData.js';
@@ -7,9 +12,15 @@ import { notify } from '../notify.js';
 import Reveal from '../components/Reveal.jsx';
 import Badge from '../components/Badge.jsx';
 import Meta from '../components/Meta.jsx';
+import ListPageHead from '../components/ListPageHead.jsx';
+import RowActions from '../components/RowActions.jsx';
+import EmptyList from '../components/EmptyList.jsx';
+import { useAccess } from '../access.jsx';
 
 export default function Messages() {
   const { guildId } = useParams();
+  // Creating a message needs Edit access (access.jsx); the list is for everyone who may look.
+  const canEdit = useAccess().can('edit');
   const { data, loading, error, setData } = useApiData(() => getComposedMessages(guildId), [guildId]);
 
   if (error) return <LoadError error={error} what="Embed messages" />;
@@ -33,6 +44,16 @@ export default function Messages() {
     }
   }
 
+  async function onDuplicate(id) {
+    try {
+      const { name } = await duplicateComposedMessage(guildId, id);
+      setData(await getComposedMessages(guildId));
+      notify(`Created the draft "${name}". Nothing was posted.`, 'info');
+    } catch (err) {
+      notify(err.message);
+    }
+  }
+
   async function onDelete(id) {
     const ok = await confirmDialog({
       title: 'Delete this embed message?',
@@ -50,20 +71,34 @@ export default function Messages() {
 
   return (
     <Reveal>
-      <div className="v2-page-head">
-        <h1 className="v2-section-title">Embed messages</h1>
-        <Link className="v2-btn-primary" to={`/guilds/${guildId}/messages/new`}>
-          + New embed message
-        </Link>
-      </div>
-      <p className="v2-field-hint">
-        Build rich embed messages with a live editor, then publish them to a channel as Sylo — and re-publish
-        to edit the posted message in place.
-      </p>
+      <ListPageHead
+        title="Embed messages"
+        // With nothing saved the empty state below carries the one accent button.
+        action={
+          canEdit && data.items.length > 0 ? (
+            <Link className="v2-btn-primary" to={`/guilds/${guildId}/messages/new`}>
+              + New embed message
+            </Link>
+          ) : null
+        }
+      >
+        <p className="v2-field-hint">
+          Build rich embed messages with a live editor, then publish them to a channel as Sylo — and
+          re-publish to edit the posted message in place.
+        </p>
+      </ListPageHead>
 
       <h2 className="v2-group-title v2-section-gap">Your embed messages ({data.items.length} / 200)</h2>
       {data.items.length === 0 ? (
-        <p className="v2-field-hint">None yet — create one to post an embed to a channel.</p>
+        <EmptyList
+          start={
+            canEdit
+              ? { label: 'Create your first embed message', to: `/guilds/${guildId}/messages/new` }
+              : null
+          }
+        >
+          Build a rich message with a live preview, then publish it to a channel as Sylo.
+        </EmptyList>
       ) : (
         <div className="v2-list">
           {data.items.map((it) => (
@@ -81,19 +116,15 @@ export default function Messages() {
                   <Meta items={[`#${it.channel}`, `edited ${it.when}`]} />
                 </p>
               </div>
-              <div className="v2-row-actions">
-                <Link className="v2-btn-ghost" to={`/guilds/${guildId}/messages/${it.id}`}>
-                  Edit
-                </Link>
-                {it.published ? (
-                  <button type="button" className="v2-btn-ghost" onClick={() => onUnpublish(it.id)}>
-                    Unpublish
-                  </button>
-                ) : null}
-                <button type="button" className="v2-btn-danger-ghost" onClick={() => onDelete(it.id)}>
-                  Delete
-                </button>
-              </div>
+              <RowActions
+                edit={{ to: `/guilds/${guildId}/messages/${it.id}` }}
+                menuLabel={`More actions for ${it.name}`}
+                items={[
+                  { label: 'Duplicate', onClick: () => onDuplicate(it.id) },
+                  it.published && { label: 'Unpublish', onClick: () => onUnpublish(it.id) },
+                  { label: 'Delete', danger: true, onClick: () => onDelete(it.id) },
+                ].filter(Boolean)}
+              />
             </div>
           ))}
         </div>

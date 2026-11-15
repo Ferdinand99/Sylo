@@ -24,9 +24,9 @@ export function resizeToContent(el) {
  * instead of one wherever the text can be more than a line: embed descriptions, message text).
  * It sizes itself when it first shows, whenever `value` changes (also when the value is set from
  * outside, like an inserted variable) and when its width changes (text re-wraps).
- * `rows` is the minimum height (default 1).
+ * `rows` is the minimum height (default 1). `innerRef` gives the caller the textarea element too.
  */
-export default function AutoGrowTextarea({ value, onInput, className = '', rows = 1, ...rest }) {
+export default function AutoGrowTextarea({ value, onInput, className = '', rows = 1, innerRef, ...rest }) {
   const ref = useRef(null);
 
   useLayoutEffect(() => {
@@ -56,7 +56,11 @@ export default function AutoGrowTextarea({ value, onInput, className = '', rows 
   return (
     <textarea
       {...rest}
-      ref={ref}
+      ref={(el) => {
+        ref.current = el;
+        if (typeof innerRef === 'function') innerRef(el);
+        else if (innerRef) innerRef.current = el;
+      }}
       rows={rows}
       value={value}
       className={`v2-autogrow${className ? ` ${className}` : ''}`}

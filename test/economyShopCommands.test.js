@@ -435,11 +435,11 @@ test('on Fluxer the shop is a numbered list without a menu, still with the pagin
   }
 });
 
-test('the three commands are loaded, listed in help under Shop, and parse from chat', async () => {
+test('the shop commands are loaded, listed in help under Shop, and parse from chat', async () => {
   const commands = await loadCommands();
-  for (const name of ['shop', 'buy', 'inventory']) assert.ok(commands.has(name), name);
+  for (const name of ['shop', 'buy', 'inventory', 'collection']) assert.ok(commands.has(name), name);
   const group = GROUPS.find((g) => g.name === 'Shop');
-  assert.deepEqual(group.commands, ['shop', 'buy', 'inventory']);
+  assert.deepEqual(group.commands, ['shop', 'buy', 'inventory', 'collection']);
   assert.deepEqual(
     otherCommands(commands).map((c) => c.data.name),
     []

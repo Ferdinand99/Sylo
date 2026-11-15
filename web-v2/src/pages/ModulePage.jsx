@@ -1,15 +1,28 @@
 import { Suspense, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
+import '../styles/wp4-inbox.css';
 import { setModuleEnabled } from '../api.js';
 import { useOverview } from '../OverviewContext.jsx';
+import { useHealth } from '../HealthContext.jsx';
 import { MODULE_FORMS } from '../moduleForms/index.js';
 import { notify } from '../notify.js';
 import { usePlatformInfo } from '../usePlatformInfo.js';
 import BlockedNote from '../components/BlockedNote.jsx';
+import ModuleHealth from '../components/ModuleHealth.jsx';
 import { PlatformContext } from '../platformContext.jsx';
 import NotFound from '../components/NotFound.jsx';
 import Reveal from '../components/Reveal.jsx';
 import Switch from '../components/Switch.jsx';
+import { AccessLock } from '../access.jsx';
+
+// Modules whose queue is a page of its own: their settings link back to it ("Open the inbox →"), as the
+// inbox pages link to their settings. (Applications and Suggestions keep both in one page, as tabs.)
+const INBOX_PATH = { tickets: '/tickets', appeals: '/appeals' };
+
+// A module's settings need Edit access (access.jsx), so below it the whole form is disabled. Not for
+// pages with tabs or a search a reader still uses: there the save bar, the switches, the row actions
+// and the queue's own buttons (Applications, Suggestions: Inbox) check the level themselves.
+const NOT_LOCKED_AS_A_WHOLE = new Set(['applications', 'suggestions', 'economy', 'quote-board']);
 
 // The module's on/off state with a switch, so a module can be turned on from
 // its own settings page. Reads and patches the same shared overview state the
@@ -55,6 +68,7 @@ export default function ModulePage() {
   const { info, loading } = usePlatformInfo(guildId);
   const { platform, notes } = info;
   const { data, dataGuildId, setData } = useOverview() ?? {};
+  const refreshHealth = useHealth()?.refresh;
   // Module ids with a save in flight, and the server the page is on now.
   const toggling = useRef(new Set());
   const currentGuild = useRef(guildId);
@@ -88,6 +102,8 @@ export default function ModulePage() {
     apply(enabled);
     try {
       await setModuleEnabled(guildId, id, enabled);
+      // A module that was off is checked from now on, and one that went off is not.
+      refreshHealth?.();
     } catch (err) {
       // Not if the user has switched server since: the same card id there is another server's.
       if (currentGuild.current === guildId) apply(!enabled);
@@ -99,7 +115,13 @@ export default function ModulePage() {
 
   return (
     <PlatformContext.Provider value={info}>
+      {INBOX_PATH[moduleId] ? (
+        <p className="wp4-inbox-link">
+          <Link to={`/guilds/${guildId}${INBOX_PATH[moduleId]}`}>Open the inbox →</Link>
+        </p>
+      ) : null}
       {card?.hasToggle ? <ModuleStatusBar card={card} onToggle={onToggle} /> : null}
+      <ModuleHealth moduleId={moduleId} />
       {note ? (
         <p className="v2-note v2-platform-note">
           <span className="v2-platform-note-tag">{platform === 'fluxer' ? 'Fluxer' : 'Discord'}</span> {note}
@@ -112,7 +134,13 @@ export default function ModulePage() {
         {/* Keyed by server, so switching server starts the form from scratch
             instead of briefly showing (and saving) the previous server's settings. */}
         <Suspense fallback={<p className="v2-state">Loading…</p>}>
-          <Form key={guildId} />
+          {NOT_LOCKED_AS_A_WHOLE.has(moduleId) ? (
+            <Form key={guildId} />
+          ) : (
+            <AccessLock need="edit" note>
+              <Form key={guildId} />
+            </AccessLock>
+          )}
         </Suspense>
       </Reveal>
     </PlatformContext.Provider>

@@ -9,13 +9,14 @@
 //     resultsMessage: { content, title, color, footer, image } }
 // pollMessage placeholders:    {question} {choices} {ends} {mode}
 // resultsMessage placeholders: {question} {results} {total} {winner} {mode}
-import { allClientsReady, guildByKey } from '../platform/platformOf.js';
+import { allClientsReady, guildByKey, guildKey } from '../platform/platformOf.js';
 import { EmbedBuilder } from 'discord.js';
 import { on } from './dispatch.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { getPoll, duePolls, deletePoll } from '../db/polls.js';
 import { log } from '../lib/log.js';
 import { every } from './schedule.js';
+import { isNotFound } from '../platform/messageErrors.js';
 
 // Regional-indicator A … T — one per option, up to 20.
 export const LETTERS = Array.from({ length: 20 }, (_, i) => String.fromCodePoint(0x1f1e6 + i));
@@ -166,26 +167,27 @@ function allowedToVote(member, config) {
   return config.voteRoleMode === 'deny' ? !has : has;
 }
 
-/**
- * Count reactions on a poll message.
- * @returns {Promise<Array<{ count: number, voters: Set<string> }>>} one entry per option
- */
 const MAX_VOTERS_PER_OPTION = 5000; // 50 pages: a bound on the API calls one tally makes
+const MAX_VOTER_PAGES = 60; // hard bound on pages read for one option, whatever the source returns
 
 /**
- * Everyone who reacted, page by page (the API gives 100 at a time), up to `cap`. Falls back to
- * the cache when fetching fails.
+ * Everyone who reacted, page by page (the API gives 100 at a time), up to `cap`. Stops when a
+ * page adds nobody new (a source that ignores the cursor) and after MAX_VOTER_PAGES. Falls back
+ * to the cache when fetching fails.
  * @returns {Promise<Map<string, object>>}
  */
 export async function reactors(rx, cap = MAX_VOTERS_PER_OPTION) {
   const all = new Map();
   let after;
   try {
-    while (all.size < cap) {
+    for (let pages = 0; pages < MAX_VOTER_PAGES && all.size < cap; pages += 1) {
       const page = await rx.users.fetch({ limit: 100, ...(after ? { after } : {}) });
+      const before = all.size;
       for (const [id, user] of page) if (all.size < cap) all.set(id, user);
       if (page.size < 100) break;
-      after = [...page.keys()].at(-1);
+      const next = [...page.keys()].at(-1);
+      if (all.size === before || next === after) break; // no progress: the cursor was ignored
+      after = next;
     }
   } catch {
     if (all.size === 0) return rx.users.cache;
@@ -193,22 +195,132 @@ export async function reactors(rx, cap = MAX_VOTERS_PER_OPTION) {
   return all;
 }
 
-async function tally(message, poll, config) {
+// A member lookup that found nobody (Unknown Member: they left) is remembered for a minute, so a
+// poll that is tallied again and again does not ask the API about the same departed user each
+// time. Any other failure (a 5xx, a timeout) is not remembered and is not "departed".
+// Discord: Unknown Member / Unknown User; Fluxer: a FluxerError with code MEMBER_NOT_FOUND and the 404 in `cause`.
+const isUnknownMember = (err) => isNotFound(err, [10007, 10013, 'MEMBER_NOT_FOUND', 'UNKNOWN_MEMBER']);
+const NO_MEMBER_TTL_MS = 60_000;
+const NO_MEMBER_MAX = 5000;
+const noMember = new Map(); // `${guildId}:${userId}` -> expiry (ms)
+
+/**
+ * The guild member for `uid`; null when they are not in the server; undefined when the lookup
+ * failed for another reason. `memo` makes it one lookup per user within a tally.
+ */
+async function memberOf(guild, uid, memo) {
+  if (memo.has(uid)) return memo.get(uid);
+  let member = guild.members.cache.get(uid) ?? null;
+  if (!member) {
+    const key = `${guildKey(guild)}:${uid}`;
+    if ((noMember.get(key) ?? 0) <= Date.now()) {
+      try {
+        member = (await guild.members.fetch(uid)) ?? null;
+      } catch (err) {
+        member = isUnknownMember(err) ? null : undefined;
+      }
+      if (member) noMember.delete(key);
+      else if (member === null) {
+        if (noMember.size >= NO_MEMBER_MAX) noMember.clear();
+        noMember.set(key, Date.now() + NO_MEMBER_TTL_MS);
+      }
+    }
+  }
+  memo.set(uid, member);
+  return member;
+}
+
+/**
+ * Count the votes on a poll message. With `strict`, a reactor who can no longer be found in the
+ * server (they left) is not an eligible voter — used for the early-close check, so reactions from
+ * accounts that have gone cannot keep it busy. A lookup that failed for another reason is not
+ * "left": that reactor is judged as before.
+ */
+async function tally(message, poll, config, { strict = false } = {}) {
   const out = poll.options.map(() => ({ count: 0, voters: new Set() }));
+  const members = new Map(); // one lookup per distinct user across all options
   for (let i = 0; i < poll.options.length; i += 1) {
     const rx = message.reactions.cache.get(LETTERS[i]);
     if (!rx) continue;
     const users = await reactors(rx);
     for (const [uid, user] of users) {
       if (user.bot) continue;
-      const member =
-        message.guild.members.cache.get(uid) ?? (await message.guild.members.fetch(uid).catch(() => null));
+      const member = await memberOf(message.guild, uid, members);
+      if (strict && member === null) continue;
       if (!allowedToVote(member, config)) continue;
       out[i].voters.add(uid);
       out[i].count += 1;
     }
   }
   return out;
+}
+
+// --- max-votes early close ----------------------------------------------
+
+// Every qualifying reaction used to run a full tally, and the gateway does not wait for handlers,
+// so a burst of reactions ran many tallies at once. Now one check runs per poll at a time, at most
+// one every MAX_VOTES_CHECK_MS, and reactions that arrive meanwhile share a single trailing check.
+let maxVotesCheckMs = 5000;
+const maxVotesChecks = new Map(); // messageId -> { running, dirty, timer, last, message, config }
+
+/** For tests. */
+export const _setMaxVotesCheckMs = (ms) => {
+  maxVotesCheckMs = ms;
+};
+
+async function closeIfMaxVotes(messageId, message, config) {
+  const poll = await getPoll(messageId);
+  if (!poll?.max_votes) return false;
+  const counts = await tally(message, poll, config, { strict: true });
+  const voters = new Set();
+  counts.forEach((c) => c.voters.forEach((v) => voters.add(v)));
+  if (voters.size < poll.max_votes) return false;
+  await endPoll(messageId);
+  return true;
+}
+
+function checkMaxVotes(message, config) {
+  const id = message.id;
+  let st = maxVotesChecks.get(id);
+  if (!st) {
+    if (maxVotesChecks.size >= 2000) {
+      for (const [k, v] of maxVotesChecks) if (!v.running && !v.timer) maxVotesChecks.delete(k);
+    }
+    st = { running: false, dirty: false, timer: null, last: 0, message, config };
+    maxVotesChecks.set(id, st);
+  }
+  const state = st;
+  state.message = message; // a delayed check uses the newest message and config, not the first reaction's
+  state.config = config;
+  if (state.running || state.timer) {
+    state.dirty = true; // fold into the check that is running or waiting
+    return Promise.resolve();
+  }
+
+  const start = async () => {
+    state.timer = null;
+    state.running = true;
+    state.dirty = false;
+    let closed = false;
+    try {
+      closed = await closeIfMaxVotes(id, state.message, state.config);
+    } catch (err) {
+      log.error('module:polls', 'max-votes check failed:', err.message);
+    } finally {
+      state.running = false;
+      state.last = Date.now();
+    }
+    if (closed || !state.dirty) return;
+    state.timer = setTimeout(start, maxVotesCheckMs);
+    state.timer.unref?.();
+  };
+
+  const wait = state.last + maxVotesCheckMs - Date.now();
+  if (wait <= 0) return start();
+  state.dirty = true;
+  state.timer = setTimeout(start, wait);
+  state.timer.unref?.();
+  return Promise.resolve();
 }
 
 // --- ending ----------------------------------------------------------
@@ -218,6 +330,7 @@ export async function endPoll(messageId) {
   const poll = await getPoll(messageId);
   if (!poll) return;
   await deletePoll(messageId); // claim it first so the loop / a race can't double-post
+  maxVotesChecks.delete(messageId);
 
   const guild = guildByKey(poll.guild_id);
   const channel = guild?.channels.cache.get(poll.channel_id);
@@ -303,10 +416,7 @@ on('polls', 'reactionAdd', async ({ reaction, user }, rawConfig, _guildId) => {
       upperBound += Math.max(0, rx.count - (rx.me ? 1 : 0));
     }
     if (upperBound < poll.max_votes) return;
-    const counts = await tally(message, poll, config);
-    const voters = new Set();
-    counts.forEach((c) => c.voters.forEach((v) => voters.add(v)));
-    if (voters.size >= poll.max_votes) await endPoll(message.id);
+    await checkMaxVotes(message, config);
   }
 });
 

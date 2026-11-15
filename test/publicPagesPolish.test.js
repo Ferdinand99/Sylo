@@ -46,6 +46,8 @@ test('the public 404s have no dashboard button, a generic error still has one', 
   const lb = await (await get('/leaderboard/not-a-server')).text();
   assert.match(lb, /No leaderboard here/);
   assert.doesNotMatch(lb, /Back to the dashboard/);
+  assert.match(lb, /Go to the dashboard/);
+  assert.doesNotMatch(lb, /sylobot\.com/, 'never the hosted product, a self-hosted instance has its own');
   assert.match(lb, /Powered by Sylo/);
 
   const q = await (await get('/quotes/not-a-server')).text();
@@ -190,7 +192,45 @@ test('the leaderboard bar says how far to the next level and the stats keep thei
   assert.match(html, /aria-label="Progress to level 19"/);
   assert.match(html, /title="62% of the way to level 19"/);
   assert.match(html, /<div class="lb-progress muted">62% to level 19<\/div>/);
-  assert.match(html, /<span class="lb-stat">41,200 XP<\/span> · <span class="lb-stat">3,012 msgs<\/span>/);
+  assert.match(
+    html,
+    /<span class="lb-stat">41,200 XP<\/span> · <span class="lb-stat">3,012 messages<\/span>/
+  );
+  assert.doesNotMatch(html, /msgs/);
+});
+
+test('a member without a picture gets the initial of their name, and one message is not "1 messages"', async () => {
+  const html = await renderSample('leaderboard');
+  // the sample's fourth member (Pepper) has no avatar
+  assert.match(html, /<span class="lb-avatar lb-avatar-blank" aria-hidden="true">P<\/span>/);
+  const one = await ejs.renderFile(
+    join(VIEWS, 'leaderboard.ejs'),
+    {
+      guild: { name: 'G', icon: null },
+      total: 1,
+      page: 1,
+      pages: 1,
+      period: 'all',
+      canonical: '',
+      members: [
+        {
+          rank: 1,
+          name: 'solo',
+          avatar: null,
+          left: false,
+          level: 1,
+          pct: 5,
+          xp: 10,
+          messages: 1,
+          voiceXp: 0,
+          voiceMinutes: 0,
+        },
+      ],
+    },
+    {}
+  );
+  assert.match(one, /1 message<\/span>/);
+  assert.match(one, />S<\/span>/);
 });
 
 test('the event page counts spots', async () => {

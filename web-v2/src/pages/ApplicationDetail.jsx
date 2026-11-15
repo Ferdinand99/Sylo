@@ -16,6 +16,7 @@ import Meta from '../components/Meta.jsx';
 import Time from '../components/Time.jsx';
 import { SubmissionRow, statusTone } from '../components/ApplicationsSubmissions.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import { NeedsInbox, needsInbox, useAccess } from '../access.jsx';
 
 const ACTION_TEXT = {
   submitted: 'Submitted',
@@ -40,7 +41,10 @@ export default function ApplicationDetail() {
   );
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
+  // Deciding, retrying the roles and deleting are inbox work (access.jsx).
+  const mayAct = useAccess().can('inbox');
 
+  if (needsInbox(error)) return <NeedsInbox what="applications" />;
   if (error) return <LoadError error={error} what="This application" />;
   if (!data) return <p className="v2-state">Loading…</p>;
   const s = data.submission;
@@ -117,7 +121,7 @@ export default function ApplicationDetail() {
           <button
             type="button"
             className="v2-btn-ghost"
-            disabled={busy}
+            disabled={busy || !mayAct}
             onClick={() => run(() => retryApplicationRoles(guildId, s.id), 'Roles retried.')}
           >
             Retry the roles
@@ -128,16 +132,14 @@ export default function ApplicationDetail() {
       <div className="v2-group v2-section-gap">
         <h2 className="v2-group-title">Answers</h2>
         {s.cleared ? <p className="v2-note">The answers were erased.</p> : null}
-        <dl>
+        <div className="v2-answers">
           {s.answers.map((a) => (
-            <div key={a.id}>
-              <dt>
-                <strong>{a.label}</strong>
-              </dt>
-              <dd style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{a.answer || '—'}</dd>
-            </div>
+            <section key={a.id} className="v2-answer" aria-label={a.label}>
+              <h3>{a.label}</h3>
+              <p>{a.answer || '—'}</p>
+            </section>
           ))}
-        </dl>
+        </div>
       </div>
 
       {s.status === 'pending' ? (
@@ -149,6 +151,7 @@ export default function ApplicationDetail() {
               id="ad-reason"
               rows={2}
               maxLength={500}
+              disabled={!mayAct}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
             />
@@ -157,7 +160,7 @@ export default function ApplicationDetail() {
             <button
               type="button"
               className="v2-btn-primary"
-              disabled={busy}
+              disabled={busy || !mayAct}
               onClick={() => run(() => decideApplication(guildId, s.id, 'accept', reason), 'Accepted.')}
             >
               Accept
@@ -165,7 +168,7 @@ export default function ApplicationDetail() {
             <button
               type="button"
               className="v2-btn-danger-ghost"
-              disabled={busy}
+              disabled={busy || !mayAct}
               onClick={() => run(() => decideApplication(guildId, s.id, 'deny', reason), 'Denied.')}
             >
               Deny
@@ -202,7 +205,7 @@ export default function ApplicationDetail() {
         <Link className="v2-btn-ghost" to={`/guilds/${guildId}/m/applications`}>
           Back to applications
         </Link>
-        <button type="button" className="v2-btn-danger-ghost" disabled={busy} onClick={onDelete}>
+        <button type="button" className="v2-btn-danger-ghost" disabled={busy || !mayAct} onClick={onDelete}>
           Delete application
         </button>
       </div>

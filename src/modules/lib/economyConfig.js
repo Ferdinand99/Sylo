@@ -13,7 +13,7 @@
 //     robEnabled, robChancePercent, robMinPercent, robMaxPercent, robFinePercent, robFineMin,
 //     robCooldownHours, robVictimMinCash, robNewMemberHours, robProtectionMinutes,
 //     startingBalance, publicLeaderboard, logChannelId,
-//     webShop, shopChannelId }
+//     webShop, shopChannelId, collectibleChannelId, collectionPublic }
 import { idList } from '../../web/lib/idList.js';
 
 /** No member can hold more than this in cash + bank together, so every number stays safe. */
@@ -68,8 +68,26 @@ export const LIMITS = {
   reason: { maxLength: 200 },
 };
 
-/** The shop's three kinds of item. */
-export const ITEM_TYPES = ['temp_role', 'role', 'custom'];
+/** The shop's four kinds of item. */
+export const ITEM_TYPES = ['temp_role', 'role', 'custom', 'collectible'];
+
+/** The two kinds of item that give a role. The others (custom, collectible) never touch a role. */
+export const isRoleItemType = (type) => type === 'temp_role' || type === 'role';
+
+/**
+ * The fixed rarity tiers of a collectible, lowest first, with the colour of each (a Discord embed colour).
+ * A collectible has none of them or exactly one; staff cannot invent others.
+ */
+export const RARITIES = Object.freeze([
+  { key: 'common', label: 'Common', color: 0x95a5a6 },
+  { key: 'uncommon', label: 'Uncommon', color: 0x2ecc71 },
+  { key: 'rare', label: 'Rare', color: 0x3498db },
+  { key: 'epic', label: 'Epic', color: 0x9b59b6 },
+  { key: 'legendary', label: 'Legendary', color: 0xf1c40f },
+]);
+
+/** The tier for a key, or null. */
+export const rarityOf = (key) => RARITIES.find((r) => r.key === key) ?? null;
 
 export const DEFAULT_CURRENCY_NAME = 'coins';
 export const DEFAULT_CURRENCY_EMOJI = '🪙';
@@ -94,7 +112,9 @@ const isId = (v) => /^\d{17,20}$/.test(String(v ?? ''));
 /**
  * One shop item from a request body, with every value clamped (the dashboard sends hours, the
  * database keeps milliseconds). Never throws; use {@link itemProblem} for what is still missing.
- * `stock` is null for unlimited. The role only counts for the two role types.
+ * `stock` is null for unlimited. The role only counts for the two role types. The rarity and the announce
+ * switch only count for a collectible (a rarity that is not one of the fixed tiers is none). The picture is
+ * never part of this: it only comes from an upload (routes/v2Shop.js), so it is not in the request body.
  */
 export function normaliseItem(raw = {}) {
   const clamp = (v, field, dflt) => {
@@ -104,7 +124,8 @@ export function normaliseItem(raw = {}) {
   };
   const blank = (v) => v === null || v === undefined || v === '' || v === 'unlimited';
   const type = ITEM_TYPES.includes(raw.type) ? raw.type : 'custom';
-  const roleType = type !== 'custom';
+  const roleType = isRoleItemType(type);
+  const collectible = type === 'collectible';
   return {
     name: cleanText(raw.name, LIMITS.itemName.maxLength),
     description: cleanText(raw.description, LIMITS.itemDescription.maxLength),
@@ -117,13 +138,15 @@ export function normaliseItem(raw = {}) {
     requiredRoles: idList(raw.requiredRoles, LIMITS.itemRequiredRoles.maxItems),
     perMemberLimit: blank(raw.perMemberLimit) ? null : clamp(raw.perMemberLimit, 'itemPerMemberLimit', 1),
     enabled: raw.enabled !== false,
+    rarity: collectible && rarityOf(raw.rarity) ? raw.rarity : null,
+    announce: collectible && raw.announce === true,
   };
 }
 
 /** What is still wrong with an item that has been through {@link normaliseItem}, or null. */
 export function itemProblem(item) {
   if (!item.name) return 'Give the item a name.';
-  if (item.type !== 'custom' && !item.roleId) return 'Pick the role this item gives.';
+  if (isRoleItemType(item.type) && !item.roleId) return 'Pick the role this item gives.';
   return null;
 }
 
@@ -177,6 +200,10 @@ export function normaliseEconomyConfig(raw = {}) {
     // "please fulfil this" notice in shopChannelId, when one is set.
     webShop: raw.webShop === true,
     shopChannelId: isId(raw.shopChannelId) ? String(raw.shopChannelId) : '',
+    // Collectibles: where a purchase of an item with "Announce purchases" is announced (none: nowhere), and
+    // whether members may show their collection to others with /collection (off: only their own, privately).
+    collectibleChannelId: isId(raw.collectibleChannelId) ? String(raw.collectibleChannelId) : '',
+    collectionPublic: raw.collectionPublic === true,
   };
 }
 

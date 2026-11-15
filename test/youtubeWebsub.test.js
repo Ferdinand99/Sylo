@@ -13,6 +13,7 @@ import {
   HUB,
   RENEW_BEFORE_MS,
   VERIFY_WINDOW_MS,
+  callbackToken,
   callbackUrl,
   handleNotification,
   renewDue,
@@ -120,12 +121,19 @@ const postPush = (base, channelId, body, signature) =>
     body,
   });
 
+/** The token the hub got in the callback URL of this channel's subscription. */
+const tokenOf = async (channelId) => callbackToken((await getWebsub(channelId)).secret, channelId);
+
 test('the callback URL and topic follow the brief', () => {
   const channelId = 'UC' + 'a'.repeat(22);
+  const url = callbackUrl(channelId, 'sekret', 'https://sylo.example.com/');
   assert.equal(
-    callbackUrl(channelId, 'https://sylo.example.com/'),
-    `https://sylo.example.com/webhooks/youtube/${channelId}`
+    url,
+    `https://sylo.example.com/webhooks/youtube/${channelId}?k=${callbackToken('sekret', channelId)}`
   );
+  assert.match(callbackToken('sekret', channelId), /^[\w-]{32}$/);
+  assert.notEqual(callbackToken('sekret', channelId), callbackToken('other', channelId));
+  assert.notEqual(callbackToken('sekret', channelId), callbackToken('sekret', 'UC' + 'b'.repeat(22)));
   assert.equal(topicUrl(channelId), `https://www.youtube.com/xml/feeds/videos.xml?channel_id=${channelId}`);
 });
 
@@ -134,7 +142,10 @@ test('subscribe sends the hub a callback, topic, mode and a 32-byte hex secret, 
     assert.equal(await subscribe(channelId), true);
     const req = net.hub[0];
     assert.equal(req['hub.mode'], 'subscribe');
-    assert.equal(req['hub.callback'], `${PUBLIC_URL}/webhooks/youtube/${channelId}`);
+    assert.equal(
+      req['hub.callback'],
+      `${PUBLIC_URL}/webhooks/youtube/${channelId}?k=${callbackToken(req['hub.secret'], channelId)}`
+    );
     assert.equal(req['hub.topic'], topicUrl(channelId));
     assert.match(req['hub.secret'], /^[0-9a-f]{64}$/);
     const row = await getWebsub(channelId);
@@ -150,7 +161,12 @@ test('subscribe sends the hub a callback, topic, mode and a 32-byte hex secret, 
 test('verification GET: the challenge is echoed only for a known topic and mode', async () => {
   await withWebsub(async ({ app, channelId }) => {
     await subscribe(channelId);
-    const ok = { 'hub.mode': 'subscribe', 'hub.topic': topicUrl(channelId), 'hub.challenge': 'abc123' };
+    const ok = {
+      'hub.mode': 'subscribe',
+      'hub.topic': topicUrl(channelId),
+      'hub.challenge': 'abc123',
+      k: await tokenOf(channelId),
+    };
 
     // Wrong mode, wrong topic, a topic of another channel, no challenge: all 404.
     for (const bad of [
@@ -161,6 +177,9 @@ test('verification GET: the challenge is echoed only for a known topic and mode'
       { ...ok, 'hub.topic': topicUrl(newChannel()) },
       { ...ok, 'hub.challenge': undefined },
       { ...ok, 'hub.mode': 'unsubscribe' }, // we want this subscription: nobody may cancel it
+      { ...ok, k: undefined }, // no callback token
+      { ...ok, k: 'x'.repeat(32) }, // a wrong one
+      { ...ok, k: callbackToken('another secret', channelId) },
     ]) {
       const clean = Object.fromEntries(Object.entries(bad).filter(([, v]) => v !== undefined));
       const res = await realFetch(verifyUrl(app.base, channelId, clean));
@@ -190,6 +209,7 @@ test('a verification GET cannot extend a lease Sylo did not ask for: only a rece
       'hub.mode': 'subscribe',
       'hub.topic': topicUrl(channelId),
       'hub.challenge': 'abc',
+      k: callbackToken('secret', channelId),
       ...extra,
     });
     // A wanted row that Sylo never asked the hub about (no pending request): refused.
@@ -229,6 +249,32 @@ test('a verification GET cannot extend a lease Sylo did not ask for: only a rece
   });
 });
 
+test('anyone who knows the public channel id cannot complete the verification before the hub', async () => {
+  await withWebsub(async ({ app, channelId }) => {
+    await subscribe(channelId);
+    const pending = (await getWebsub(channelId)).subscribe_requested_at;
+    assert.ok(pending > 0);
+    const base = { 'hub.mode': 'subscribe', 'hub.topic': topicUrl(channelId), 'hub.lease_seconds': '432000' };
+
+    // The attacker's GET (no token, or a guessed one) is refused and changes nothing.
+    for (const k of [undefined, '', 'guess', 'x'.repeat(32)]) {
+      const params = { ...base, 'hub.challenge': 'attacker', ...(k === undefined ? {} : { k }) };
+      assert.equal((await realFetch(verifyUrl(app.base, channelId, params))).status, 404);
+    }
+    const row = await getWebsub(channelId);
+    assert.equal(row.lease_expires_at, null, 'no lease was chosen');
+    assert.equal(row.subscribe_requested_at, pending, 'the request is still pending for the hub');
+
+    // The hub echoes the callback it was given, query string included: accepted.
+    const hub = await realFetch(
+      verifyUrl(app.base, channelId, { ...base, 'hub.challenge': 'real', k: await tokenOf(channelId) })
+    );
+    assert.equal(hub.status, 200);
+    assert.equal(await hub.text(), 'real');
+    assert.ok((await getWebsub(channelId)).lease_expires_at > Date.now());
+  });
+});
+
 test('a refused subscribe leaves no pending request', async () => {
   await withWebsub(
     async ({ channelId }) => {
@@ -253,7 +299,7 @@ test('an unsubscribe is verified only after we asked for it, and then the row go
     assert.equal(await unsubscribe(channelId), true);
     assert.equal(net.hub.at(-1)['hub.mode'], 'unsubscribe');
 
-    const params = { 'hub.topic': topicUrl(channelId), 'hub.challenge': 'bye' };
+    const params = { 'hub.topic': topicUrl(channelId), 'hub.challenge': 'bye', k: await tokenOf(channelId) };
     // We no longer want it, so a subscribe verification is refused...
     assert.equal(
       (await realFetch(verifyUrl(app.base, channelId, { ...params, 'hub.mode': 'subscribe' }))).status,

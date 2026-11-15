@@ -73,6 +73,10 @@ import '../src/db/quotes.js';
 import '../src/db/introductions.js';
 import '../src/db/applications.js';
 import '../src/db/economy.js';
+import '../src/db/economyShop.js';
+import '../src/db/collectibleImages.js';
+import '../src/db/welcomeSent.js';
+import '../src/db/pushEvents.js';
 import '../src/db/leaderboardVanity.js';
 import '../src/db/tempBans.js';
 import '../src/db/channelLocks.js';
@@ -97,6 +101,9 @@ import '../src/db/youtubeWebsub.js';
 const FORCE = process.argv.includes('--force');
 const DRY_RUN = process.argv.includes('--dry-run');
 const CHUNK = 1000;
+// A table with a binary column (the pictures of collectibles, up to about a megabyte each) is copied in small
+// chunks, so a chunk never holds hundreds of megabytes. The bytes are copied as they are (a Buffer is a BYTEA).
+const CHUNK_OF = { collectible_images: 10 };
 
 function fail(msg) {
   console.error(`\n✖ ${msg}`);
@@ -134,8 +141,9 @@ async function copyTable(sql, table, columns) {
   if (total === 0) return 0;
 
   let copied = 0;
-  for (let offset = 0; offset < total; offset += CHUNK) {
-    const rows = db.prepare(`SELECT * FROM ${table} ORDER BY rowid LIMIT ? OFFSET ?`).all(CHUNK, offset);
+  const chunk = CHUNK_OF[table] ?? CHUNK;
+  for (let offset = 0; offset < total; offset += chunk) {
+    const rows = db.prepare(`SELECT * FROM ${table} ORDER BY rowid LIMIT ? OFFSET ?`).all(chunk, offset);
     if (rows.length === 0) break;
     if (!DRY_RUN) {
       await sql`INSERT INTO ${sql(table)} ${sql(rows, ...columns)}`;

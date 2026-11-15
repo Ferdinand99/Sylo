@@ -91,6 +91,7 @@ export const SERVER_READS = (g) => [
   `/guilds/${g}/modules/welcome/config`,
   `/guilds/${g}/modules/github/watches`,
   `/guilds/${g}/modules/events/config`,
+  `/guilds/${g}/modules/reminders/list`,
   `/guilds/${g}/modules/suggestions/config`,
   `/guilds/${g}/modules/suggestions/list?status=open&sort=top`,
   `/guilds/${g}/modules/temp-roles/config`,

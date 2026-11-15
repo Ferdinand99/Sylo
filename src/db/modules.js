@@ -1,6 +1,9 @@
 // Per-guild module enable state and JSON config.
 import { prepare, registerPostgresBootstrap } from './driver.js';
 import { MODULES, getModule } from '../modules/registry.js';
+import { restartTriggerClock } from '../modules/lib/welcomeClock.js';
+import { noteModuleWrite } from './auditCapture.js';
+import { invalidateHealth } from '../lib/healthCache.js';
 
 registerPostgresBootstrap(`
   CREATE TABLE IF NOT EXISTS guild_modules (
@@ -95,9 +98,58 @@ export function setModuleConfigGuard(fn) {
   configGuard = fn;
 }
 
+/** Who to ask, by what the refusal says: a rank refusal is not helped by Manage Server. */
+function whoCanSwitchOn(message) {
+  const rank = /([^.]+?) is above or equal to your highest role/.exec(message);
+  if (rank)
+    return `Ask someone whose highest role is above ${rank[1].trim()}, or the server owner, to switch it on.`;
+  if (/Manage Roles/.test(message))
+    return 'Ask someone with Manage Roles, or the server owner, to switch it on.';
+  return 'Ask the server owner or someone with Manage Server to switch it on.';
+}
+
+/**
+ * Run the config guard for switching a module on: everything its stored config hands out counts as new. A
+ * refusal says that switching on is the cause. Does nothing for a module that is on, and in the bot's own writes.
+ */
+async function guardSwitchOn(guildId, moduleId, config) {
+  try {
+    await configGuard({ guildId, moduleId, prev: {}, next: config ?? {}, switchingOn: true });
+  } catch (err) {
+    if (err?.name === 'RoleGrantError') {
+      err.message = `Switching ${getModule(moduleId)?.name ?? moduleId} on is refused. ${err.message} ${whoCanSwitchOn(err.message)}`;
+    }
+    throw err;
+  }
+}
+
+/**
+ * For a route that switches several modules on: throws the refusal of the first module whose stored config
+ * the person may not bring back, before any of them is changed.
+ * @param {string} guildId
+ * @param {string[]} moduleIds
+ */
+export async function checkSwitchOn(guildId, moduleIds) {
+  if (!configGuard) return;
+  for (const moduleId of moduleIds) {
+    const current = await getGuildModule(guildId, moduleId);
+    if (!current.enabled) await guardSwitchOn(guildId, moduleId, current.config);
+  }
+}
+
 export async function setGuildModule(guildId, moduleId, patch) {
   const current = await getGuildModule(guildId, moduleId);
-  if (patch.config && configGuard) {
+  // Every way of switching Welcome on (the toggle, the bulk toggle, an API client) passes here: its trigger
+  // roles start counting from now, not from when they were set up (see restartTriggerClock).
+  if (moduleId === 'welcome' && patch.enabled === true && !current.enabled) {
+    patch = { ...patch, config: restartTriggerClock(patch.config ?? current.config) };
+  }
+  // Switching a module on makes the bot act on everything it holds: each grant it makes is checked as
+  // new, not only the ones this write changes.
+  const switchingOn = patch.enabled === true && !current.enabled;
+  if (switchingOn && configGuard) {
+    await guardSwitchOn(guildId, moduleId, patch.config ?? current.config);
+  } else if (patch.config && configGuard) {
     await configGuard({ guildId, moduleId, prev: current.config ?? {}, next: patch.config });
   }
   await upsertStmt.run({
@@ -107,6 +159,10 @@ export async function setGuildModule(guildId, moduleId, patch) {
     config: JSON.stringify(patch.config ?? current.config),
     updatedAt: Date.now(),
   });
+  // The change history of the dashboard request this write belongs to keeps what it changed.
+  if (patch.config) noteModuleWrite(guildId, moduleId, current.config ?? {}, patch.config);
+  // The permission health check of this server read the settings that just changed.
+  invalidateHealth(guildId);
 }
 
 function safeParse(json) {

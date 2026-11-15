@@ -22,13 +22,21 @@ import {
   PlatformAlreadyLinkedError,
   createSession,
   deleteSession,
+  findIdentity,
   getSession,
   identitiesOf,
   linkIdentity,
   purgeExpiredSessions,
   signInIdentity,
 } from '../../db/accounts.js';
-import { API_TOKEN_TTL_MS, findApiToken, purgeExpiredApiTokens, touchApiToken } from '../../db/apiTokens.js';
+import {
+  API_TOKEN_TTL_MS,
+  createConnectResult,
+  findApiToken,
+  isApiTokenLive,
+  purgeExpiredApiTokens,
+  touchApiToken,
+} from '../../db/apiTokens.js';
 import { purgeStaleRelayRegistrations } from '../../db/pushRelay.js';
 import { bearerToken, isTokenRequest } from '../lib/bearer.js';
 import { enabledProviders, fluxerOrigins, providers, adminGuildIdsFromOAuth } from '../lib/oauthProviders.js';
@@ -41,6 +49,8 @@ import { log } from '../../lib/log.js';
 export { adminGuildIdsFromOAuth };
 
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+/** How long the app's "add a login" round-trip may take, from its confirmation page to the callback. */
+export const MOBILE_CONNECT_TTL_MS = 10 * 60 * 1000;
 
 /**
  * `returnTo` is always set from `req.originalUrl` — attacker-controlled in a
@@ -90,6 +100,15 @@ export function botInviteUrls() {
 function baseUrl(req) {
   if (config.dashboardUrl) return config.dashboardUrl;
   return `${req.protocol}://${req.get('host')}`;
+}
+
+/**
+ * This instance's issuer identifier for the app's callbacks (RFC 9207 style): the origin of the
+ * same public URL the OAuth redirect URI is built from. Scheme, host and port only: no path, no
+ * trailing slash, whatever DASHBOARD_URL carries.
+ */
+export function issuerOf(req) {
+  return new URL(baseUrl(req)).origin;
 }
 
 // --- who is signed in --------------------------------------------------------------
@@ -151,7 +170,16 @@ export function adminGuildIds(req) {
  * @returns {Array<{ id: string, name: string, icon: string|null, platform: 'discord'|'fluxer' }>}
  */
 export function manageableGuilds(req) {
-  return [...adminGuildIds(req)]
+  return guildEntries(adminGuildIds(req));
+}
+
+/**
+ * Guild keys as server-switcher entries, sorted by name; keys the bot is not in are left out.
+ * @param {Iterable<string>} keys
+ * @returns {Array<{ id: string, name: string, icon: string|null, platform: 'discord'|'fluxer' }>}
+ */
+export function guildEntries(keys) {
+  return [...keys]
     .map((key) => guildByKey(key))
     .filter(Boolean)
     .map((g) => ({
@@ -187,17 +215,6 @@ export function requireAuth(req, res, next) {
   redirectToLogin(req, res);
 }
 
-/** A "bot master" — holds one of the guild's designated dashboard-admin roles. */
-async function isBotMaster(key, userId) {
-  if (!userId) return false;
-  const roles = await getBotMasterRoles(key);
-  if (!roles.length) return false;
-  const guild = guildByKey(key);
-  if (!guild) return false;
-  const member = guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
-  return Boolean(member && member.roles.cache.hasAny(...roles));
-}
-
 /** How a live check looks up a member the bot has not cached: one platform API call. */
 export const fetchMemberFromGuild = async (guild, userId) => guild.members.fetch(userId);
 
@@ -218,9 +235,11 @@ export async function managesGuildLive(key, userId, { fetchMember = fetchMemberF
 
 /**
  * The live part of managesGuildLive without bot masters: is this person the guild's owner, or a
- * member with Manage Server or Administrator? Returns null when they are not in the guild.
+ * member with Manage Server or Administrator? Returns null when they are not in the guild. Also
+ * the live check of the dashboard access levels (src/web/middleware/access.js).
+ * @returns {Promise<{ right: boolean, member: object | null } | null>}
  */
-async function serverRightsLive(key, userId, fetchMember) {
+export async function serverRightsLive(key, userId, fetchMember) {
   if (!userId) return null;
   const guild = guildByKey(key);
   if (!guild) return null;
@@ -233,7 +252,7 @@ async function serverRightsLive(key, userId, fetchMember) {
 
 /**
  * Does this person own the guild or hold Manage Server (or Administrator) in it right now? The
- * live check requireGuildAdmin relies on, minus the bot-master role: for what only real server
+ * live check the dashboard access levels rely on, minus the bot-master role: for what only real server
  * managers may do, such as choosing the bot masters.
  */
 export async function holdsManageServerLive(key, userId, { fetchMember = fetchMemberFromGuild } = {}) {
@@ -269,44 +288,6 @@ export function snapshotIsFresh(account, key, now = Date.now()) {
   const platform = splitPlatformGuildId(key)?.platform ?? 'discord';
   const identity = identityFor(account, platform);
   return Boolean(identity) && now - identity.guildsFetchedAt <= GUILDS_TTL_MS;
-}
-
-function forbidGuild(req, res) {
-  if (wantsJson(req)) return res.status(403).json({ error: 'You do not manage this server.' });
-  res.status(403).render('error', {
-    title: 'Forbidden',
-    heading: 'Not an admin',
-    message:
-      'You need Manage Server (or a bot-master role) in this server to manage it here, and Sylo has to be in it.',
-  });
-}
-
-/** Require the signed-in user to be an admin (or bot master) of req.params.guildId. */
-export function requireGuildAdmin(req, res, next) {
-  if (!config.authEnabled) return next();
-  if (!req.account) {
-    if (wantsJson(req)) return notSignedIn(res);
-    req.session.returnTo = req.originalUrl;
-    return redirectToLogin(req, res);
-  }
-  const key = req.params.guildId;
-  if (req.viaToken) {
-    return tokenManagesGuild(req, key)
-      .then((ok) => (ok ? next() : forbidGuild(req, res)))
-      .catch(() => forbidGuild(req, res));
-  }
-  // The sign-in snapshot is only refreshed on GET / and /guilds pages, so V2 requests and form
-  // posts would trust it for the whole session. Past the refresh window, check live instead,
-  // like a token: someone who lost Manage Server is refused within minutes.
-  if (!snapshotIsFresh(req.account, key)) {
-    return accountManagesGuildLive(req.account, key)
-      .then((ok) => (ok ? next() : forbidGuild(req, res)))
-      .catch(() => forbidGuild(req, res));
-  }
-  if (adminGuildIds(req).has(key)) return next();
-  isBotMaster(key, userIdForGuild(req, key))
-    .then((ok) => (ok ? next() : forbidGuild(req, res)))
-    .catch(() => forbidGuild(req, res));
 }
 
 /** Kept for backwards compatibility with earlier route code. */
@@ -413,16 +394,70 @@ function loginError(req, res, message, status = 400) {
   });
 }
 
-/** Start an OAuth round-trip. `connect` adds the identity to the signed-in account instead of signing in. */
-function beginOAuth(req, res, provider, { connect }) {
+/**
+ * Start an OAuth round-trip. `connect` adds the identity to the signed-in account instead of
+ * signing in. `mobileConnect` is the Sylo app adding a login to its account (routes/mobile.js,
+ * GET /auth/mobile/connect): the callback links nothing and makes no session, it hands the app a
+ * result code to finish with. The platform is asked to show its consent screen then, so the person
+ * sees which of their accounts there is being used. Any other round-trip clears a leftover app
+ * flow, so a later plain login can never be taken for one.
+ */
+export function beginOAuth(req, res, provider, { connect, mobileConnect = null }) {
   if (!provider.enabled()) return res.redirect('/');
   const state = randomUUID();
   req.session.oauthState = state;
   req.session.oauthPlatform = provider.platform;
   req.session.connect = connect ? provider.platform : undefined;
+  req.session.mobileConnect = mobileConnect ?? undefined;
   // Connecting is started from the account page, so that is where it should end.
   if (connect) req.session.returnTo = '/v2/account';
-  res.redirect(provider.authorizeUrl(redirectUri(req, provider), state));
+  const extra = mobileConnect ? { prompt: 'consent' } : undefined;
+  res.redirect(provider.authorizeUrl(redirectUri(req, provider), state, extra));
+}
+
+/**
+ * Where the app's browser sheet ends: the fixed app scheme, a platform Sylo knows, and either a
+ * result code Sylo made or a fixed error word, plus `iss`, this instance's own origin, so the app
+ * can tell a callback from another server (mix-up attack). Nothing else from the request is put in it.
+ */
+export const connectedUrl = (req, platform, { error, result } = {}) =>
+  `sylo://connected?${new URLSearchParams({
+    platform,
+    ...(result ? { result } : {}),
+    ...(error ? { error } : {}),
+    iss: issuerOf(req),
+  })}`;
+
+/**
+ * The app's "add a login" flow this browser is in, if this callback is its round-trip for this
+ * platform; `expired` when it took too long. Taking it ends it: one flow, one login.
+ */
+function takeMobileConnect(req, provider) {
+  const flow = req.session.mobileConnect;
+  req.session.mobileConnect = undefined;
+  if (!flow || flow.platform !== provider.platform) return null;
+  return { ...flow, expired: Date.now() - flow.at > MOBILE_CONNECT_TTL_MS };
+}
+
+/**
+ * Finish the app's round-trip at the platform's callback. Nothing is linked here: the browser could
+ * be anybody's, and the link someone opened may have been made by someone else. The verified
+ * identity is kept under a result code bound to the account and app token the flow started with,
+ * and the app completes the link with its own token (POST /api/mobile/connect/complete).
+ */
+async function finishMobileConnect(req, res, provider, flow, identity) {
+  issuerOf(req); // an unusable address fails here, before a result code is made that nobody could use
+  const to = (outcome) => res.redirect(connectedUrl(req, provider.platform, outcome));
+  // Sign-out or revocation while the sheet was open ends the flow.
+  if (!(await isApiTokenLive(flow.tokenId))) return to({ error: 'token-revoked' });
+  const existing = await findIdentity(identity.platform, identity.platformUserId);
+  if (existing)
+    return to({ error: existing.accountId === flow.accountId ? 'already-linked' : 'identity-linked' });
+  if ((await identitiesOf(flow.accountId)).some((i) => i.platform === provider.platform)) {
+    return to({ error: 'already-linked' });
+  }
+  const result = await createConnectResult({ accountId: flow.accountId, tokenId: flow.tokenId, identity });
+  to({ result });
 }
 
 /** Finish an OAuth round-trip: sign in (or link) the identity and start a fresh session. */
@@ -475,7 +510,7 @@ export function mountAuth(app) {
 
   // The guild list from sign-in is not refreshed by sending the browser through the platform's
   // login again: the bot keeps it current from its own events (src/bot/lib/adminSnapshot.js),
-  // and once it is older than GUILDS_TTL_MS access is checked live (requireGuildAdmin).
+  // and once it is older than GUILDS_TTL_MS access is checked live (requireGuildAccess, access.js).
   // Rate-limited because the view setup below runs ahead of every other limiter in the chain.
   app.use(rateLimit({ windowMs: 60_000, max: 120 }));
 
@@ -528,6 +563,30 @@ export function mountAuth(app) {
         const expected = req.session.oauthState;
         const startedOn = req.session.oauthPlatform;
         req.session.oauthState = undefined;
+        const mobile = takeMobileConnect(req, provider);
+        if (mobile) {
+          // The app's sheet never gets the dashboard's error page: it always ends at the app.
+          req.session.oauthPlatform = undefined;
+          const invalid = error || !code || !state || state !== expected || startedOn !== provider.platform;
+          if (invalid) {
+            return res.redirect(
+              connectedUrl(req, provider.platform, {
+                error: error === 'access_denied' ? 'access-denied' : 'invalid-response',
+              })
+            );
+          }
+          if (mobile.expired) return res.redirect(connectedUrl(req, provider.platform, { error: 'expired' }));
+          let identity;
+          try {
+            identity = await provider.fetchIdentity(
+              await provider.exchange(String(code), redirectUri(req, provider))
+            );
+          } catch (err) {
+            log.error('auth', `${provider.label} connect from the app failed:`, err.message);
+            return res.redirect(connectedUrl(req, provider.platform, { error: 'provider-error' }));
+          }
+          return await finishMobileConnect(req, res, provider, mobile, identity);
+        }
         if (error || !code || !state || state !== expected || startedOn !== provider.platform) {
           return loginError(
             req,

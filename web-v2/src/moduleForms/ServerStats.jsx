@@ -1,8 +1,10 @@
 import { useContext } from 'react';
 import { PlatformContext } from '../platformContext.jsx';
+import PlaceholderBar from '../components/PlaceholderBar.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
+import EmptyList from '../components/EmptyList.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import UnitInput from '../components/UnitInput.jsx';
@@ -59,7 +61,9 @@ export default function ServerStats() {
 
       <form onSubmit={save} data-savebar>
         {form.channels.length === 0 ? (
-          <p className="v2-field-hint">No stat channels yet — add one below.</p>
+          <EmptyList start={{ label: 'Add your first stat channel', onClick: addRow }}>
+            Show live numbers, such as the member count, in the name of a channel.
+          </EmptyList>
         ) : null}
         {form.channels.map((c) => (
           <div className="v2-rule-card" key={c.key}>
@@ -101,6 +105,9 @@ export default function ServerStats() {
               </div>
             </div>
 
+            <PlaceholderBar
+              fields={[{ id: `ss-name-${c.key}`, label: 'Channel name', tokens: tokensFor('serverStats') }]}
+            />
             <div className="v2-field">
               <label htmlFor={`ss-name-${c.key}`}>
                 Channel name{' '}
@@ -116,10 +123,12 @@ export default function ServerStats() {
               />
               <PlaceholderHint
                 fieldId={`ss-name-${c.key}`}
+                chips={false}
                 tokens={tokensFor('serverStats')}
                 value={c.template}
                 onChange={(template) => updateRow(c.key, { template })}
               />
+              <p className="v2-field-hint">Preview: {c.template.replaceAll('{count}', '1,284')}</p>
             </div>
           </div>
         ))}

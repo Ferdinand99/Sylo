@@ -1,0 +1,405 @@
+// Import of a configuration export (routes/v2ConfigImport.js, lib/configImport.js): the preview changes
+// nothing, ids of another server are cleared, every module goes through its own normaliser, the apply
+// needs the typed word and is audited.
+import { startWebApp } from './helpers/webApp.js';
+import { v2Open, auditRows } from './helpers/v2Open.js';
+import { GID, CH, ROLE, fakeGuild } from './helpers/fakeGuild.js';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { getGuildModule, setGuildModule } from '../src/db/modules.js';
+import { getGuildSettings } from '../src/db/guildSettings.js';
+import { getCommandOverride } from '../src/db/commandOverrides.js';
+import {
+  IMPORTABLE_MODULES,
+  ImportError,
+  applyImport,
+  planImport,
+  readExport,
+} from '../src/web/lib/configImport.js';
+import { getAuditEntry, listAudit } from '../src/db/audit.js';
+
+let app;
+let api;
+test.before(async () => {
+  app = await startWebApp();
+  api = v2Open(app, GID);
+});
+test.after(() => app.close());
+
+const FOREIGN_CH = '700000000000000001';
+const FOREIGN_ROLE = '700000000000000002';
+const FOREIGN_MSG = '700000000000000003';
+
+const file = (over = {}) => ({
+  sylo: 'guild-config-export',
+  version: 1,
+  exportedAt: '2026-11-01T00:00:00.000Z',
+  guildId: '700000000000000099',
+  settings: null,
+  modules: [],
+  commandOverrides: [],
+  scheduledMessages: [],
+  counting: null,
+  ...over,
+});
+const preview = async (doc) => {
+  const res = await api.post('/import/preview', { export: doc });
+  return { res, body: await res.json() };
+};
+const apply = async (doc, items, confirm = 'IMPORT') => {
+  const res = await api.post('/import/apply', { export: doc, items, confirm });
+  return { res, body: await res.json() };
+};
+const item = (plan, key) => plan.items.find((i) => i.key === key);
+
+test('the preview lists what changes, clears ids this server does not have, and writes nothing', async () => {
+  await setGuildModule(GID, 'counting', { enabled: false, config: {} });
+  const doc = file({
+    modules: [
+      {
+        moduleId: 'counting',
+        enabled: true,
+        config: { channelId: FOREIGN_CH, react: false, penaltyRoleId: ROLE.member, penaltyMinutes: 30 },
+      },
+    ],
+  });
+  const { res, body } = await preview(doc);
+  assert.equal(res.status, 200, JSON.stringify(body));
+  assert.equal(body.confirmWord, 'IMPORT');
+  const counting = item(body, 'module:counting');
+  assert.equal(counting.status, 'change');
+  assert.equal(counting.cleared.channel, 1);
+  assert.match(counting.notes.join(' '), /1 channel from the file is not in this server and was cleared/);
+  const paths = Object.keys(counting.change.after);
+  assert.deepEqual(paths.sort(), ['enabled', 'penaltyMinutes', 'penaltyRoleId']);
+  assert.ok(!paths.includes('channelId'), 'the foreign channel is not a change');
+  // nothing was written
+  const stored = await getGuildModule(GID, 'counting');
+  assert.equal(stored.enabled, false);
+  assert.deepEqual(stored.config, {});
+  assert.deepEqual(await auditRows(GID, 'import:config'), []);
+});
+
+test('apply needs the typed word, and without it nothing changes', async () => {
+  const doc = file({ modules: [{ moduleId: 'afk', enabled: true, config: { setNickname: false } }] });
+  for (const confirm of [undefined, 'import', 'IMPORT ']) {
+    const res = await api.post('/import/apply', { export: doc, items: ['module:afk'], confirm });
+    assert.equal(res.status, 400, `confirm ${JSON.stringify(confirm)}`);
+  }
+  assert.equal((await getGuildModule(GID, 'afk')).config.setNickname, undefined);
+  const none = await api.post('/import/apply', { export: doc, items: [], confirm: 'IMPORT' });
+  assert.equal(none.status, 400);
+});
+
+test('apply stores the normalised config, writes an audit row per item and one for the import', async () => {
+  const doc = file({
+    modules: [
+      {
+        moduleId: 'counting',
+        enabled: true,
+        config: {
+          channelId: CH.general,
+          react: false,
+          allowSameUser: true,
+          penaltyRoleId: FOREIGN_ROLE,
+          penaltyMinutes: 99999,
+          sneaky: 'not part of the config',
+        },
+      },
+    ],
+  });
+  // JSON.parse makes "__proto__" an own key, which is what a hostile file would carry.
+  const raw = JSON.parse(JSON.stringify(doc).replace('"sneaky"', '"__proto__":{"polluted":true},"sneaky"'));
+  const { res, body } = await apply(raw, ['module:counting']);
+  assert.equal(res.status, 200, JSON.stringify(body));
+  assert.deepEqual(body.results, [{ key: 'module:counting', label: 'Counting', ok: true }]);
+  const stored = await getGuildModule(GID, 'counting');
+  assert.equal(stored.enabled, true);
+  assert.equal(stored.config.channelId, CH.general);
+  assert.equal(stored.config.react, false);
+  assert.equal(stored.config.allowSameUser, true);
+  assert.equal(stored.config.penaltyRoleId, '', 'the foreign role was cleared');
+  assert.ok(stored.config.penaltyMinutes < 99999, 'a number out of range was clamped by the normaliser');
+  assert.ok(!('sneaky' in stored.config), 'unknown keys are dropped by the normaliser');
+  assert.equal({}.polluted, undefined);
+  const audit = (await auditRows(GID, 'module:counting'))[0];
+  assert.match(audit.detail, /imported from a file, turned on/);
+  assert.equal(audit.actor, 'Dashboard');
+  assert.match(
+    (await auditRows(GID, 'import:config'))[0].detail,
+    /imported 1 item from a configuration file/
+  );
+});
+
+test('only the ticked items are applied, and an unchanged one is reported rather than written', async () => {
+  const doc = file({
+    modules: [
+      { moduleId: 'birthdays', enabled: true, config: { channelId: CH.bots } },
+      { moduleId: 'sticky', enabled: true, config: { stickies: [] } },
+    ],
+  });
+  const before = await getGuildModule(GID, 'birthdays');
+  const { body } = await apply(doc, ['module:sticky', 'module:nothing-here']);
+  assert.equal(body.results.find((r) => r.key === 'module:sticky').ok, true);
+  assert.deepEqual(
+    body.results.find((r) => r.key === 'module:nothing-here'),
+    { key: 'module:nothing-here', label: 'module:nothing-here', ok: false, error: 'Not in the file.' }
+  );
+  assert.deepEqual(await getGuildModule(GID, 'birthdays'), before, 'birthdays was not ticked');
+  const again = await apply(doc, ['module:sticky']);
+  assert.equal(again.body.results[0].ok, false);
+  assert.equal(again.body.results[0].error, 'Nothing to change.');
+});
+
+test('the ids of posted messages of the other server are never stored', async () => {
+  await setGuildModule(GID, 'verification', { enabled: false, config: { messageId: CH.announce } });
+  const doc = file({
+    modules: [
+      {
+        moduleId: 'verification',
+        enabled: false,
+        config: {
+          mode: 'button',
+          verifiedRoleId: ROLE.member,
+          channelId: CH.general,
+          messageId: FOREIGN_MSG,
+        },
+      },
+    ],
+  });
+  const { body } = await preview(doc);
+  assert.equal(item(body, 'module:verification').cleared.message, 1);
+  assert.match(
+    item(body, 'module:verification').notes.join(' '),
+    /posted message of the other server is not carried over/
+  );
+  await apply(doc, ['module:verification']);
+  const stored = (await getGuildModule(GID, 'verification')).config;
+  // the module posts its own message after saving (as a normal save does); the other server's id is gone
+  assert.notEqual(stored.messageId, FOREIGN_MSG);
+  assert.equal(stored.channelId, CH.general);
+});
+
+test('channel and role mentions of another server are removed from text, the ones here stay', async () => {
+  const doc = file({
+    modules: [
+      {
+        moduleId: 'appeals',
+        enabled: true,
+        config: {
+          appealMessage: `Vote in <#${FOREIGN_CH}> or <#${CH.general}> <@&${FOREIGN_ROLE}> <@&${ROLE.member}>`,
+        },
+      },
+    ],
+  });
+  const { body } = await preview(doc);
+  assert.equal(item(body, 'module:appeals').cleared.mention, 2);
+  await apply(doc, ['module:appeals']);
+  const stored = (await getGuildModule(GID, 'appeals')).config;
+  assert.equal(stored.appealMessage, `Vote in  or <#${CH.general}>  <@&${ROLE.member}>`);
+});
+
+test('a module that cannot be imported and an unknown one are skipped with a reason', async () => {
+  const doc = file({
+    modules: [
+      { moduleId: 'custom-commands', enabled: true, config: { commands: [] } },
+      { moduleId: 'reminders', enabled: true, config: {} },
+      { moduleId: 'no-such-module', enabled: true, config: {} },
+    ],
+  });
+  const { body } = await preview(doc);
+  for (const id of ['custom-commands', 'reminders', 'no-such-module']) {
+    const it = item(body, `module:${id}`);
+    assert.equal(it.status, 'skip', id);
+    assert.ok(it.notes[0].length > 10, id);
+  }
+  const { body: applied } = await apply(doc, ['module:reminders']);
+  assert.ok(applied.results.every((r) => r.ok === false));
+});
+
+// The route is in open mode here, where the signed-in person counts as an operator.
+const APPLE = {
+  moduleId: 'apple-connect',
+  enabled: true,
+  config: { channelId: CH.general, apps: ['6446998023'], events: { build: { enabled: false } } },
+};
+
+test('an operator-only module is skipped for a person who is not an operator, and nothing is written', async () => {
+  const { guild } = fakeGuild();
+  await setGuildModule(GID, 'apple-connect', { enabled: false, config: {} });
+  const doc = file({ modules: [APPLE] });
+  for (const opts of [undefined, { owner: false }]) {
+    const plan = await planImport(guild, doc, opts);
+    const it = plan.items.find((i) => i.key === 'module:apple-connect');
+    assert.equal(it.status, 'skip');
+    assert.match(it.notes[0], /operator/);
+  }
+  const { results } = await applyImport(guild, doc, ['module:apple-connect'], { actor: 'Test' });
+  assert.equal(results[0].ok, false);
+  assert.match(results[0].error, /operator/);
+  const stored = await getGuildModule(GID, 'apple-connect');
+  assert.equal(stored.enabled, false);
+  assert.deepEqual(stored.config, {});
+});
+
+test('an operator applies an operator-only module through its own normaliser and setGuildModule', async () => {
+  await setGuildModule(GID, 'apple-connect', { enabled: false, config: {} });
+  const doc = file({ modules: [APPLE] });
+  const { body } = await preview(doc);
+  assert.equal(item(body, 'module:apple-connect').status, 'change');
+  // Through the library, so the per-server limit of the apply route is left for the tests that use it.
+  const { results } = await applyImport(fakeGuild().guild, doc, ['module:apple-connect'], {
+    actor: 'Test',
+    owner: true,
+  });
+  assert.deepEqual(
+    results.map((r) => [r.key, r.ok, r.error]),
+    [['module:apple-connect', true, undefined]]
+  );
+  const stored = await getGuildModule(GID, 'apple-connect');
+  assert.equal(stored.enabled, true);
+  assert.equal(stored.config.channelId, CH.general);
+  assert.deepEqual(stored.config.apps, ['6446998023']);
+  assert.equal(stored.config.events.build.enabled, false);
+  assert.equal((await auditRows(GID, 'module:apple-connect')).length > 0, true);
+});
+
+test('server settings: a colour is imported, a mod-log channel of another server is not, Discord has no prefix, and the dashboard access roles are never touched', async () => {
+  const { setBotMasterRoles } = await import('../src/db/guildSettings.js');
+  await setBotMasterRoles(GID, [ROLE.admin]);
+  const doc = file({
+    settings: {
+      modlog_channel_id: FOREIGN_CH,
+      embed_color: 0x112233,
+      command_prefix: '!',
+      bot_master_roles: JSON.stringify([ROLE.member]),
+      dashboard_inbox_roles: JSON.stringify([ROLE.member]),
+      dashboard_view_roles: JSON.stringify([ROLE.member]),
+    },
+  });
+  const { body } = await preview(doc);
+  const s = item(body, 'settings');
+  assert.equal(s.status, 'change');
+  assert.ok(s.notes.some((n) => /mod-log channel/.test(n)));
+  assert.ok(s.notes.some((n) => /command prefix/.test(n)));
+  const { body: applied } = await apply(doc, ['settings']);
+  assert.equal(applied.results[0].ok, true);
+  const stored = await getGuildSettings(GID);
+  assert.equal(stored.embed_color, 0x112233);
+  assert.ok(!stored.modlog_channel_id);
+  assert.ok(!stored.command_prefix);
+  assert.ok(s.notes.some((n) => /access roles in the file are never imported/.test(n)));
+  assert.equal(stored.bot_master_roles, JSON.stringify([ROLE.admin]));
+  assert.equal(stored.dashboard_inbox_roles, '[]');
+  assert.equal(stored.dashboard_view_roles, '[]');
+  const exported = await (await api.get('/export')).json();
+  assert.doesNotMatch(JSON.stringify(exported.settings), /bot_master|dashboard_/);
+  assert.equal((await auditRows(GID, 'settings:server')).at(0).detail, 'imported from a file');
+});
+
+test('command limits: a known command is imported without foreign ids, an unknown one is skipped', async () => {
+  const doc = file({
+    commandOverrides: [
+      {
+        command: 'ban',
+        enabled: false,
+        allowedChannels: [CH.general, FOREIGN_CH],
+        allowedRoles: [FOREIGN_ROLE],
+      },
+      { command: 'nonexistent', enabled: false, allowedChannels: [], allowedRoles: [] },
+    ],
+  });
+  const { body } = await preview(doc);
+  assert.equal(item(body, 'command:nonexistent').status, 'skip');
+  assert.equal(item(body, 'command:ban').cleared.channel, 1);
+  await apply(doc, ['command:ban']);
+  assert.deepEqual(await getCommandOverride(GID, 'ban'), {
+    command: 'ban',
+    enabled: false,
+    allowedChannels: [CH.general],
+    allowedRoles: [],
+  });
+});
+
+test('a file that is not an export, has another version, or is oversized is refused', async () => {
+  for (const bad of [
+    undefined,
+    null,
+    'text',
+    [],
+    {},
+    { sylo: 'something-else', version: 1 },
+    { sylo: 'guild-config-export', version: 2 },
+    file({ modules: Array.from({ length: 101 }, (_, i) => ({ moduleId: `m${i}`, config: {} })) }),
+    file({
+      modules: [
+        { moduleId: 'afk', config: {} },
+        { moduleId: 'afk', config: {} },
+      ],
+    }),
+    file({ modules: [{ moduleId: 'afk', config: { text: 'x'.repeat(200_000) } }] }),
+    file({ commandOverrides: Array.from({ length: 301 }, (_, i) => ({ command: `c${i}` })) }),
+  ]) {
+    assert.throws(() => readExport(bad), ImportError, JSON.stringify(bad)?.slice(0, 60));
+  }
+  // the route answers it as the person's mistake
+  const res = await api.post('/import/preview', { export: { sylo: 'something-else', version: 1 } });
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, /not a Sylo configuration export/);
+  // nesting deeper than the walk allows
+  let deep = {};
+  for (let i = 0; i < 30; i += 1) deep = { a: deep };
+  const nested = await api.post('/import/preview', {
+    export: file({ modules: [{ moduleId: 'afk', config: deep }] }),
+  });
+  assert.equal(nested.status, 400);
+});
+
+test("importing a server's own export again changes nothing, for every module that can be imported", async () => {
+  // Every importable module with an empty config, then exported and planned again: if a normaliser is not
+  // idempotent on what it stored, that module shows up as a change.
+  const empty = file({
+    modules: IMPORTABLE_MODULES.map((moduleId) => ({ moduleId, enabled: false, config: {} })),
+  });
+  const first = await preview(empty);
+  const keys = first.body.items.filter((i) => i.status === 'change').map((i) => i.key);
+  const { body } = await apply(empty, keys);
+  for (const r of body.results) assert.equal(r.ok, true, `${r.key}: ${r.error}`);
+
+  const exported = await (await api.get('/export')).json();
+  const again = await preview(exported);
+  const changed = again.body.items.filter(
+    (i) => i.status === 'change' && IMPORTABLE_MODULES.includes(i.key.slice('module:'.length))
+  );
+  assert.deepEqual(
+    changed.map((i) => `${i.key}: ${Object.keys(i.change.after).join(',')}`),
+    []
+  );
+});
+
+test('every item keeps its own change in the history, and the summary row keeps none', async () => {
+  const doc = file({
+    settings: { embed_color: 0x445566 },
+    modules: [
+      { moduleId: 'free-games', enabled: true, config: { channelId: CH.general } },
+      { moduleId: 'afk', enabled: true, config: { ignoreChannels: [CH.bots] } },
+    ],
+    commandOverrides: [{ command: 'ping', enabled: false, allowedChannels: [], allowedRoles: [] }],
+  });
+  const before = (await listAudit(GID, 500)).length;
+  const { body } = await apply(doc, ['settings', 'module:free-games', 'module:afk', 'command:ping']);
+  for (const r of body.results) assert.equal(r.ok, true, `${r.key}: ${r.error}`);
+  const all = await listAudit(GID, 500);
+  const rows = all.slice(0, all.length - before);
+  const byAction = Object.fromEntries(rows.map((r) => [r.action, r]));
+  assert.equal(rows.length, 5, 'one row per item and one summary, nothing doubled');
+  const free = await getAuditEntry(GID, byAction['module:free-games'].id);
+  assert.deepEqual(free.change.after.channelId, CH.general);
+  const afk = await getAuditEntry(GID, byAction['module:afk'].id);
+  assert.deepEqual(afk.change.after.ignoreChannels, [CH.bots]);
+  assert.equal(afk.change.after.channelId, undefined, 'the other module is not mixed in');
+  const settings = await getAuditEntry(GID, byAction['settings:server'].id);
+  assert.equal(settings.change.after.embedColor, '#445566');
+  assert.equal((await getAuditEntry(GID, byAction['command:/ping'].id)).change, null);
+  assert.equal((await getAuditEntry(GID, byAction['import:config'].id)).change, null);
+});

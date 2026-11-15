@@ -19,3 +19,12 @@ export default function Breadcrumb({ parents = [], current }) {
     </nav>
   );
 }
+
+/**
+ * The parent crumb of the pages the sidebar files under "Members & moderation" (Audit log, Member data):
+ * the trail uses the sidebar's group name and leads to the group's first page, the moderation hub.
+ */
+export const peopleCrumb = (guildId) => ({
+  label: 'Members & moderation',
+  to: `/guilds/${guildId}/moderation`,
+});

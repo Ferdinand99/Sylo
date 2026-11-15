@@ -6,7 +6,8 @@
 // There is no invoking message to reply to, so reply() posts in the channel; an
 // "ephemeral" reply opens with a mention of the reactor and is deleted after a
 // short delay, and — unlike a command reply — never deletes the panel itself.
-import { MessageInteraction, COMPONENT_TTL_MS } from './MessageInteraction.js';
+import { MessageInteraction, COMPONENT_TTL_MS, withPlatformId } from './MessageInteraction.js';
+import { makePlatformGuildId } from '../../lib/platformId.js';
 import { prepareOutgoing, attachActions } from '../../platform/outgoing.js';
 
 const NO_ARGS = { subcommand: null, values: {} };
@@ -18,12 +19,19 @@ export class ReactionInteraction extends MessageInteraction {
    * @param {any} init.message  the message that carries the reactions
    * @param {any} init.user  who reacted
    * @param {any} init.member  their guild member, when in a guild
+   * @param {any} [init.guild]  the server the panel belongs to, when the message is a DM (a private reply
+   *   that was sent to someone's DMs keeps working for its server)
    * @param {{ kind: 'button'|'select', customId: string, value?: string | null }} init.action
    * @param {'discord'|'fluxer'} [init.platform]
    * @param {number} [init.privateTtlMs]
    */
-  constructor({ message, user, member, action, platform, privateTtlMs }) {
+  constructor({ message, user, member, guild = null, action, platform, privateTtlMs }) {
     super({ message, commandName: action.customId, parsed: NO_ARGS, resolved: {}, platform, privateTtlMs });
+    if (!message.guild && guild) {
+      this.guild = withPlatformId(guild, platform ?? 'fluxer');
+      this.guildId = makePlatformGuildId(platform ?? 'fluxer', guild.id);
+      this._inDm = true;
+    }
     this.user = user;
     this.member = member ?? null;
     this.memberPermissions = member?.permissions ?? null;
@@ -53,9 +61,10 @@ export class ReactionInteraction extends MessageInteraction {
   }
 
   async _send(payload, ephemeral = false) {
-    const body = ephemeral
-      ? { ...payload, content: `<@${this.user.id}> ${payload.content ?? ''}`.trimEnd() }
-      : payload;
+    const body =
+      ephemeral && !this._inDm
+        ? { ...payload, content: `<@${this.user.id}> ${payload.content ?? ''}`.trimEnd() }
+        : payload;
     return this.channel.send(body);
   }
 

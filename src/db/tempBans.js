@@ -1,6 +1,11 @@
 // Temporary bans: one row per (guild, user) with the time the ban should be
 // lifted. The moderation module ticks over `dueTempBans` and calls
-// guild.bans.remove(). Rows are cleared on manual /unban and on guild purge.
+// guild.bans.remove(). A row is cleared when the ban is lifted (every ban-removed event, on Discord and
+// Fluxer, whatever modules are on; /unban; an accepted appeal), when Sylo places a permanent ban
+// (/ban without a duration, the warn-threshold auto-ban, the honeypot) and on guild purge. As a last
+// check, settleTempBan leaves alone a ban whose latest case is newer than the row and has no duration.
+// Narrow case that remains: the unban happened while Sylo was offline (the event was missed) and the
+// member was then banned again natively or by another bot, which writes no Sylo case.
 import { prepare, registerPostgresBootstrap } from './driver.js';
 
 registerPostgresBootstrap(`

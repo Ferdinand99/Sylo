@@ -213,3 +213,27 @@ test('deleteAccount removes the account, its sign-ins, sessions, app tokens and 
   assert.notEqual(kept.created_by, userId, 'a suggestion stays, without who made it');
   assert.equal(await prepare('SELECT * FROM accounts WHERE id = ?').get(accountId), undefined);
 });
+
+test('deleteAccount removes data keyed on a Fluxer login, and leaves a Discord person with the same bare id alone', async () => {
+  const { accountId } = await signInIdentity({ ...fluxerMe, guildIds: [] });
+  const key = `fluxer:${fluxerMe.platformUserId}`;
+  await prepare("INSERT INTO user_prefs (user_id, dashboard_version, updated_at) VALUES (?, 'v2', 1)").run(
+    key
+  );
+  await prepare('INSERT INTO roadmap_votes (post_id, user_id, created_at) VALUES (1, ?, 1)').run(key);
+  const post = await prepare(
+    "INSERT INTO roadmap_posts (title, description, status, created_by, created_at, updated_at) VALUES ('t', 'd', 'pending', ?, 1, 1)"
+  ).run(key);
+  // Somebody else, whose Discord id happens to equal this Fluxer id: not this person's data.
+  const other = fluxerMe.platformUserId;
+  await prepare('INSERT INTO roadmap_votes (post_id, user_id, created_at) VALUES (2, ?, 1)').run(other);
+
+  await deleteAccount(accountId);
+
+  assert.equal(await prepare('SELECT * FROM user_prefs WHERE user_id = ?').get(key), undefined);
+  assert.equal(await prepare('SELECT * FROM roadmap_votes WHERE user_id = ?').get(key), undefined);
+  const kept = await prepare('SELECT created_by FROM roadmap_posts WHERE id = ?').get(post.lastInsertRowid);
+  assert.equal(kept.created_by, '', 'the suggestion stays, without who made it');
+  assert.ok(await prepare('SELECT * FROM roadmap_votes WHERE user_id = ?').get(other));
+  await prepare('DELETE FROM roadmap_votes WHERE user_id = ?').run(other);
+});

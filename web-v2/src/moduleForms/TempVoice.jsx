@@ -1,4 +1,5 @@
 import ChipPicker from '../components/ChipPicker.jsx';
+import PlaceholderBar from '../components/PlaceholderBar.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import LoadError from '../components/LoadError.jsx';
 import SaveBar from '../components/SaveBar.jsx';
@@ -7,6 +8,7 @@ import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import UnitInput from '../components/UnitInput.jsx';
 import { cardTitle } from '../util.js';
 import { tokensFor } from '../placeholders.js';
+import '../styles/wp2-alerts.css';
 
 function newKey() {
   return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : String(Math.random());
@@ -61,6 +63,66 @@ function keepAliveLabel(m) {
   if (m < 0) return 'Never delete';
   if (m === 0) return 'Delete immediately';
   return `${m} minute${m === 1 ? '' : 's'}`;
+}
+
+const OWNER_PERMS = [
+  ['manageChannels', 'Manage Channel (rename, user limit)'],
+  ['managePermissions', 'Manage Permissions'],
+  ['prioritySpeaker', 'Priority Speaker'],
+  ['moveMembers', 'Move Members'],
+];
+const TEXT_CHANNEL_OPTIONS = [
+  ['enabled', 'Create a paired temporary text channel'],
+  ['restrict', 'Only connected members (and mods) can read it'],
+  ['pinUsages', 'Pin a message listing the /voice-* commands'],
+  ['restrictCommands', 'Only allow /voice-* in this text channel'],
+];
+
+const roles = (n) => `${n} role${n === 1 ? '' : 's'}`;
+
+/** One line for each folded section: what is set in it, so the card reads without opening anything. */
+function whoCanJoinSummary(h) {
+  const n = h.roleList.length;
+  const who =
+    h.roleMode === 'deny'
+      ? `Only members with ${n ? roles(n) : 'a role (none picked)'}`
+      : n
+        ? `Everyone except ${roles(n)}`
+        : 'Everyone';
+  const synced = [h.syncCategory && 'the category', h.syncChannel && 'the hub'].filter(Boolean);
+  return synced.length ? `${who} · permissions follow ${synced.join(' and ')}` : who;
+}
+function moderationSummary(h) {
+  const parts = [];
+  if (h.moderatorRoles.length) parts.push(`${roles(h.moderatorRoles.length)} can moderate`);
+  if (h.ignoredRoles.length) parts.push(`${roles(h.ignoredRoles.length)} ignored`);
+  return parts.join(' · ') || 'No extra roles';
+}
+function ownerSummary(h) {
+  const on = OWNER_PERMS.filter(([key]) => h.ownerPerms[key]).map(([, label]) => label.split(' (')[0]);
+  return on.join(', ') || 'None';
+}
+function textChannelSummary(h) {
+  if (!h.textChannel.enabled) return 'Off';
+  const more = TEXT_CHANNEL_OPTIONS.filter(([key]) => key !== 'enabled' && h.textChannel[key]).length;
+  return more ? `On · ${more} option${more === 1 ? '' : 's'}` : 'On';
+}
+
+/**
+ * A settings group that folds away to one line: its title and what is set in it. The hub card holds a lot,
+ * and most hubs only ever change the name and the limits. A plain <details>, so it also works from the
+ * keyboard and keeps its own open state while the form re-renders.
+ */
+function FoldSection({ title, summary, children }) {
+  return (
+    <details className="v2-fold">
+      <summary className="v2-fold-head">
+        <span className="v2-fold-title">{title}</span>
+        <span className="v2-fold-summary">{summary}</span>
+      </summary>
+      <div className="v2-fold-body">{children}</div>
+    </details>
+  );
 }
 
 const toForm = (config) => ({ hubs: config.hubs.map(toFormRow) });
@@ -149,6 +211,11 @@ export default function TempVoice() {
               </div>
             </div>
 
+            <PlaceholderBar
+              fields={[
+                { id: `tv-name-${h.key}`, label: 'Temporary channel name', tokens: tokensFor('tempVoice') },
+              ]}
+            />
             <div className="v2-field">
               <label htmlFor={`tv-name-${h.key}`}>Temporary channel name</label>
               <input
@@ -161,6 +228,7 @@ export default function TempVoice() {
               />
               <PlaceholderHint
                 fieldId={`tv-name-${h.key}`}
+                chips={false}
                 tokens={tokensFor('tempVoice')}
                 value={h.nameTemplate}
                 onChange={(nameTemplate) => updateHub(h.key, { nameTemplate })}
@@ -221,115 +289,118 @@ export default function TempVoice() {
               </label>
             </div>
 
-            <h3 className="v2-field-hint u-mt-2">Permissions</h3>
-            <div className="v2-field">
-              <label className="v2-check">
-                <input
-                  type="checkbox"
-                  checked={h.syncCategory}
-                  onChange={(e) => updateHub(h.key, { syncCategory: e.target.checked })}
-                />
-                Synchronize permissions with the hub's category
-              </label>
-              <label className="v2-check">
-                <input
-                  type="checkbox"
-                  checked={h.syncChannel}
-                  onChange={(e) => updateHub(h.key, { syncChannel: e.target.checked })}
-                />
-                Synchronize permissions with the hub channel
-              </label>
-            </div>
+            <FoldSection title="Who can join" summary={whoCanJoinSummary(h)}>
+              <fieldset className="v2-field">
+                <legend>Permissions of new channels</legend>
+                <label className="v2-check">
+                  <input
+                    type="checkbox"
+                    checked={h.syncCategory}
+                    onChange={(e) => updateHub(h.key, { syncCategory: e.target.checked })}
+                  />
+                  Synchronize permissions with the hub's category
+                </label>
+                <label className="v2-check">
+                  <input
+                    type="checkbox"
+                    checked={h.syncChannel}
+                    onChange={(e) => updateHub(h.key, { syncChannel: e.target.checked })}
+                  />
+                  Synchronize permissions with the hub channel
+                </label>
+              </fieldset>
 
-            <div className="v2-field">
-              <label>Who can join</label>
-              <select value={h.roleMode} onChange={(e) => updateHub(h.key, { roleMode: e.target.value })}>
-                <option value="allow">Everyone except the roles below</option>
-                <option value="deny">Only members with a role below</option>
-              </select>
-            </div>
-            <ChipPicker
-              kind="role"
-              items={d.roles}
-              value={h.roleList}
-              onChange={(roleList) => updateHub(h.key, { roleList })}
-            />
-            <div className="v2-field">
-              <label className="v2-check">
-                <input
-                  type="checkbox"
-                  checked={h.useRolesForAccess}
-                  onChange={(e) => updateHub(h.key, { useRolesForAccess: e.target.checked })}
-                />
-                Also use these roles to gate access to the temporary channels
-              </label>
-            </div>
-
-            <div className="v2-field">
-              <label>
-                Ignored roles <span className="v2-field-hint">— not affected by /voice-*</span>
-              </label>
+              <div className="v2-field">
+                <label htmlFor={`tv-mode-${h.key}`}>Access</label>
+                <select
+                  id={`tv-mode-${h.key}`}
+                  value={h.roleMode}
+                  onChange={(e) => updateHub(h.key, { roleMode: e.target.value })}
+                >
+                  <option value="allow">Everyone except the roles below</option>
+                  <option value="deny">Only members with a role below</option>
+                </select>
+              </div>
               <ChipPicker
                 kind="role"
                 items={d.roles}
-                value={h.ignoredRoles}
-                onChange={(ignoredRoles) => updateHub(h.key, { ignoredRoles })}
+                value={h.roleList}
+                onChange={(roleList) => updateHub(h.key, { roleList })}
               />
-            </div>
-
-            <div className="v2-field">
-              <label>
-                Moderator roles <span className="v2-field-hint">— can run /voice-* on any temp channel</span>
-              </label>
-              <ChipPicker
-                kind="role"
-                items={d.roles}
-                value={h.moderatorRoles}
-                onChange={(moderatorRoles) => updateHub(h.key, { moderatorRoles })}
-              />
-            </div>
-
-            <h3 className="v2-field-hint u-mt-2">Owner permissions</h3>
-            <div className="v2-field">
-              {[
-                ['manageChannels', 'Manage Channel (rename, user limit)'],
-                ['managePermissions', 'Manage Permissions'],
-                ['prioritySpeaker', 'Priority Speaker'],
-                ['moveMembers', 'Move Members'],
-              ].map(([key, label]) => (
-                <label className="v2-check" key={key}>
+              <div className="v2-field">
+                <label className="v2-check">
                   <input
                     type="checkbox"
-                    checked={h.ownerPerms[key]}
-                    onChange={(e) =>
-                      updateHub(h.key, { ownerPerms: { ...h.ownerPerms, [key]: e.target.checked } })
-                    }
+                    checked={h.useRolesForAccess}
+                    onChange={(e) => updateHub(h.key, { useRolesForAccess: e.target.checked })}
                   />
-                  {label}
+                  Also use these roles to gate access to the temporary channels
                 </label>
-              ))}
-            </div>
+              </div>
+            </FoldSection>
 
-            <h3 className="v2-field-hint u-mt-2">Text channel</h3>
-            <div className="v2-field">
-              {[
-                ['enabled', 'Create a paired temporary text channel'],
-                ['restrict', 'Only connected members (and mods) can read it'],
-                ['pinUsages', 'Pin a message listing the /voice-* commands'],
-                ['restrictCommands', 'Only allow /voice-* in this text channel'],
-              ].map(([key, label]) => (
-                <label className="v2-check" key={key}>
-                  <input
-                    type="checkbox"
-                    checked={h.textChannel[key]}
-                    onChange={(e) =>
-                      updateHub(h.key, { textChannel: { ...h.textChannel, [key]: e.target.checked } })
-                    }
-                  />
-                  {label}
+            <FoldSection title="Moderation" summary={moderationSummary(h)}>
+              <div className="v2-field">
+                <label>
+                  Ignored roles <span className="v2-field-hint">— not affected by /voice-*</span>
                 </label>
-              ))}
-            </div>
+                <ChipPicker
+                  kind="role"
+                  items={d.roles}
+                  value={h.ignoredRoles}
+                  onChange={(ignoredRoles) => updateHub(h.key, { ignoredRoles })}
+                />
+              </div>
+
+              <div className="v2-field">
+                <label>
+                  Moderator roles{' '}
+                  <span className="v2-field-hint">— can run /voice-* on any temp channel</span>
+                </label>
+                <ChipPicker
+                  kind="role"
+                  items={d.roles}
+                  value={h.moderatorRoles}
+                  onChange={(moderatorRoles) => updateHub(h.key, { moderatorRoles })}
+                />
+              </div>
+            </FoldSection>
+
+            <FoldSection title="Owner permissions" summary={ownerSummary(h)}>
+              <fieldset className="v2-field">
+                <legend className="v2-sr-only">Owner permissions</legend>
+                {OWNER_PERMS.map(([key, label]) => (
+                  <label className="v2-check" key={key}>
+                    <input
+                      type="checkbox"
+                      checked={h.ownerPerms[key]}
+                      onChange={(e) =>
+                        updateHub(h.key, { ownerPerms: { ...h.ownerPerms, [key]: e.target.checked } })
+                      }
+                    />
+                    {label}
+                  </label>
+                ))}
+              </fieldset>
+            </FoldSection>
+
+            <FoldSection title="Paired text channel" summary={textChannelSummary(h)}>
+              <fieldset className="v2-field">
+                <legend className="v2-sr-only">Paired text channel</legend>
+                {TEXT_CHANNEL_OPTIONS.map(([key, label]) => (
+                  <label className="v2-check" key={key}>
+                    <input
+                      type="checkbox"
+                      checked={h.textChannel[key]}
+                      onChange={(e) =>
+                        updateHub(h.key, { textChannel: { ...h.textChannel, [key]: e.target.checked } })
+                      }
+                    />
+                    {label}
+                  </label>
+                ))}
+              </fieldset>
+            </FoldSection>
           </div>
         ))}
         <button

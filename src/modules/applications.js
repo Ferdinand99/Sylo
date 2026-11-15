@@ -73,6 +73,7 @@ import { isMessageGone, isNotFound, isPermissionDenied } from '../platform/messa
 import { sweepMap } from '../lib/sweepMap.js';
 import { log } from '../lib/log.js';
 import { botRefusal } from './tempRoles.js';
+import { chatGrantRefusal } from '../web/middleware/roleGrants.js';
 import { cleanAnswer, cut } from './introductions.js';
 import {
   DEFAULT_RETENTION_DAYS,
@@ -315,6 +316,26 @@ function endingOps(form, sub, status, grants) {
     removeOps([sub.pendingRoleId]),
     form ? decisionOps(form, status, grants) : []
   );
+}
+
+/**
+ * The roles accepting or denying `sub` would give the applicant, as the decision would work them out
+ * (the form's roles, the role question's answers, changes still waiting). For the dashboard, which checks
+ * them against the person deciding before the decision is made (src/web/middleware/roleGrants.js).
+ * @param {'accept' | 'deny'} action
+ * @returns {string[]}
+ */
+export function decisionGrantIds(form, sub, action) {
+  const status = action === 'accept' ? 'accepted' : 'denied';
+  const grants = status === 'accepted' ? questionGrants(form, sub.questions, sub.answers, 'accept').ids : [];
+  return endingOps(form, sub, status, grants)
+    .filter((o) => o.op === 'add')
+    .map((o) => o.roleId);
+}
+
+/** The roles a retry of the waiting role changes would give. */
+export function pendingGrantIds(sub) {
+  return (sub.rolesPending ?? []).filter((o) => o.op === 'add').map((o) => o.roleId);
 }
 
 /** Take the pending role off a member whose pending application ends without a decision (deleted, forgotten). */
@@ -957,7 +978,8 @@ const normaliseReason = (v) => cut(cleanAnswer(String(v ?? '')), 500);
  * @param {{ guild: any, id: number, action: 'accept' | 'deny', reason?: string, by?: string | null,
  *   actor: { member?: any, permissions?: any, dashboard?: true, system?: true }, memberGone?: boolean }} args
  *   `actor` says who asks: a member (checked against the form's manager roles and Manage Server), the
- *   dashboard (the route has checked Manage Server) or the system (a leave).
+ *   dashboard (the route has checked the person's access level, Inbox or more, and that they may hand
+ *   out every role the decision gives: decisionGrantIds) or the system (a leave).
  * @returns {Promise<{ ok: true, status: string, warnings: string[], dm: boolean } | { ok: false, error: string, code: string }>}
  */
 export async function decideSubmission({
@@ -990,6 +1012,21 @@ export async function decideSubmission({
     }
     if (sub.status !== 'pending') {
       return { ok: false, error: `Application #${id} was already ${sub.status}.`, code: 'already' };
+    }
+    if (actor?.system !== true) {
+      // Nobody decides on their own application, on any path.
+      if (by && String(by) === String(sub.userId)) {
+        return { ok: false, error: "You can't decide on your own application.", code: 'forbidden' };
+      }
+      // A member deciding in the chat may only give roles they could hand out themselves, as the
+      // dashboard route checks for the person deciding there (decisionGrantIds).
+      if (actor?.dashboard !== true) {
+        for (const rid of decisionGrantIds(form, sub, action)) {
+          const role = guild.roles?.cache?.get?.(rid);
+          const why = role ? await chatGrantRefusal(guild, actor?.member ?? null, role) : null;
+          if (why) return { ok: false, error: why, code: 'forbidden' };
+        }
+      }
     }
 
     const cleanReason = normaliseReason(reason);

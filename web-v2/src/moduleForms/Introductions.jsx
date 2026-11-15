@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import PickerHealth from '../components/PickerHealth.jsx';
 import { useCmd } from '../platformContext.jsx';
 import { publishIntroPrompt, unpublishIntroPrompt } from '../api.js';
 import { notify } from '../notify.js';
@@ -7,6 +8,9 @@ import ColorPicker from '../components/ColorPicker.jsx';
 import HowItWorks from '../components/HowItWorks.jsx';
 import LoadError from '../components/LoadError.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
+import SectionIndex from '../components/SectionIndex.jsx';
+import MentionTextarea from '../components/MentionTextarea.jsx';
+import PreviewLayout from '../components/PreviewLayout.jsx';
 import SaveBar from '../components/SaveBar.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { useModuleForm } from '../components/useModuleForm.js';
@@ -135,332 +139,386 @@ export default function Introductions() {
     }
   }
 
+  const previews = [
+    {
+      key: 'card',
+      title: 'Membership card',
+      embed: {
+        // The custom colour; the server's colour or the member's role colour is not known here.
+        color: form.colorChoice === 'custom' ? form.color : undefined,
+        title: 'Mara',
+        description: form.description,
+        fields: form.questions.map((q) => ({
+          name: q.label || 'Question',
+          value: 'A sample answer',
+          inline: q.inline !== false,
+        })),
+        footer: form.footer,
+      },
+    },
+    {
+      key: 'prompt',
+      title: 'Prompt message',
+      hidden: !form.promptText,
+      content: form.promptText,
+      note: 'Sylo adds the "Create my intro" button under it.',
+    },
+  ];
   return (
-    <>
-      <h1 className="v2-section-title">Introductions</h1>
-      <p className="v2-field-hint">
-        Members answer a few questions in DM and Sylo posts a membership card for them in the channel below.
-        They start with <code>{cmd('/intro create')}</code> or the button on the prompt message. Running it
-        again updates their card.
-      </p>
-      <HowItWorks>
-        <p>
-          Sylo asks the questions one at a time. A member can type <code>skip</code> to leave an optional
-          question empty, <code>keep</code> to keep an earlier answer, and <code>cancel</code> to stop. They
-          see a preview first. Mentions in answers (@everyone, @here and roles) are removed, and the card
-          never pings anyone.
+    <PreviewLayout previews={previews} lookup={{ channels: data.channels ?? [], roles: data.roles ?? [] }}>
+      <>
+        <h1 className="v2-section-title">Introductions</h1>
+        <p className="v2-field-hint">
+          Members answer a few questions in DM and Sylo posts a membership card for them in the channel below.
+          They start with <code>{cmd('/intro create')}</code> or the button on the prompt message. Running it
+          again updates their card.
         </p>
-      </HowItWorks>
-
-      <form onSubmit={save} data-savebar>
-        <div className="v2-field">
-          <label htmlFor="intro-channel">Introductions channel</label>
-          <select
-            id="intro-channel"
-            value={form.channelId}
-            onChange={(e) => set({ channelId: e.target.value })}
-          >
-            <option value="">— select a channel —</option>
-            {data.channels.map((c) => (
-              <option key={c.id} value={c.id}>
-                #{c.name}
-              </option>
-            ))}
-          </select>
-          <p className="v2-field-hint">
-            Sylo needs View Channel, Send Messages and Embed Links there. Nothing works until a channel is
-            chosen.
+        <SectionIndex
+          sections={[
+            ['intro-questions', 'Questions'],
+            ['intro-roles', 'Role groups'],
+            ['intro-card', 'Card'],
+            ['intro-leave', 'When a member leaves'],
+            ['intro-prompt-section', 'Prompt message'],
+          ]}
+        />
+        <HowItWorks>
+          <p>
+            Sylo asks the questions one at a time. A member can type <code>skip</code> to leave an optional
+            question empty, <code>keep</code> to keep an earlier answer, and <code>cancel</code> to stop. They
+            see a preview first. Mentions in answers (@everyone, @here and roles) are removed, and the card
+            never pings anyone.
           </p>
-        </div>
+        </HowItWorks>
 
-        <div className="v2-group v2-section-gap">
-          <h2 className="v2-group-title">Questions</h2>
-          {form.questions.length === 0 ? (
+        <form onSubmit={save} data-savebar>
+          <div className="v2-field">
+            <label htmlFor="intro-channel">Introductions channel</label>
+            <select
+              id="intro-channel"
+              value={form.channelId}
+              onChange={(e) => set({ channelId: e.target.value })}
+            >
+              <option value="">— select a channel —</option>
+              {data.channels.map((c) => (
+                <option key={c.id} value={c.id}>
+                  #{c.name}
+                </option>
+              ))}
+            </select>
+            <PickerHealth kind="channel" value={form.channelId} embed />
             <p className="v2-field-hint">
-              No questions: the card shows only the member's profile and role groups.
+              Sylo needs View Channel, Send Messages and Embed Links there. Nothing works until a channel is
+              chosen.
             </p>
-          ) : null}
-          {form.questions.map((q, i) => (
-            <div className="v2-rule-card" key={q.key}>
-              <div className="v2-rule-head">
-                <span className="v2-rule-title">{q.label || `Question ${i + 1}`}</span>
-                <span>
-                  <button
-                    type="button"
-                    className="v2-btn-ghost"
-                    aria-label={`Move question ${i + 1} up`}
-                    disabled={i === 0}
-                    onClick={() => moveQuestion(q.key, -1)}
-                  >
-                    ↑
-                  </button>
-                  <button
-                    type="button"
-                    className="v2-btn-ghost"
-                    aria-label={`Move question ${i + 1} down`}
-                    disabled={i === form.questions.length - 1}
-                    onClick={() => moveQuestion(q.key, 1)}
-                  >
-                    ↓
-                  </button>
+          </div>
+
+          <div className="v2-group v2-section-gap">
+            <h2 className="v2-group-title" id="intro-questions">
+              Questions
+            </h2>
+            {form.questions.length === 0 ? (
+              <p className="v2-field-hint">
+                No questions: the card shows only the member's profile and role groups.
+              </p>
+            ) : null}
+            {form.questions.map((q, i) => (
+              <div className="v2-rule-card" key={q.key}>
+                <div className="v2-rule-head">
+                  <span className="v2-rule-title">{q.label || `Question ${i + 1}`}</span>
+                  <span>
+                    <button
+                      type="button"
+                      className="v2-btn-ghost"
+                      aria-label={`Move question ${i + 1} up`}
+                      disabled={i === 0}
+                      onClick={() => moveQuestion(q.key, -1)}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      className="v2-btn-ghost"
+                      aria-label={`Move question ${i + 1} down`}
+                      disabled={i === form.questions.length - 1}
+                      onClick={() => moveQuestion(q.key, 1)}
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      className="v2-btn-danger-ghost"
+                      onClick={() =>
+                        setForm((f) => ({ ...f, questions: f.questions.filter((x) => x.key !== q.key) }))
+                      }
+                    >
+                      Remove
+                    </button>
+                  </span>
+                </div>
+                <div className="v2-field">
+                  <label htmlFor={`q-label-${q.key}`}>Label on the card</label>
+                  <input
+                    id={`q-label-${q.key}`}
+                    type="text"
+                    maxLength={label.maxLength}
+                    value={q.label}
+                    onChange={(e) => updateQuestion(q.key, { label: e.target.value })}
+                  />
+                </div>
+                <div className="v2-field">
+                  <label htmlFor={`q-prompt-${q.key}`}>Question asked in DM</label>
+                  <textarea
+                    id={`q-prompt-${q.key}`}
+                    rows={2}
+                    maxLength={prompt.maxLength}
+                    value={q.prompt}
+                    onChange={(e) => updateQuestion(q.key, { prompt: e.target.value })}
+                  />
+                </div>
+                <div className="v2-field">
+                  <label htmlFor={`q-max-${q.key}`}>Longest answer (characters)</label>
+                  <input
+                    id={`q-max-${q.key}`}
+                    type="number"
+                    min={answerLength.min}
+                    max={answerLength.max}
+                    value={q.maxLength}
+                    onChange={(e) => updateQuestion(q.key, { maxLength: Number(e.target.value) })}
+                  />
+                </div>
+                <div className="v2-field-row">
+                  <label className="v2-check">
+                    <input
+                      type="checkbox"
+                      checked={q.required}
+                      onChange={(e) => updateQuestion(q.key, { required: e.target.checked })}
+                    />
+                    Required
+                  </label>
+                  <label className="v2-check">
+                    <input
+                      type="checkbox"
+                      checked={q.inline}
+                      onChange={(e) => updateQuestion(q.key, { inline: e.target.checked })}
+                    />
+                    Short field (side by side with others)
+                  </label>
+                </div>
+              </div>
+            ))}
+            <button
+              type="button"
+              className="v2-btn-ghost"
+              disabled={questionsFull}
+              onClick={() =>
+                setForm((f) => ({
+                  ...f,
+                  questions: [
+                    ...f.questions,
+                    {
+                      key: newKey(),
+                      id: '',
+                      label: '',
+                      prompt: '',
+                      required: false,
+                      maxLength: 300,
+                      inline: false,
+                    },
+                  ],
+                }))
+              }
+            >
+              + Add question
+            </button>
+          </div>
+
+          <div className="v2-group v2-section-gap">
+            <h2 className="v2-group-title" id="intro-roles">
+              Role groups
+            </h2>
+            <p className="v2-field-hint">
+              A group shows the roles a member has from a list (for example Country or Age) as one field on
+              the card. In the description, <code>{'{rolegroup:Name}'}</code> inserts them.
+            </p>
+            {form.roleGroups.map((g) => (
+              <div className="v2-rule-card" key={g.key}>
+                <div className="v2-rule-head">
+                  <span className="v2-rule-title">{g.name || 'New group'}</span>
                   <button
                     type="button"
                     className="v2-btn-danger-ghost"
                     onClick={() =>
-                      setForm((f) => ({ ...f, questions: f.questions.filter((x) => x.key !== q.key) }))
+                      setForm((f) => ({ ...f, roleGroups: f.roleGroups.filter((x) => x.key !== g.key) }))
                     }
                   >
                     Remove
                   </button>
-                </span>
-              </div>
-              <div className="v2-field">
-                <label htmlFor={`q-label-${q.key}`}>Label on the card</label>
-                <input
-                  id={`q-label-${q.key}`}
-                  type="text"
-                  maxLength={label.maxLength}
-                  value={q.label}
-                  onChange={(e) => updateQuestion(q.key, { label: e.target.value })}
-                />
-              </div>
-              <div className="v2-field">
-                <label htmlFor={`q-prompt-${q.key}`}>Question asked in DM</label>
-                <textarea
-                  id={`q-prompt-${q.key}`}
-                  rows={2}
-                  maxLength={prompt.maxLength}
-                  value={q.prompt}
-                  onChange={(e) => updateQuestion(q.key, { prompt: e.target.value })}
-                />
-              </div>
-              <div className="v2-field">
-                <label htmlFor={`q-max-${q.key}`}>Longest answer (characters)</label>
-                <input
-                  id={`q-max-${q.key}`}
-                  type="number"
-                  min={answerLength.min}
-                  max={answerLength.max}
-                  value={q.maxLength}
-                  onChange={(e) => updateQuestion(q.key, { maxLength: Number(e.target.value) })}
-                />
-              </div>
-              <div className="v2-field-row">
+                </div>
+                <div className="v2-field">
+                  <label htmlFor={`g-name-${g.key}`}>Name</label>
+                  <input
+                    id={`g-name-${g.key}`}
+                    type="text"
+                    maxLength={groupName.maxLength}
+                    value={g.name}
+                    onChange={(e) => updateGroup(g.key, { name: e.target.value })}
+                  />
+                </div>
+                <div className="v2-field">
+                  <label>Roles in this group</label>
+                  <ChipPicker
+                    kind="role"
+                    items={data.roles}
+                    value={g.roleIds}
+                    onChange={(roleIds) => updateGroup(g.key, { roleIds })}
+                  />
+                </div>
                 <label className="v2-check">
                   <input
                     type="checkbox"
-                    checked={q.required}
-                    onChange={(e) => updateQuestion(q.key, { required: e.target.checked })}
+                    checked={g.hideWhenEmpty}
+                    onChange={(e) => updateGroup(g.key, { hideWhenEmpty: e.target.checked })}
                   />
-                  Required
-                </label>
-                <label className="v2-check">
-                  <input
-                    type="checkbox"
-                    checked={q.inline}
-                    onChange={(e) => updateQuestion(q.key, { inline: e.target.checked })}
-                  />
-                  Short field (side by side with others)
+                  Hide the field when the member has none of these roles
                 </label>
               </div>
-            </div>
-          ))}
-          <button
-            type="button"
-            className="v2-btn-ghost"
-            disabled={questionsFull}
-            onClick={() =>
-              setForm((f) => ({
-                ...f,
-                questions: [
-                  ...f.questions,
-                  {
-                    key: newKey(),
-                    id: '',
-                    label: '',
-                    prompt: '',
-                    required: false,
-                    maxLength: 300,
-                    inline: false,
-                  },
-                ],
-              }))
-            }
-          >
-            + Add question
-          </button>
-        </div>
-
-        <div className="v2-group v2-section-gap">
-          <h2 className="v2-group-title">Role groups</h2>
-          <p className="v2-field-hint">
-            A group shows the roles a member has from a list (for example Country or Age) as one field on the
-            card. In the description, <code>{'{rolegroup:Name}'}</code> inserts them.
-          </p>
-          {form.roleGroups.map((g) => (
-            <div className="v2-rule-card" key={g.key}>
-              <div className="v2-rule-head">
-                <span className="v2-rule-title">{g.name || 'New group'}</span>
-                <button
-                  type="button"
-                  className="v2-btn-danger-ghost"
-                  onClick={() =>
-                    setForm((f) => ({ ...f, roleGroups: f.roleGroups.filter((x) => x.key !== g.key) }))
-                  }
-                >
-                  Remove
-                </button>
-              </div>
-              <div className="v2-field">
-                <label htmlFor={`g-name-${g.key}`}>Name</label>
-                <input
-                  id={`g-name-${g.key}`}
-                  type="text"
-                  maxLength={groupName.maxLength}
-                  value={g.name}
-                  onChange={(e) => updateGroup(g.key, { name: e.target.value })}
-                />
-              </div>
-              <div className="v2-field">
-                <label>Roles in this group</label>
-                <ChipPicker
-                  kind="role"
-                  items={data.roles}
-                  value={g.roleIds}
-                  onChange={(roleIds) => updateGroup(g.key, { roleIds })}
-                />
-              </div>
-              <label className="v2-check">
-                <input
-                  type="checkbox"
-                  checked={g.hideWhenEmpty}
-                  onChange={(e) => updateGroup(g.key, { hideWhenEmpty: e.target.checked })}
-                />
-                Hide the field when the member has none of these roles
-              </label>
-            </div>
-          ))}
-          <button
-            type="button"
-            className="v2-btn-ghost"
-            disabled={groupsFull}
-            onClick={() =>
-              setForm((f) => ({
-                ...f,
-                roleGroups: [...f.roleGroups, { key: newKey(), name: '', roleIds: [], hideWhenEmpty: false }],
-              }))
-            }
-          >
-            + Add role group
-          </button>
-        </div>
-
-        <div className="v2-group v2-section-gap">
-          <h2 className="v2-group-title">Card</h2>
-          <p className="v2-field-hint">
-            The card shows the member's avatar, name, answers, role groups and when they joined.
-          </p>
-          <div className="v2-field">
-            <label htmlFor="intro-description">Description (optional)</label>
-            <textarea
-              id="intro-description"
-              rows={3}
-              maxLength={limitOf(limits, 'description').maxLength}
-              value={form.description}
-              onChange={(e) => set({ description: e.target.value })}
-            />
-            <PlaceholderHint
-              fieldId="intro-description"
-              tokens={tokens}
-              value={form.description}
-              onChange={(description) => set({ description })}
-            />
-          </div>
-          <div className="v2-field">
-            <label htmlFor="intro-footer">Footer (optional)</label>
-            <input
-              id="intro-footer"
-              type="text"
-              maxLength={limitOf(limits, 'footer').maxLength}
-              value={form.footer}
-              onChange={(e) => set({ footer: e.target.value })}
-            />
-          </div>
-          <div className="v2-field">
-            <label htmlFor="intro-color">Colour</label>
-            <select
-              id="intro-color"
-              value={form.colorChoice}
-              onChange={(e) => set({ colorChoice: e.target.value })}
-            >
-              <option value="default">The server's embed colour</option>
-              <option value="custom">A colour I pick</option>
-              <option value="role">The member's top role colour</option>
-            </select>
-            {form.colorChoice === 'custom' ? (
-              <ColorPicker value={form.color} onChange={(color) => set({ color })} title="Card colour" />
-            ) : null}
-          </div>
-          <label className="v2-check">
-            <input
-              type="checkbox"
-              checked={form.showRoles}
-              onChange={(e) => set({ showRoles: e.target.checked })}
-            />
-            Show the member's other roles (top 10, without the roles already shown in a group)
-          </label>
-        </div>
-
-        <div className="v2-group v2-section-gap">
-          <h2 className="v2-group-title">When a member leaves</h2>
-          <label className="v2-check">
-            <input
-              type="checkbox"
-              checked={form.deleteOnLeave}
-              onChange={(e) => set({ deleteOnLeave: e.target.checked })}
-            />
-            Delete their card and answers
-          </label>
-        </div>
-
-        <div className="v2-group v2-section-gap">
-          <h2 className="v2-group-title">Prompt message</h2>
-          <p className="v2-field-hint">
-            Post a pinned “Introduce yourself” message with a <strong>Create my intro</strong> button in the
-            channel above. On Fluxer the button is shown as a reaction.
-          </p>
-          <div className="v2-field">
-            <label htmlFor="intro-prompt">Message text</label>
-            <textarea
-              id="intro-prompt"
-              rows={2}
-              maxLength={limitOf(limits, 'promptText').maxLength}
-              placeholder="Introduce yourself! Press the button and Sylo asks you a few questions in DM."
-              value={form.promptText}
-              onChange={(e) => set({ promptText: e.target.value })}
-            />
-          </div>
-          <div className="v2-field-row">
+            ))}
             <button
               type="button"
-              className="v2-btn-primary"
-              disabled={busy || !form.channelId}
-              onClick={onPublish}
+              className="v2-btn-ghost"
+              disabled={groupsFull}
+              onClick={() =>
+                setForm((f) => ({
+                  ...f,
+                  roleGroups: [
+                    ...f.roleGroups,
+                    { key: newKey(), name: '', roleIds: [], hideWhenEmpty: false },
+                  ],
+                }))
+              }
             >
-              {isPublished ? 'Update prompt message' : 'Publish prompt message'}
+              + Add role group
             </button>
-            {isPublished ? (
-              <button type="button" className="v2-btn-danger-ghost" disabled={busy} onClick={onUnpublish}>
-                Remove prompt message
-              </button>
-            ) : null}
           </div>
-        </div>
-      </form>
-      <p className="v2-field-hint">
-        {data.introductions === 1 ? '1 member has' : `${data.introductions} members have`} an introduction.
-      </p>
-      <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
-    </>
+
+          <div className="v2-group v2-section-gap">
+            <h2 className="v2-group-title" id="intro-card">
+              Card
+            </h2>
+            <p className="v2-field-hint">
+              The card shows the member's avatar, name, answers, role groups and when they joined.
+            </p>
+            <div className="v2-field">
+              <label htmlFor="intro-description">Description (optional)</label>
+              <MentionTextarea
+                channels={data.channels}
+                roles={data.roles}
+                id="intro-description"
+                rows={3}
+                maxLength={limitOf(limits, 'description').maxLength}
+                value={form.description}
+                onChange={(e) => set({ description: e.target.value })}
+              />
+              <PlaceholderHint
+                fieldId="intro-description"
+                tokens={tokens}
+                value={form.description}
+                onChange={(description) => set({ description })}
+              />
+            </div>
+            <div className="v2-field">
+              <label htmlFor="intro-footer">Footer (optional)</label>
+              <input
+                id="intro-footer"
+                type="text"
+                maxLength={limitOf(limits, 'footer').maxLength}
+                value={form.footer}
+                onChange={(e) => set({ footer: e.target.value })}
+              />
+            </div>
+            <div className="v2-field">
+              <label htmlFor="intro-color">Colour</label>
+              <select
+                id="intro-color"
+                value={form.colorChoice}
+                onChange={(e) => set({ colorChoice: e.target.value })}
+              >
+                <option value="default">The server's embed colour</option>
+                <option value="custom">A colour I pick</option>
+                <option value="role">The member's top role colour</option>
+              </select>
+              {form.colorChoice === 'custom' ? (
+                <ColorPicker value={form.color} onChange={(color) => set({ color })} title="Card colour" />
+              ) : null}
+            </div>
+            <label className="v2-check">
+              <input
+                type="checkbox"
+                checked={form.showRoles}
+                onChange={(e) => set({ showRoles: e.target.checked })}
+              />
+              Show the member's other roles (top 10, without the roles already shown in a group)
+            </label>
+          </div>
+
+          <div className="v2-group v2-section-gap">
+            <h2 className="v2-group-title" id="intro-leave">
+              When a member leaves
+            </h2>
+            <label className="v2-check">
+              <input
+                type="checkbox"
+                checked={form.deleteOnLeave}
+                onChange={(e) => set({ deleteOnLeave: e.target.checked })}
+              />
+              Delete their card and answers
+            </label>
+          </div>
+
+          <div className="v2-group v2-section-gap">
+            <h2 className="v2-group-title" id="intro-prompt-section">
+              Prompt message
+            </h2>
+            <p className="v2-field-hint">
+              Post a pinned “Introduce yourself” message with a <strong>Create my intro</strong> button in the
+              channel above. On Fluxer the button is shown as a reaction.
+            </p>
+            <div className="v2-field">
+              <label htmlFor="intro-prompt">Message text</label>
+              <MentionTextarea
+                channels={data.channels}
+                roles={data.roles}
+                id="intro-prompt"
+                rows={2}
+                maxLength={limitOf(limits, 'promptText').maxLength}
+                placeholder="Introduce yourself! Press the button and Sylo asks you a few questions in DM."
+                value={form.promptText}
+                onChange={(e) => set({ promptText: e.target.value })}
+              />
+            </div>
+            <div className="v2-field-row">
+              <button
+                type="button"
+                className="v2-btn-primary"
+                disabled={busy || !form.channelId}
+                onClick={onPublish}
+              >
+                {isPublished ? 'Update prompt message' : 'Publish prompt message'}
+              </button>
+              {isPublished ? (
+                <button type="button" className="v2-btn-danger-ghost" disabled={busy} onClick={onUnpublish}>
+                  Remove prompt message
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </form>
+        <p className="v2-field-hint">
+          {data.introductions === 1 ? '1 member has' : `${data.introductions} members have`} an introduction.
+        </p>
+        <SaveBar dirty={dirty} saving={saving} onSave={save} onReset={reset} />
+      </>
+    </PreviewLayout>
   );
 }

@@ -34,6 +34,7 @@ vi.mock('../moduleForms/index.js', () => ({ v2Href: (card, guildId) => `/guilds/
 vi.mock('../OverviewContext.jsx', () => ({ useOverview: vi.fn() }));
 const api = await import('../api.js');
 const { useOverview } = await import('../OverviewContext.jsx');
+const { confirmDialog } = await import('../components/ConfirmDialog.jsx');
 
 const GUILD = '123456789012345678';
 const ROLE = '555555555555555551';
@@ -42,6 +43,11 @@ const CHANNEL = '666666666666666661';
 beforeEach(() => {
   vi.resetAllMocks();
   resetModuleLimits();
+  try {
+    localStorage.clear(); // the overview's hint and folded categories are remembered there
+  } catch {
+    // storage is optional
+  }
   api.getModuleLimits.mockResolvedValue({ _embed: {} });
 });
 
@@ -70,13 +76,136 @@ describe('Overview', () => {
     });
   }
 
-  it('links the ticket and appeal tiles to their pages', async () => {
+  it('says how many modules are on in the heading, without a separate count strip', async () => {
     mockOverview();
     renderAtGuild(<Overview />, GUILD);
-    const tickets = (await screen.findByText('open tickets')).closest('a');
-    const appeals = screen.getByText('open appeal').closest('a');
+    expect(await screen.findByText(/1 of 1 modules on/)).toBeTruthy();
+    expect(screen.queryByText('modules active')).toBeNull();
+  });
+
+  const ISSUE = {
+    problems: [{ id: 'afk', name: 'AFK', issues: ['The channel is not set'] }],
+    missingPermissions: [],
+    waiting: { tickets: 2, appeals: 1, applications: 3, suggestions: 0 },
+  };
+
+  it('lists what needs attention at the top: the waiting work as one row of links, the rest with a link to fix it', async () => {
+    mockOverview({ attention: ISSUE });
+    renderAtGuild(<Overview />, GUILD);
+    const panel = (await screen.findByRole('heading', { name: /Needs attention/ })).closest('section');
+    expect(within(panel).getAllByText('Waiting for a person')).toHaveLength(1);
+    const tickets = within(panel).getByRole('link', { name: '2 open tickets' });
     expect(tickets.getAttribute('href')).toBe(`/guilds/${GUILD}/tickets`);
-    expect(appeals.getAttribute('href')).toBe(`/guilds/${GUILD}/appeals`);
+    const applications = within(panel).getByRole('link', { name: '3 applications waiting' });
+    expect(applications.getAttribute('href')).toBe(`/guilds/${GUILD}/m/applications?tab=submissions`);
+    expect(within(panel).getByText('AFK is on but not set up', { selector: 'strong' })).toBeTruthy();
+    expect(within(panel).getByText('The channel is not set')).toBeTruthy();
+    const fix = within(panel).getByRole('link', { name: /Fix AFK is on but not set up/ });
+    expect(fix.getAttribute('href')).toBe(`/guilds/${GUILD}/m/afk`);
+  });
+
+  it('says so when nothing needs attention', async () => {
+    mockOverview({ openTickets: 0, openAppeals: 0, attention: undefined });
+    renderAtGuild(<Overview />, GUILD);
+    expect(await screen.findByText('Nothing needs your attention right now.')).toBeTruthy();
+  });
+
+  it('shows a one-line summary and the status on each module card, and the card opens the module', async () => {
+    mockOverview({
+      groups: [
+        {
+          title: 'Utility',
+          cards: [card({ lines: [{ label: 'Channel', value: '#general', state: 'on' }], icon: 'moon' })],
+        },
+      ],
+    });
+    renderAtGuild(<Overview />, GUILD);
+    expect(await screen.findByText('Channel: #general')).toBeTruthy();
+    expect(screen.getByText('On', { selector: '.v2-modrow-status' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'AFK' }).getAttribute('href')).toBe(`/guilds/${GUILD}/m/afk`);
+  });
+
+  it('asks before switching a module off, and does nothing when the answer is no', async () => {
+    const setData = vi.fn();
+    mockOverview();
+    useOverview.mockReturnValue({ ...useOverview(), setData });
+    confirmDialog.mockResolvedValue(false);
+    renderAtGuild(<Overview />, GUILD);
+    fireEvent.click(await screen.findByRole('switch', { name: 'AFK' }));
+    await waitFor(() => expect(confirmDialog).toHaveBeenCalled());
+    expect(confirmDialog.mock.calls[0][0].title).toBe('Switch off AFK?');
+    expect(api.setModuleEnabled).not.toHaveBeenCalled();
+    expect(setData).not.toHaveBeenCalled();
+  });
+
+  it('switches the module off when the answer is yes', async () => {
+    mockOverview();
+    api.setModuleEnabled.mockResolvedValue({});
+    confirmDialog.mockResolvedValue(true);
+    renderAtGuild(<Overview />, GUILD);
+    fireEvent.click(await screen.findByRole('switch', { name: 'AFK' }));
+    await waitFor(() => expect(api.setModuleEnabled).toHaveBeenCalledWith(GUILD, 'afk', false));
+  });
+
+  it('switches a module on without asking', async () => {
+    mockOverview({ groups: [{ title: 'Utility', cards: [card({ enabled: false })] }] });
+    api.setModuleEnabled.mockResolvedValue({});
+    renderAtGuild(<Overview />, GUILD);
+    fireEvent.click(await screen.findByRole('switch', { name: 'AFK' }));
+    await waitFor(() => expect(api.setModuleEnabled).toHaveBeenCalledWith(GUILD, 'afk', true));
+    expect(confirmDialog).not.toHaveBeenCalled();
+  });
+
+  it('asks before a bulk "Disable" too, and only calls the server on yes', async () => {
+    mockOverview();
+    api.setModulesEnabledBulk.mockResolvedValue({});
+    confirmDialog.mockResolvedValueOnce(false);
+    renderAtGuild(<Overview />, GUILD);
+    fireEvent.click(await screen.findByRole('button', { name: 'Bulk edit' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select AFK' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Disable' }));
+    await waitFor(() => expect(confirmDialog).toHaveBeenCalledTimes(1));
+    expect(confirmDialog.mock.calls[0][0].title).toBe('Switch off 1 module?');
+    expect(api.setModulesEnabledBulk).not.toHaveBeenCalled();
+
+    confirmDialog.mockResolvedValueOnce(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Disable' }));
+    await waitFor(() => expect(api.setModulesEnabledBulk).toHaveBeenCalledWith(GUILD, ['afk'], false));
+  });
+
+  it('shows markup in a name or a summary as plain text', async () => {
+    const evil = '<img src=x onerror="window.pwned=1"> <b>bold</b>';
+    mockOverview({
+      groups: [
+        {
+          title: 'Utility',
+          cards: [card({ name: evil, summaryParts: [evil], icon: 'moon' })],
+        },
+      ],
+      attention: {
+        problems: [{ id: 'afk', name: evil, issues: [evil] }],
+        missingPermissions: [],
+        waiting: { tickets: 0, appeals: 0, applications: 0, suggestions: 0 },
+      },
+    });
+    const { container } = renderAtGuild(<Overview />, GUILD);
+    await screen.findAllByText(evil, { exact: false });
+    expect(container.querySelector('img[src="x"]')).toBeNull();
+    expect(container.querySelector('b')).toBeNull();
+    expect(window.pwned).toBeUndefined();
+  });
+
+  it('folds a category, remembers it, and opens it again while searching', async () => {
+    mockOverview();
+    renderAtGuild(<Overview />, GUILD);
+    const head = await screen.findByRole('button', { name: /Utility/ });
+    expect(head.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(head);
+    expect(head.getAttribute('aria-expanded')).toBe('false');
+    expect(JSON.parse(localStorage.getItem('sylo:v2:overview-collapsed'))).toEqual(['Utility']);
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search modules' }), { target: { value: 'afk' } });
+    expect(screen.getByRole('button', { name: /Utility/ }).getAttribute('aria-expanded')).toBe('true');
+    localStorage.removeItem('sylo:v2:overview-collapsed');
   });
 
   it('calls the bulk switch "Bulk edit" and gives one instruction instead of the old note', async () => {
@@ -112,8 +241,8 @@ describe('Audit log', () => {
     expect(screen.queryByRole('heading', { name: /shown, newest first/ })).toBeNull();
     expect(screen.getByText('2 shown, newest first.')).toBeTruthy();
     const crumbs = screen.getByRole('navigation', { name: 'Breadcrumb' });
-    expect(within(crumbs).getByRole('link', { name: 'Settings' }).getAttribute('href')).toBe(
-      `/guilds/${GUILD}/settings`
+    expect(within(crumbs).getByRole('link', { name: 'Members & moderation' }).getAttribute('href')).toBe(
+      `/guilds/${GUILD}/moderation`
     );
     expect(within(crumbs).getByText('Audit log').getAttribute('aria-current')).toBe('page');
   });

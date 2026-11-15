@@ -26,3 +26,6 @@ A new member sees only the verify channel. Clicking **Verify** (button mode)
 grants the role immediately; captcha mode opens `<DASHBOARD_URL>/verify/<token>`,
 which grants the role after the challenge passes. Tokens are single-use and bound
 to the member + guild.
+
+To greet a member only once they are verified, set the [Welcome](welcome.md#welcome-on-a-role)
+module to welcome **when a member gets a role** and pick the verified role.

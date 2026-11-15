@@ -40,6 +40,8 @@ import { LIMITS as CEILINGS, checkLimit } from '../lib/limits.js';
 import { log } from '../lib/log.js';
 import { idList } from '../web/lib/idList.js';
 import { every, after } from './schedule.js';
+import { liveMember } from './lib/liveMember.js';
+import { isNotFound } from '../platform/messageErrors.js';
 import { canonicalTimeZone, formatInZone, localToUtc } from './lib/eventTime.js';
 import { eventAudience, eventPageUrl, eventPagesOn, refusedLinkButton } from './lib/eventPage.js';
 
@@ -393,7 +395,10 @@ export function roleGrantable(guild, role) {
 }
 
 async function memberOf(guild, userId) {
-  return guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
+  return liveMember(guild, userId).catch((err) => {
+    if (!isNotFound(err, [10007])) log.warn('events', `could not look up ${userId}:`, err.message);
+    return null;
+  });
 }
 
 async function setRole(guild, member, roleId, give, reason) {

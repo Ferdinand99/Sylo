@@ -15,6 +15,7 @@ import {
 import { config as appConfig } from '../../config.js';
 import { balanceOf, formatMoney } from '../../modules/economy.js';
 import { itemLabel, purchase, requirementsMet } from '../../modules/lib/shop.js';
+import { rarityLabel } from '../../modules/lib/collectibles.js';
 import { getItem, listItems } from '../../db/economyShop.js';
 import { economySettings } from '../../modules/economy.js';
 import { guildKey, guildSupports } from '../../platform/platformOf.js';
@@ -33,7 +34,9 @@ export const data = new SlashCommandBuilder()
   .setContexts(InteractionContextType.Guild);
 
 /** The items a member sees: the ones for sale, in the staff's order. */
-export const itemsForSale = async (guildId) => (await listItems(guildId)).filter((i) => i.enabled);
+/** The items a member sees: the ones for sale (a collectible only once it has a picture), in the staff's order. */
+export const itemsForSale = async (guildId) =>
+  (await listItems(guildId)).filter((i) => i.enabled && (i.type !== 'collectible' || i.imageId));
 
 const stockText = (item) => {
   if (item.stock === null) return '';
@@ -49,7 +52,9 @@ function lineOf(item, number, roleIds, config) {
       ? ` (role for ${Math.round(item.durationMs / 3_600_000)}h)`
       : item.type === 'role'
         ? ' (role)'
-        : '';
+        : item.type === 'collectible'
+          ? ` (collectible${rarityLabel(item.rarity) ? `, ${rarityLabel(item.rarity)}` : ''})`
+          : '';
   const text = item.description ? `\n${item.description}` : '';
   return `**${number}.** ${lock}${itemLabel(item)}${kind} — ${formatMoney(item.price, config)}${stockText(item)}${text}`;
 }

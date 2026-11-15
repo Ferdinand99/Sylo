@@ -15,6 +15,7 @@ vi.mock('../api.js', async (importOriginal) => ({
   getCsrfToken: vi.fn().mockResolvedValue('t'),
   getPlatformInfo: vi.fn().mockResolvedValue({ platform: 'discord', capabilities: {} }),
   getMemberData: vi.fn().mockResolvedValue({ lookup: null }),
+  getGuildAccess: vi.fn().mockResolvedValue({ level: 'edit' }),
 }));
 
 // The same wiring as components/Shell.jsx: a <ScrollRestoration /> beside the layout of a data router.
@@ -109,11 +110,11 @@ describe('scrolling inside the real Shell', () => {
 
   it('a member lookup (a new search on the same page) does not jump to the top, a new page does', async () => {
     const router = setupShell();
-    const field = await screen.findByLabelText('User ID or @mention');
+    const field = await screen.findByLabelText('Member');
     scrollTo.mockClear();
     fireEvent.change(field, { target: { value: '222222222222222222' } });
     await act(async () => {
-      fireEvent.submit(field.closest('form'));
+      fireEvent.mouseDown(screen.getByRole('option', { name: 'Use the member id 222222222222222222' }));
     });
     expect(router.state.location.search).toBe('?user=222222222222222222');
     expect(scrollTo).not.toHaveBeenCalledWith(0, 0);

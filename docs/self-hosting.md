@@ -141,7 +141,7 @@ Discord's approval for Message Content.
    - **Manage Server** — invite tracker (reads the invite list) and the automod
      push to native Discord AutoMod (creates/edits `Sylo:`-named rules)
 
-   Open the generated URL to invite the bot. Tickets (modmail) need no extra
+   Open the generated URL to invite the bot. Tickets need no extra
    permission — just leave the bot able to receive DMs.
 5. Drag **Sylo's role above the roles it should manage** in *Server Settings →
    Roles*. The bot can never kick/ban/timeout someone whose highest role sits
@@ -173,9 +173,15 @@ To require a login:
 With `DISCORD_CLIENT_SECRET` set, every page except the `/health` JSON and the
 `/metrics` scrape endpoint requires "Log in with Discord". Per-server pages
 require **Manage Server** (or Administrator / owner) in that server, or one of the
-**bot-master roles** set on that server's *Settings* page. Only the owner or
-someone with Manage Server can change the bot-master roles; a bot master can save
-the rest of that page.
+roles set under *Dashboard access* on that server's *Settings* page: **Edit**
+(the bot-master roles: everything), **Inbox** (tickets, ban appeals, applications
+and suggestions, and reading the rest) or **View** (the pages and settings, read
+only, without what the inboxes contain). Only the owner or someone with Manage
+Server can change the Edit roles; anyone with Edit can change the Inbox and View
+roles and save the rest of that page. With `INTENT_GUILD_MEMBERS=false` Sylo
+fetches a member from Discord before their role decides access (on every change,
+and at most once a minute for reading), because the bot is not told when roles
+change.
 
 `/health` (JSON) and `/metrics` stay unauthenticated so a monitor or Prometheus
 can reach them — keep them on your LAN, or restrict them at the reverse proxy if

@@ -66,7 +66,8 @@ async function runCustomCommand(message, split) {
   };
   const interaction = new MessageInteraction({ message, commandName: split.name, parsed, resolved: {} });
   try {
-    if (await handleCustomSlash(interaction)) inc('sylo_commands_total', { command: split.name });
+    // One fixed label: /health and /metrics are public and must not list a server's own command names.
+    if (await handleCustomSlash(interaction)) inc('sylo_commands_total', { command: 'custom' });
   } catch (err) {
     log.error('bot', `Custom command "${split.name}" failed:`, err);
   }

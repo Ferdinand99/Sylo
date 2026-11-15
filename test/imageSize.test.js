@@ -18,11 +18,7 @@ function png(width, height) {
 }
 
 function gif(width, height) {
-  const b = Buffer.alloc(13);
-  b.write('GIF89a', 0, 'ascii');
-  b.writeUInt16LE(width, 6);
-  b.writeUInt16LE(height, 8);
-  return b;
+  return gifWithFrame({ width, height }, { width, height });
 }
 
 function jpeg(width, height) {
@@ -77,4 +73,104 @@ test('imageDimensions reads a BMP header', () => {
   b.writeInt32LE(800, 18);
   b.writeInt32LE(-300, 22); // negative: a top-down bitmap
   assert.deepEqual(imageDimensions(b), { width: 800, height: 300 });
+});
+
+// The pre-decode guard is only worth anything if it reads what the decoder uses.
+function gifWithFrame(screen, frame, { prefix = Buffer.alloc(0), tail = Buffer.from([0x3b]) } = {}) {
+  const head = Buffer.alloc(13);
+  head.write('GIF89a', 0, 'ascii');
+  head.writeUInt16LE(screen.width, 6);
+  head.writeUInt16LE(screen.height, 8);
+  // image descriptor, no local colour table, LZW min code size, one data sub-block, terminator
+  const desc = Buffer.alloc(10);
+  desc[0] = 0x2c;
+  desc.writeUInt16LE(frame.left ?? 0, 1);
+  desc.writeUInt16LE(frame.top ?? 0, 3);
+  desc.writeUInt16LE(frame.width, 5);
+  desc.writeUInt16LE(frame.height, 7);
+  const data = Buffer.from([0x02, 0x02, 0x44, 0x01, 0x00]);
+  return Buffer.concat([head, prefix, desc, data, tail]);
+}
+
+test('imageDimensions: a GIF reports its largest frame, not only the logical screen', () => {
+  assert.deepEqual(imageDimensions(gifWithFrame({ width: 1, height: 1 }, { width: 6000, height: 6000 })), {
+    width: 6000,
+    height: 6000,
+  });
+  assert.deepEqual(imageDimensions(gifWithFrame({ width: 300, height: 200 }, { width: 10, height: 10 })), {
+    width: 300,
+    height: 200,
+  });
+});
+
+test('imageDimensions: a GIF frame placed far from the origin widens the picture to its far corner', () => {
+  const tiny = gifWithFrame({ width: 1, height: 1 }, { left: 9999, top: 9999, width: 1, height: 1 });
+  assert.deepEqual(imageDimensions(tiny), { width: 10000, height: 10000 });
+  const wide = gifWithFrame({ width: 1, height: 1 }, { left: 60000, top: 0, width: 5000, height: 2 });
+  assert.deepEqual(imageDimensions(wide), { width: 65000, height: 2 });
+});
+
+test('imageDimensions: a run of extensions before the frame does not hide it', () => {
+  const comment = Buffer.from([0x21, 0xfe, 0x00]); // an empty comment extension
+  const prefix = Buffer.concat(Array.from({ length: 5000 }, () => comment));
+  const g = gifWithFrame({ width: 1, height: 1 }, { width: 6000, height: 6000 }, { prefix });
+  assert.deepEqual(imageDimensions(g), { width: 6000, height: 6000 });
+});
+
+test('imageDimensions: a GIF with an unknown or truncated block, or no frame, is refused', () => {
+  const frame = { width: 10, height: 10 };
+  assert.equal(
+    imageDimensions(gifWithFrame({ width: 1, height: 1 }, frame, { prefix: Buffer.from([0x99]) })),
+    null
+  );
+  const whole = gifWithFrame({ width: 1, height: 1 }, frame);
+  assert.equal(imageDimensions(whole.subarray(0, 18)), null, 'cut inside the image descriptor');
+  assert.equal(imageDimensions(whole.subarray(0, whole.length - 3)), null, 'cut inside the data');
+  const header = Buffer.alloc(13);
+  header.write('GIF89a', 0, 'ascii');
+  assert.equal(imageDimensions(header), null, 'no frame at all');
+});
+
+test('fetchCardImage refuses a GIF whose frame is larger than its logical screen', async () => {
+  const server = createServer((req, res) =>
+    res.end(
+      gifWithFrame(
+        { width: 1, height: 1 },
+        req.url === '/big' ? { width: 6000, height: 6000 } : { width: 1, height: 1 }
+      )
+    )
+  );
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    assert.equal(await fetchCardImage(`${base}/big`, { allowPrivate: true }), null);
+    assert.ok(Buffer.isBuffer(await fetchCardImage(`${base}/ok`, { allowPrivate: true })));
+  } finally {
+    server.close();
+  }
+});
+
+function sofSegment(width, height) {
+  const b = Buffer.alloc(13);
+  b.writeUInt16BE(0xffc0, 0);
+  b.writeUInt16BE(11, 2);
+  b[4] = 8;
+  b.writeUInt16BE(height, 5);
+  b.writeUInt16BE(width, 7);
+  b[9] = 1;
+  return b;
+}
+
+test('imageDimensions: a TEM marker does not steer the JPEG walker onto a fake frame header', () => {
+  const fake = sofSegment(16, 16);
+  const real = sofSegment(6000, 6000);
+  const com = Buffer.concat([
+    Buffer.from([0xff, 0xfe]),
+    Buffer.from([0x00, 2 + 4 + fake.length]), // COM length: itself, 4 filler bytes, the fake header
+    Buffer.alloc(4),
+    fake,
+  ]);
+  // SOI, TEM, then two bytes a decoder skips but a length-reading walker takes as "10" (landing in the comment).
+  const buf = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0x01, 0x00, 0x0a]), com, real, Buffer.alloc(8)]);
+  assert.deepEqual(imageDimensions(buf), { width: 6000, height: 6000 });
 });

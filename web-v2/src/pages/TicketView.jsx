@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
+import '../styles/wp4-inbox.css';
 import { getTicket, pollTicket, replyToTicket, closeTicket, ticketTranscriptUrl } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
@@ -7,8 +8,11 @@ import LoadError from '../components/LoadError.jsx';
 import Meta from '../components/Meta.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import Badge from '../components/Badge.jsx';
-import CopyButton from '../components/CopyButton.jsx';
+import Breadcrumb from '../components/Breadcrumb.jsx';
+import { copyText } from '../components/CopyButton.jsx';
+import OverflowMenu from '../components/OverflowMenu.jsx';
 import Time from '../components/Time.jsx';
+import { AccessLock, NeedsInbox, needsInbox } from '../access.jsx';
 
 const POLL_MS = 6000;
 // Within this many px of the bottom counts as "reading the latest" — new
@@ -91,6 +95,7 @@ export default function TicketView() {
     }
   }, [messages.length]);
 
+  if (needsInbox(error)) return <NeedsInbox what="tickets" />;
   if (error) return <LoadError error={error} what="this ticket" />;
   if (!data) return <p className="v2-state">Loading…</p>;
   const { ticket } = data;
@@ -134,6 +139,11 @@ export default function TicketView() {
     }
   }
 
+  async function copyUserId() {
+    const ok = await copyText(ticket.userId);
+    notify(ok ? 'User ID copied.' : 'Could not copy the user ID.', ok ? 'info' : 'error');
+  }
+
   async function close() {
     const ok = await confirmDialog({
       title: `Close ticket #${ticket.id}?`,
@@ -159,33 +169,37 @@ export default function TicketView() {
 
   return (
     <>
-      <p className="v2-field-hint">
-        <Link to={`/guilds/${guildId}/tickets`}>← Tickets</Link>
-      </p>
-      <h1 className="v2-section-title v2-ticket-title">
-        Ticket #{ticket.id}
-        {/* An unresolved name is the raw ID, which the meta line below already shows with a Copy button. */}
-        {ticket.user && ticket.user !== ticket.userId ? (
-          <>
-            {' '}
-            <span className="v2-ticket-user">{ticket.user}</span>
-          </>
+      <Breadcrumb
+        parents={[{ label: 'Tickets', to: `/guilds/${guildId}/tickets` }]}
+        current={`#${ticket.id}`}
+      />
+      <div className="wp4-ticket-head">
+        <h1 className="v2-section-title v2-ticket-title">
+          Ticket #{ticket.id}
+          {/* An unresolved name is the raw ID, which only the menu shows (Copy user ID). */}
+          {ticket.user && ticket.user !== ticket.userId ? (
+            <>
+              {' '}
+              <span className="v2-ticket-user">{ticket.user}</span>
+            </>
+          ) : null}
+          <Badge tone={status === 'open' ? 'warning' : 'neutral'} className="wp4-ticket-title-badge">
+            {status === 'open' ? 'Open' : 'Closed'}
+          </Badge>
+        </h1>
+        {ticket.userId ? (
+          <OverflowMenu
+            label={`More actions for ticket #${ticket.id}`}
+            items={[{ label: 'Copy user ID', onClick: copyUserId }]}
+          />
         ) : null}
-      </h1>
+      </div>
       <p className="v2-field-hint">
         <Meta
           items={[
-            ticket.userId && (
-              <span key="id">
-                User ID <code>{ticket.userId}</code> <CopyButton text={ticket.userId} what="user ID" />
-              </span>
-            ),
             <span key="o">
               opened <Time value={ticket.openedAt} relative fallback={ticket.openedAgo} />
             </span>,
-            <Badge key="s" tone={status === 'open' ? 'warning' : 'neutral'}>
-              {status === 'open' ? 'Open' : 'Closed'}
-            </Badge>,
             <a key="t" href={ticketTranscriptUrl(guildId, ticketId)} download>
               Download transcript
             </a>,
@@ -207,36 +221,39 @@ export default function TicketView() {
       </div>
 
       {status === 'open' ? (
-        <div className="v2-field">
-          <label htmlFor="ticket-reply">Reply as staff</label>
-          <textarea
-            id="ticket-reply"
-            rows={3}
-            maxLength={2000}
-            placeholder="Write a reply…"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                e.preventDefault();
-                if (canSend) send();
-              }
-            }}
-            aria-describedby="ticket-reply-hint"
-          />
-          <div className="v2-field-row v2-wrap-row v2-section-gap-sm">
-            <button type="button" className="v2-btn-primary" disabled={!canSend} onClick={send}>
-              Send reply
-            </button>
-            <button type="button" className="v2-btn-ghost" disabled={busy} onClick={close}>
-              Close ticket
-            </button>
+        // Replying and closing are inbox work: someone with View access reads only (access.jsx).
+        <AccessLock need="inbox">
+          <div className="v2-field">
+            <label htmlFor="ticket-reply">Reply as staff</label>
+            <textarea
+              id="ticket-reply"
+              rows={3}
+              maxLength={2000}
+              placeholder="Write a reply…"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  if (canSend) send();
+                }
+              }}
+              aria-describedby="ticket-reply-hint"
+            />
+            <div className="v2-field-row v2-wrap-row v2-section-gap-sm">
+              <button type="button" className="v2-btn-primary" disabled={!canSend} onClick={send}>
+                Send reply
+              </button>
+              <button type="button" className="v2-btn-ghost" disabled={busy} onClick={close}>
+                Close ticket
+              </button>
+            </div>
+            <p className="v2-field-hint" id="ticket-reply-hint">
+              Ctrl+Enter (⌘+Enter on a Mac) sends. Close ticket sends your text as the last reply, or the
+              standard closing notice if the box is empty.
+            </p>
           </div>
-          <p className="v2-field-hint" id="ticket-reply-hint">
-            Ctrl+Enter (⌘+Enter on a Mac) sends. Close ticket sends your text as the last reply, or the
-            standard closing notice if the box is empty.
-          </p>
-        </div>
+        </AccessLock>
       ) : (
         <p className="v2-field-hint">
           This ticket is closed. The member can open a new one by sending the bot a DM again.
