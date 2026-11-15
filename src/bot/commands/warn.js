@@ -136,7 +136,7 @@ export async function execute(interaction) {
         });
       }
     }
-    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral, private: true });
     return;
   }
 

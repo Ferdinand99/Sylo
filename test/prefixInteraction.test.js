@@ -247,6 +247,49 @@ test('when the DM fails, only a notice without the data is posted, and later edi
   assert.equal(log.edits.length, 0);
 });
 
+test('the mark on the reply decides: `private: true` sends plain text to the DMs, `private: false` keeps an embed in the channel', async () => {
+  const a = make();
+  const dmsA = withDms(a.ix);
+  await a.ix.reply({ content: 'the notes: spam', flags: MessageFlags.Ephemeral, private: true });
+  assert.match(JSON.stringify(dmsA.dms), /the notes/);
+  assert.ok(!channelText(a.log).includes('the notes'));
+
+  const b = make();
+  const dmsB = withDms(b.ix);
+  await b.ix.reply({ ...secret('shown'), flags: MessageFlags.Ephemeral, private: false });
+  assert.equal(dmsB.dms.length, 0);
+  assert.match(channelText(b.log), /shown/);
+  assert.ok(!channelText(b.log).includes('"private"'), 'the mark is not sent on');
+
+  // a mark on deferReply covers the editReply that follows
+  const c = make();
+  const dmsC = withDms(c.ix);
+  await c.ix.deferReply({ flags: MessageFlags.Ephemeral, private: true });
+  await c.ix.editReply('plain but private');
+  assert.match(JSON.stringify(dmsC.dms), /plain but private/);
+  assert.ok(!channelText(c.log).includes('plain but private'));
+});
+
+test('/help with the DMs closed does not throw, and stays in the channel (nothing private in it)', async () => {
+  const { execute } = await import('../src/bot/commands/help.js');
+  const { ix, log } = make();
+  ix.client = { commands: new Map() };
+  ix.message.reply = async (p) => {
+    log.replies.push(p);
+    return {
+      id: 'help1',
+      channelId: '222222222222222222',
+      edit: async () => {},
+      delete: async () => {},
+      react: async () => {},
+    };
+  };
+  withDms(ix, { fail: true });
+  await execute(ix);
+  assert.match(channelText(log), /Sylo/i);
+  assert.ok(!channelText(log).includes("couldn't send you"));
+});
+
 test('a private reply with data in a DM channel is sent where it is (nobody else is there)', async () => {
   const { message, log } = fakeMessage();
   message.guild = null;

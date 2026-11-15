@@ -89,7 +89,7 @@ export async function execute(interaction) {
   const send = (body) =>
     config.collectionPublic
       ? interaction.reply(body)
-      : interaction.reply({ ...body, flags: MessageFlags.Ephemeral });
+      : interaction.reply({ ...body, flags: MessageFlags.Ephemeral, private: true });
   if (!payload) {
     return send({
       content: own

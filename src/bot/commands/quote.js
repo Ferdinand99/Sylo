@@ -135,6 +135,7 @@ function replySaved(interaction, result) {
       content: `${result.existing ? 'That message is already' : 'Saved as'} quote **#${result.quote.number}**. It comes from a private channel, so only you see it here.`,
       embeds: [embed],
       flags: MessageFlags.Ephemeral,
+      private: true,
       allowedMentions: { parse: [] },
     });
   }
@@ -143,6 +144,7 @@ function replySaved(interaction, result) {
       content: `That message is already quote **#${result.quote.number}**.`,
       embeds: [embed],
       flags: MessageFlags.Ephemeral,
+      private: true,
       allowedMentions: { parse: [] },
     });
   }
@@ -304,6 +306,7 @@ async function show(interaction) {
       content: 'That quote comes from a private channel, so only you see it here.',
       embeds: [buildQuoteEmbed(row, key)],
       flags: MessageFlags.Ephemeral,
+      private: true,
       allowedMentions: { parse: [] },
     });
   }

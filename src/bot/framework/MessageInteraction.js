@@ -5,13 +5,15 @@
 //
 //   - reply()/editReply() send, then edit, one message; followUp() sends another.
 //     deferReply() just shows the typing indicator — the first editReply() sends.
-//   - There are no ephemeral replies in a channel. An "ephemeral" reply that carries
-//     data (an embed or a file: a member's moderation history, a private quote, the
-//     /mydata export) goes to the invoking person's DMs in a server; the channel only
-//     gets a short notice with none of it, deleted — along with the invoking message —
-//     after a short delay. When the DM cannot be sent, the notice says so and the reply
-//     is dropped: it is never posted in the channel. Any other "ephemeral" reply (a
-//     short status or error line) is sent normally, then deleted after the same delay.
+//   - There are no ephemeral replies in a channel. An "ephemeral" reply marked `private: true`
+//     (a member's moderation history, a private quote, the /mydata export: the commands that
+//     look something up say so at the call) goes to the invoking person's DMs in a server; the
+//     channel only gets a short notice with none of it, deleted — along with the invoking
+//     message — after a short delay. When the DM cannot be sent, the notice says so and the
+//     reply is dropped: it is never posted in the channel. `private: false` keeps a reply in
+//     the channel. Unmarked, an ephemeral reply with an embed or a file counts as private (a
+//     safety net for a command that forgot the mark); an unmarked line of text (a status or an
+//     error) is sent normally, then deleted after the same delay.
 //   - Buttons and menus do not exist here; `components` become reactions
 //     (platform/outgoing.js) and a reaction runs the same handler.
 //   - `guildId` and `guild.id` are in platform form ("fluxer:<id>"), because
@@ -133,6 +135,8 @@ export class MessageInteraction {
     this._privateUndeliverable = false;
     // The reply in `_sent` is a DM (not a message in the channel).
     this._sentIsDm = false;
+    // The mark given to deferReply(), for the editReply() that follows it.
+    this._private = undefined;
     // Set when a reaction in a DM (on a private reply that was sent there) is run on behalf of a server.
     this._inDm = false;
   }
@@ -161,11 +165,12 @@ export class MessageInteraction {
     }
   }
 
-  /** Is this a private reply with data in it, in a server channel? Then it must not sit in the channel. */
+  /** Is this a private reply (marked, or with data in it) in a server channel? Then it must not sit in the channel. */
   _mustBePrivate(out, ephemeral) {
-    return Boolean(
-      ephemeral && this._inServerChannel && (out.payload.embeds?.length || out.payload.files?.length)
-    );
+    if (!ephemeral || !this._inServerChannel) return false;
+    const marked = out.private ?? this._private;
+    if (marked !== undefined) return marked;
+    return Boolean(out.payload.embeds?.length || out.payload.files?.length);
   }
 
   /**
@@ -212,7 +217,9 @@ export class MessageInteraction {
   }
 
   async deferReply(opts = {}) {
-    this.ephemeral = prepareOutgoing(opts).ephemeral;
+    const out = prepareOutgoing(opts);
+    this.ephemeral = out.ephemeral;
+    this._private = out.private;
     this.deferred = true;
     this.channel?.sendTyping?.().catch(() => {});
   }

@@ -184,9 +184,11 @@ export async function execute(interaction) {
     embeds: [buildOverviewEmbed(cats, prefix)],
     components: buildComponents(cats, 'overview'),
     flags: MessageFlags.Ephemeral,
+    private: false, // nothing private in it: on Fluxer it stays in the channel, as before
   });
 
   const message = await interaction.fetchReply();
+  if (!message) return; // a private reply that could not be sent (Fluxer, DMs closed): nothing to attach a menu to
   const collector = message.createMessageComponentCollector({
     componentType: ComponentType.StringSelect,
     time: COLLECTOR_TIMEOUT_MS,
