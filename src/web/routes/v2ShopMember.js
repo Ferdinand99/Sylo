@@ -10,7 +10,7 @@
 // The only thing a signed-out visitor sees is the login page the dashboard sends everyone to.
 // Writes need the CSRF token (the global csrf middleware) and have their own rate limit; the
 // requirements of an item are checked on the server, never trusted from the page.
-import { Router } from 'express';
+import { accessRouter } from '../middleware/access.js';
 import { config as appConfig } from '../../config.js';
 import { rateLimit, clientKey } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -18,12 +18,13 @@ import { guildByKey, guildKey } from '../../platform/platformOf.js';
 import { isPlatformGuildId, splitPlatformGuildId } from '../../lib/platformId.js';
 import { identityFor } from '../lib/accountAuth.js';
 import { getGuildModule } from '../../db/modules.js';
-import { listInventory, listItems } from '../../db/economyShop.js';
+import { collectionPage, listInventory, listItems } from '../../db/economyShop.js';
+import { rarityLabel } from '../../modules/lib/collectibles.js';
 import { getTempRole } from '../../db/tempRoles.js';
 import { balanceOf, normaliseEconomyConfig } from '../../modules/economy.js';
 import { buyProblem, purchase, requirementsMet, shopRefusalText } from '../../modules/lib/shop.js';
 
-const router = Router({ mergeParams: true });
+const router = accessRouter('/shop/:guildId', { mergeParams: true });
 
 /** A purchase may call the platform (a role), so buying has its own limit: per person and server. */
 const buyLimit = rateLimit({
@@ -83,10 +84,24 @@ function plain(text, guild) {
 async function shopView({ guild, key, member, config }) {
   const roleIds = [...member.roles.cache.keys()];
   const bal = await balanceOf(key, member.id);
-  const items = (await listItems(key)).filter((i) => i.enabled);
+  // A collectible without a picture is not shown yet (it cannot be bought).
+  const items = (await listItems(key)).filter((i) => i.enabled && (i.type !== 'collectible' || i.imageId));
+  // A collectible is shown in the collection below, not in the list of what the member owns.
   const rows = (await listInventory(key, member.id, 100)).filter(
-    (r) => r.status === 'active' || r.status === 'pending'
+    (r) => (r.status === 'active' || r.status === 'pending') && r.itemType !== 'collectible'
   );
+  // The member's own collection, every kind they hold (at most the shop's items plus deleted ones).
+  const collection = (await collectionPage(key, member.id, 1, 200)).entries.map((e) => ({
+    itemId: e.itemId,
+    name: e.name,
+    emoji: e.emoji,
+    imagePath: e.imageId ? `/c/${e.imageId}.webp` : null,
+    rarity: e.rarity,
+    rarityLabel: rarityLabel(e.rarity),
+    count: e.count,
+    removed: e.removed,
+    since: e.firstAt,
+  }));
   const inventory = [];
   for (const r of rows) {
     const until =
@@ -119,6 +134,9 @@ async function shopView({ guild, key, member, config }) {
         version: i.updatedAt,
         durationHours: i.durationMs == null ? null : Math.round(i.durationMs / 3_600_000),
         left: i.stock === null ? null : Math.max(0, i.stock - i.sold),
+        imagePath: i.type === 'collectible' && i.imageId ? `/c/${i.imageId}.webp` : null,
+        rarity: i.type === 'collectible' ? i.rarity : null,
+        rarityLabel: i.type === 'collectible' ? rarityLabel(i.rarity) : null,
         requiredRoles: i.requiredRoles.map((id) => ({
           id,
           name: guild.roles.cache.get(id)?.name ?? 'a role',
@@ -133,6 +151,7 @@ async function shopView({ guild, key, member, config }) {
       };
     }),
     inventory,
+    collection,
   };
 }
 

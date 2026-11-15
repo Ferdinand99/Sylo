@@ -6,7 +6,7 @@
 // Mounted at /guilds/:guildId AFTER the admin guard in v2Api.js, so req.guild is set, the caller manages
 // this server and the state-changing calls have passed the CSRF check. Every call is staff-only: a
 // submission holds personal answers.
-import { Router } from 'express';
+import { accessRouter, checkAccessRoleGrants, seesInboxContent } from '../middleware/access.js';
 import { config as appConfig } from '../../config.js';
 import { actingUserId, currentUser } from '../middleware/auth.js';
 import { platformActionLimit } from '../middleware/rateLimit.js';
@@ -37,12 +37,14 @@ import {
   applicationsConfig,
   cancelFormSessions,
   decideSubmission,
+  decisionGrantIds,
   deleteSubmissionWithPosts,
   getSubmission,
   loadForm,
   loadForms,
   normaliseApplicationsConfig,
   normaliseForm,
+  pendingGrantIds,
   publishPanel,
   retryRoles,
   roleSetupProblem,
@@ -59,7 +61,7 @@ import {
 } from '../../modules/lib/applicationsForm.js';
 import { guildSupports } from '../../platform/platformOf.js';
 
-const router = Router({ mergeParams: true });
+const router = accessRouter('/guilds/:guildId', { mergeParams: true });
 
 const actor = (req) => (currentUser(req)?.open ? 'Dashboard' : `${currentUser(req).name} (dashboard)`);
 const PAGE = 25;
@@ -89,7 +91,8 @@ const nameOf = (guild, userId) => {
 const roleName = (guild, id) => guild.roles?.cache?.get?.(id)?.name ?? null;
 
 /** A submission as the dashboard sees it. `full` adds the answers and the history. */
-function submissionView(sub, guild, { full = false } = {}) {
+// `content: false` (View access) leaves out the decision's reason, which was sent to the applicant.
+function submissionView(sub, guild, { full = false, content = true } = {}) {
   const base = {
     id: sub.id,
     formId: sub.formId,
@@ -102,7 +105,7 @@ function submissionView(sub, guild, { full = false } = {}) {
     decidedAt: sub.decidedAt,
     decidedBy: sub.decidedBy,
     decidedByName: nameOf(guild, sub.decidedBy),
-    reason: sub.reason,
+    reason: content ? sub.reason : null,
     dmNote: sub.dmNote,
     cleared: sub.cleared,
     hasPost: Boolean(sub.messageId),
@@ -354,7 +357,14 @@ router.get(
       limit: PAGE,
       offset: (page - 1) * PAGE,
     });
-    res.json({ submissions: rows.map((s) => submissionView(s, req.guild)), total, page, pageSize: PAGE });
+    const content = seesInboxContent(req);
+    res.json({
+      submissions: rows.map((s) => submissionView(s, req.guild, { content })),
+      contentHidden: !content,
+      total,
+      page,
+      pageSize: PAGE,
+    });
   })
 );
 
@@ -374,12 +384,26 @@ router.post(
     const action = req.body?.action === 'accept' ? 'accept' : req.body?.action === 'deny' ? 'deny' : null;
     if (!action) return res.status(400).json({ error: 'Choose accept or deny.' });
     const id = Number(req.params.id);
+    const pending = await getSubmission(req.guild.id, id);
+    if (!pending) return res.status(404).json({ error: `There is no application #${id} in this server.` });
+    // Nobody decides on their own application, at any level.
+    const by = actingUserId(req, req.guild.id, null);
+    if (by && pending.userId === by) {
+      return res.status(403).json({ error: "You can't decide on your own application." });
+    }
+    // Before the decision is claimed: the person deciding must be able to hand out every role it gives,
+    // as when saving the form (roleGrants.js), and no role that gives more dashboard access than their own.
+    if (pending.status === 'pending') {
+      const grants = decisionGrantIds(await loadForm(req.guild.id, pending.formId), pending, action);
+      await checkRoleGrants(grants);
+      await checkAccessRoleGrants(req, grants);
+    }
     const result = await decideSubmission({
       guild: req.guild,
       id,
       action,
       reason: req.body?.reason,
-      by: actingUserId(req, req.guild.id, null),
+      by,
       actor: { dashboard: true },
     });
     if (!result.ok) return res.status(result.code === 'missing' ? 404 : 409).json({ error: result.error });
@@ -403,6 +427,15 @@ router.post(
   platformActionLimit,
   asyncHandler(async (req, res) => {
     const id = Number(req.params.id);
+    const pending = await getSubmission(req.guild.id, id);
+    if (!pending) return res.status(404).json({ error: 'No such application.' });
+    // The same rule as deciding: only roles this person could hand out themselves.
+    const by = actingUserId(req, req.guild.id, null);
+    if (by && pending.userId === by) {
+      return res.status(403).json({ error: "You can't change the roles of your own application." });
+    }
+    await checkRoleGrants(pendingGrantIds(pending));
+    await checkAccessRoleGrants(req, pendingGrantIds(pending));
     const result = await retryRoles({ guild: req.guild, id });
     if (!result.ok) return res.status(404).json({ error: result.error });
     const sub = await getSubmission(req.guild.id, id);
@@ -436,7 +469,8 @@ router.get(
     return res.json({
       userId: req.params.userId,
       userName: nameOf(req.guild, req.params.userId),
-      submissions: rows.map((s) => submissionView(s, req.guild)),
+      submissions: rows.map((s) => submissionView(s, req.guild, { content: seesInboxContent(req) })),
+      contentHidden: !seesInboxContent(req),
     });
   })
 );

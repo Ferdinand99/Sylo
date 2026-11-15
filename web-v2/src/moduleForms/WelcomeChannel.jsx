@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import PickerHealth from '../components/PickerHealth.jsx';
 import { useParams } from 'react-router-dom';
 import {
   getWelcomeChannel,
@@ -9,11 +10,14 @@ import {
 } from '../api.js';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
+import EmptyList from '../components/EmptyList.jsx';
 import PlaceholderHint from '../components/PlaceholderHint.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { isDirty } from '../components/formEqual.js';
 import { useUnsavedChangesGuard } from '../components/useUnsavedChangesGuard.js';
 import EmbedCard, { EmbedToolbar, pickImage, newKey } from '../components/EmbedCard.jsx';
+import TemplatePicker, { embedTemplates } from '../components/TemplatePicker.jsx';
+import EmbedJsonTools from '../components/EmbedJsonTools.jsx';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { tokensFor } from '../placeholders.js';
 
@@ -195,10 +199,21 @@ export default function WelcomeChannel() {
         action === 'publish'
           ? await publishWelcomeChannel(guildId, body)
           : await saveWelcomeChannel(guildId, body);
-      setChannelId(config.channelId);
+      // A posted message stays in its channel until it is published again. Keep the picked
+      // channel in the picker (the page stays unsaved on it), so Publish moves the post.
+      const keptChannel =
+        action !== 'publish' && Boolean(config.messageId) && channelId && config.channelId !== channelId;
+      if (!keptChannel) setChannelId(config.channelId);
       setMessageId(config.messageId);
       setSavedSnapshot({ channelId: config.channelId, form: sentForm });
-      notify(action === 'publish' ? 'Published to the channel.' : 'Draft saved.', 'info');
+      notify(
+        action === 'publish'
+          ? 'Published to the channel.'
+          : keptChannel
+            ? 'Draft saved. The posted message stays in its channel until you publish.'
+            : 'Draft saved.',
+        'info'
+      );
     } catch (err) {
       notify(err.message);
     } finally {
@@ -228,10 +243,11 @@ export default function WelcomeChannel() {
   async function onCreateChannel() {
     setBusy(true);
     try {
-      const { config, channels: chans } = await createWelcomeReadOnlyChannel(guildId);
-      setChannelId(config.channelId);
+      const { config, createdChannelId, channels: chans } = await createWelcomeReadOnlyChannel(guildId);
+      setChannelId(createdChannelId ?? config.channelId);
       setChannels(chans);
-      // The server stores the new channel as this message's channel.
+      // The server stores the new channel as this message's channel, unless the message is
+      // posted already: it stays where it is until Publish moves it.
       setSavedSnapshot((s) => (s ? { ...s, channelId: config.channelId } : s));
       notify('Created #welcome.', 'info');
     } catch (err) {
@@ -260,11 +276,21 @@ export default function WelcomeChannel() {
               </option>
             ))}
           </select>
+          <PickerHealth kind="channel" value={channelId} />
         </div>
         <button type="button" className="v2-btn-ghost" disabled={busy} onClick={onCreateChannel}>
           Create read-only #welcome
         </button>
       </div>
+
+      <TemplatePicker
+        templates={embedTemplates({ tokens: true })}
+        what="message"
+        hasContent={form.content.trim() !== '' || form.items.length > 0}
+        onPick={(t) =>
+          setForm({ content: t.message.content, items: t.message.embeds.slice(0, maxItems).map(normItem) })
+        }
+      />
 
       <div className="v2-field">
         <label htmlFor="wc-content">
@@ -288,7 +314,15 @@ export default function WelcomeChannel() {
 
       <div className="v2-wc-stage">
         {form.items.length === 0 ? (
-          <p className="v2-note">No elements yet — pick one from "Add element" below.</p>
+          <EmptyList
+            start={
+              d.presets.length && !full
+                ? { label: 'Add your first element', onClick: () => addPreset(d.presets[0].id) }
+                : null
+            }
+          >
+            Build the message from embeds, cards with a title, text and fields, and banners, large pictures.
+          </EmptyList>
         ) : (
           form.items.map((item, i) => {
             const toolbar = {
@@ -337,6 +371,14 @@ export default function WelcomeChannel() {
           ))}
         </div>
       </div>
+
+      <EmbedJsonTools
+        getSpec={() => formToSpec(form)}
+        onImport={(spec) => setForm(specToForm(spec))}
+        hasContent={form.content.trim() !== '' || form.items.length > 0}
+        fileName="welcome-channel"
+        links={false}
+      />
 
       <p className="v2-field-hint v2-section-gap">
         <strong>Save draft</strong> keeps your work here without posting anything.{' '}

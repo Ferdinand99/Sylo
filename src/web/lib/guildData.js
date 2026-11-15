@@ -9,6 +9,7 @@ import { forgetIntroductionCard } from '../../modules/introductions.js';
 import { forgetApplicationPosts } from '../../modules/applications.js';
 import { endShopRolesForForget } from '../../modules/lib/shop.js';
 import { recordAudit } from '../../db/audit.js';
+import { legacyDeciderNames } from './legacyDeciderNames.js';
 
 /** What a member-data deletion leaves alone; shown in the DM and on the dashboard pages. */
 export const MEMBER_DATA_UNAFFECTED =
@@ -53,10 +54,13 @@ export async function forgetMember(guild, userId, { reason = '', actor }) {
   // Roles the shop gave them come off before the records that explain them are deleted.
   const shopRoles = await endShopRolesForForget(guild, userId);
   const apps = await forgetApplicationPosts(guild, userId);
+  // For appeals they decided before Sylo stored who decided by id (those only have a name).
+  const names = await legacyDeciderNames(guild.id, userId);
   const r = await forgetUser(guild.id, userId, {
     keepIntroduction: !card.ok,
     keepApplicationIds: apps.failedIds,
     keepTempRoles: shopRoles.failed,
+    names,
   });
 
   const dm = new EmbedBuilder()
@@ -103,6 +107,7 @@ export async function forgetMember(guild, userId, { reason = '', actor }) {
         inline: true,
       },
       { name: 'Invite records', value: String(r.invites), inline: true },
+      { name: 'Settings history entries', value: String(r.configHistory), inline: true },
       { name: 'Not affected', value: MEMBER_DATA_UNAFFECTED }
     )
     .setTimestamp(Date.now());

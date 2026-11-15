@@ -6,6 +6,8 @@ import Badge from './Badge.jsx';
 import Meta from './Meta.jsx';
 import Time from './Time.jsx';
 import LoadError from './LoadError.jsx';
+import MemberPicker from './MemberPicker.jsx';
+import { NeedsInbox, useAccess } from '../access.jsx';
 
 export const STATUS_OPTIONS = ['pending', 'accepted', 'denied', 'withdrawn'];
 export const statusTone = (status) =>
@@ -51,11 +53,12 @@ export default function ApplicationsSubmissions({ guildId, forms }) {
   const [page, setPage] = useState(1);
   const [exportForm, setExportForm] = useState('');
   const [exportStatus, setExportStatus] = useState('');
+  // The answers (and their export) are inbox content: View sees the list only (access.jsx).
+  const canRead = useAccess().can('inbox');
   const { data, error } = useApiData(
     () => getApplicationSubmissions(guildId, { formId, status, userId, page }),
     [guildId, formId, status, userId, page]
   );
-  const validUser = userId === '' || /^\d{17,20}$/.test(userId);
   const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
   const exportTarget = exportForm || forms[0]?.id;
 
@@ -99,19 +102,15 @@ export default function ApplicationsSubmissions({ guildId, forms }) {
           </select>
         </div>
         <div className="v2-field">
-          <label htmlFor="as-user">Member id</label>
-          <input
+          <label htmlFor="as-user">Member</label>
+          <MemberPicker
             id="as-user"
-            type="text"
-            inputMode="numeric"
-            placeholder="All members"
             value={userId}
-            onChange={(e) => {
-              setUserId(e.target.value.trim());
+            onChange={(id) => {
+              setUserId(id);
               setPage(1);
             }}
           />
-          {!validUser ? <p className="v2-field-hint">A member id is 17 to 20 digits.</p> : null}
         </div>
       </div>
 
@@ -119,6 +118,7 @@ export default function ApplicationsSubmissions({ guildId, forms }) {
       {!error && !data ? <p className="v2-state">Loading…</p> : null}
       {data ? (
         <>
+          {data.contentHidden ? <NeedsInbox what="applications" list /> : null}
           {data.submissions.length === 0 ? <p className="v2-note">No applications match.</p> : null}
           <div className="v2-list">
             {data.submissions.map((s) => (
@@ -151,14 +151,14 @@ export default function ApplicationsSubmissions({ guildId, forms }) {
         </>
       ) : null}
 
-      {forms.length > 0 ? (
+      {forms.length > 0 && canRead ? (
         <div className="v2-group v2-section-gap">
           <h2 className="v2-group-title">Export answers</h2>
           <p className="v2-field-hint">
             Downloads the answers of one form as CSV or JSON. It is for staff only and is written to the audit
             log.
           </p>
-          <div className="v2-field-row">
+          <form className="v2-field-row" onSubmit={(e) => e.preventDefault()}>
             <select
               aria-label="Form to export"
               value={exportForm || forms[0].id}
@@ -202,7 +202,7 @@ export default function ApplicationsSubmissions({ guildId, forms }) {
             >
               Download JSON
             </a>
-          </div>
+          </form>
         </div>
       ) : null}
     </div>

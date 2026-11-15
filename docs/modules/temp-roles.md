@@ -9,6 +9,9 @@ to the mod log, and the member can get a DM about it (off by default).
 temporary role (member search, role list, duration), and the list of active
 temporary roles with a search, a role filter and a Remove button on every row.
 
+The form's member search finds members by name or by a pasted ID. Bots are left out,
+also when their ID is pasted, so a bot cannot be given a temporary role from the dashboard.
+
 ## Needs
 
 - **Manage Roles** for Sylo, and Sylo's own role must sit **above** the roles it

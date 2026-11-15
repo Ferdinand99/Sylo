@@ -293,3 +293,17 @@ test('voice state changes from the tracker reach the modules keyed by the fluxer
     { event: 'voiceStateUpdate', key: KEY, payload: { old: oldState, new: newState } },
   ]);
 });
+
+test('a lifted ban ends the temporary-ban timer even when no module handles the event', async () => {
+  const { scheduleTempBan, getTempBan } = await import('../src/db/tempBans.js');
+  await scheduleTempBan({
+    guildId: KEY,
+    userId: 'u3',
+    modId: 'm',
+    reason: 'r',
+    unbanAt: Date.now() + 60_000,
+  });
+  const { fire } = setup();
+  await fire('guildBanRemove', { guildId: RAW, user: { id: 'u3' } });
+  assert.equal(await getTempBan(KEY, 'u3'), null);
+});

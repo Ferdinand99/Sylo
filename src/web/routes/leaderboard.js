@@ -5,6 +5,7 @@
 import { guildByKey } from '../../platform/platformOf.js';
 import { isPlatformGuildId } from '../../lib/platformId.js';
 import { Router } from 'express';
+import { config as appConfig } from '../../config.js';
 import { getGuildModule } from '../../db/modules.js';
 import {
   topMembers,
@@ -79,7 +80,9 @@ export function notFound(res) {
     title: 'Leaderboard unavailable',
     heading: 'No leaderboard here',
     message: NOT_FOUND,
-    backHref: null,
+    // This instance's own dashboard (the address it was set up with), never the hosted product's site.
+    backHref: appConfig.dashboardUrl ? `${appConfig.dashboardUrl}/v2/` : '/v2/',
+    backLabel: 'Go to the dashboard',
     publicPage: true,
   });
 }

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { deleteAccount, disconnectAccount, getAccount, revokeDevice } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
+import { clearAllDrafts } from '../applicationAnswers.js';
 import LoadError from '../components/LoadError.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { plural } from '../components/Meta.jsx';
@@ -58,6 +59,8 @@ export default function Account() {
     setBusy('delete');
     try {
       await deleteAccount();
+      // Unfinished application drafts stay in the browser otherwise: not for the next person to use it.
+      clearAllDrafts();
       window.location.assign('/');
     } catch (err) {
       notify(err.message);

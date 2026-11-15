@@ -3,12 +3,17 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { getComposedMessage, saveComposedMessage } from '../api.js';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
+import Breadcrumb from '../components/Breadcrumb.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { isDirty } from '../components/formEqual.js';
 import { useUnsavedChangesGuard, SKIP_UNSAVED_GUARD } from '../components/useUnsavedChangesGuard.js';
 import AppTag from '../components/AppTag.jsx';
 import AutoGrowTextarea from '../components/AutoGrowTextarea.jsx';
+import MentionTextarea from '../components/MentionTextarea.jsx';
 import EmbedCard, { newKey } from '../components/EmbedCard.jsx';
+import TemplatePicker, { embedTemplates } from '../components/TemplatePicker.jsx';
+import EmbedJsonTools from '../components/EmbedJsonTools.jsx';
+import { AccessLock } from '../access.jsx';
 
 const HEX_RE = /^#[0-9a-f]{6}$/i;
 const MAX_EMBEDS = 10;
@@ -94,6 +99,7 @@ export default function MessageBuilder() {
   const [channelId, setChannelId] = useState('');
   const [messageId, setMessageId] = useState(null);
   const [channels, setChannels] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [busy, setBusy] = useState(false);
   // What the server last had — dirty while name / channel / message differ.
   const [savedSnapshot, setSavedSnapshot] = useState(null);
@@ -112,6 +118,7 @@ export default function MessageBuilder() {
         setForm(loaded);
         setSavedSnapshot({ name: d.rec.name, channelId: d.rec.channelId, form: loaded });
         setChannels(d.channels);
+        setRoles(d.roles ?? []);
         setState({ loading: false, error: null });
       })
       .catch((error) => !cancelled && setState({ loading: false, error }));
@@ -156,24 +163,46 @@ export default function MessageBuilder() {
     setForm((f) => ({ ...f, links: f.links.map((l, idx) => (idx === i ? { ...l, ...patch } : l)) }));
   const removeLink = (i) => setForm((f) => ({ ...f, links: f.links.filter((_, idx) => idx !== i) }));
 
+  // A template replaces the text and the embeds (never the role rows); this page has no placeholders, so the
+  // templates are written out in words.
+  const hasMessage = form.content.trim() !== '' || form.embeds.length > 0;
+  const applyTemplate = (t) => {
+    setForm((f) => ({ ...f, content: t.message.content, embeds: t.message.embeds.map(normEmbed) }));
+    setName((n) => n.trim() || t.name);
+  };
+  // Imported JSON fills the page the same way; the role rows only Sylo can answer stay as they are.
+  const importSpec = (spec) => setForm((f) => ({ ...specToForm(spec), keepRows: f.keepRows }));
+
   async function submit(action) {
     setBusy(true);
     const sent = { name, form };
     try {
       const body = { name, channelId, action, spec: formToSpec(form) };
-      const { rec, status, error } = await saveComposedMessage(guildId, id, body);
+      const { rec, status, error, rolesSilent } = await saveComposedMessage(guildId, id, body);
       if (error) {
         notify(error);
       } else {
+        if (rolesSilent?.length) {
+          notify(
+            `${rolesSilent.map((r) => `@${r}`).join(', ')} ${rolesSilent.length === 1 ? 'was' : 'were'} shown but not pinged: only the server owner, someone with Manage Server or Mention Everyone, or a mentionable role can be pinged through Sylo.`,
+            'info'
+          );
+        }
+        // A posted message stays in its channel until it is published again. Keep the picked
+        // channel in the picker (the page stays unsaved on it), so "Update published" moves the post.
+        const keptChannel =
+          status === 'saved' && Boolean(rec.messageId) && channelId && rec.channelId !== channelId;
         notify(
-          {
-            saved: 'Draft saved.',
-            sent: 'Published to the channel.',
-            updated: 'Published message updated.',
-          }[status],
+          keptChannel
+            ? 'Draft saved. The posted message stays in its channel until you click "Update published".'
+            : {
+                saved: 'Draft saved.',
+                sent: 'Published to the channel.',
+                updated: 'Published message updated.',
+              }[status],
           'info'
         );
-        setChannelId(rec.channelId);
+        if (!keptChannel) setChannelId(rec.channelId);
         setMessageId(rec.messageId);
         setSavedSnapshot({ ...sent, channelId: rec.channelId });
         if (isNew) {
@@ -206,135 +235,167 @@ export default function MessageBuilder() {
 
   return (
     <form onSubmit={(e) => e.preventDefault()}>
-      <div className="v2-page-head">
-        <input
-          type="text"
-          className="v2-mb-name"
-          maxLength={100}
-          placeholder="Untitled embed"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
+      <AccessLock need="edit" note>
+        <Breadcrumb
+          parents={[{ label: 'Embed messages', to: `/guilds/${guildId}/messages` }]}
+          current={name.trim() || (messageId ? 'Untitled embed' : 'New embed message')}
         />
-        <div className="v2-field-row v2-composer-actions">
-          <span className="v2-composer-status" aria-live="polite">
-            {dirty ? 'Unsaved changes' : ''}
-          </span>
-          <button type="button" className="v2-btn-ghost" onClick={onDiscard}>
-            {dirty ? 'Discard' : 'Back'}
-          </button>
-          <button type="button" className="v2-btn-ghost" disabled={busy} onClick={() => submit('save')}>
-            Save draft
-          </button>
-          <button type="button" className="v2-btn-primary" disabled={busy} onClick={() => submit('publish')}>
-            {messageId ? 'Update published' : 'Publish'}
-          </button>
-        </div>
-      </div>
-
-      <div className="v2-field v2-section-gap">
-        <label htmlFor="channelId">Channel</label>
-        <select id="channelId" value={channelId} onChange={(e) => setChannelId(e.target.value)}>
-          <option value="">— select a channel —</option>
-          {channels.map((c) => (
-            <option key={c.id} value={c.id}>
-              #{c.name}
-            </option>
-          ))}
-        </select>
-        {messageId ? (
-          <p className="v2-field-hint">
-            Published — "Update published" edits the posted message; changing the channel posts a fresh one.
-          </p>
-        ) : null}
-      </div>
-
-      <h2 className="v2-group-title v2-section-gap">Message</h2>
-      <p className="v2-field-hint">
-        This is a live preview — click straight into any part of it to edit. To ping a role, type it into the
-        message text as {'<@&ROLE_ID>'}; mentions placed inside an embed don't notify anyone.
-      </p>
-
-      <div className="v2-msg-preview">
-        <div className="v2-msg-head">
-          <div className="v2-msg-avatar">S</div>
-          <div className="v2-msg-head-text">
-            <span className="v2-msg-botname">Sylo</span>
-            <AppTag />
-            <span className="v2-msg-time">Today</span>
+        <div className="v2-page-head">
+          <input
+            type="text"
+            className="v2-mb-name"
+            maxLength={100}
+            placeholder="Untitled embed"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <div className="v2-field-row v2-composer-actions">
+            <span className="v2-composer-status" aria-live="polite">
+              {dirty ? 'Unsaved changes' : ''}
+            </span>
+            {dirty ? (
+              <button type="button" className="v2-btn-ghost" onClick={onDiscard}>
+                Discard
+              </button>
+            ) : null}
+            <button type="button" className="v2-btn-ghost" disabled={busy} onClick={() => submit('save')}>
+              Save draft
+            </button>
+            <button
+              type="button"
+              className="v2-btn-primary"
+              disabled={busy}
+              onClick={() => submit('publish')}
+            >
+              {messageId ? 'Update published' : 'Publish'}
+            </button>
           </div>
         </div>
-        <AutoGrowTextarea
-          className="v2-msg-content"
-          aria-label="Message text"
-          maxLength={2000}
-          placeholder="Write your message here!"
-          value={form.content}
-          onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
+
+        <div className="v2-field v2-section-gap">
+          <label htmlFor="channelId">Channel</label>
+          <select id="channelId" value={channelId} onChange={(e) => setChannelId(e.target.value)}>
+            <option value="">— select a channel —</option>
+            {channels.map((c) => (
+              <option key={c.id} value={c.id}>
+                #{c.name}
+              </option>
+            ))}
+          </select>
+          {messageId ? (
+            <p className="v2-field-hint">
+              Published — "Update published" edits the posted message. To move it, pick another channel and
+              click "Update published": the old post is deleted and a fresh one is posted there.
+            </p>
+          ) : null}
+        </div>
+
+        <h2 className="v2-group-title v2-section-gap">Message</h2>
+        <p className="v2-field-hint">
+          This is a live preview — click straight into any part of it to edit. To ping a role, type @ in the
+          message text and pick it. Only the owner, someone with Manage Server or Mention Everyone, or a role
+          that is mentionable, is pinged through Sylo; mentions placed inside an embed don't notify anyone.
+        </p>
+
+        <TemplatePicker
+          templates={embedTemplates({ tokens: false })}
+          what="message"
+          hasContent={hasMessage}
+          onPick={applyTemplate}
         />
 
-        {form.embeds.map((embed, i) => (
-          <EmbedCard
-            key={embed.key}
-            embed={embed}
-            onChange={(next) => updateEmbed(i, next)}
-            toolbar={{
-              index: i,
-              count: form.embeds.length,
-              onMove: (d) => moveEmbed(i, d),
-              onDuplicate: () => duplicateEmbed(i),
-              onRemove: () => removeEmbed(i),
-            }}
+        <div className="v2-msg-preview">
+          <div className="v2-msg-head">
+            <div className="v2-msg-avatar">S</div>
+            <div className="v2-msg-head-text">
+              <span className="v2-msg-botname">Sylo</span>
+              <AppTag />
+              <span className="v2-msg-time">Today</span>
+            </div>
+          </div>
+          <MentionTextarea
+            as={AutoGrowTextarea}
+            channels={channels}
+            roles={roles}
+            className="v2-msg-content"
+            aria-label="Message text"
+            maxLength={2000}
+            placeholder="Write your message here!"
+            value={form.content}
+            onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
           />
-        ))}
 
-        <button
-          type="button"
-          className="v2-embed-add"
-          disabled={form.embeds.length >= MAX_EMBEDS}
-          onClick={addEmbed}
-        >
-          + Add embed
-        </button>
-      </div>
+          {form.embeds.map((embed, i) => (
+            <EmbedCard
+              key={embed.key}
+              embed={embed}
+              onChange={(next) => updateEmbed(i, next)}
+              toolbar={{
+                index: i,
+                count: form.embeds.length,
+                onMove: (d) => moveEmbed(i, d),
+                onDuplicate: () => duplicateEmbed(i),
+                onRemove: () => removeEmbed(i),
+              }}
+            />
+          ))}
 
-      <h2 className="v2-group-title v2-section-gap">
-        Link buttons <span className="v2-field-hint">— optional, up to {MAX_LINKS}</span>
-      </h2>
-      {form.links.map((link, i) => (
-        <div className="v2-field-row v2-section-gap-sm" key={i}>
-          <input
-            type="text"
-            placeholder="Label"
-            maxLength={80}
-            value={link.label}
-            onChange={(e) => updateLink(i, { label: e.target.value })}
-          />
-          <input
-            type="text"
-            placeholder="emoji"
-            maxLength={64}
-            value={link.emoji}
-            onChange={(e) => updateLink(i, { emoji: e.target.value })}
-          />
-          <input
-            type="text"
-            placeholder="https://…"
-            value={link.url}
-            onChange={(e) => updateLink(i, { url: e.target.value })}
-          />
-          <button type="button" className="v2-btn-ghost" onClick={() => removeLink(i)}>
-            ✕
+          <button
+            type="button"
+            className="v2-embed-add"
+            disabled={form.embeds.length >= MAX_EMBEDS}
+            onClick={addEmbed}
+          >
+            + Add embed
           </button>
         </div>
-      ))}
-      <button
-        type="button"
-        className="v2-btn-ghost v2-section-gap-sm"
-        disabled={form.links.length >= MAX_LINKS}
-        onClick={addLink}
-      >
-        + Add link button
-      </button>
+
+        <h2 className="v2-group-title v2-section-gap">
+          Link buttons <span className="v2-field-hint">— optional, up to {MAX_LINKS}</span>
+        </h2>
+        {form.links.map((link, i) => (
+          <div className="v2-field-row v2-section-gap-sm" key={i}>
+            <input
+              type="text"
+              placeholder="Label"
+              maxLength={80}
+              value={link.label}
+              onChange={(e) => updateLink(i, { label: e.target.value })}
+            />
+            <input
+              type="text"
+              placeholder="emoji"
+              maxLength={64}
+              value={link.emoji}
+              onChange={(e) => updateLink(i, { emoji: e.target.value })}
+            />
+            <input
+              type="text"
+              placeholder="https://…"
+              value={link.url}
+              onChange={(e) => updateLink(i, { url: e.target.value })}
+            />
+            <button type="button" className="v2-btn-ghost" onClick={() => removeLink(i)}>
+              ✕
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          className="v2-btn-ghost v2-section-gap-sm"
+          disabled={form.links.length >= MAX_LINKS}
+          onClick={addLink}
+        >
+          + Add link button
+        </button>
+
+        <EmbedJsonTools
+          getSpec={() => formToSpec(form)}
+          onImport={importSpec}
+          hasContent={hasMessage}
+          fileName={name.trim() || 'embed-message'}
+        />
+      </AccessLock>
     </form>
   );
 }

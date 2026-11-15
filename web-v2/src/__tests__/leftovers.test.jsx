@@ -1,7 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Appeals, { moveQuestion, removeQuestion } from '../moduleForms/Appeals.jsx';
-import AutoReact, { appendEmoji } from '../moduleForms/AutoReact.jsx';
+import AutoReact from '../moduleForms/AutoReact.jsx';
+import { appendEmoji } from '../emojiText.js';
 import ServerStats from '../moduleForms/ServerStats.jsx';
 import EmbedEditor from '../components/EmbedEditor.jsx';
 import { resetModuleLimits } from '../components/useModuleLimits.js';

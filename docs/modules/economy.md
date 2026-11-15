@@ -102,7 +102,7 @@ reset in progress, try again shortly." at once.
 Staff build the shop on the **Shop** tab; nothing needs a Discord command. An item has a name (up to 60
 characters), a description (up to 300), an optional emoji, a **price** (1 or more), a **stock** (unlimited, or a
 number), optional **required roles** (a member needs any one of them), an optional **limit per member**, a
-paused/for-sale switch and a place in the list (move it up or down). There are three kinds:
+paused/for-sale switch and a place in the list (move it up or down). There are four kinds:
 
 - **Temporary role** — a role for a time from 1 hour to 365 days. The time is kept like any other
   temporary role (see [Temporary roles](temp-roles.md)): Sylo takes the role back when it is up and writes the
@@ -111,6 +111,8 @@ paused/for-sale switch and a place in the list (move it up or down). There are t
 - **Permanent role** — the role is handed out when it is bought. A member who already has the role cannot buy it.
 - **Custom item** — goes into the member's inventory, and Sylo posts "X bought Y" in the shop channel (a setting)
   so staff can do what was promised, then mark it **fulfilled** on the member's Inventory panel.
+- **Collectible** — a picture (and an optional rarity) that members buy, own and show. It gives no role and needs
+  nobody to fulfil it. See [Collectibles](#collectibles).
 
 Before any money moves Sylo checks that the item is for sale, in stock, that the member has a required role, and
 that Sylo itself can hand out the role (Manage Roles, and the role is below Sylo's highest role). If not, the
@@ -167,6 +169,69 @@ anyone who is not signed in is sent to the login, and anyone else who may not us
 server, the module or the web shop is off, no such server) gets the same "Nothing here" page. Fluxer servers work
 the same way for people who sign in with the Fluxer login, and on Fluxer a Discord login is never looked up.
 
+### Collectibles
+
+A **collectible** is a shop item with a **picture** and an optional **rarity**: Common (grey), Uncommon (green),
+Rare (blue), Epic (purple) or Legendary (gold). The tiers are fixed; staff pick one or none. A collectible gives no
+role and is the member's the moment it is bought. Everything else is the shop you already know: name, description,
+emoji, price, required roles, a **stock** (which makes it a **limited edition**: the last copy sells out) and a
+**limit per member**. The purchase is the same one as for every item: the member pays the price and sees the
+version they confirmed (a changed price, rarity or picture means "This item changed, check it and try again" and
+nothing is charged), it writes one ledger row, and staff can refund it, revoke it, or give it for free from the
+member's Inventory panel. A collectible that has no picture yet cannot be bought ("not ready yet").
+
+**The picture.** Staff upload it on the **Shop** tab, in the item editor (the item is saved first, then the
+picture goes up). The file can be a PNG, JPEG or WebP of at most **2 MB** and at most 16 megapixels. Sylo decides what a
+file is from its first bytes, never from its name or the type the browser sent, and refuses everything else, SVG
+included. The picture is then decoded and **saved again as a new WebP of at most 512 by 512 pixels** (quality 85), with
+its proportions kept and never enlarged. That removes metadata and anything that was not a real picture, and keeps
+every picture small (a flat badge is a few kilobytes). An animated WebP becomes its first frame (animated pictures are
+not supported). The upload needs a dashboard login with the rights to manage the server, the usual CSRF check, and
+has its own rate limit; at most two pictures are decoded at a time, and an upload that has to wait too long is told
+the server is busy and can be tried again. A server can store at most **200 pictures and 25 MB** of them (every stored
+picture counts, also those that only members' copies still hold). An upload over that is refused with a message.
+
+The picture is stored **in the database** (the table `collectible_images`), not in a folder, so it is part of every
+backup: the Health page backup, the scheduled ones and the off-site copy, and a restore brings back exactly the
+pictures that the restored items and copies refer to. It is served at `<dashboard address>/c/<id>.webp` **without a
+login**, because Discord and Fluxer fetch it themselves to show an embed (the id is 128 random bits; the address must
+be exactly that, anything else answers a plain "Not found", and the answer carries no cookie). The id cannot be
+guessed, but anyone who has the address can open that one picture. The address needs a public `DASHBOARD_URL`;
+without one, messages go out without the picture.
+
+**What a picture belongs to.** Members' copies keep the picture they were bought with. Replacing the picture of an
+item gives it to the item **and to every copy** (so the old announcements show the old picture only until then),
+and the old picture is deleted. **Removing the picture** only takes it off the item: it is not shown in the shop and
+cannot be bought until it has a picture again, while the members who own it keep their copies with the picture they
+have. **Deleting an item** keeps the copies as "item removed", with their picture and rarity. Changing a
+collectible into another kind takes its picture off the item the same way. A picture is deleted in the same step that
+drops its last reference: the last copy that ends (revoked, refunded or erased with `/forget`), or the item when
+nobody owns it. When a server removes Sylo (or its data is purged), all its pictures are deleted.
+
+**Size of backups.** The pictures add to the size of the database and of every backup, at most 25 MB a server; a
+shop of flat badges adds a few hundred kilobytes. The off-site copy to a Discord webhook stops at about 8 MiB, so an
+instance with many large pictures should use the WebDAV target (`BACKUP_WEBDAV_URL`, see [Self-hosting](../self-hosting.md)).
+
+**Announce purchases.** An item has a switch **Announce purchases**, and the settings have a **channel for
+collectible announcements**. With both set, a purchase posts "🎉 @buyer bought 🎖️ **Founder badge** (Epic)!" in
+that channel, with the picture as an embed. Only the buyer is mentioned, and the text of an item cannot ping or
+format anything. A free gift is not announced, and neither is an item without the switch.
+
+**Showing a collection.** `/collection [user]` lists the collectibles a member owns, one embed each with the picture as a
+thumbnail, ten to a page (buttons on Discord, the ⬅️ and ➡️ reactions on Fluxer). A member who owns several copies
+sees "× 2". The setting **Members can show their collection** is **off by default**. Off: `/collection` shows only
+your own collection, and only you see it (on Fluxer, which has no private replies, it is sent to your DMs and paged
+there with the same reactions; with your DMs closed you are told so and nothing is shown), and asking for someone
+else's is refused. On: `/collection` is public and `/collection @member` shows that member's collection. The page
+buttons are checked on every press, so a collection that was shown while the setting was on cannot be paged by others
+once it is off. `/inventory` works as before and lists collectibles too (someone else's collectibles only while the
+setting is on), and the web shop has a **Collection** section with the signed-in member's own collectibles. A
+collectible that has no picture yet is hidden from `/shop`, `/buy` and the web shop (the item list in the dashboard
+says "needs a picture"). Staff see everything in the dashboard.
+
+**Not in this version** (later): gifting or trading collectibles between members, showing them on the
+introduction card, animated pictures, and sets or achievements.
+
 ## Giveaways
 
 With the Economy module on, `/giveaway start` takes two more options (see [Giveaways](giveaways.md)): an
@@ -191,7 +256,8 @@ and total only, never the cash. Turn it off in the settings and the page disappe
 
 ## Your members' data
 
-`/mydata` lists a member's economy account, ledger rows and shop inventory, and `/forget` deletes them
+`/mydata` lists a member's economy account, ledger rows and shop inventory (collectibles are inventory rows, so they are
+included), and `/forget` deletes them
 (first it takes off the roles the shop gave the member, temporary and permanent, because the records that
 explain them are deleted; a role Sylo cannot take off is reported, and for a temporary one its record stays so
 the expiry still removes it)

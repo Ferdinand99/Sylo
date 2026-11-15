@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useCmd } from '../platformContext.jsx';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import {
   getModuleConfig,
   publishApplicationsPanel,
@@ -11,19 +11,25 @@ import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
 import ApplicationsFormEditor, { newDraft, toDraft } from '../components/ApplicationsFormEditor.jsx';
 import ApplicationsSubmissions from '../components/ApplicationsSubmissions.jsx';
+import EmptyList from '../components/EmptyList.jsx';
 import Badge from '../components/Badge.jsx';
 import HowItWorks from '../components/HowItWorks.jsx';
 import LoadError from '../components/LoadError.jsx';
 import Meta from '../components/Meta.jsx';
 import TabRow from '../components/TabRow.jsx';
+import { AccessLock } from '../access.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 
 const TABS = [
   ['forms', 'Forms'],
-  ['submissions', 'Applications'],
+  ['submissions', 'Submissions'],
   ['panel', 'Panel and settings'],
 ];
+
+/** The label of a tab; the queue says how many applications wait for a decision. */
+const tabLabel = (key, label, pending) =>
+  key === 'submissions' && pending > 0 ? `${label} · ${pending} waiting` : label;
 
 const MODE_TEXT = { both: 'DM or web', discord: 'DM only', web: 'Web only' };
 
@@ -158,12 +164,17 @@ export default function Applications() {
   const { guildId } = useParams();
   const limits = useModuleLimits('applications');
   const { data, error, setData } = useApiData(() => getModuleConfig(guildId, 'applications'), [guildId]);
-  const [tab, setTab] = useState('forms');
+  const [params, setParams] = useSearchParams();
   // The form being edited: null (the list), a draft, or a new draft.
   const [editing, setEditing] = useState(null);
 
   if (error) return <LoadError error={error} what="Applications" />;
   if (!data) return <p className="v2-state">Loading…</p>;
+
+  // "?tab=" says which tab; without it the page opens on the queue when applications wait, else on the forms.
+  const asked = params.get('tab');
+  const tab = TABS.some(([key]) => key === asked) ? asked : data.pending > 0 ? 'submissions' : 'forms';
+  const setTab = (key) => setParams({ tab: key }, { replace: true, preventScrollReset: true });
 
   const upsert = (form) =>
     setData((d) => {
@@ -199,80 +210,93 @@ export default function Applications() {
             className={`v2-tab${tab === key ? ' is-active' : ''}`}
             onClick={() => setTab(key)}
           >
-            {label}
-            {key === 'submissions' && data.pending > 0 ? ` (${data.pending})` : ''}
+            {tabLabel(key, label, data.pending)}
           </button>
         ))}
       </TabRow>
 
       {tab === 'forms' ? (
-        editing ? (
-          <ApplicationsFormEditor
-            key={editing.id ?? 'new'}
-            guildId={guildId}
-            initial={editing}
-            data={data}
-            limits={limits}
-            onSaved={(form) => {
-              upsert(form);
-              setEditing(toDraft(form));
-            }}
-            onDeleted={(id) => {
-              setData((d) => ({ ...d, forms: d.forms.filter((f) => f.id !== id) }));
-              setEditing(null);
-            }}
-            onCancel={() => setEditing(null)}
-          />
-        ) : (
-          <div className="v2-section-gap">
-            {data.forms.length === 0 ? <p className="v2-note">No forms yet.</p> : null}
-            <div className="v2-list">
-              {data.forms.map((f) => (
-                <div className="v2-row" key={f.id}>
-                  <div className="v2-row-main">
-                    <h3>
-                      {f.name}{' '}
-                      <Badge tone={f.enabled ? 'success' : 'neutral'} inline>
-                        {f.enabled ? 'Open' : 'Closed'}
-                      </Badge>
-                    </h3>
-                    <p className="v2-field-hint">
-                      <Meta
-                        items={[
-                          MODE_TEXT[f.fillMode],
-                          `${f.questions.length} question${f.questions.length === 1 ? '' : 's'}`,
-                          f.problems.setup && `Not ready: ${f.problems.setup}`,
-                          f.problems.roles && `Roles: ${f.problems.roles}`,
-                        ]}
-                      />
-                    </p>
+        <AccessLock need="edit" note>
+          {editing ? (
+            <ApplicationsFormEditor
+              key={editing.id ?? 'new'}
+              guildId={guildId}
+              initial={editing}
+              data={data}
+              limits={limits}
+              onSaved={(form) => {
+                upsert(form);
+                setEditing(toDraft(form));
+              }}
+              onDeleted={(id) => {
+                setData((d) => ({ ...d, forms: d.forms.filter((f) => f.id !== id) }));
+                setEditing(null);
+              }}
+              onCancel={() => setEditing(null)}
+            />
+          ) : (
+            <div className="v2-section-gap">
+              {data.forms.length === 0 ? (
+                <EmptyList
+                  start={{ label: 'Create your first form', onClick: () => setEditing(newDraft(data)) }}
+                >
+                  Let members apply for a role or a position with the questions you choose, and review the
+                  answers here.
+                </EmptyList>
+              ) : null}
+              <div className="v2-list">
+                {data.forms.map((f) => (
+                  <div className="v2-row" key={f.id}>
+                    <div className="v2-row-main">
+                      <h3>
+                        {f.name}{' '}
+                        <Badge tone={f.enabled ? 'success' : 'neutral'} inline>
+                          {f.enabled ? 'Open' : 'Closed'}
+                        </Badge>
+                      </h3>
+                      <p className="v2-field-hint">
+                        <Meta
+                          items={[
+                            MODE_TEXT[f.fillMode],
+                            `${f.questions.length} question${f.questions.length === 1 ? '' : 's'}`,
+                            f.problems.setup && `Not ready: ${f.problems.setup}`,
+                            f.problems.roles && `Roles: ${f.problems.roles}`,
+                          ]}
+                        />
+                      </p>
+                    </div>
+                    <div className="v2-row-actions">
+                      <button type="button" className="v2-btn-ghost" onClick={() => setEditing(toDraft(f))}>
+                        Edit
+                      </button>
+                    </div>
                   </div>
-                  <div className="v2-row-actions">
-                    <button type="button" className="v2-btn-ghost" onClick={() => setEditing(toDraft(f))}>
-                      Edit
-                    </button>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
+              {/* With no form yet the empty state above carries the one accent button. */}
+              {data.forms.length > 0 ? (
+                <button
+                  type="button"
+                  className="v2-btn-primary"
+                  disabled={data.forms.length >= data.maxForms}
+                  onClick={() => setEditing(newDraft(data))}
+                >
+                  New form
+                </button>
+              ) : null}
+              {data.forms.length >= data.maxForms ? (
+                <p className="v2-field-hint">A server can have at most {data.maxForms} forms.</p>
+              ) : null}
             </div>
-            <button
-              type="button"
-              className="v2-btn-primary"
-              disabled={data.forms.length >= data.maxForms}
-              onClick={() => setEditing(newDraft(data))}
-            >
-              New form
-            </button>
-            {data.forms.length >= data.maxForms ? (
-              <p className="v2-field-hint">A server can have at most {data.maxForms} forms.</p>
-            ) : null}
-          </div>
-        )
+          )}
+        </AccessLock>
       ) : null}
 
       {tab === 'submissions' ? <ApplicationsSubmissions guildId={guildId} forms={data.forms} /> : null}
       {tab === 'panel' ? (
-        <PanelAndSettings guildId={guildId} data={data} setData={setData} limits={limits} />
+        <AccessLock need="edit" note>
+          <PanelAndSettings guildId={guildId} data={data} setData={setData} limits={limits} />
+        </AccessLock>
       ) : null}
     </>
   );

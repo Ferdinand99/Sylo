@@ -10,7 +10,7 @@ import { allClientsReady, guildByKey, guildKey } from '../platform/platformOf.js
 import { EmbedBuilder, RESTJSONErrorCodes } from 'discord.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { dueTempBans, clearTempBan } from '../db/tempBans.js';
-import { addCase, deactivateLatest } from '../db/modCases.js';
+import { addCase, deactivateLatest, latestActiveCase } from '../db/modCases.js';
 import { postModLog } from '../bot/lib/modlog.js';
 import { notifyTarget, MOD_COLOR, INFO_COLOR } from '../bot/lib/moderation.js';
 import { formatDuration } from '../bot/lib/duration.js';
@@ -111,6 +111,8 @@ export async function applyWarnThresholds(guild, targetUser, warnCount, moderato
         }
       }
       await guild.bans.create(targetUser.id, { reason });
+      // A permanent ban now: an earlier temporary ban's timer must not lift it.
+      await clearTempBan(guildKey(guild), targetUser.id);
       done = 'banned';
     }
   } catch (err) {
@@ -163,6 +165,20 @@ export async function settleTempBan(row) {
   const existing = await guild.bans.fetch(row.user_id).catch(() => null);
   if (!existing) {
     await clearTempBan(row.guild_id, row.user_id); // already unbanned — nothing left to do
+    return;
+  }
+
+  // The ban that is there now may not be the one this timer was set for: the temporary ban was lifted
+  // outside Sylo and the member was banned again (warn threshold, automod, honeypot) after it was
+  // scheduled. A timed ban's own case says how long it lasts; a later one without a duration is a
+  // permanent ban the timer has no right to lift.
+  const latest = await latestActiveCase(row.guild_id, row.user_id, 'ban');
+  if (
+    latest &&
+    Number(latest.created_at) > Number(row.created_at) &&
+    (latest.detail == null || latest.detail === 'permanent')
+  ) {
+    await clearTempBan(row.guild_id, row.user_id);
     return;
   }
 

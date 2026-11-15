@@ -1,0 +1,148 @@
+/* Message forms of the alert, ticket and voice pages (dashboard polish package 2).
+   Used by YoutubeAlerts, RssAlerts, AutoThreads, TempVoice and AppleConnect. */
+
+/* A field that takes the whole row of its card (the feed address). */
+.v2-field-full {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+.v2-field-full input {
+  width: 100%;
+}
+
+/* "Found: Channel name" under the channel field: room before the next label. */
+.v2-found-line {
+  margin: 0 0 16px;
+}
+
+/* ---- Auto threads: the thread as it will look ------------------------------------------------------------- */
+.v2-thread-label {
+  margin: 12px 0 6px;
+}
+.v2-thread-card {
+  padding: 12px 14px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+}
+.v2-thread-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: 0.95rem;
+  overflow-wrap: anywhere;
+}
+.v2-thread-icon {
+  flex: none;
+}
+.v2-thread-card .v2-msg-preview {
+  margin: 0;
+}
+.v2-thread-card > .v2-field-hint {
+  margin: 0;
+}
+
+/* ---- Temporary voice: sections that fold to one line ------------------------------------------------------- */
+.v2-fold {
+  border-top: 1px solid var(--border-subtle);
+}
+.v2-fold-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+  padding: 10px 0;
+  list-style: none;
+  cursor: pointer;
+}
+.v2-fold-head::-webkit-details-marker {
+  display: none;
+}
+.v2-fold-head::before {
+  content: '';
+  flex: none;
+  align-self: center;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  transform: rotate(-45deg);
+  transition: transform var(--dur-ui) var(--ease-out);
+}
+.v2-fold[open] > .v2-fold-head::before {
+  transform: rotate(45deg);
+}
+.v2-fold-title {
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.v2-fold-summary {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+.v2-fold-body {
+  padding: 4px 0 6px 19px;
+}
+/* A group of checkboxes with a visible name reads like the other field labels, not like a hint. */
+.v2-fold-body fieldset.v2-field > legend:not(.v2-sr-only) {
+  margin-bottom: 8px;
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+@media (pointer: coarse) {
+  .v2-fold-head {
+    min-height: 44px;
+    align-items: center;
+  }
+}
+
+/* ---- App Store Connect: one grid row per alert -------------------------------------------------------------- */
+/* The alert | its number (where it has one) | its channel. Every row is a row of the same grid, so the
+   numbers and the channel selects line up whatever the length of the text. */
+.v2-alert-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(12rem, 16rem);
+  align-items: center;
+  gap: 12px 16px;
+}
+.v2-alert-line {
+  display: contents;
+}
+.v2-alert-grid .v2-check {
+  margin-bottom: 0;
+}
+.v2-alert-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: start;
+}
+/* The footnote of a row sits under that row, over the full width. */
+.v2-alert-grid .v2-alert-hint {
+  grid-column: 1 / -1;
+  margin: -6px 0 0;
+}
+@media (max-width: 600px) {
+  .v2-alert-grid {
+    display: block;
+  }
+  .v2-alert-line {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .v2-alert-option:empty {
+    display: none;
+  }
+  .v2-alert-grid .v2-alert-hint {
+    margin: 0;
+  }
+}

@@ -91,7 +91,7 @@ export async function execute(interaction) {
       }
     );
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral, private: true });
 
   if (isSelf) {
     const link = await personalLink(interaction.guild, target.id);

@@ -311,11 +311,11 @@ export async function createRejoinInvite(guild) {
  * Record a decision, optionally lift the ban, DM the user, and log it.
  * @param {import('discord.js').Guild} guild
  * @param {object} appeal            row from db/appeals.js (answers parsed)
- * @param {{ status: 'accepted' | 'denied', decidedBy: string, reason: string }} decision
+ * @param {{ status: 'accepted' | 'denied', decidedBy: string, decidedById?: string | null, reason: string }} decision
  * @returns {Promise<{ recorded: boolean, unbanned: boolean, dmDelivered: boolean, inviteUrl: string | null }>}
  */
-export async function decideAndNotify(guild, appeal, { status, decidedBy, reason }) {
-  const recorded = await decideAppeal(guildKey(guild), appeal.id, { status, decidedBy, reason });
+export async function decideAndNotify(guild, appeal, { status, decidedBy, decidedById = null, reason }) {
+  const recorded = await decideAppeal(guildKey(guild), appeal.id, { status, decidedBy, decidedById, reason });
   if (!recorded) return { recorded: false, unbanned: false, dmDelivered: false, inviteUrl: null };
 
   const cfg = normaliseAppealsConfig((await getGuildModule(guildKey(guild), 'appeals')).config);

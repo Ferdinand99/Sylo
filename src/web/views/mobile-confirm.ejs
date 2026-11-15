@@ -6,8 +6,11 @@
     The Sylo app on your device will be signed in as <strong><%= name %></strong>
     (<%= platforms.join(' and ') %>) and can manage the same servers you manage here.
   </p>
+  <p>
+    Server: <strong><code><%= server %></code></strong>
+  </p>
   <p class="muted small">
-    Only continue if you started this from the Sylo app yourself. You can sign the device out
+    Only continue if this is the Sylo server you chose in the app, and you started this from the Sylo app yourself. If the address above is not the one you expected, cancel. You can sign the device out
     again at any time from your account page.
   </p>
   <form method="POST" action="/auth/mobile/confirm" class="auth-actions">

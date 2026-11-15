@@ -7,8 +7,9 @@
 // mounted and the module logs it once.
 //
 // Flow: subscribe(channel) stores a row with a fresh per-subscription secret and asks the hub
-// (POST, hub.mode=subscribe); the hub then calls GET /webhooks/youtube/<channel> to verify
-// (verifyIntent); later pushes arrive as POSTs signed with that secret (handleNotification, after
+// (POST, hub.mode=subscribe) with a callback that carries a token only Sylo and the hub know
+// (callbackToken); the hub then calls GET /webhooks/youtube/<channel>?k=<token> to verify
+// (verifyIntent refuses a GET without the token); later pushes arrive as POSTs signed with that secret (handleNotification, after
 // the route has checked the signature with verifySignature). Leases run ~5 days; the hourly tick
 // renews any with under a day left and reconciles the table with what guilds watch.
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -87,8 +88,27 @@ export function websubEnabled(dashboardUrl = currentDashboardUrl()) {
   return websubBase(dashboardUrl) !== null;
 }
 
-export const callbackUrl = (channelId, dashboardUrl = currentDashboardUrl()) =>
-  `${websubBase(dashboardUrl)}/webhooks/youtube/${channelId}`;
+/**
+ * A value that binds the callback to one subscription: the channel id is public, so without it
+ * anyone could send the hub's verification GET first, choose the lease and use up the pending
+ * request. Derived from the subscription's secret, which only Sylo and the hub hold.
+ */
+export const callbackToken = (secret, channelId) =>
+  createHmac('sha256', String(secret))
+    .update(`websub-callback:${channelId}`)
+    .digest('base64url')
+    .slice(0, 32);
+
+/** Does `given` (the `k` of a verification request) match this row's callback token? Constant-time. */
+export function callbackTokenOk(row, channelId, given) {
+  if (!row?.secret || typeof given !== 'string') return false;
+  const a = Buffer.from(callbackToken(row.secret, channelId));
+  const b = Buffer.from(given);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+export const callbackUrl = (channelId, secret, dashboardUrl = currentDashboardUrl()) =>
+  `${websubBase(dashboardUrl)}/webhooks/youtube/${channelId}?k=${callbackToken(secret, channelId)}`;
 
 let loggedOff = false;
 function logOffOnce() {
@@ -126,7 +146,7 @@ function queued(task) {
 function hubRequest(mode, channelId, secret) {
   return queued(async () => {
     const body = new URLSearchParams({
-      'hub.callback': callbackUrl(channelId),
+      'hub.callback': callbackUrl(channelId, secret),
       'hub.topic': topicUrl(channelId),
       'hub.mode': mode,
       'hub.verify': 'async',
@@ -246,6 +266,7 @@ export async function syncSubscriptions(now = Date.now()) {
 
 /**
  * Answer the hub's verification request. The challenge to echo, or null (answer 404) unless the
+ * request carries the callback token (`k`) Sylo gave the hub for this subscription, the
  * mode is subscribe/unsubscribe, the topic is exactly this channel's, and we have a matching
  * pending subscription: for subscribe, a request Sylo itself sent (and recorded with its time)
  * less than VERIFY_WINDOW_MS ago, and not yet verified; for unsubscribe, an unwanted row.
@@ -268,6 +289,9 @@ export async function verifyIntent(channelId, query = {}, now = Date.now()) {
 
   const row = await getWebsub(channelId);
   if (!row) return null;
+  // Only the hub that was given our callback knows its token. Checked before anything is stored,
+  // so a GET from anyone else changes nothing and leaves the pending request for the hub.
+  if (!callbackTokenOk(row, channelId, query.k)) return null;
   if (mode === 'subscribe') {
     if (!row.wanted) return null;
     // Only a request we sent: anyone can send a GET, and it must not be able to move a lease.

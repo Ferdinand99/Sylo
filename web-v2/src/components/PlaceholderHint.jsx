@@ -14,7 +14,8 @@ const MAX_WARNINGS = 3;
  *
  * `fieldId` is the id of the textarea/input the chips write into; the chips put the token where the
  * caret is (over the selection, or at the end when the field was never clicked) and give the caret
- * back to the field. Unknown tokens only warn: saving is never blocked. `tokens` are
+ * back to the field. Unknown tokens only warn: saving is never blocked. With `chips={false}` only the
+ * warnings are drawn (the form has one shared PlaceholderBar for its chips). `tokens` are
  * `{ token, hint }` objects (see placeholders.js).
  */
 export default function PlaceholderHint({
@@ -23,6 +24,7 @@ export default function PlaceholderHint({
   value,
   onChange,
   ignoreCase = false,
+  chips = true,
   className = '',
 }) {
   // The field's last selection, remembered when it loses focus (clicking a chip blurs it on
@@ -88,23 +90,27 @@ export default function PlaceholderHint({
 
   return (
     <div className={`v2-ph${className ? ` ${className}` : ''}`}>
-      <div className="v2-ph-chips" role="group" aria-label="Insert a placeholder">
-        <span className="v2-ph-label">Insert:</span>
-        {tokens.map((tk) => (
-          <button
-            type="button"
-            key={tk.token}
-            title={tk.hint || undefined}
-            aria-label={`Insert ${tk.token}`}
-            // Keep the focus (and the caret) in the field while the chip is pressed.
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => insert(tk.token)}
-          >
-            {tk.token}
-          </button>
-        ))}
-      </div>
-      <p className="v2-field-hint">Click one to insert it at the cursor.</p>
+      {chips ? (
+        <>
+          <div className="v2-ph-chips" role="group" aria-label="Insert a placeholder">
+            <span className="v2-ph-label">Insert:</span>
+            {tokens.map((tk) => (
+              <button
+                type="button"
+                key={tk.token}
+                title={tk.hint || undefined}
+                aria-label={`Insert ${tk.token}`}
+                // Keep the focus (and the caret) in the field while the chip is pressed.
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => insert(tk.token)}
+              >
+                {tk.token}
+              </button>
+            ))}
+          </div>
+          <p className="v2-field-hint">Click one to insert it at the cursor.</p>
+        </>
+      ) : null}
       {noRoom ? (
         <p className="v2-ph-warn" role="status">
           <span aria-hidden="true">⚠ </span>

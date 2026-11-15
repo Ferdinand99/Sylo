@@ -1,24 +1,43 @@
 import { useEffect, useState } from 'react';
+import PickerHealth from './PickerHealth.jsx';
+import OverflowMenu from './OverflowMenu.jsx';
 import {
   createShopItem,
   deleteShopItem,
+  deleteShopItemImage,
+  duplicateShopItem,
   getShopItems,
   reorderShopItems,
   setShopItemEnabled,
   updateShopItem,
+  uploadShopItemImage,
 } from '../api.js';
 import { notify } from '../notify.js';
 import ChipPicker from './ChipPicker.jsx';
+import EmptyList from './EmptyList.jsx';
 import LoadError from './LoadError.jsx';
 import Meta from './Meta.jsx';
 import { confirmDialog } from './ConfirmDialog.jsx';
-import { limitOf, useModuleLimits } from './useModuleLimits.js';
+import { counter, limitOf, useModuleLimits } from './useModuleLimits.js';
+
+// "3.4 MB" for the storage a server's collectible pictures use, and "340 KB" under a megabyte (a small
+// server would otherwise read "0 MB").
+function formatSize(bytes) {
+  const n = Number(bytes) || 0;
+  if (n < 1024 * 1024) return `${Math.ceil(n / 1024)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1).replace(/\.0$/, '')} MB`;
+}
 
 const TYPE_LABELS = {
   temp_role: 'Temporary role',
   role: 'Permanent role',
   custom: 'Custom item (staff fulfil it)',
+  collectible: 'Collectible (a picture, no role)',
 };
+
+// What the server accepts for a picture (it checks the file itself, not only this).
+const IMAGE_ACCEPT = 'image/png,image/jpeg,image/webp';
+const IMAGE_MAX_BYTES = 2 * 1024 * 1024;
 
 const blankForm = (defaults = {}) => ({
   id: null,
@@ -33,6 +52,11 @@ const blankForm = (defaults = {}) => ({
   perMemberLimit: '',
   requiredRoles: [],
   enabled: true,
+  rarity: '',
+  announce: false,
+  imagePath: null,
+  file: null, // a picture chosen in this form, uploaded after the item is saved
+  fileKey: 0, // changes when the file input has to be emptied (it is not a controlled input)
   ...defaults,
 });
 
@@ -50,6 +74,9 @@ const toForm = (item) =>
     perMemberLimit: item.perMemberLimit ?? '',
     requiredRoles: item.requiredRoles,
     enabled: item.enabled,
+    rarity: item.rarity ?? '',
+    announce: Boolean(item.announce),
+    imagePath: item.imagePath ?? null,
   });
 
 /** The Shop tab of the Economy page: the items, and the form to add or change one. */
@@ -74,15 +101,17 @@ export default function EconomyShopAdmin({ guildId, currency }) {
   if (!data) return <p className="v2-state">Loading…</p>;
 
   const { items, roles } = data;
+  const rarities = data.rarities ?? [];
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
-  const roleType = form && form.type !== 'custom';
+  const roleType = form && (form.type === 'temp_role' || form.type === 'role');
+  const collectible = form && form.type === 'collectible';
   const money = (n) => `${currency.emoji} ${Number(n).toLocaleString('en-US')} ${currency.name}`;
 
   async function run(fn) {
     setBusy(true);
     try {
       const out = await fn();
-      setData((d) => ({ ...d, items: out.items }));
+      setData((d) => ({ ...d, items: out.items, pictures: out.pictures ?? d.pictures }));
       return out;
     } catch (err) {
       notify(err.message);
@@ -106,13 +135,55 @@ export default function EconomyShopAdmin({ guildId, currency }) {
       perMemberLimit: form.perMemberLimit,
       requiredRoles: form.requiredRoles,
       enabled: form.enabled,
+      rarity: collectible ? form.rarity : '',
+      announce: collectible ? form.announce : false,
     };
+    if (collectible && form.file && form.file.size > IMAGE_MAX_BYTES) {
+      notify('The picture is larger than 2 MB.');
+      return;
+    }
     const out = await run(() =>
       form.id ? updateShopItem(guildId, form.id, body) : createShopItem(guildId, body)
     );
+    if (!out) return;
+    const id = form.id ?? out.id;
+    // The picture goes up once the item exists (it belongs to an item). When it is refused the item is
+    // kept and the form stays open on it, so the picture can be tried again.
+    if (collectible && form.file) {
+      const uploaded = await run(() => uploadShopItemImage(guildId, id, form.file));
+      if (!uploaded) {
+        set({ id, file: null, fileKey: form.fileKey + 1 });
+        return;
+      }
+    }
+    notify(form.id ? 'Item saved.' : 'Item added.', 'info');
+    setForm(null);
+  }
+
+  async function onRemoveImage() {
+    const ok = await confirmDialog({
+      title: 'Remove the picture?',
+      body: 'The item is not shown in the shop and cannot be bought until it has a picture again. Members who own it keep it, with the picture they have, until you upload a new one.',
+      confirmLabel: 'Remove picture',
+    });
+    if (!ok) return;
+    const out = await run(() => deleteShopItemImage(guildId, form.id));
+    if (out) set({ imagePath: null });
+  }
+
+  // The copy is paused and has no picture; the list is read again to show it.
+  async function onDuplicate(item) {
+    const out = await run(async () => {
+      await duplicateShopItem(guildId, item.id);
+      return getShopItems(guildId);
+    });
     if (out) {
-      notify(form.id ? 'Item saved.' : 'Item added.', 'info');
-      setForm(null);
+      notify(
+        item.type === 'collectible'
+          ? 'Created a paused copy. Upload a picture to put it on sale.'
+          : 'Created a paused copy. Resume it to put it on sale.',
+        'info'
+      );
     }
   }
 
@@ -137,29 +208,55 @@ export default function EconomyShopAdmin({ guildId, currency }) {
   return (
     <>
       <div className="v2-group">
-        <h2 className="v2-group-title">Items ({items.length})</h2>
+        <h2 className="v2-group-title">Items ({counter(items.length, data.maxItems)})</h2>
+        {data.pictures ? (
+          <p className="v2-field-hint" data-testid="shop-pictures">
+            Collectible pictures: {counter(data.pictures.count, data.pictures.maxCount)} ·{' '}
+            {formatSize(data.pictures.bytes)} / {formatSize(data.pictures.maxBytes)}
+          </p>
+        ) : null}
         <p className="v2-field-hint">
           Members see the items that are not paused, in this order. Buying a temporary role again while it
           runs adds the new time to what is left.
         </p>
-        {items.length === 0 ? <p className="v2-note">No items yet. Add the first one below.</p> : null}
+        {items.length === 0 && !form ? (
+          <EmptyList start={{ label: 'Add your first item', onClick: () => setForm(blankForm()) }}>
+            Sell roles, collectibles and custom items for the server's currency.
+          </EmptyList>
+        ) : null}
         <div className="v2-list">
           {items.map((item, index) => (
-            <div className="v2-row" key={item.id}>
+            <div className="v2-row v2-shop-row" key={item.id}>
+              {item.type === 'collectible' && item.imagePath ? (
+                <img className="v2-thumb" src={item.imagePath} alt="" width="48" height="48" />
+              ) : null}
               <div className="v2-row-main">
                 <h3 className="v2-break">
                   {item.emoji ? `${item.emoji} ` : ''}
                   {item.name}
+                  {item.type === 'collectible' && item.rarity ? (
+                    <span className={`v2-rarity is-${item.rarity}`}>
+                      {rarities.find((r) => r.key === item.rarity)?.label ?? item.rarity}
+                    </span>
+                  ) : null}
                   {!item.enabled ? <span className="v2-field-hint"> — paused</span> : null}
+                  {item.type === 'collectible' && !item.imagePath ? (
+                    <span className="v2-field-hint">
+                      {' '}
+                      — needs a picture (hidden from members until it has one)
+                    </span>
+                  ) : null}
                 </h3>
+                {item.description ? <p className="v2-shop-desc">{item.description}</p> : null}
                 <p className="v2-field-hint">
                   <Meta
                     items={[
                       money(item.price),
                       TYPE_LABELS[item.type],
                       item.type === 'temp_role' && `${item.durationHours} h`,
-                      item.type !== 'custom' &&
+                      (item.type === 'temp_role' || item.type === 'role') &&
                         (roles.find((r) => r.id === item.roleId)?.name ?? 'role missing'),
+                      item.type === 'collectible' && item.announce && 'announced',
                       item.left === null ? 'unlimited stock' : `${item.left} of ${item.stock} left`,
                       `${item.purchases} sold`,
                       `${money(item.revenue)} earned`,
@@ -167,49 +264,37 @@ export default function EconomyShopAdmin({ guildId, currency }) {
                   />
                 </p>
               </div>
-              <div className="v2-row-actions">
-                <button
-                  type="button"
-                  className="v2-btn-ghost"
-                  disabled={busy || index === 0}
-                  aria-label={`Move ${item.name} up`}
-                  onClick={() => onMove(index, -1)}
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  className="v2-btn-ghost"
-                  disabled={busy || index === items.length - 1}
-                  aria-label={`Move ${item.name} down`}
-                  onClick={() => onMove(index, 1)}
-                >
-                  ↓
-                </button>
+              <div className="v2-row-actions v2-shop-actions">
                 <button type="button" className="v2-btn-ghost" onClick={() => setForm(toForm(item))}>
                   Edit
                 </button>
-                <button
-                  type="button"
-                  className="v2-btn-ghost"
-                  disabled={busy}
-                  onClick={() => run(() => setShopItemEnabled(guildId, item.id, !item.enabled))}
-                >
-                  {item.enabled ? 'Pause' : 'Resume'}
-                </button>
-                <button
-                  type="button"
-                  className="v2-btn-danger-ghost"
-                  disabled={busy}
-                  onClick={() => onDelete(item)}
-                >
-                  Delete
-                </button>
+                <OverflowMenu
+                  label={`More actions for ${item.name}`}
+                  items={[
+                    { label: 'Move up', disabled: busy || index === 0, onClick: () => onMove(index, -1) },
+                    {
+                      label: 'Move down',
+                      disabled: busy || index === items.length - 1,
+                      onClick: () => onMove(index, 1),
+                    },
+                    {
+                      label: item.enabled ? 'Pause' : 'Resume',
+                      disabled: busy,
+                      onClick: () => run(() => setShopItemEnabled(guildId, item.id, !item.enabled)),
+                    },
+                    {
+                      label: 'Duplicate',
+                      disabled: busy,
+                      onClick: () => onDuplicate(item),
+                    },
+                    { label: 'Delete', danger: true, disabled: busy, onClick: () => onDelete(item) },
+                  ]}
+                />
               </div>
             </div>
           ))}
         </div>
-        {!form ? (
+        {!form && items.length > 0 ? (
           <button type="button" className="v2-btn-primary" onClick={() => setForm(blankForm())}>
             Add an item
           </button>
@@ -276,6 +361,7 @@ export default function EconomyShopAdmin({ guildId, currency }) {
                     </option>
                   ))}
                 </select>
+                <PickerHealth kind="role" value={form.roleId} />
               </div>
             ) : null}
             {form.type === 'temp_role' ? (
@@ -331,6 +417,77 @@ export default function EconomyShopAdmin({ guildId, currency }) {
               />
             </div>
           </div>
+          {collectible ? (
+            <>
+              <div className="v2-field-row">
+                <div className="v2-field">
+                  <label htmlFor="item-rarity">
+                    Rarity <span className="v2-field-hint">— optional</span>
+                  </label>
+                  <select
+                    id="item-rarity"
+                    value={form.rarity}
+                    onChange={(e) => set({ rarity: e.target.value })}
+                  >
+                    <option value="">— none —</option>
+                    {rarities.map((r) => (
+                      <option key={r.key} value={r.key}>
+                        {r.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="v2-field">
+                  <label htmlFor="item-image">Picture</label>
+                  <input
+                    id="item-image"
+                    key={form.fileKey}
+                    type="file"
+                    accept={IMAGE_ACCEPT}
+                    onChange={(e) => set({ file: e.target.files?.[0] ?? null })}
+                  />
+                </div>
+              </div>
+              {form.imagePath ? (
+                <div className="v2-field">
+                  <img
+                    className="v2-thumb"
+                    src={form.imagePath}
+                    alt="The current picture"
+                    width="96"
+                    height="96"
+                  />
+                  <button
+                    type="button"
+                    className="v2-btn-danger-ghost"
+                    disabled={busy}
+                    onClick={onRemoveImage}
+                  >
+                    Remove picture
+                  </button>
+                </div>
+              ) : null}
+              <p className="v2-field-hint">
+                PNG, JPEG or WebP, up to 2 MB. Sylo re-encodes it as a PNG of at most 512 by 512 pixels, so
+                metadata is removed and an animation becomes its first frame. A collectible cannot be bought
+                until it has a picture. Stock makes it a limited edition.
+              </p>
+              <div className="v2-field">
+                <label className="v2-check" htmlFor="item-announce">
+                  <input
+                    id="item-announce"
+                    type="checkbox"
+                    checked={form.announce}
+                    onChange={(e) => set({ announce: e.target.checked })}
+                  />
+                  Announce purchases
+                </label>
+                <p className="v2-field-hint">
+                  Needs the announcement channel in the Economy settings. Only the buyer is mentioned.
+                </p>
+              </div>
+            </>
+          ) : null}
           <div className="v2-field" role="group" aria-labelledby="item-required-label">
             <label id="item-required-label">
               Required roles{' '}

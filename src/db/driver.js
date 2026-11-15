@@ -15,6 +15,7 @@
 // decision) — see `registerPostgresMigration` below for the Postgres-only
 // incremental-migration mechanism this enables.
 import { config } from '../config.js';
+import { log } from '../lib/log.js';
 import { db, SCHEMA_VERSION } from './index.js';
 import { idempotentTarget, splitStatements } from './splitSql.js';
 
@@ -110,7 +111,12 @@ async function getSql() {
         for (const ddl of bootstrapStatements) {
           for (const statement of splitStatements(ddl)) {
             if (await alreadyThere(client, statement)) continue;
-            await client.unsafe(statement);
+            const done = await client.unsafe(statement);
+            // A bootstrap DELETE removes rows only to repair a shape an older version allowed (a doubled
+            // login, say); say how many, never which.
+            const table = /^DELETE\s+FROM\s+(\w+)/i.exec(statement)?.[1];
+            if (table && done.count > 0)
+              log.warn('db', `Postgres bootstrap removed ${done.count} row(s) from ${table}`);
           }
         }
         await runPostgresMigrations(client);

@@ -127,7 +127,8 @@ function world({ dmClosed = [], platform = 'discord', botPosition = 10 } = {}) {
       cache: members,
       fetch: async (id) => {
         if (state.fetchError) throw state.fetchError;
-        return members.get(id) ?? null;
+        // `{ user, force }` asks the platform for a fresh copy: the fake has no cache to go stale.
+        return members.get(typeof id === 'object' ? id.user : id) ?? null;
       },
     },
   };

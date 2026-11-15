@@ -192,7 +192,15 @@ function scanGuild(channelCount) {
       },
     });
   }
-  return { fetched, guild: { id: '900000000000000555', channels: { cache: channels }, members: { me: {} } } };
+  return {
+    fetched,
+    guild: {
+      id: '900000000000000555',
+      channels: { cache: channels },
+      members: { me: {} },
+      roles: { everyone: {} },
+    },
+  };
 }
 
 const scanBoard = () =>

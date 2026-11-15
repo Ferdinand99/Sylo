@@ -5,9 +5,15 @@
 //
 //   - reply()/editReply() send, then edit, one message; followUp() sends another.
 //     deferReply() just shows the typing indicator — the first editReply() sends.
-//   - There are no ephemeral replies in a channel. An "ephemeral" reply is sent
-//     normally, then deleted — along with the invoking message — after a short
-//     delay, so a private result does not linger.
+//   - There are no ephemeral replies in a channel. An "ephemeral" reply marked `private: true`
+//     (a member's moderation history, a private quote, the /mydata export: the commands that
+//     look something up say so at the call) goes to the invoking person's DMs in a server; the
+//     channel only gets a short notice with none of it, deleted — along with the invoking
+//     message — after a short delay. When the DM cannot be sent, the notice says so and the
+//     reply is dropped: it is never posted in the channel. `private: false` keeps a reply in
+//     the channel. Unmarked, an ephemeral reply with an embed or a file counts as private (a
+//     safety net for a command that forgot the mark); an unmarked line of text (a status or an
+//     error) is sent normally, then deleted after the same delay.
 //   - Buttons and menus do not exist here; `components` become reactions
 //     (platform/outgoing.js) and a reaction runs the same handler.
 //   - `guildId` and `guild.id` are in platform form ("fluxer:<id>"), because
@@ -22,7 +28,7 @@ export const PRIVATE_TTL_MS = 15_000;
 /** How long the reactions of a command reply's buttons/menus stay live (a Discord interaction token lives 15 min). */
 export const COMPONENT_TTL_MS = 15 * 60_000;
 
-function withPlatformId(guild, platform) {
+export function withPlatformId(guild, platform) {
   if (!guild) return null;
   return new Proxy(guild, {
     get(target, prop) {
@@ -125,6 +131,19 @@ export class MessageInteraction {
     this.ephemeral = false;
     this._privateTtlMs = privateTtlMs;
     this._sent = null;
+    // A private reply in a server whose DM could not be sent: later data in it is dropped, not posted.
+    this._privateUndeliverable = false;
+    // The reply in `_sent` is a DM (not a message in the channel).
+    this._sentIsDm = false;
+    // The mark given to deferReply(), for the editReply() that follows it.
+    this._private = undefined;
+    // Set when a reaction in a DM (on a private reply that was sent there) is run on behalf of a server.
+    this._inDm = false;
+  }
+
+  /** Private replies need a DM only when this was run in a server's channel, not in a DM already. */
+  get _inServerChannel() {
+    return Boolean(this.guild) && !this._inDm;
   }
 
   inGuild() {
@@ -146,24 +165,42 @@ export class MessageInteraction {
     }
   }
 
+  /** Is this a private reply (marked, or with data in it) in a server channel? Then it must not sit in the channel. */
+  _mustBePrivate(out, ephemeral) {
+    if (!ephemeral || !this._inServerChannel) return false;
+    const marked = out.private ?? this._private;
+    if (marked !== undefined) return marked;
+    return Boolean(out.payload.embeds?.length || out.payload.files?.length);
+  }
+
   /**
-   * A private reply with a file, in a server channel: there are no private replies here, so it
-   * would sit in the channel for everyone until the cleanup. Send it to the author's DMs
-   * instead; the channel only gets a notice when that fails. Returns null when not applicable.
+   * A private reply with data in a server channel: there are no private replies here, so it would sit
+   * in the channel for everyone until the cleanup. Send it to the DMs of whoever ran the command (or
+   * reacted) instead, and leave only a notice, with none of it, in the channel. When the DM fails the
+   * notice says so and the reply is dropped; it is never posted in the channel.
+   * Returns null when not applicable (see _mustBePrivate).
+   * @returns {Promise<{ message: any } | null>} `message` is the DM, null when it could not be sent
    */
-  async _sendPrivateFile(out, ephemeral) {
-    if (!ephemeral || !this.guild || !out.payload.files?.length) return null;
+  async _sendPrivate(out, ephemeral) {
+    if (!this._mustBePrivate(out, ephemeral)) return null;
+    if (this._privateUndeliverable) return { message: null };
+    let dm = null;
     try {
-      return await this.message.author.send(out.payload);
+      dm = await this.user.send(out.payload);
     } catch {
-      const notice = await this._send({
-        content:
-          "⚠️ I couldn't send you that by DM, and it is private. Allow DMs from this server's members, then try again.",
-        allowedMentions: { parse: [] },
-      });
-      this._scheduleCleanup(notice);
-      return notice;
+      this._privateUndeliverable = true;
     }
+    const notice = await this._send(
+      {
+        content: dm
+          ? '📬 Sent to your DMs.'
+          : "⚠️ I couldn't send you that by DM, and it is private. Allow DMs from this server's members, then try again.",
+        allowedMentions: { parse: [] },
+      },
+      true
+    );
+    this._scheduleCleanup(notice);
+    return { message: dm };
   }
 
   _scheduleCleanup(sent) {
@@ -180,7 +217,9 @@ export class MessageInteraction {
   }
 
   async deferReply(opts = {}) {
-    this.ephemeral = prepareOutgoing(opts).ephemeral;
+    const out = prepareOutgoing(opts);
+    this.ephemeral = out.ephemeral;
+    this._private = out.private;
     this.deferred = true;
     this.channel?.sendTyping?.().catch(() => {});
   }
@@ -188,10 +227,13 @@ export class MessageInteraction {
   async reply(input) {
     const out = prepareOutgoing(input);
     this.ephemeral = out.ephemeral;
-    const privately = await this._sendPrivateFile(out, out.ephemeral);
+    const privately = await this._sendPrivate(out, out.ephemeral);
     if (privately) {
       this.replied = true;
-      return out.wantsResponse ? { resource: { message: privately } } : privately;
+      this._sent = privately.message;
+      this._sentIsDm = Boolean(privately.message);
+      if (privately.message) await this._attach(privately.message, out);
+      return out.wantsResponse ? { resource: { message: privately.message } } : privately.message;
     }
     const sent = await this._send(out.payload, out.ephemeral);
     this._sent = sent;
@@ -202,10 +244,18 @@ export class MessageInteraction {
   }
 
   async editReply(input) {
-    const privately = await this._sendPrivateFile(prepareOutgoing(input), this.ephemeral);
-    if (privately) {
-      this.replied = true;
-      return privately;
+    // Private data in a server lives in the DM (or nowhere, when that failed): never in the channel.
+    const first = prepareOutgoing(input);
+    if (this._mustBePrivate(first, this.ephemeral)) {
+      if (this._privateUndeliverable) return null;
+      if (!this._sentIsDm) {
+        const privately = await this._sendPrivate(first, true);
+        this.replied = true;
+        this._sent = privately.message;
+        this._sentIsDm = Boolean(privately.message);
+        if (privately.message) await this._attach(privately.message, first);
+        return privately.message;
+      }
     }
     if (this._sent) {
       const out = prepareOutgoing(input, { edit: true });
@@ -224,8 +274,12 @@ export class MessageInteraction {
 
   async followUp(input) {
     const out = prepareOutgoing(input);
-    const privately = await this._sendPrivateFile(out, out.ephemeral);
-    if (privately) return privately;
+    const privately = await this._sendPrivate(out, out.ephemeral);
+    if (privately) {
+      this.replied = true;
+      if (privately.message) await this._attach(privately.message, out);
+      return privately.message;
+    }
     const sent = await this._send(out.payload, out.ephemeral);
     this.replied = true;
     await this._attach(sent, out);

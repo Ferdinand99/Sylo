@@ -9,6 +9,8 @@ import { useModuleForm } from '../components/useModuleForm.js';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import UnitInput from '../components/UnitInput.jsx';
 import Meta from '../components/Meta.jsx';
+import MemberPicker from '../components/MemberPicker.jsx';
+import '../styles/wp1-members.css';
 
 export default function InviteTracker() {
   const cmd = useCmd();
@@ -28,7 +30,7 @@ export default function InviteTracker() {
     e.preventDefault();
     setBonusBusy(true);
     try {
-      const { board } = await setInviteBonus(guildId, bonusUser.trim(), Number(bonusValue));
+      const { board } = await setInviteBonus(guildId, bonusUser, Number(bonusValue));
       setData((d) => ({ ...d, board }));
       setBonusUser('');
       setBonusValue(0);
@@ -139,13 +141,13 @@ export default function InviteTracker() {
       </p>
       <form onSubmit={onSetBonus}>
         <div className="v2-field-row">
-          <input
-            type="text"
-            aria-label="Member ID or @mention"
-            placeholder="Member ID or @mention"
+          <MemberPicker
+            id="bonus-member"
+            label="Member"
             value={bonusUser}
-            onChange={(e) => setBonusUser(e.target.value)}
-            required
+            onChange={setBonusUser}
+            placeholder="Search by name, or paste an ID"
+            clearLabel="Choose another member"
           />
           <input
             type="number"
@@ -155,7 +157,7 @@ export default function InviteTracker() {
             onChange={(e) => setBonusValue(e.target.value)}
             required
           />
-          <button type="submit" className="v2-btn-primary" disabled={bonusBusy}>
+          <button type="submit" className="v2-btn-primary" disabled={bonusBusy || !bonusUser}>
             {bonusBusy ? 'Setting…' : 'Set bonus'}
           </button>
         </div>

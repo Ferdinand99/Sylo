@@ -37,7 +37,33 @@ registerPostgresBootstrap(`
     challenge  TEXT NOT NULL,
     expires_at BIGINT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS mobile_connect_codes (
+    code_hash  TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    platform   TEXT NOT NULL,
+    expires_at BIGINT NOT NULL,
+    token_id   TEXT
+  );
+  ALTER TABLE mobile_connect_codes ADD COLUMN IF NOT EXISTS token_id TEXT;
+  -- One live code per account (an earlier shape could hold two): keep the newest, then enforce it.
+  DELETE FROM mobile_connect_codes a USING mobile_connect_codes b
+    WHERE a.account_id = b.account_id AND (a.expires_at, a.code_hash) < (b.expires_at, b.code_hash);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_mobile_connect_codes_one ON mobile_connect_codes (account_id);
+  CREATE TABLE IF NOT EXISTS mobile_connect_results (
+    code_hash        TEXT PRIMARY KEY,
+    account_id       TEXT NOT NULL,
+    token_id         TEXT NOT NULL,
+    platform         TEXT NOT NULL,
+    platform_user_id TEXT NOT NULL,
+    username         TEXT NOT NULL DEFAULT '',
+    avatar           TEXT,
+    guild_ids        TEXT NOT NULL DEFAULT '[]',
+    expires_at       BIGINT NOT NULL
+  );
 `);
+// The plain index on mobile_connect_codes (account_id) is covered by the unique one; mirrors SQLite
+// migration 77. A new install never creates it.
+registerPostgresMigration(77, 'DROP INDEX IF EXISTS idx_mobile_connect_codes_account');
 // Push notifications (internal/push-notifications-plan.md); mirrors SQLite migration 49.
 registerPostgresMigration(
   49,
@@ -104,6 +130,29 @@ const s = {
     'DELETE FROM mobile_codes WHERE code_hash = ? RETURNING account_id, challenge, expires_at'
   ),
   purgeCodes: prepare('DELETE FROM mobile_codes WHERE expires_at <= ?'),
+  // One code per account at a time, in one statement: asking again replaces the earlier one, even
+  // when two asks arrive together (account_id is unique).
+  upsertConnectCode: prepare(`
+    INSERT INTO mobile_connect_codes (code_hash, account_id, token_id, platform, expires_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT (account_id) DO UPDATE SET code_hash = excluded.code_hash, token_id = excluded.token_id,
+      platform = excluded.platform, expires_at = excluded.expires_at
+  `),
+  // Single use under concurrent redeems, as takeCode.
+  takeConnectCode: prepare(
+    'DELETE FROM mobile_connect_codes WHERE code_hash = ? RETURNING account_id, token_id, platform, expires_at'
+  ),
+  purgeConnectCodes: prepare('DELETE FROM mobile_connect_codes WHERE expires_at <= ?'),
+  insertConnectResult: prepare(`
+    INSERT INTO mobile_connect_results
+      (code_hash, account_id, token_id, platform, platform_user_id, username, avatar, guild_ids, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `),
+  takeConnectResult: prepare(`
+    DELETE FROM mobile_connect_results WHERE code_hash = ?
+    RETURNING account_id, token_id, platform, platform_user_id, username, avatar, guild_ids, expires_at
+  `),
+  purgeConnectResults: prepare('DELETE FROM mobile_connect_results WHERE expires_at <= ?'),
   tokenById: prepare('SELECT * FROM api_tokens WHERE id = ?'),
   // The device's handle keeps its "proven" mark while it stays the same handle.
   setPush: prepare(`
@@ -286,7 +335,99 @@ export async function revokeAccountTokens(accountId) {
 export async function purgeExpiredApiTokens() {
   const now = Date.now();
   await s.purgeCodes.run(now);
+  await s.purgeConnectCodes.run(now);
+  await s.purgeConnectResults.run(now);
   return deleted(await s.purgeTokens.all(now));
+}
+
+// --- connecting a platform from the app -------------------------------------------------
+//
+// Two single-use values, both stored only as a hash:
+//  1. the CONNECT CODE, made for a signed-in app token (account + token + platform). The app opens
+//     it in the browser sheet; it only names whose account the next login is meant for.
+//  2. the RESULT CODE, made by the platform callback after the person logged in there. It holds
+//     the verified identity, still unlinked, and the account and token of the connect code. The
+//     app redeems it with its token (POST /api/mobile/connect/complete), and only then is the
+//     identity linked, and only when the redeeming token is the one the flow started with. A link
+//     someone else minted therefore cannot attach your login to their account: the result goes to
+//     the app on your device, whose token is not theirs.
+
+/** Is this app token still valid (not signed out, revoked or expired)? */
+export async function isApiTokenLive(tokenId) {
+  if (typeof tokenId !== 'string' || !tokenId) return false;
+  const row = await s.tokenById.get(tokenId);
+  return Boolean(row) && Number(row.expires_at) > Date.now();
+}
+
+/**
+ * A single-use code that lets the app's browser sheet start adding a login on `platform` to this
+ * account (GET /auth/mobile/connect). It names the account and the app token that asked, and it has
+ * no PKCE challenge: it links nothing by itself.
+ * @returns {Promise<{ code: string, expiresAt: number }>}
+ */
+export async function createConnectCode(accountId, tokenId, platform, { ttlMs = CODE_TTL_MS } = {}) {
+  const code = secret();
+  const expiresAt = Date.now() + ttlMs;
+  await s.upsertConnectCode.run(sha256(code), accountId, String(tokenId), String(platform), expiresAt);
+  return { code, expiresAt };
+}
+
+/**
+ * Take a connect code: the account, app token and platform it was made for, or null when it is
+ * unknown, used or expired. The code is gone after the first attempt, so it cannot be guessed at.
+ * @returns {Promise<{ accountId: string, tokenId: string, platform: string } | null>}
+ */
+export async function redeemConnectCode(code) {
+  if (typeof code !== 'string' || !code) return null;
+  const row = await s.takeConnectCode.get(sha256(code));
+  if (!row || Number(row.expires_at) <= Date.now() || !row.token_id) return null;
+  return { accountId: row.account_id, tokenId: row.token_id, platform: row.platform };
+}
+
+/** How long the app has to finish after the platform login. */
+const RESULT_TTL_MS = 120_000;
+
+/**
+ * Keep a verified platform identity, not yet linked, for the app that started the flow. Returns the
+ * result code the browser hands to the app.
+ * @param {{ accountId: string, tokenId: string, identity: { platform: string, platformUserId: string, username?: string, avatar?: string | null, guildIds?: string[] } }} flow
+ * @returns {Promise<string>}
+ */
+export async function createConnectResult({ accountId, tokenId, identity }, { ttlMs = RESULT_TTL_MS } = {}) {
+  const code = secret();
+  await s.insertConnectResult.run(
+    sha256(code),
+    accountId,
+    tokenId,
+    identity.platform,
+    identity.platformUserId,
+    String(identity.username ?? '').slice(0, 100),
+    identity.avatar ?? null,
+    JSON.stringify(identity.guildIds ?? []),
+    Date.now() + ttlMs
+  );
+  return code;
+}
+
+/**
+ * Take a result code. It is gone after the first attempt, right or wrong, whoever makes it.
+ * @returns {Promise<{ accountId: string, tokenId: string, identity: object } | null>} null when unknown, used or expired
+ */
+export async function redeemConnectResult(code) {
+  if (typeof code !== 'string' || !code) return null;
+  const row = await s.takeConnectResult.get(sha256(code));
+  if (!row || Number(row.expires_at) <= Date.now()) return null;
+  return {
+    accountId: row.account_id,
+    tokenId: row.token_id,
+    identity: {
+      platform: row.platform,
+      platformUserId: row.platform_user_id,
+      username: row.username,
+      avatar: row.avatar ?? null,
+      guildIds: JSON.parse(row.guild_ids || '[]'),
+    },
+  };
 }
 
 // --- push notifications ----------------------------------------------------------------

@@ -12,7 +12,9 @@ process.env.FLUXER_WEB_URL = 'http://fluxer.test';
 process.env.SESSION_SECRET = 'test-session-secret';
 process.env.OWNER_IDS = '111111111111111111';
 process.env.FLUXER_OWNER_IDS = '555555555555555555';
-delete process.env.DASHBOARD_URL;
+// A test file sets SYLO_TEST_DASHBOARD_URL to run with a configured public URL.
+if (process.env.SYLO_TEST_DASHBOARD_URL) process.env.DASHBOARD_URL = process.env.SYLO_TEST_DASHBOARD_URL;
+else delete process.env.DASHBOARD_URL;
 
 import './tmpDb.js';
 import test from 'node:test';
@@ -54,7 +56,8 @@ const stubbedFetch = async (url, init) => {
       : null;
   if (!platform) return realFetch(url, init);
   const p = profiles[platform];
-  if (u.endsWith('/oauth2/token')) return json({ access_token: `${platform}-token` });
+  if (u.endsWith('/oauth2/token'))
+    return p.tokenFails ? json({ error: 'invalid_grant' }, 400) : json({ access_token: `${platform}-token` });
   if (u.endsWith('/users/@me/guilds')) return json(p.guilds);
   if (u.endsWith('/users/@me'))
     return json({ id: p.id, username: p.username, global_name: null, avatar: null });
@@ -107,6 +110,9 @@ fluxerClient.guilds = { cache: new Map([[F_GUILD, guild(F_GUILD, 'F-main', fluxe
 
 let base;
 
+/** The origin the test app listens on (scheme, host and a non-default port). */
+export const appOrigin = () => base;
+
 /** Start the app on a free port and install the fake platforms. Call once per test file. */
 export async function startOAuthApp() {
   runtime.clients.discord = discordClient;
@@ -146,6 +152,43 @@ export function browser() {
     return res;
   };
   return { get: request, jar };
+}
+
+/**
+ * GET as a browser that asked for another Host (fetch cannot change it): the page's status and text.
+ * Uses the browser's cookies, and keeps what the answer sets.
+ */
+export async function getWithHost(b, path, host, { method = 'GET', body, headers = {} } = {}) {
+  const { request } = await import('node:http');
+  const url = new URL(base);
+  const cookie = [...b.jar].map(([k, v]) => `${k}=${v}`).join('; ');
+  return new Promise((resolve, reject) => {
+    const req = request(
+      {
+        host: url.hostname,
+        port: url.port,
+        path,
+        method,
+        headers: { ...headers, host, cookie },
+        agent: false,
+      },
+      (res) => {
+        let text = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => (text += chunk));
+        res.on('end', () => {
+          for (const line of res.headers['set-cookie'] ?? []) {
+            const [pair] = line.split(';');
+            const eq = pair.indexOf('=');
+            b.jar.set(pair.slice(0, eq), pair.slice(eq + 1));
+          }
+          resolve({ status: res.statusCode, text });
+        });
+      }
+    );
+    req.on('error', reject);
+    req.end(body);
+  });
 }
 
 // Ids that are nobody's operator id, unique per call: the database is shared across the file.

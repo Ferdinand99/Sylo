@@ -104,10 +104,19 @@ function fluxerWorld() {
   stored.set(quoted.id, quoted);
 
   const replies = [];
+  // what was sent to the asker's DMs: a private reply with a quote in it never goes to the channel
+  const dms = [];
   const command = (content, extra = {}) => ({
     content,
     createdTimestamp: 1,
-    author: { id: ASKER, bot: false },
+    author: {
+      id: ASKER,
+      bot: false,
+      send: async (p) => {
+        dms.push(p);
+        return { id: 'dm' };
+      },
+    },
     member: { id: ASKER, permissions: { has: () => false }, roles: { cache: new Map() } },
     guild,
     channel,
@@ -120,7 +129,7 @@ function fluxerWorld() {
     delete: async () => {},
     ...extra,
   });
-  return { guild, quoted, replies, command };
+  return { guild, quoted, replies, dms, command };
 }
 
 const run = async (message) =>
@@ -169,7 +178,8 @@ test('!quote save as a reply saves the message that was replied to', async () =>
   // saving it again through its link finds the same quote
   w.replies.length = 0;
   await run(w.command(`!quote save https://discord.com/channels/${RAW}/${CHANNEL}/${w.quoted.id}`));
-  assert.match(said(w.replies), /already quote \*\*#1\*\*/);
+  assert.match(said(w.dms), /already quote \*\*#1\*\*/, 'a private reply with the quote goes to the DMs');
+  assert.ok(!said(w.replies).includes('said on Fluxer'), 'and not to the channel');
   assert.equal((await recentQuotes(KEY)).length, 1);
 });
 

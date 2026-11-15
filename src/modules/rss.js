@@ -142,6 +142,25 @@ export function sourceLabel(feed = {}) {
   return feedSource(feed.url);
 }
 
+/**
+ * A feed with its address cut to the origin ("https://example.com/…"); feeds by name (Reddit) are kept.
+ * A feed URL can carry a token, so every response that shows feeds to someone below Edit uses this.
+ */
+export function maskFeedUrl(feed) {
+  const mask = (u) => {
+    try {
+      return `${new URL(u).origin}/…`;
+    } catch {
+      return '…';
+    }
+  };
+  return {
+    ...feed,
+    ref: /^https?:\/\//i.test(feed.ref) ? mask(feed.ref) : feed.ref,
+    url: feed.url ? mask(feed.url) : feed.url,
+  };
+}
+
 export function normaliseRssConfig(raw = {}) {
   const seenKeys = new Set();
   return {
@@ -255,31 +274,58 @@ export async function runFeed(guildId, feed) {
   }
 }
 
+// Where the next tick starts: the guild, and the feed in it, the previous tick ran out of budget at.
+// The walk used to begin at the first guild every time, so with more than MAX_FETCHES_PER_TICK feeds
+// in total the guilds at the end of the list (every Fluxer guild, which comes after the Discord
+// ones) were never polled. Resuming here makes every feed's turn come round.
+/** @type {{ key: string, feed: number } | null} */
+let resumeAt = null;
+
+/** The guilds in the order this tick visits them: from `resumeAt` to the end, then the start. */
+function guildsFrom(cursor, guilds) {
+  const at = cursor == null ? -1 : guilds.findIndex((g) => guildKey(g) === cursor.key);
+  return at <= 0 ? guilds : [...guilds.slice(at), ...guilds.slice(0, at)];
+}
+
 async function tick() {
   if (!allClientsReady()) return;
   let budget = MAX_FETCHES_PER_TICK;
+  let stoppedAt = null;
+  const resume = resumeAt;
+  let resumed = false;
 
-  for (const guild of allGuilds()) {
-    if (!(await isModuleEnabled(guildKey(guild), 'rss'))) continue;
-    const cfg = normaliseRssConfig((await getGuildModule(guildKey(guild), 'rss')).config);
-    for (const feed of cfg.feeds) {
-      if (budget-- <= 0) return;
+  for (const guild of guildsFrom(resume, allGuilds())) {
+    const key = guildKey(guild);
+    // Only the guild the last tick stopped in starts part-way, and only the first time it is reached.
+    const from = resume && !resumed && key === resume.key ? resume.feed : 0;
+    if (resume && key === resume.key) resumed = true;
+    if (!(await isModuleEnabled(key, 'rss'))) continue;
+    const cfg = normaliseRssConfig((await getGuildModule(key, 'rss')).config);
+    for (let i = from; i < cfg.feeds.length; i += 1) {
+      const feed = cfg.feeds[i];
+      if (budget-- <= 0) {
+        stoppedAt = { key, feed: i };
+        break;
+      }
       try {
-        await runFeed(guildKey(guild), feed);
+        await runFeed(key, feed);
       } catch (err) {
         log.error('rss', `${hostOf(feed.url)}: ${err.message}`);
       }
     }
+    if (stoppedAt) break;
   }
+  resumeAt = stoppedAt; // null once every guild has had its turn: the next tick starts over
 
   await pruneScopePrefixOlderThan('rss:', KEEP_MS);
 }
 
-every(
-  'rss',
-  POLL_MS,
-  () => {
-    tick().catch((err) => log.error('rss', 'tick failed:', err.message));
-  },
-  { firstDelayMs: 45_000 }
-);
+/** For tests. */
+export const _tick = tick;
+export const _resetResumeAt = () => {
+  resumeAt = null;
+};
+
+every('rss', POLL_MS, () => tick().catch((err) => log.error('rss', 'tick failed:', err.message)), {
+  firstDelayMs: 45_000,
+});

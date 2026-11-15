@@ -1,6 +1,13 @@
 import { useEffect, useState } from 'react';
+import PickerHealth from '../components/PickerHealth.jsx';
 import { useParams } from 'react-router-dom';
-import { getRoles, saveAutoroles, saveReactionRole, deleteReactionRole } from '../api.js';
+import {
+  getRoles,
+  saveAutoroles,
+  saveReactionRole,
+  deleteReactionRole,
+  duplicateReactionRole,
+} from '../api.js';
 import Badge from '../components/Badge.jsx';
 import Meta, { plural } from '../components/Meta.jsx';
 import LoadError from '../components/LoadError.jsx';
@@ -12,7 +19,10 @@ import EmbedEditor from '../components/EmbedEditor.jsx';
 import EmojiPicker from '../components/EmojiPicker.jsx';
 import { newKey } from '../components/EmbedCard.jsx';
 import { notify } from '../notify.js';
-import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import { counter, limitOf, useModuleLimits } from '../components/useModuleLimits.js';
+import ListPageHead from '../components/ListPageHead.jsx';
+import RowActions from '../components/RowActions.jsx';
+import EmptyList from '../components/EmptyList.jsx';
 
 const BTN_STYLES = ['secondary', 'primary', 'success', 'danger'];
 const STYLES = [
@@ -116,6 +126,7 @@ function ReactionRoleForm({ initial, channels, roles, onSave, onCancel, saving }
             </option>
           ))}
         </select>
+        <PickerHealth kind="channel" value={channelId} />
       </div>
 
       <div className="v2-field">
@@ -213,6 +224,7 @@ function ReactionRoleForm({ initial, channels, roles, onSave, onCancel, saving }
                 </option>
               ))}
             </select>
+            <PickerHealth kind="role" value={row.roleId} />
             {style === 'buttons' ? (
               <select value={row.btnStyle} onChange={(e) => updateRow(row.key, { btnStyle: e.target.value })}>
                 {BTN_STYLES.map((b) => (
@@ -259,6 +271,7 @@ function ReactionRoleForm({ initial, channels, roles, onSave, onCancel, saving }
 }
 
 export default function Roles() {
+  const limits = useModuleLimits('roles');
   const { guildId } = useParams();
   const [state, setState] = useState({ loading: true, data: null, error: null });
   // Autoroles are a plain settings form → SaveBar; the reaction-role sets
@@ -320,6 +333,16 @@ export default function Roles() {
     }
   }
 
+  async function onDuplicate(id) {
+    try {
+      await duplicateReactionRole(guildId, id);
+      await load();
+      notify('Created a draft copy. Nothing was posted: open it and publish it when it is ready.', 'info');
+    } catch (err) {
+      notify(err.message);
+    }
+  }
+
   async function onDelete(id) {
     const ok = await confirmDialog({
       title: 'Delete this reaction-role set?',
@@ -337,13 +360,32 @@ export default function Roles() {
 
   return (
     <>
-      <h1 className="v2-section-title">Reaction roles &amp; autoroles</h1>
-      <p className="v2-field-hint">Self-assign roles from a message; roles automatically on join.</p>
+      <ListPageHead
+        title="Reaction roles & autoroles"
+        // With nothing in the list the empty state below carries the one accent button.
+        action={
+          creating || d.reactionMessages.length === 0 ? null : (
+            <button type="button" className="v2-btn-primary" onClick={() => setCreating(true)}>
+              + New reaction role
+            </button>
+          )
+        }
+      >
+        <p className="v2-field-hint">Self-assign roles from a message; roles automatically on join.</p>
+      </ListPageHead>
 
       <div className="v2-group">
-        <h2 className="v2-group-title">Reaction roles ({d.reactionMessages.length})</h2>
+        <h2 className="v2-group-title">
+          Reaction roles ({counter(d.reactionMessages.length, limitOf(limits, 'reactionMessages').maxItems)})
+        </h2>
         {d.reactionMessages.length === 0 ? (
-          <p className="v2-note">None yet — create one to let members self-assign roles.</p>
+          <EmptyList
+            start={
+              creating ? null : { label: 'Create your first reaction role', onClick: () => setCreating(true) }
+            }
+          >
+            Let members pick their own roles with a reaction or a button.
+          </EmptyList>
         ) : (
           <div className="v2-list">
             {d.reactionMessages.map((rm) => {
@@ -382,14 +424,14 @@ export default function Roles() {
                     ) : null}
                   </div>
                   {editingId === rm.id ? null : (
-                    <div className="v2-row-actions">
-                      <button type="button" className="v2-btn-ghost" onClick={() => setEditingId(rm.id)}>
-                        Edit
-                      </button>
-                      <button type="button" className="v2-btn-danger-ghost" onClick={() => onDelete(rm.id)}>
-                        Delete
-                      </button>
-                    </div>
+                    <RowActions
+                      edit={{ onClick: () => setEditingId(rm.id) }}
+                      menuLabel={`More actions for ${title}`}
+                      items={[
+                        { label: 'Duplicate', onClick: () => onDuplicate(rm.id) },
+                        { label: 'Delete', danger: true, onClick: () => onDelete(rm.id) },
+                      ]}
+                    />
                   )}
                 </div>
               );
@@ -410,11 +452,7 @@ export default function Roles() {
             onCancel={() => setCreating(false)}
           />
         </div>
-      ) : (
-        <button type="button" className="v2-btn-primary" onClick={() => setCreating(true)}>
-          + New reaction role
-        </button>
-      )}
+      ) : null}
 
       <div className="v2-group v2-section-gap">
         <h2 className="v2-group-title">Autoroles on join</h2>
@@ -423,7 +461,13 @@ export default function Roles() {
           members" in Welcome &amp; leave.
         </p>
         <form onSubmit={onSaveAutoroles} data-savebar>
-          <ChipPicker kind="role" items={d.roles} value={autoroles.form} onChange={autoroles.setForm} />
+          <ChipPicker
+            kind="role"
+            items={d.roles}
+            value={autoroles.form}
+            health="role"
+            onChange={autoroles.setForm}
+          />
         </form>
       </div>
       <SaveBar

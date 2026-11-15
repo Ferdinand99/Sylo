@@ -8,6 +8,7 @@ import { GID, CH, ROLE } from './helpers/fakeGuild.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getGuildModule, setGuildModule } from '../src/db/modules.js';
+import { purgeGuild } from '../src/db/purge.js';
 import {
   createSuggestion,
   decideSuggestion,
@@ -15,6 +16,7 @@ import {
   setSuggestionMessage,
   setSuggestionVote,
   suggestionCount,
+  suggestionCountsByStatus,
 } from '../src/db/suggestions.js';
 
 let app;
@@ -53,6 +55,7 @@ test('GET config: the defaults, the channel and role lists, no suggestions yet',
   assert.ok(data.roles.some((r) => r.id === ROLE.member));
   assert.deepEqual(data.suggestions, []);
   assert.equal(data.outside, 0);
+  assert.equal(data.openCount, 0);
 });
 
 test('POST config stores the normalised settings and writes an audit row', async () => {
@@ -282,6 +285,9 @@ test('the list marks suggestions outside the suggestions channel, counts them fo
   assert.equal(flag(home.number), false);
   assert.equal(flag(away1.number), true);
   assert.ok(list.outside >= 2, 'the count covers the server, not only the shown list');
+  assert.ok(list.openCount >= 3, 'the open count covers the server, whatever the filter');
+  const approvedOnly = await json(await api.get('/modules/suggestions/list?status=approved'));
+  assert.equal(approvedOnly.openCount, list.openCount);
   const outsideBefore = list.outside;
 
   app.sink.messages.length = 0;
@@ -348,3 +354,39 @@ test('delete removes the suggestion and its votes; a second delete and a missing
   assert.equal((await api.post(`/modules/suggestions/${number}/delete`)).status, 404);
   assert.equal((await api.post('/modules/suggestions/0/delete')).status, 404);
 });
+
+test('the list and the config carry the count of every status, for the filter chips', async () => {
+  await purgeGuild(GID);
+  const a = await make({ body: 'One' });
+  const b = await make({ body: 'Two' });
+  const c = await make({ body: 'Three' });
+  await make({ body: 'Four' });
+  await decideSuggestion(a.id, { status: 'approved' });
+  await decideSuggestion(b.id, { status: 'denied' });
+  await decideSuggestion(c.id, { status: 'considering' });
+  // another server's suggestions, in every status, change nothing here
+  const OTHER = '700000000000000999';
+  const others = [
+    await make({ guildId: OTHER }),
+    await make({ guildId: OTHER }),
+    await make({ guildId: OTHER }),
+  ];
+  await decideSuggestion(others[0].id, { status: 'approved' });
+  await decideSuggestion(others[1].id, { status: 'implemented' });
+
+  const expected = { all: 4, open: 1, considering: 1, approved: 1, denied: 1, implemented: 0 };
+  assert.deepEqual((await json(await api.get('/modules/suggestions/config'))).counts, expected);
+  // the counts are for the whole server, whatever the filter on the list
+  const filtered = await json(await api.get('/modules/suggestions/list?status=denied'));
+  assert.equal(filtered.suggestions.length, 1);
+  assert.deepEqual(filtered.counts, expected);
+  assert.equal(filtered.openCount, 2);
+  assert.deepEqual(
+    await suggestionCountsByStatus(OTHER),
+    { all: 3, open: 1, considering: 0, approved: 1, denied: 0, implemented: 1 },
+    'the other server keeps its own numbers'
+  );
+  await purgeGuild(OTHER);
+});
+
+// Keep this test last in the file: it purges the server's suggestions at the start.

@@ -13,7 +13,11 @@ import LoadError from '../components/LoadError.jsx';
 import { limitOf, useModuleLimits } from '../components/useModuleLimits.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import Meta from '../components/Meta.jsx';
+import ListPageHead from '../components/ListPageHead.jsx';
+import RowActions from '../components/RowActions.jsx';
+import EmptyList from '../components/EmptyList.jsx';
 import UnitInput from '../components/UnitInput.jsx';
+import { serverTimeNote } from '../serverTime.js';
 
 function dayLabel(days, weekdays) {
   if (days.length === 7) return 'every day';
@@ -29,7 +33,7 @@ function ageLabel(hours) {
   return hours % 24 === 0 ? `${hours / 24}d` : `${hours}h`;
 }
 
-function ScheduleForm({ initial, channels, weekdays, maxAgeHoursCap, onSave, onCancel, saving }) {
+function ScheduleForm({ initial, channels, weekdays, maxAgeHoursCap, timeZone, onSave, onCancel, saving }) {
   const limits = useModuleLimits('channel-cleanup');
   const ageLimit = limitOf(limits, 'maxAgeHours');
   const [channelId, setChannelId] = useState(initial.channelId);
@@ -79,7 +83,7 @@ function ScheduleForm({ initial, channels, weekdays, maxAgeHoursCap, onSave, onC
       </div>
 
       <div className="v2-field">
-        <label>At (server local time)</label>
+        <label>At{serverTimeNote(timeZone) || ' (server local time)'}</label>
         <input
           type="time"
           value={timeHhmm}
@@ -208,16 +212,31 @@ export default function ChannelCleanup() {
 
   return (
     <>
-      <h1 className="v2-section-title">Channel cleanup</h1>
-      <p className="v2-field-hint">
-        Auto-delete messages older than a threshold from a channel, on a weekly schedule you pick. Needs{' '}
-        <strong>Manage Messages</strong> in the target channel.
-      </p>
+      <ListPageHead
+        title="Channel cleanup"
+        // With nothing in the list the empty state below carries the one accent button.
+        action={
+          creating || d.schedules.length === 0 ? null : (
+            <button type="button" className="v2-btn-primary" onClick={() => setCreating(true)}>
+              + New schedule
+            </button>
+          )
+        }
+      >
+        <p className="v2-field-hint">
+          Auto-delete messages older than a threshold from a channel, on a weekly schedule you pick. Needs{' '}
+          <strong>Manage Messages</strong> in the target channel.
+        </p>
+      </ListPageHead>
 
       <div className="v2-group">
         <h2 className="v2-group-title">Your schedules ({d.schedules.length})</h2>
         {d.schedules.length === 0 ? (
-          <p className="v2-note">None yet — create one to start cleaning up a channel.</p>
+          <EmptyList
+            start={creating ? null : { label: 'Add your first schedule', onClick: () => setCreating(true) }}
+          >
+            Keep a channel tidy: Sylo deletes messages older than the age you choose, on the days you pick.
+          </EmptyList>
         ) : (
           <div className="v2-list">
             {d.schedules.map((s) => {
@@ -234,7 +253,7 @@ export default function ChannelCleanup() {
                     <p>
                       <Meta
                         items={[
-                          `${dayLabel(s.days, d.weekdays)} at ${s.timeHhmm}`,
+                          `${dayLabel(s.days, d.weekdays)} at ${s.timeHhmm}${serverTimeNote(d.timeZone)}`,
                           `older than ${ageLabel(s.maxAgeHours)}`,
                           s.lastRunDate &&
                             `last ran ${s.lastRunDate}${s.lastRunCount ? ` (${s.lastRunCount} deleted)` : ''}`,
@@ -247,6 +266,7 @@ export default function ChannelCleanup() {
                         channels={d.channels}
                         weekdays={d.weekdays}
                         maxAgeHoursCap={d.maxAgeHoursCap}
+                        timeZone={d.timeZone}
                         saving={saving}
                         onSave={(body) => onEdit(s.id, body)}
                         onCancel={() => setEditingId(null)}
@@ -254,17 +274,14 @@ export default function ChannelCleanup() {
                     ) : null}
                   </div>
                   {editingId === s.id ? null : (
-                    <div className="v2-row-actions">
-                      <button type="button" className="v2-btn-ghost" onClick={() => setEditingId(s.id)}>
-                        Edit
-                      </button>
-                      <button type="button" className="v2-btn-ghost" onClick={() => onToggle(s.id)}>
-                        {s.enabled ? 'Pause' : 'Resume'}
-                      </button>
-                      <button type="button" className="v2-btn-danger-ghost" onClick={() => onDelete(s.id)}>
-                        Delete
-                      </button>
-                    </div>
+                    <RowActions
+                      edit={{ onClick: () => setEditingId(s.id) }}
+                      menuLabel={`More actions for #${channel ? channel.name : s.channelId}`}
+                      items={[
+                        { label: s.enabled ? 'Pause' : 'Resume', onClick: () => onToggle(s.id) },
+                        { label: 'Delete', danger: true, onClick: () => onDelete(s.id) },
+                      ]}
+                    />
                   )}
                 </div>
               );
@@ -281,16 +298,13 @@ export default function ChannelCleanup() {
             channels={d.channels}
             weekdays={d.weekdays}
             maxAgeHoursCap={d.maxAgeHoursCap}
+            timeZone={d.timeZone}
             saving={saving}
             onSave={onCreate}
             onCancel={() => setCreating(false)}
           />
         </div>
-      ) : (
-        <button type="button" className="v2-btn-primary" onClick={() => setCreating(true)}>
-          + New schedule
-        </button>
-      )}
+      ) : null}
     </>
   );
 }

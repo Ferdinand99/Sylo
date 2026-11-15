@@ -11,6 +11,7 @@ import {
   ApiError,
 } from '../api.js';
 import LoadError from '../components/LoadError.jsx';
+import OverflowMenu from '../components/OverflowMenu.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { formatCount } from '../util.js';
 import { ROADMAP_STATUS } from '../roadmapStatus.js';
@@ -272,9 +273,10 @@ export default function RoadmapAdmin() {
                       Edit
                     </button>
                   )}
-                  <button type="button" className="v2-btn-danger-ghost" onClick={() => onDelete(p)}>
-                    Delete
-                  </button>
+                  <OverflowMenu
+                    label={`More actions for ${p.title}`}
+                    items={[{ label: 'Delete', danger: true, onClick: () => onDelete(p) }]}
+                  />
                 </div>
               </div>
             ))}

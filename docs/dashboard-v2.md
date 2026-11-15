@@ -36,6 +36,22 @@ note.
 - **A server selection follows you** onto bot-wide pages (Bot Personalizer,
   Health) that aren't scoped to any one server, instead of clearing when you
   navigate there.
+- **A setup wizard for new servers.** A server with fewer than three modules
+  set up gets a "Set up Sylo" card on its Overview; the wizard can also be run
+  again any time from **Settings → Server data → Setup wizard**. Sylo looks at
+  the server's channels and roles, you pick goals (welcome, verification,
+  moderation and logging, tickets, community), and Sylo proposes the channels
+  and roles by name (`welcome`, `rules`, `mod-log`, `logs`, `tickets`,
+  `support` …). You review it, then apply. A channel or role is only created
+  when you tick **Create** for it, and only if Sylo has Manage Channels or
+  Manage Roles. Channels for logs and ticket alerts are made private (visible to
+  admins, Sylo and the staff role you pick); the others are read-only for
+  members and keep the server's own rules for who can see them. A channel with
+  the wanted name that already exists is used only if it is what the wizard
+  promises, and its permissions change only when you tick it. A module that is
+  already set up is left alone unless you tick it. Each module is saved like its
+  own settings page saves it and gets its own audit entry, and so does every
+  channel or role the wizard makes. It works the same way on Fluxer.
 - **Mobile gets a real off-canvas menu** (hamburger button, slide-in sidebar)
   below ~860px, rather than the sidebar just disappearing.
 
@@ -48,8 +64,69 @@ Every module has its own V2 settings page, and so do the staff pages (tickets,
 ban appeals, the moderation hub with commands, automod and logging), embed
 messages, insights, the leaderboard, Health, Stats and the Bot Personalizer. The
 server tools are there too, under **Settings → Server data**: the audit log,
-config export (a JSON file) and member data (look up and forget a member;
-moderation cases and other safety records are kept).
+config export and import (a JSON file) and member data (look up and forget a
+member; moderation cases and other safety records are kept).
+
+**Import configuration** reads a file made by the export, from this or another
+server. It shows what each module would change, you tick what to import, and
+you type `IMPORT` to confirm. Every module goes through the same checks as
+saving its own page, so a role you may not hand out is refused. Channels, roles
+and custom emoji that this server does not have are cleared (with a warning),
+and the ids of messages the other server posted are never carried over.
+Reminders, reaction-role sets and custom commands are in the file but are not
+imported yet; embed messages, the shop and member data are not in the file at
+all. A step that posts a message (verification, honeypot) or updates AutoMod is
+named in the preview before you confirm. Each import is written to the audit
+log.
+
+## Duplicate and templates
+
+The "⋯" menu of a reminder, an embed message, a reaction-role set, a custom
+command and a shop item has **Duplicate**. The copy never starts on its own: a
+reminder and a shop item are paused, an embed message and a reaction-role set
+are drafts (nothing is posted), and a custom command gets a free name ending in
+`-copy`. A copy counts against the same limits as creating one.
+
+**Start from a template** (the message builder, Welcome, the Welcome channel and
+the alert messages) offers a small gallery: Rules, Welcome card, Announcement,
+Stream live, Giveaway and Event. A template only fills in the form; nothing is
+saved until you save. The message builder and the Welcome channel also have
+**Message JSON**: the message as Discord message JSON (the shape Discohook uses)
+to copy or download, and a box to paste or load JSON back in. JSON that is over
+the limits is refused with the reason; what cannot be carried over (buttons that
+need a bot, timestamps) is listed.
+
+### Change history and undo
+
+Every save of a module's settings or of the server settings made from the
+dashboard keeps what it changed in its audit log entry: the settings that
+differ, with the value before and after. This includes the leaderboard switch
+and any page that saves settings through the same write. Lists that live in
+tables of their own (reminders, shop items) are not module settings and keep no
+copy. Open an entry in the audit log with **Show changes** to see the changed
+fields only, with a readable name where one is known. API keys, tokens,
+passwords, webhook links and links that carry a key are masked and never stored
+in clear. The log keeps the newest 500 entries per server, saved changes
+included; one copy is at most about 32 KB, all the copies of a server together
+about 5 MB (the oldest copies go first, the entries stay), and they go with the
+server when Sylo is removed from it.
+
+**Undo this change** puts the earlier values of that module back. It goes
+through the module's normal save (the same limits and checks as its form,
+including the rule that you cannot hand out a role above your own) and writes an
+entry of its own, so an undo can be undone too. If the settings were changed
+again since the entry, the page says which ones and asks before they are lost
+(the yes is for what the page showed: if the settings change again meanwhile,
+you are asked again). A masked secret is never restored: the value that is saved
+now stays, and a secret with nothing to be taken from is left out and reported.
+Settings that Sylo manages itself (the id of a message it posted) and the
+auto-role switch of Welcome, which goes together with the Roles page, are left
+as they are, and an entry with only such settings has no undo. Server settings
+are checked as the settings form checks them, all before the first is written.
+Undo covers a module's settings and the server settings; lists kept on their own
+(reminders, shop items, custom commands, saved messages) are not restored, and a
+few modules whose save does more than store settings show the difference
+without an undo.
 
 Two pages are public, with no login: the command list (`/v2/commands`) and the
 roadmap (`/v2/roadmap`). They show the same lists as before; voting
