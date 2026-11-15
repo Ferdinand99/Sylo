@@ -8,10 +8,10 @@ import {
   MAX_BALANCE,
   formatMoney,
   refusalText,
-  soldRoleIds,
   staffAdjust,
 } from '../../modules/economy.js';
-import { grantRefusal } from '../../web/middleware/roleGrants.js';
+import { fundingRefusal, grantRefusal } from '../../web/middleware/roleGrants.js';
+import { soldRoleIds } from '../../modules/lib/economyFunding.js';
 import { economyGate, reply } from '../lib/economyCmd.js';
 
 const user = (s) => s.addUserOption((o) => o.setName('user').setDescription('The member').setRequired(true));
@@ -75,7 +75,7 @@ export async function execute(interaction) {
     for (const roleId of await soldRoleIds(interaction.guildId)) {
       const role = interaction.guild?.roles?.cache?.get(roleId);
       const why = role ? grantRefusal(interaction.guild, interaction.member, role) : null;
-      if (why) return reply(interaction, why);
+      if (why) return reply(interaction, fundingRefusal(why, 'add money'));
     }
   }
 

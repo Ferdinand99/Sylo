@@ -30,11 +30,17 @@ const MOD = fakeRole('700000000000000703', 'Helper', 2, ['KickMembers']);
 
 const TARGET = '800000000000000701';
 
+// One sign-in per kind of person: the sign-in has its own rate limit.
+const sessions = new Map();
 async function signedIn(top, perms = ['ManageGuild']) {
-  setProfiles();
-  const id = profiles.discord.id;
-  const b = browser();
-  await signIn(b, 'discord');
+  const key = `${top}|${perms}`;
+  if (!sessions.has(key)) {
+    setProfiles();
+    const b = browser();
+    await signIn(b, 'discord');
+    sessions.set(key, { b, id: profiles.discord.id, token: (await (await b.get('/api/v2/csrf')).json()).token });
+  }
+  const { b, id, token } = sessions.get(key);
   guild.members.cache.set(id, {
     id,
     permissions: { has: (p) => perms.includes(p) },
@@ -45,13 +51,15 @@ async function signedIn(top, perms = ['ManageGuild']) {
     displayName: 'Target',
     user: { id: TARGET, username: 'target', bot: false },
   });
-  const token = (await (await b.get('/api/v2/csrf')).json()).token;
-  return (body) =>
-    b.get(`/api/v2/guilds/${D_GUILD}/modules/economy/members/${TARGET}/adjust`, {
+  const post = (path, body) =>
+    b.get(`/api/v2/guilds/${D_GUILD}/modules/economy${path}`, {
       method: 'POST',
       headers: { 'x-csrf-token': token, 'content-type': 'application/json' },
       body: JSON.stringify(body),
     });
+  const adjust = (body) => post(`/members/${TARGET}/adjust`, body);
+  adjust.post = post;
+  return adjust;
 }
 
 const sell = (role, extra = {}) =>
@@ -119,4 +127,49 @@ test('the owner and Administrators may credit whatever the shop sells', async ()
   await sell(HIGH);
   const adjust = await signedIn(10, ['Administrator']);
   assert.equal((await adjust({ action: 'add', amount: 100 })).status, 200);
+});
+
+test('the refusal says the shop is the reason', async () => {
+  await sell(HIGH);
+  const adjust = await signedIn(10);
+  const { error } = await (await adjust({ action: 'add', amount: 5 })).json();
+  assert.match(error, /The shop sells a role you can't hand out, so you can't add money/);
+});
+
+test('raising what members earn is refused while the shop sells a role above the actor', async () => {
+  await setGuildModule(D_GUILD, 'economy', { enabled: true, config: { workMin: 50, workMax: 150 } });
+  await sell(HIGH);
+  const adjust = await signedIn(10);
+  const raised = await adjust.post('/config', { workMin: 50, workMax: 100000 });
+  assert.equal(raised.status, 403);
+  assert.match((await raised.json()).error, /raise what members earn/);
+  const cooldown = await adjust.post('/config', { workMin: 50, workMax: 150, workCooldownMinutes: 1 });
+  assert.equal(cooldown.status, 403, 'a shorter cooldown pays more');
+  const start = await adjust.post('/config', { workMin: 50, workMax: 150, startingBalance: 1000000 });
+  assert.equal(start.status, 403);
+  assert.equal((await adjust.post('/reset', { confirm: 'RESET' })).status, 200, 'no starting balance: nothing to fund');
+});
+
+test('a starting balance makes the reset a credit, so it is refused too', async () => {
+  await setGuildModule(D_GUILD, 'economy', { enabled: true, config: { startingBalance: 500 } });
+  await sell(HIGH);
+  const adjust = await signedIn(10);
+  const res = await adjust.post('/reset', { confirm: 'RESET' });
+  assert.equal(res.status, 403);
+  assert.match((await res.json()).error, /reset the economy/);
+});
+
+test('lowering income, or changing something else, stays open', async () => {
+  await setGuildModule(D_GUILD, 'economy', { enabled: true, config: { workMin: 50, workMax: 150 } });
+  await sell(HIGH);
+  const adjust = await signedIn(10);
+  assert.equal((await adjust.post('/config', { workMin: 10, workMax: 20, currencyName: 'gold' })).status, 200);
+  assert.equal((await adjust.post('/config', { workMin: 10, workMax: 20, currencyName: 'silver' })).status, 200);
+});
+
+test('raising income is open when the shop sells nothing the actor could not hand out', async () => {
+  await setGuildModule(D_GUILD, 'economy', { enabled: true, config: { workMin: 50, workMax: 150 } });
+  await sell(LOW);
+  const adjust = await signedIn(10);
+  assert.equal((await adjust.post('/config', { workMin: 50, workMax: 100000 })).status, 200);
 });

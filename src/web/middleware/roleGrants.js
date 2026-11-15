@@ -24,6 +24,7 @@ import { normaliseLevelingConfig, rewardRolesToAdd } from '../../modules/levelin
 import { levelFromXp } from '../../modules/lib/levels.js';
 import { setComposedSpecGuard } from '../../db/composedMessages.js';
 import { guildKey } from '../../platform/platformOf.js';
+import { raisesIncome, soldRoleIds } from '../../modules/lib/economyFunding.js';
 import { getDashboardAccessRoles } from '../../db/guildSettings.js';
 import { holdsManageServerLive, userIdForGuild } from './auth.js';
 
@@ -212,12 +213,33 @@ async function checkPingRaise(moduleId, prev, next) {
   );
 }
 
+/** The sentence for a refusal where money would buy a role the person may not hand out. */
+export const fundingRefusal = (why, what) =>
+  `The shop sells a role you can't hand out, so you can't ${what} while it is on sale. ${why}`;
+
+/**
+ * For what funds a purchase of the shop's role items (a staff credit, the income settings, the starting
+ * balance): throw a RoleGrantError unless the acting person could hand out every role the shop sells.
+ */
+export async function checkFundingGrants(guildId, what) {
+  try {
+    await checkRoleGrants(await soldRoleIds(guildId));
+  } catch (err) {
+    if (err instanceof RoleGrantError) throw new RoleGrantError(fundingRefusal(err.message, what));
+    throw err;
+  }
+}
+
 /**
  * The module write guard's check, for a route that must refuse before it does anything else
  * (publishing a role menu posts to the channel before the save reaches the guard).
  */
 export async function checkModuleGrants(moduleId, prev, next) {
   await checkPingRaise(moduleId, prev, next);
+  if (moduleId === 'economy' && raisesIncome(prev, next)) {
+    const guildId = actors.getStore()?.guild ? guildKey(actors.getStore().guild) : null;
+    if (guildId) await checkFundingGrants(guildId, 'raise what members earn');
+  }
   await checkNewGrants(moduleGrantSites(moduleId, prev), moduleGrantSites(moduleId, next));
 }
 

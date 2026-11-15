@@ -29,10 +29,9 @@ import {
   normaliseReason,
   refusalText,
   resetEconomy,
-  soldRoleIds,
   staffAdjust,
 } from '../../modules/economy.js';
-import { checkRoleGrants } from '../middleware/roleGrants.js';
+import { checkFundingGrants } from '../middleware/roleGrants.js';
 
 /**
  * The audit-log line of one staff change: "add 330 for Alice (…1234)". The member's name is stored with the
@@ -256,7 +255,7 @@ router.post(
 
     // Money buys the shop's role items: crediting it is a grant of every role the shop sells, so it is
     // refused for someone who could not hand those roles out themselves (a 403). Taking money is not.
-    if (action !== 'remove') await checkRoleGrants(await soldRoleIds(guild.id));
+    if (action !== 'remove') await checkFundingGrants(guild.id, 'add money');
 
     const by = actingUserId(req, guild.id, null);
     const out = await staffAdjust({
@@ -294,6 +293,8 @@ router.post(
     if (req.body?.confirm !== 'RESET') return fail(res, 'Type RESET to confirm.');
     const { config } = await economySettings(req.guild.id);
     if (!withinPostLimit(req, res, config)) return undefined;
+    // Everyone starts again with the starting balance: money, for anyone who has less.
+    if (config.startingBalance > 0) await checkFundingGrants(req.guild.id, 'reset the economy');
     const out = await resetEconomy({
       guildId: req.guild.id,
       actorId: actingUserId(req, req.guild.id, null),
