@@ -20,8 +20,9 @@ const GID = '900000000000000901';
 const ROLE = '100000000000000901';
 const USER = '100000000000000911';
 
-function world() {
+function world({ platform = 'discord' } = {}) {
   const calls = [];
+  const state = { fetchError: null };
   const role = {
     id: ROLE,
     name: 'Perk',
@@ -61,7 +62,10 @@ function world() {
         roles: { highest: { position: 10, comparePositionTo: (r) => 10 - r.position } },
       },
       // discord.js: a plain fetch answers from the cache, a forced one asks the platform.
-      fetch: async (arg) => (arg && typeof arg === 'object' && arg.force ? live : (members.get(arg) ?? live)),
+      fetch: async (arg) => {
+        if (state.fetchError) throw state.fetchError;
+        return arg && typeof arg === 'object' && arg.force ? live : (members.get(arg) ?? live);
+      },
     },
   };
   const client = {
@@ -70,13 +74,15 @@ function world() {
     users: { fetch: async () => null },
   };
   guild.client = client;
-  runtime.clients.discord = client;
-  return { guild, calls };
+  runtime.clients.discord = platform === 'discord' ? client : null;
+  runtime.clients.fluxer = platform === 'fluxer' ? client : null;
+  return { guild, calls, state };
 }
 
 afterEach(async () => {
   await stopSchedules();
   runtime.clients.discord = null;
+  runtime.clients.fluxer = null;
 });
 
 const due = () =>
@@ -120,4 +126,34 @@ test('the shop take-back removes the role', async () => {
   const out = await takeRoleOnPlatform(guild, USER, ROLE, 'Purchase refunded');
   assert.equal(out.roleRemoved, true);
   assert.deepEqual(calls, [['remove', USER, ROLE]]);
+});
+
+test('Fluxer asks the platform too, as the event page does', async () => {
+  const { guild } = world({ platform: 'fluxer' });
+  const m = await liveMember(guild, USER);
+  assert.ok(m.roles.cache.has(ROLE), 'the fresh member, not the cached one');
+});
+
+test('a failed lookup is not read as "the member left": the early removal keeps the record and says so', async () => {
+  const { guild, calls, state } = world();
+  await due();
+  state.fetchError = Object.assign(new Error('Service Unavailable'), { status: 503 });
+  const out = await removeTempRole({ guild, userId: USER, roleId: ROLE });
+  assert.equal(out.ok, false);
+  assert.match(out.error, /could not check the member/);
+  assert.ok(await getTempRole(GID, USER, ROLE), 'the record is still there');
+  assert.deepEqual(calls, []);
+  // A member who is really gone still ends the record.
+  state.fetchError = Object.assign(new Error('Unknown Member'), { status: 404, code: 10007 });
+  const gone = await removeTempRole({ guild, userId: USER, roleId: ROLE });
+  assert.equal(gone.ok, true);
+  assert.equal(await getTempRole(GID, USER, ROLE), null);
+});
+
+test('the shop take-back warns instead of reporting nothing to do when the lookup fails', async () => {
+  const { guild, state } = world();
+  state.fetchError = Object.assign(new Error('Too Many Requests'), { status: 429 });
+  const out = await takeRoleOnPlatform(guild, USER, ROLE, 'Purchase refunded');
+  assert.equal(out.roleRemoved, false);
+  assert.match(out.warning, /could not check the member/);
 });

@@ -153,8 +153,14 @@ export function describeTempRole(row) {
   return bits.join(' · ');
 }
 
+/** The member now, or null when they are no longer in the server. Any other failure (a timeout, a 5xx, a rate limit) throws. */
 async function memberOf(guild, userId) {
-  return liveMember(guild, userId).catch(() => null);
+  try {
+    return await liveMember(guild, userId);
+  } catch (err) {
+    if (isGone(err)) return null;
+    throw err;
+  }
 }
 
 /** The platform says the member or role no longer exists (Discord 10007 / 10011, a 404 on either platform). */
@@ -335,7 +341,14 @@ export async function removeTempRole({ guild, userId, roleId, by = null, reason 
 
   let roleRemoved = false;
   let warning;
-  const member = role ? await memberOf(guild, userId) : null;
+  let member = null;
+  try {
+    member = role ? await memberOf(guild, userId) : null;
+  } catch (err) {
+    // Not a "left": nothing is changed, so the record stays and the person can try again.
+    log.warn('temp-roles', `could not look up ${userId}:`, err.message);
+    return fail('Sylo could not check the member just now, so nothing was changed. Try again in a moment.');
+  }
   if (member?.roles.cache.has(roleId)) {
     const refusal = botRefusal(guild, role);
     if (refusal) {
@@ -573,7 +586,16 @@ export async function giveRoleOnPlatform(guild, member, role, what) {
 export async function takeRoleOnPlatform(guild, userId, roleId, what) {
   const role = guild.roles.cache.get(roleId) ?? null;
   if (!role) return { roleRemoved: false };
-  const member = await memberOf(guild, userId);
+  let member;
+  try {
+    member = await memberOf(guild, userId);
+  } catch (err) {
+    log.warn('temp-roles', `could not look up ${userId}:`, err.message);
+    return {
+      roleRemoved: false,
+      warning: 'Sylo could not check the member just now. The role may still be on them.',
+    };
+  }
   if (!member?.roles.cache.has(roleId)) return { roleRemoved: false };
   const refusal = botRefusal(guild, role);
   if (refusal) return { roleRemoved: false, warning: `${refusal} The role is still on the member.` };
