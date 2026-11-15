@@ -2,41 +2,104 @@ import SwiftUI
 import SyloKit
 
 /// Suggestions: where they are posted and logged, anonymous posts, DMs to the author, turning
-/// messages into suggestions, the cooldown and the staff roles, with the latest suggestions listed
-/// read only. Deciding on or deleting a suggestion stays in the web dashboard. Mirrors
-/// web-v2/src/moduleForms/Suggestions.jsx.
+/// messages into suggestions, the cooldown and the staff roles, and the suggestions themselves:
+/// filter and sort them, set a status with an optional reason, move them back to the suggestions
+/// channel or delete them. Mirrors web-v2/src/moduleForms/Suggestions.jsx.
 struct SuggestionsSettingsView: View {
     @State private var model: ModuleSettingsModel<SuggestionsPage>
     @State private var note: ModulePlatformNoteModel
-    private let server: ServerID
+    @State private var list: SuggestionListModel
+    /// The status change the reason alert is asking about.
+    @State private var deciding: PendingDecision?
+    @State private var isAskingReason = false
+    @State private var deleting: SuggestionSummary?
+    @State private var isConfirmingMoveAll = false
+    @Environment(\.dashboardAccess) private var access
 
     init(server: ServerID, session: AppSession) {
-        self.server = server
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
         _note = State(initialValue: ModulePlatformNoteModel(server: server, module: SuggestionsPage.moduleID, session: session))
+        _list = State(initialValue: SuggestionListModel(server: server, session: session))
     }
 
     var body: some View {
+        alerts
+    }
+
+    /// The form with its confirmations and alerts, in layers so each stays quick to type-check.
+    private var alerts: some View {
+        dialogs
+            .alert("Couldn't Update Suggestion", isPresented: isShowingActionError, presenting: list.actionError) { _ in
+                Button("OK") {}
+            } message: { message in
+                Text(message)
+            }
+            .alert(noticeTitle, isPresented: isShowingNotice, presenting: list.notice) { _ in
+                Button("OK") {}
+            } message: { notice in
+                Text(notice.message)
+            }
+            .sensoryFeedback(.success, trigger: list.doneCount)
+    }
+
+    private var noticeTitle: LocalizedStringKey {
+        list.notice?.isError == true ? "Not Everything Moved" : "Moved Back"
+    }
+
+    private var dialogs: some View {
+        form
+            .reasonPrompt(
+                "Set the Status?", message: decisionMessage, isPresented: $isAskingReason,
+                confirmTitle: LocalizedStringKey(deciding?.action.title ?? "Set")
+            ) { reason in
+                if let pending = deciding {
+                    Task { await list.decide(pending.suggestion, pending.action, reason: reason) }
+                }
+            }
+            .confirmationDialog(
+                "Delete This Suggestion?", isPresented: isConfirmingDelete, titleVisibility: .visible, presenting: deleting
+            ) { suggestion in
+                Button("Delete", role: .destructive) { Task { await list.delete(suggestion) } }
+                Button("Cancel", role: .cancel) {}
+            } message: { suggestion in
+                Text("Suggestion #\(suggestion.number), its votes and its post are removed. This can't be undone.")
+            }
+            .confirmationDialog("Move All Back?", isPresented: $isConfirmingMoveAll, titleVisibility: .visible) {
+                Button("Move All Back") { Task { await list.moveAllBack() } }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Sylo posts each one again in the suggestions channel, oldest first, and removes the old post. With a log channel in copy mode, a decided suggestion keeps the old post as its log copy. A suggestion whose old post Sylo cannot reach is skipped and listed afterwards. This can take a while.")
+            }
+    }
+
+    private var form: some View {
         ModuleSettingsForm("Suggestions", model: model) { $settings, page in
-            ModuleIntro("Members post ideas and everyone votes with thumbs up and down. Staff approve, deny or mark a suggestion as implemented, in chat or in the web dashboard.")
+            ModuleIntro("Members post ideas and everyone votes with thumbs up and down. Staff approve, deny or mark a suggestion as implemented, in chat or right here.")
             PlatformNoteSection(model: note)
 
+            // The settings are Edit work; deciding on suggestions below is for the Inbox level.
+            Group {
             Section {
                 ChannelPicker(title: "Suggestions channel", selection: $settings.channel, channels: page.channels,
-                              noneTitle: "Where the command is used")
+                              noneTitle: "Where the command is used", embed: true, health: true)
             }
 
             Section {
                 ChannelPicker(title: "Log channel", selection: $settings.logChannel, channels: page.channels,
-                              noneTitle: "Decided ones stay")
+                              noneTitle: "Decided ones stay", embed: true, health: true)
+                Picker("When decided", selection: $settings.logMode) {
+                    Text("Copy, keep the original").tag(SuggestionsLogMode.copy)
+                    Text("Move, delete the original").tag(SuggestionsLogMode.move)
+                }
+                .disabled(settings.logChannel.isEmpty)
             } footer: {
-                Text("A suggestion that is approved, denied or implemented is reposted here and the original is deleted.")
+                Text(Self.logModeFooter(settings))
             }
 
             Section {
                 Toggle("Anonymous suggestions", isOn: $settings.anonymous)
             } footer: {
-                Text("New posts do not show who wrote them. Staff still see the author in the web dashboard.")
+                Text("New posts do not show who wrote them. Staff still see the author in the list below.")
             }
 
             Section {
@@ -63,21 +126,196 @@ struct SuggestionsSettingsView: View {
             } footer: {
                 Text("May decide on suggestions without Manage Server.")
             }
-
-            Section("Latest suggestions") {
-                if page.suggestions.isEmpty {
-                    Text("Nothing here yet.").foregroundStyle(.secondary)
-                }
-                ForEach(page.suggestions) { item in
-                    SuggestionLine(item: item)
-                }
             }
+            .disabled(!access.canEdit)
 
-            DashboardLinkSection(
-                server: server, module: SuggestionsPage.moduleID,
-                footer: "Set a status, add a reason or delete a suggestion in the web dashboard.")
+            suggestionsSection(page)
         }
         .task { await note.load() }
+        // The page comes with the unfiltered list; take it over whenever the page is loaded.
+        .onChange(of: model.page?.suggestions, initial: true) {
+            if let page = model.page { Task { await list.adopt(page) } }
+        }
+        // A new suggestions channel changes which suggestions can be moved back.
+        .onChange(of: model.saveCount) { Task { await list.load() } }
+        .onChange(of: list.filter) { Task { await list.load() } }
+        .onChange(of: list.sort) { Task { await list.load() } }
+    }
+
+    /// The filter and order, the move-all-back banner and the suggestions.
+    @ViewBuilder
+    private func suggestionsSection(_ page: SuggestionsPage) -> some View {
+        let suggestions = list.hasLoaded ? list.suggestions : page.suggestions
+        let outside = list.hasLoaded ? list.outside : page.outside
+        if outside > 0 {
+            Section {
+                Text("\(outside) suggestions are not in the suggestions channel, for example after an earlier move to the log channel.")
+                    .font(.subheadline)
+                Button("Move All Back", systemImage: "arrow.uturn.backward") { isConfirmingMoveAll = true }
+                    .disabled(list.isWorking || !access.canActOnInbox)
+            }
+        }
+
+        Section {
+            // Open, Approved, Denied, Implemented and All, each with how many there are (Sylo 5.2).
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(SuggestionFilter.chipOrder, id: \.self) { filter in
+                        filterChip(filter)
+                    }
+                }
+                .padding(.horizontal, 2)
+            }
+            .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+            Picker("Order", selection: $list.sort) {
+                Text("Newest First").tag(SuggestionSort.new)
+                Text("Most Votes First").tag(SuggestionSort.top)
+            }
+        }
+
+        Section {
+            if suggestions.isEmpty {
+                Text(list.isLoading ? "Loading…" : "Nothing here yet.").foregroundStyle(.secondary)
+            }
+            ForEach(suggestions) { item in
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .top) {
+                        SuggestionLine(item: item)
+                        Spacer(minLength: 0)
+                        Menu {
+                            actions(for: item)
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .imageScale(.large)
+                                .accessibilityLabel("Actions for suggestion #\(item.number)")
+                        }
+                        .disabled(list.isWorking || !access.canActOnInbox)
+                    }
+                    // Quick Approve and Deny on an open one; both open the reason form with the status set, as
+                    // on the web (Sylo 5.2).
+                    if access.canActOnInbox, item.status == .open || item.status == .considering {
+                        HStack(spacing: 8) {
+                            Button("Approve", systemImage: "checkmark.circle") { ask(.approve, for: item) }
+                            Button("Deny", systemImage: "xmark.circle") { ask(.deny, for: item) }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(list.isWorking)
+                    }
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    if access.canActOnInbox {
+                        Button("Delete", systemImage: "trash", role: .destructive) { deleting = item }
+                    }
+                }
+                .contextMenu {
+                    if access.canActOnInbox { actions(for: item) }
+                }
+            }
+        } header: {
+            Text("Suggestions (\(suggestions.count))")
+        } footer: {
+            if let message = list.errorMessage {
+                StatusMessage(message, kind: .error)
+            }
+        }
+    }
+
+    /// One filter chip: its title and how many suggestions it holds.
+    private func filterChip(_ filter: SuggestionFilter) -> some View {
+        let isSelected = list.filter == filter
+        let count = list.counts?.count(for: filter)
+        return Button {
+            list.filter = filter
+        } label: {
+            Text(verbatim: count.map { "\(filter.chipTitle) \(DateText.count($0))" } ?? filter.chipTitle)
+                .font(.subheadline.weight(isSelected ? .semibold : .regular))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .foregroundStyle(isSelected ? Color.onAccent : Color.primary)
+                .background(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(Color.secondary.opacity(0.15)), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    /// Set a status, move back, delete: the same list from the menu and from a long press.
+    @ViewBuilder
+    private func actions(for item: SuggestionSummary) -> some View {
+        ForEach(SuggestionAction.available(for: item.status), id: \.self) { action in
+            Button(action.title, systemImage: action.symbol) { ask(action, for: item) }
+        }
+        if item.canMoveBack {
+            Button("Move Back", systemImage: "arrow.uturn.backward") {
+                Task { await list.moveBack(item) }
+            }
+        }
+        Button("Delete", systemImage: "trash", role: .destructive) { deleting = item }
+    }
+
+    private func ask(_ action: SuggestionAction, for suggestion: SuggestionSummary) {
+        deciding = PendingDecision(suggestion: suggestion, action: action)
+        isAskingReason = true
+    }
+
+    /// Which suggestion becomes what, and who sees the reason.
+    private var decisionMessage: LocalizedStringKey {
+        guard let deciding else { return "" }
+        return "Suggestion #\(deciding.suggestion.number) becomes \(deciding.action.title). The reason is shown on the post and sent to the author."
+    }
+
+    private var isConfirmingDelete: Binding<Bool> {
+        Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })
+    }
+
+    private var isShowingActionError: Binding<Bool> {
+        Binding(get: { list.actionError != nil }, set: { if !$0 { list.actionError = nil } })
+    }
+
+    private var isShowingNotice: Binding<Bool> {
+        Binding(get: { list.notice != nil }, set: { if !$0 { list.notice = nil } })
+    }
+
+    /// What the log channel does with a decided suggestion, in the dashboard's words.
+    private static func logModeFooter(_ settings: SuggestionsSettings) -> LocalizedStringKey {
+        if settings.logChannel.isEmpty {
+            return "Pick a log channel to have decided suggestions posted there too."
+        }
+        switch settings.logMode {
+        case .copy:
+            return "The original stays in the suggestions channel and shows its status. The copy in the log channel is updated if the status changes again and removed if the suggestion is reopened."
+        case .move:
+            return "The original is deleted and the suggestion lives in the log channel from then on."
+        }
+    }
+}
+
+/// A status change waiting for the person to confirm it, with the reason they type.
+private struct PendingDecision: Identifiable {
+    let suggestion: SuggestionSummary
+    let action: SuggestionAction
+
+    var id: String { "\(suggestion.number)-\(action.rawValue)" }
+}
+
+extension SuggestionAction {
+    /// The status the action sets, as the dashboard words the "Set status" choices.
+    var title: String {
+        switch self {
+        case .approve: String(localized: "Approved")
+        case .deny: String(localized: "Denied")
+        case .implement: String(localized: "Implemented")
+        case .consider: String(localized: "Considering")
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .approve: "checkmark.circle"
+        case .deny: "xmark.circle"
+        case .implement: "shippingbox"
+        case .consider: "questionmark.circle"
+        }
     }
 }
 

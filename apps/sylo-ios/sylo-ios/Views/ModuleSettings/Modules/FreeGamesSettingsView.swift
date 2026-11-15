@@ -5,9 +5,11 @@ import SyloKit
 /// web-v2/src/moduleForms/FreeGames.jsx.
 struct FreeGamesSettingsView: View {
     @State private var model: ModuleSettingsModel<FreeGamesPage>
+    @State private var test: ModuleTestModel
 
     init(server: ServerID, session: AppSession) {
         _model = State(initialValue: ModuleSettingsModel(server: server, session: session))
+        _test = State(initialValue: ModuleTestModel(server: server, module: "free-games", session: session))
     }
 
     var body: some View {
@@ -16,7 +18,7 @@ struct FreeGamesSettingsView: View {
 
             Section {
                 ChannelPicker(title: "Announcement channel", selection: $settings.channelId, channels: page.channels,
-                              noneTitle: "Choose a channel")
+                              noneTitle: "Choose a channel", embed: true, health: true)
             } footer: {
                 if settings.channelId.isEmpty {
                     Text("Nothing is posted until you choose a channel.")
@@ -30,6 +32,10 @@ struct FreeGamesSettingsView: View {
             } footer: {
                 Text("Optional: mentioned with each announcement.")
             }
+
+            SendTestButton(model: test, hasUnsavedChanges: model.hasChanges,
+                           sample: "a sample announcement",
+                           channelName: page.channels.first { $0.id == settings.channelId }?.name)
         }
     }
 }

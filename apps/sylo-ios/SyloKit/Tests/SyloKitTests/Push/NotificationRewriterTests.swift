@@ -203,7 +203,9 @@ struct NotificationRewriterTests {
         defer { h.cleanUp() }
         let start = ContinuousClock.now
         let rewrite = await h.rewriter.rewrite(Self.payload())
-        #expect(ContinuousClock.now - start < .seconds(5))
+        // The client sleeps for 60 s, so anything well below that proves the limit ended the call. The bound is
+        // wide on purpose: a busy test run delays the timer by seconds (the whole run takes 5 to 9 s on CI).
+        #expect(ContinuousClock.now - start < .seconds(30))
         #expect(rewrite == NotificationRewrite(threadIdentifier: "https://sylo.example.com"))
     }
 

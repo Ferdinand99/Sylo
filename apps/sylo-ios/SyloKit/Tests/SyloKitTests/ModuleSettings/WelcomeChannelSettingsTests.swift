@@ -33,9 +33,18 @@ struct WelcomeChannelSettingsTests {
     }
     """#
 
+    static func page() throws -> WelcomeChannelPage {
+        try JSONDecoder().decode(WelcomeChannelPage.self, from: Data(pageJSON.utf8))
+    }
+
+    private static func body(_ settings: WelcomeChannelSettings) throws -> [String: Any] {
+        let data = try JSONEncoder().encode(settings)
+        return try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+    }
+
     @Test("the page decodes the channel, the message, its elements and the presets")
     func decodesPage() throws {
-        let page = try JSONDecoder().decode(WelcomeChannelPage.self, from: Data(Self.pageJSON.utf8))
+        let page = try Self.page()
         #expect(WelcomeChannelPage.moduleID == "welcome-channel")
         let s = page.settings
         #expect(s.channelId == "111111111111111111")
@@ -43,8 +52,8 @@ struct WelcomeChannelSettingsTests {
         #expect(s.isPublished)
         #expect(s.content == "Welcome to {server}!")
         #expect(s.embeds.count == 2)
-        let embed = try #require(s.embeds.first)
-        #expect(embed.kind == .embed)
+        let embed = try #require(s.embeds.first).draft
+        #expect(!s.embeds[0].isBanner)
         #expect(embed.title == "Rules")
         #expect(embed.color == "#ff0000")
         #expect(embed.thumbnail == "https://example.com/t.png")
@@ -55,10 +64,11 @@ struct WelcomeChannelSettingsTests {
         #expect(field.value == "No spam")
         #expect(field.inline)
         let banner = s.embeds[1]
-        #expect(banner.kind == .banner)
-        #expect(banner.image == "https://example.com/b.png")
-        // No colour stored: the web form shows (and saves) Discord's blurple.
-        #expect(banner.color == WelcomeChannelSettings.Embed.defaultColor)
+        #expect(banner.isBanner)
+        #expect(banner.draft.image == "https://example.com/b.png")
+        // No colour stored: the editor shows (and saving sends) Discord's blurple.
+        #expect(banner.draft.color.isEmpty)
+        #expect(banner.draft.resolvedColor() == "#5865f2")
         #expect(page.channels.map(\.name) == ["welcome"])
         #expect(page.presets.map(\.id) == ["welcome-embed", "welcome-banner"])
         #expect(page.presets.first?.label == "Welcome embed")
@@ -74,10 +84,12 @@ struct WelcomeChannelSettingsTests {
         #expect(!s.isPublished)
         #expect(s.content.isEmpty)
         let embed = try #require(s.embeds.first)
-        #expect(embed.kind == .embed)
-        #expect(embed.color == "#5865f2")
-        #expect(embed.title.isEmpty)
-        #expect(embed.fields.isEmpty)
+        // An unknown kind is kept as it came (sent back unchanged), and the broken colour reads as the default.
+        #expect(embed.draft.kind == "poster")
+        #expect(!embed.isBanner)
+        #expect(embed.draft.resolvedColor() == "#5865f2")
+        #expect(embed.draft.title.isEmpty)
+        #expect(embed.draft.fields.isEmpty)
         #expect(page.channels.isEmpty)
         #expect(page.presets.isEmpty)
 
@@ -87,42 +99,496 @@ struct WelcomeChannelSettingsTests {
 
     @Test("saving sends exactly what the web dashboard sends, never the published message id")
     func encodesBody() throws {
-        var settings = try JSONDecoder().decode(WelcomeChannelPage.self, from: Data(Self.pageJSON.utf8)).settings
+        var settings = try Self.page().settings
         // An empty field row is left out, as the web form does.
-        settings.embeds[0].fields.append(WelcomeChannelSettings.Field())
-        let data = try JSONEncoder().encode(settings)
-        let body = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        settings.embeds[0].draft.fields.append(EmbedDraft.Field())
+        let body = try Self.body(settings)
         #expect(Set(body.keys) == ["channelId", "spec"])
         let spec = try #require(body["spec"] as? [String: Any])
         #expect(Set(spec.keys) == ["content", "embeds"])
         let embed = try #require((spec["embeds"] as? [[String: Any]])?.first)
+        // This embed was stored with the time switched on, so that goes back too.
         #expect(Set(embed.keys) == [
             "kind", "color", "authorName", "authorIcon", "title", "description", "image", "thumbnail",
-            "footerText", "footerIcon", "fields",
+            "footerText", "footerIcon", "fields", "timestamp",
         ])
+        #expect(embed["timestamp"] as? Bool == true)
+        // The banner had it off: no key.
+        let banner = try #require((spec["embeds"] as? [[String: Any]])?.last)
+        #expect(banner["timestamp"] == nil)
         let fields = try #require(embed["fields"] as? [[String: Any]])
         #expect(fields.count == 1)
         #expect(Set(fields[0].keys) == ["name", "value", "inline"])
     }
 
-    @Test("new elements and fields start like the web form's new ones")
+    @Test("a banner stays a banner and an unknown key survives a save")
+    func bannerRoundTrip() throws {
+        let json = #"""
+        {"config":{"spec":{"embeds":[
+          {"kind":"banner","image":"https://example.com/b.png","description":"Hi","color":"#ed4245","extraKey":[1,{"a":true}]}
+        ]}}}
+        """#
+        var settings = try JSONDecoder().decode(WelcomeChannelPage.self, from: Data(json.utf8)).settings
+        settings.embeds[0].draft.description = "Hello"
+        let body = try Self.body(settings)
+        let spec = try #require(body["spec"] as? [String: Any])
+        let sent = try #require((spec["embeds"] as? [[String: Any]])?.first)
+        #expect(sent["kind"] as? String == "banner")
+        #expect(sent["image"] as? String == "https://example.com/b.png")
+        #expect(sent["description"] as? String == "Hello")
+        #expect(sent["color"] as? String == "#ed4245")
+        #expect(sent["extraKey"] != nil)
+
+        // Read back, the banner is the same banner.
+        let again = try JSONDecoder().decode(WelcomeChannelSettings.self, from: JSONEncoder().encode(settings))
+        #expect(again.embeds.count == 1)
+        #expect(again.embeds[0].isBanner)
+        #expect(again.embeds[0] == settings.embeds[0])
+    }
+
+    @Test("the colour a banner shows is what is sent, and the embeds read back as the same elements")
+    func sentColourAndReadBack() throws {
+        let settings = try Self.page().settings
+        let again = try JSONDecoder().decode(WelcomeChannelSettings.self, from: JSONEncoder().encode(settings))
+        #expect(again.embeds.count == 2)
+        #expect(again.embeds[0].draft.title == "Rules")
+        #expect(again.embeds[0].draft.fields == settings.embeds[0].draft.fields)
+        // The banner had no colour stored; what is sent is the colour the editor shows.
+        #expect(again.embeds[1].draft.color == "#5865f2")
+        #expect(again.embeds[1].isBanner)
+        // A stored timestamp is kept (and shown in the preview), not dropped on save.
+        #expect(settings.embeds[0].draft.timestamp)
+        #expect(again.embeds[0].draft.timestamp)
+        #expect(!again.embeds[1].draft.timestamp)
+    }
+
+    @Test("new elements and presets start like the web form's new ones")
     func newRows() throws {
-        let page = try JSONDecoder().decode(WelcomeChannelPage.self, from: Data(Self.pageJSON.utf8))
+        let page = try Self.page()
         let preset = try #require(page.presets.first)
         let embed = preset.makeEmbed()
-        #expect(embed.kind == .embed)
-        #expect(embed.title == "Welcome to {server}!")
-        #expect(embed.description == "Hello")
-        #expect(embed.color == "#5865f2")
-        #expect(embed.image.isEmpty)
-        #expect(embed.fields.isEmpty)
+        #expect(!embed.isBanner)
+        #expect(embed.draft.title == "Welcome to {server}!")
+        #expect(embed.draft.description == "Hello")
+        #expect(embed.draft.color == "#5865f2")
+        #expect(embed.draft.image.isEmpty)
+        #expect(embed.draft.fields.isEmpty)
         #expect(preset.makeEmbed().id != embed.id)
         let banner = try #require(page.presets.last).makeEmbed()
-        #expect(banner.kind == .banner)
-        #expect(banner.color == "#5865f2")
-        let field = WelcomeChannelSettings.Field()
+        #expect(banner.isBanner)
+        #expect(banner.draft.resolvedColor() == "#5865f2")
+        let field = EmbedDraft.Field()
         #expect(field.name.isEmpty)
         #expect(field.value.isEmpty)
         #expect(!field.inline)
+    }
+
+    @Test("a preset's copy has its own field ids")
+    func presetFieldIDs() throws {
+        let draft = EmbedDraft(fields: [EmbedDraft.Field(name: "1", value: "a")])
+        let preset = WelcomeChannelPreset(id: "p", label: "P", defaults: draft)
+        let first = preset.makeEmbed()
+        let second = preset.makeEmbed()
+        #expect(first.draft.fields[0].id != second.draft.fields[0].id)
+        #expect(first.draft.fields[0].id != draft.fields[0].id)
+        #expect(first == second)
+    }
+
+    // MARK: Publishing
+
+    @Test("the publishing calls are POSTs to the module's own paths")
+    func endpoints() throws {
+        let settings = try Self.page().settings
+        let publish = Endpoints.PublishWelcomeChannel(server: "fluxer:1", settings: settings)
+        #expect(publish.path == "/api/v2/guilds/fluxer%3A1/modules/welcome-channel/publish")
+        #expect(publish.method == .post)
+        #expect(publish.body != nil)
+        let unpublish = Endpoints.UnpublishWelcomeChannel(server: "1")
+        #expect(unpublish.path == "/api/v2/guilds/1/modules/welcome-channel/unpublish")
+        #expect(unpublish.method == .post)
+        let create = Endpoints.CreateWelcomeChannel(server: "1")
+        #expect(create.path == "/api/v2/guilds/1/modules/welcome-channel/create-channel")
+        #expect(create.method == .post)
+    }
+
+    @Test("the answer to creating the channel carries the config and the refreshed channel list")
+    func decodesCreated() throws {
+        let json = #"""
+        {"config":{"channelId":"333333333333333333","messageId":"","spec":{"content":"","embeds":[]}},
+         "channels":[{"id":"333333333333333333","name":"welcome"}]}
+        """#
+        let created = try JSONDecoder().decode(WelcomeChannelCreated.self, from: Data(json.utf8))
+        #expect(created.settings.channelId == "333333333333333333")
+        #expect(created.channels.map(\.name) == ["welcome"])
+    }
+}
+
+/// The server's side of the Welcome Channel for the publisher tests.
+final class FakeWelcomeServer: @unchecked Sendable {
+    // @unchecked: every field is only touched while holding `lock`.
+    private let lock = NSLock()
+    private var _channelId: String
+    private var _messageId: String
+    private var _calls: [String] = []
+    private var _publishError: NetworkError?
+    private var _saveError: NetworkError?
+    private var _content = "Welcome!"
+    private var _embeds = "[]"
+    private var _publishedChannels: [String] = []
+    private var _keepsChannelWhilePosted = false
+    private var _features: [ServerFeature]?
+    private var _createdIdApart = false
+
+    init(channelId: String = "111111111111111111", messageId: String = "") {
+        _channelId = channelId
+        _messageId = messageId
+    }
+
+    var calls: [String] { lock.withLock { _calls } }
+    var channelId: String { lock.withLock { _channelId } }
+    var messageId: String { lock.withLock { _messageId } }
+    var content: String { lock.withLock { _content } }
+    var publishedChannels: [String] { lock.withLock { _publishedChannels } }
+
+    func failPublish(with error: NetworkError?) { lock.withLock { _publishError = error } }
+    func failSave(with error: NetworkError?) { lock.withLock { _saveError = error } }
+    func keepChannelWhilePosted(_ on: Bool) { lock.withLock { _keepsChannelWhilePosted = on } }
+    func announce(_ features: [ServerFeature]?) { lock.withLock { _features = features } }
+    func answerCreateWithCreatedChannel(_ on: Bool) { lock.withLock { _createdIdApart = on } }
+
+    private func config(_ channelId: String, _ messageId: String, content: String) throws -> WelcomeChannelSettings {
+        let json = #"{"channelId":"\#(channelId)","messageId":"\#(messageId)","spec":{"content":"\#(content)","embeds":\#(lock.withLock { _embeds })}}"#
+        return try JSONDecoder().decode(WelcomeChannelSettings.self, from: Data(json.utf8))
+    }
+
+    func clients() -> StubClients {
+        StubClients { [self] endpoint in
+            if endpoint is Endpoints.LoadModuleSettings<WelcomeChannelPage> {
+                lock.withLock { _calls.append("load") }
+                let json = #"{"config":{"channelId":"\#(channelId)","messageId":"\#(messageId)","spec":{"content":"\#(content)","embeds":[{"kind":"banner","image":"https://example.com/b.png"}]}},"channels":[{"id":"111111111111111111","name":"welcome"}]}"#
+                return try JSONDecoder().decode(WelcomeChannelPage.self, from: Data(json.utf8))
+            }
+            if let saving = endpoint as? Endpoints.SaveModuleSettings<WelcomeChannelPage> {
+                lock.withLock { _calls.append("save") }
+                if let error = lock.withLock({ _saveError }) { throw error }
+                lock.withLock {
+                    // 5.2 keeps the stored channel while a message is posted.
+                    if !(_keepsChannelWhilePosted && !_messageId.isEmpty) { _channelId = saving.settings.channelId }
+                    _content = saving.settings.content
+                }
+                return SavedModuleSettings(settings: try config(channelId, messageId, content: content))
+            }
+            if let publishing = endpoint as? Endpoints.PublishWelcomeChannel {
+                lock.withLock { _calls.append("publish") }
+                if let error = lock.withLock({ _publishError }) { throw error }
+                lock.withLock {
+                    _publishedChannels.append(publishing.settings.channelId)
+                    // The publish route stores the body, and posts (or moves the post) there.
+                    _channelId = publishing.settings.channelId
+                    _messageId = "999999999999999999"
+                }
+                return SavedModuleSettings(settings: try config(channelId, messageId, content: content))
+            }
+            if endpoint is Endpoints.UnpublishWelcomeChannel {
+                lock.withLock {
+                    _calls.append("unpublish")
+                    _messageId = ""
+                }
+                return SavedModuleSettings(settings: try config(channelId, messageId, content: content))
+            }
+            if endpoint is Endpoints.CreateWelcomeChannel {
+                let keepsOld = lock.withLock { _createdIdApart }
+                lock.withLock {
+                    _calls.append("create")
+                    if !keepsOld { _channelId = "333333333333333333" }
+                }
+                // 5.2 while a message is posted: the config still has the old channel.
+                let shown = keepsOld ? channelId : "333333333333333333"
+                let apart = keepsOld ? #","createdChannelId":"333333333333333333""# : ""
+                let json = #"{"config":{"channelId":"\#(shown)","messageId":"","spec":{"content":"","embeds":[]}}\#(apart),"channels":[{"id":"333333333333333333","name":"welcome"}]}"#
+                return try JSONDecoder().decode(WelcomeChannelCreated.self, from: Data(json.utf8))
+            }
+            if endpoint is Endpoints.ServerInfo {
+                guard let features = lock.withLock({ _features }) else { throw NetworkError.notFound }
+                return ServerInfo(features: features)
+            }
+            throw NetworkError.notFound
+        }
+    }
+}
+
+@MainActor
+@Suite("Welcome channel publishing")
+struct WelcomeChannelPublisherTests {
+    func make(_ server: FakeWelcomeServer) async -> (ModuleSettingsModel<WelcomeChannelPage>, WelcomeChannelPublisher) {
+        let session = makeSignedInSession(clients: server.clients())
+        let model = ModuleSettingsModel<WelcomeChannelPage>(server: "9", session: session)
+        await model.load()
+        return (model, WelcomeChannelPublisher(model: model, session: session))
+    }
+
+    @Test("publishing saves unsaved edits first, posts, and reloads so the message shows as published")
+    func publishes() async throws {
+        let server = FakeWelcomeServer()
+        let (model, publisher) = await make(server)
+        #expect(!publisher.isPublished)
+        model.draft?.content = "Hello {server}"
+        #expect(model.hasChanges)
+
+        let published = await publisher.publish()
+
+        #expect(published)
+        #expect(server.calls == ["load", "save", "publish", "load"])
+        #expect(server.content == "Hello {server}")
+        #expect(publisher.isPublished)
+        #expect(publisher.notice == .published)
+        #expect(publisher.errorMessage == nil)
+        #expect(!model.hasChanges)
+        #expect(publisher.successCount == 1)
+    }
+
+    @Test("publishing without edits does not save again, and an already posted message is updated")
+    func updates() async throws {
+        let server = FakeWelcomeServer(messageId: "888888888888888888")
+        let (_, publisher) = await make(server)
+        #expect(publisher.isPublished)
+
+        #expect(await publisher.publish())
+
+        #expect(server.calls == ["load", "publish", "load"])
+        #expect(publisher.notice == .updated)
+    }
+
+    @Test("publishing needs a channel and does not call the server without one")
+    func needsChannel() async throws {
+        let server = FakeWelcomeServer(channelId: "")
+        let (_, publisher) = await make(server)
+
+        #expect(await publisher.publish() == false)
+
+        #expect(server.calls == ["load"])
+        #expect(publisher.errorMessage == "Pick a channel first.")
+        #expect(publisher.failedStep == .publish)
+    }
+
+    @Test("a post the server refuses shows its words and leaves the message unpublished")
+    func publishFails() async throws {
+        let server = FakeWelcomeServer()
+        server.failPublish(with: .badRequest(message: "The bot lacks View Channel / Send Messages / Embed Links there."))
+        let (_, publisher) = await make(server)
+
+        #expect(await publisher.publish() == false)
+
+        #expect(publisher.errorMessage == "The bot lacks View Channel / Send Messages / Embed Links there.")
+        #expect(publisher.failedStep == .publish)
+        #expect(!publisher.isPublished)
+        #expect(publisher.notice == nil)
+        #expect(publisher.successCount == 0)
+        #expect(!publisher.isBusy)
+    }
+
+    @Test("a failed save stops before the post, and the settings model shows why")
+    func saveFails() async throws {
+        let server = FakeWelcomeServer()
+        server.failSave(with: .badRequest(message: "Too much text."))
+        let (model, publisher) = await make(server)
+        model.draft?.content = "changed"
+
+        #expect(await publisher.publish() == false)
+
+        #expect(server.calls == ["load", "save"])
+        #expect(model.saveError == "Too much text.")
+        #expect(model.hasChanges)
+    }
+
+    @Test("removing the published message keeps the draft")
+    func unpublishes() async throws {
+        let server = FakeWelcomeServer(messageId: "888888888888888888")
+        let (model, publisher) = await make(server)
+
+        #expect(await publisher.unpublish())
+
+        #expect(server.calls == ["load", "unpublish", "load"])
+        #expect(!publisher.isPublished)
+        #expect(publisher.notice == .removed)
+        #expect(model.draft?.embeds.count == 1)
+        #expect(model.draft?.embeds.first?.isBanner == true)
+    }
+
+    @Test("creating the channel picks it, and keeps edits that were not saved")
+    func createsChannel() async throws {
+        let server = FakeWelcomeServer(channelId: "")
+        let (model, publisher) = await make(server)
+        model.draft?.content = "Draft text"
+
+        #expect(await publisher.createChannel())
+
+        #expect(server.calls == ["load", "create", "load"])
+        #expect(model.draft?.channelId == "333333333333333333")
+        #expect(model.draft?.content == "Draft text")
+        #expect(publisher.notice == .channelCreated)
+    }
+
+    @Test("a server that cannot create the channel says why")
+    func createFails() async throws {
+        let session = makeSignedInSession(clients: StubClients { endpoint in
+            if endpoint is Endpoints.CreateWelcomeChannel {
+                throw NetworkError.badRequest(message: "Sylo needs the Manage Channels permission.")
+            }
+            return try JSONDecoder().decode(WelcomeChannelPage.self, from: Data(#"{"config":{}}"#.utf8))
+        })
+        let model = ModuleSettingsModel<WelcomeChannelPage>(server: "9", session: session)
+        await model.load()
+        let publisher = WelcomeChannelPublisher(model: model, session: session)
+
+        #expect(await publisher.createChannel() == false)
+
+        #expect(publisher.errorMessage == "Sylo needs the Manage Channels permission.")
+        #expect(publisher.failedStep == .createChannel)
+    }
+
+    // MARK: A 5.2 server keeps the stored channel while a message is posted
+
+    @Test("a save that answers with the old channel does not change where the publish goes")
+    func publishCarriesThePickedChannel() async throws {
+        let server = FakeWelcomeServer(channelId: "111111111111111111", messageId: "888888888888888888")
+        server.keepChannelWhilePosted(true)
+        let (model, publisher) = await make(server)
+        model.draft?.channelId = "222222222222222222"
+
+        #expect(await publisher.publish())
+
+        // The save came back with the old channel (and the settings model took it over), but the
+        // publish was sent with the one the person picked.
+        #expect(server.calls == ["load", "save", "publish", "load"])
+        #expect(server.publishedChannels == ["222222222222222222"])
+        #expect(publisher.notice == .updated)
+        // After the reload the screen shows the channel the message is in now.
+        #expect(model.draft?.channelId == "222222222222222222")
+        #expect(!model.hasChanges)
+    }
+
+    @Test("on a server that stores the picked channel with the save, the publish still goes there")
+    func publishAfterPlainSave() async throws {
+        let server = FakeWelcomeServer(channelId: "111111111111111111")
+        let (model, publisher) = await make(server)
+        model.draft?.channelId = "222222222222222222"
+
+        #expect(await publisher.publish())
+
+        #expect(server.publishedChannels == ["222222222222222222"])
+        #expect(server.channelId == "222222222222222222")
+    }
+
+    @Test("creating the channel on a server that keeps the stored channel selects the new one")
+    func createdChannelIsSelected() async throws {
+        let server = FakeWelcomeServer(channelId: "111111111111111111", messageId: "888888888888888888")
+        server.answerCreateWithCreatedChannel(true)
+        let (model, publisher) = await make(server)
+
+        #expect(await publisher.createChannel())
+
+        #expect(model.draft?.channelId == "333333333333333333")
+        // Not saved yet: publishing is what moves the message there.
+        #expect(model.hasChanges)
+    }
+
+    @Test("the created channel is read from createdChannelId, and from the config when there is none")
+    func decodesCreatedChannel() throws {
+        let apart = try JSONDecoder().decode(WelcomeChannelCreated.self, from: Data(
+            #"{"config":{"channelId":"111"},"createdChannelId":"333","channels":[]}"#.utf8))
+        #expect(apart.createdChannelId == "333")
+        #expect(apart.newChannelId == "333")
+        let old = try JSONDecoder().decode(WelcomeChannelCreated.self, from: Data(
+            #"{"config":{"channelId":"333"},"channels":[]}"#.utf8))
+        #expect(old.createdChannelId == nil)
+        #expect(old.newChannelId == "333")
+        let empty = try JSONDecoder().decode(WelcomeChannelCreated.self, from: Data(
+            #"{"config":{"channelId":"333"},"createdChannelId":"","channels":[]}"#.utf8))
+        #expect(empty.newChannelId == "333")
+    }
+
+    @Test("the screen words its channel hint by the server's message-move feature")
+    func featureHint() async throws {
+        let without = FakeWelcomeServer()
+        let (_, plain) = await make(without)
+        await plain.loadFeatures()
+        #expect(!plain.serverMovesMessages)
+
+        let with = FakeWelcomeServer()
+        with.announce([.appLogin, .messageMove])
+        let (_, moving) = await make(with)
+        #expect(!moving.serverMovesMessages)
+        await moving.loadFeatures()
+        #expect(moving.serverMovesMessages)
+
+        let other = FakeWelcomeServer()
+        other.announce([.appLogin])
+        let (_, older) = await make(other)
+        await older.loadFeatures()
+        #expect(!older.serverMovesMessages)
+    }
+}
+
+// MARK: - Publishing while a save runs
+
+/// Holds calls until the test lets them go, so a publish can be asked for while a save runs.
+private final class SaveGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var closed = false
+
+    var isOpen: Bool { lock.withLock { !closed } }
+    func close() { lock.withLock { closed = true } }
+    func open() { lock.withLock { closed = false } }
+}
+
+private struct GatedWelcomeClient: APIClient {
+    let gate: SaveGate
+
+    func send<E: APIEndpoint>(_ endpoint: E) async throws -> E.Response {
+        while !gate.isOpen { try await Task.sleep(for: .milliseconds(5)) }
+        let answer: Any
+        if let saving = endpoint as? Endpoints.SaveModuleSettings<WelcomeChannelPage> {
+            answer = SavedModuleSettings(settings: saving.settings)
+        } else if endpoint is Endpoints.LoadModuleSettings<WelcomeChannelPage> {
+            answer = try WelcomeChannelSettingsTests.page()
+        } else {
+            throw NetworkError.notFound
+        }
+        guard let response = answer as? E.Response else { throw NetworkError.decoding("wrong type") }
+        return response
+    }
+}
+
+@MainActor
+@Suite("Welcome channel publishing during a save")
+struct WelcomeChannelPublishDuringSaveTests {
+    @Test("publishing while a save is running says so and posts nothing")
+    func publishWaitsForSave() async throws {
+        let gate = SaveGate()
+        let server = try ServerURL("https://sylo.example.com")
+        let session = AppSession(
+            tokens: InMemoryTokenStore(tokens: [
+                server.description: StoredToken(token: "sylo_live", expiresAt: Date().addingTimeInterval(86_400)),
+            ]),
+            preference: MemoryServerPreference(server), deviceName: "Test",
+            makeClient: { _, _ in GatedWelcomeClient(gate: gate) })
+        session.start()
+        let model = ModuleSettingsModel<WelcomeChannelPage>(server: "9", session: session)
+        await model.load()
+        let publisher = WelcomeChannelPublisher(model: model, session: session)
+
+        model.draft?.content = "changed"
+        gate.close()
+        let save = Task { await model.save() }
+        while !model.isSaving { try await Task.sleep(for: .milliseconds(5)) }
+
+        #expect(await publisher.publish() == false)
+        #expect(publisher.errorMessage == "A save is still running. Wait for it to finish, then publish again.")
+        #expect(publisher.failedStep == .publish)
+        #expect(!publisher.isBusy)
+
+        gate.open()
+        #expect(await save.value)
     }
 }

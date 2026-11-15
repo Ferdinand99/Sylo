@@ -1,7 +1,7 @@
 import SwiftUI
 import SyloKit
 
-/// Tickets (modmail): the greeting and close messages, the staff notification channel, staff
+/// Tickets: the greeting and close messages, the staff notification channel, staff
 /// roles, and how long closed tickets are kept. Mirrors web-v2/src/moduleForms/Tickets.jsx.
 struct TicketsSettingsView: View {
     @State private var model: ModuleSettingsModel<TicketsPage>
@@ -12,11 +12,11 @@ struct TicketsSettingsView: View {
 
     var body: some View {
         ModuleSettingsForm("Tickets", model: model) { $settings, page in
-            ModuleIntro("Members open a ticket by sending Sylo a direct message. Staff read and reply from the dashboard's Tickets page; replies reach the member as an anonymous \"Staff\" DM.")
+            ModuleIntro("Members open a ticket by sending Sylo a direct message. Staff read and reply on the Tickets tab; replies reach the member as an anonymous \"Staff\" DM.")
 
             Section {
-                TextArea(title: "Thanks for contacting the staff of {server}…", text: $settings.greeting,
-                         limit: TicketsSettings.maxMessageLength, lines: 2...8)
+                LimitedTextField(title: "Thanks for contacting the staff of {server}…", text: $settings.greeting,
+                                 limit: TicketsSettings.maxMessageLength, lines: 2...8)
             } header: {
                 Text("Greeting when a ticket opens")
             } footer: {
@@ -24,8 +24,8 @@ struct TicketsSettingsView: View {
             }
 
             Section {
-                TextArea(title: "This ticket has been closed…", text: $settings.closeMessage,
-                         limit: TicketsSettings.maxMessageLength, lines: 2...8)
+                LimitedTextField(title: "This ticket has been closed…", text: $settings.closeMessage,
+                                 limit: TicketsSettings.maxMessageLength, lines: 2...8)
             } header: {
                 Text("Message when a ticket is closed")
             } footer: {
@@ -34,7 +34,7 @@ struct TicketsSettingsView: View {
 
             Section {
                 ChannelPicker(title: "Notification channel", selection: $settings.notifyChannel,
-                              channels: page.channels)
+                              channels: page.channels, embed: true, health: true)
                 Toggle("Include the opening message", isOn: $settings.showMessageInAlert)
             } header: {
                 Text("Staff notifications")

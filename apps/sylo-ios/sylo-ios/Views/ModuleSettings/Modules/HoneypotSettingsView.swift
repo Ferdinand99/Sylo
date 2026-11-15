@@ -42,8 +42,8 @@ struct HoneypotSettingsView: View {
                 Section {
                     ChannelPicker(title: "Channel", selection: $trap.channelId, channels: page.channels,
                                   noneTitle: "Choose a channel")
-                    TextArea(title: "Bait text", text: $trap.bait,
-                             limit: HoneypotSettings.MessageTrap.maxBaitLength, lines: 2...6)
+                    LimitedTextField(title: "Bait text", text: $trap.bait,
+                                     limit: HoneypotSettings.MessageTrap.maxBaitLength, lines: 2...6)
                     ActionRows(action: $trap.action, timeoutMinutes: $trap.timeoutMinutes)
                     Button("Remove Message Honeypot", role: .destructive) {
                         settings.messages.removeAll { $0.id == trap.id }

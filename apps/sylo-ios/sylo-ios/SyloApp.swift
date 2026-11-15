@@ -9,6 +9,8 @@ import UserNotifications
     @State private var push: PushCoordinator
 
     init() {
+        // Exports and other downloads can hold personal data: none is kept from an earlier launch.
+        DownloadedFile.removeAllTemporary()
         let session = AppSession.live()
         // Reads the remembered server and token before the first frame, so a signed-in launch
         // never flashes the sign-in screen.

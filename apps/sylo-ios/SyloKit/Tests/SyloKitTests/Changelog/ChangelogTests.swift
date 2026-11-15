@@ -58,6 +58,49 @@ struct ChangelogDecodingTests {
         #expect(try decode(ChangelogPage.self, "{}").releases.isEmpty)
     }
 
+    @Test("The Sylo 5.1 entries read: plain-text items without a scope or references, in their own sections")
+    func sylo51() throws {
+        // CHANGELOG.md's 5.1.1 and 5.1.0 sections, as src/lib/changelog.js parses them for the route.
+        let json = #"""
+            {"version":"5.1.1","releases":[
+              {"version":"5.1.1","date":"2026-11-12","url":"https://github.com/Ferdinand99/Sylo/compare/v5.1.0...v5.1.1",
+               "sections":[{"title":"Fixes","kind":"fixes","items":[
+                 {"scope":null,"text":"List every 5.1 change on the What's new page",
+                  "refs":[{"label":"#316","url":"https://github.com/Ferdinand99/Sylo/issues/316"}]}]}]},
+              {"version":"5.1.0","date":"2026-11-12","url":"https://github.com/Ferdinand99/Sylo/compare/v5.0.0...v5.1.0",
+               "sections":[
+                 {"title":"New","kind":"features","items":[
+                   {"scope":null,"text":"Introductions module: members answer a few questions in DMs and get a membership card in the intro channel, with role groups (for example Country or Age) that stay up to date, and an {intro} placeholder for the welcome message","refs":[]},
+                   {"scope":null,"text":"Economy module (beta): a server currency earned by chatting, voice time, /daily and /work, with cash and a bank, /pay, an optional /rob (off by default) and /economy-leaderboard","refs":[]},
+                   {"scope":null,"text":"Applications module: Appy-style forms answered in DMs or on the web (chosen per form), with requirements, accept and deny, roles, custom messages, panels and CSV/JSON export","refs":[]},
+                   {"scope":null,"text":"Suggestions: decided suggestions can stay in their channel with a copy in the log channel, and moved suggestions can be moved back from the dashboard","refs":[]}]},
+                 {"title":"Fixes","kind":"fixes","items":[
+                   {"scope":null,"text":"Temporary roles notice a member or role that no longer exists on Fluxer","refs":[]}]}]}
+            ]}
+            """#
+        let page = try decode(ChangelogPage.self, json)
+        #expect(page.version == "5.1.1")
+        #expect(page.releases.map(\.version) == ["5.1.1", "5.1.0"])
+        let release = page.releases[1]
+        #expect(release.sections.map(\.kind) == [.features, .fixes])
+        #expect(release.sections[0].items.count == 4)
+        #expect(release.sections[0].items.allSatisfy { $0.scope == nil && $0.refs.isEmpty })
+        #expect(release.sections[0].items[0].text.contains("{intro}"))
+        #expect(release.sections[0].items[1].text.contains("/economy-leaderboard"))
+        #expect(release.sections[1].items.count == 1)
+        // The release day is read the way the page shows it.
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let parts = calendar.dateComponents([.year, .month, .day], from: try #require(release.day(in: calendar)))
+        #expect(parts.year == 2026)
+        #expect(parts.month == 11)
+        #expect(parts.day == 12)
+        // The item text is inline Markdown; braces and slashes stay as they are.
+        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        let rendered = try AttributedString(markdown: release.sections[0].items[0].text, options: options)
+        #expect(String(rendered.characters) == release.sections[0].items[0].text)
+    }
+
     @Test("A kind the app does not know is kept, not a decoding error")
     func unknownKind() throws {
         let section = try decode(ChangelogSection.self, #"{"title":"Docs","kind":"documentation","items":[]}"#)

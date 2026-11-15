@@ -10,6 +10,7 @@ struct SuggestionsSettingsTests {
       "config": {
         "channel": "222222222222222222",
         "logChannel": "333333333333333333",
+        "logMode": "copy",
         "anonymous": true,
         "dmAuthor": false,
         "messagesToSuggestions": true,
@@ -35,7 +36,7 @@ struct SuggestionsSettingsTests {
         let page = try JSONDecoder().decode(SuggestionsPage.self, from: Data(Self.pageJSON.utf8))
         #expect(SuggestionsPage.moduleID == "suggestions")
         #expect(page.settings == SuggestionsSettings(
-            channel: "222222222222222222", logChannel: "333333333333333333", anonymous: true, dmAuthor: false,
+            channel: "222222222222222222", logChannel: "333333333333333333", logMode: .copy, anonymous: true, dmAuthor: false,
             messagesToSuggestions: true, cooldownSeconds: 120, staffRoles: ["111111111111111111"]))
         #expect(page.channels.count == 2)
         #expect(page.roles.map(\.name) == ["Moderators"])
@@ -77,8 +78,10 @@ struct SuggestionsSettingsTests {
         let data = try JSONEncoder().encode(page.settings)
         let body = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         #expect(Set(body.keys) == [
-            "channel", "logChannel", "anonymous", "dmAuthor", "messagesToSuggestions", "cooldownSeconds", "staffRoles",
+            "channel", "logChannel", "logMode", "anonymous", "dmAuthor", "messagesToSuggestions", "cooldownSeconds",
+            "staffRoles",
         ])
+        #expect(body["logMode"] as? String == "copy")
         #expect(body["cooldownSeconds"] as? Int == 120)
         #expect(body["dmAuthor"] as? Bool == false)
         #expect(try JSONDecoder().decode(SuggestionsSettings.self, from: data) == page.settings)
@@ -88,5 +91,56 @@ struct SuggestionsSettingsTests {
     func ranges() {
         #expect(SuggestionsSettings.cooldownRange == 0...3600)
         #expect(SuggestionsSettings.maxStaffRoles == 25)
+    }
+
+    @Test("the log mode is read as stored, and move is the one the app sends for move")
+    func logModeRoundTrip() throws {
+        for (raw, mode) in [("copy", SuggestionsLogMode.copy), ("move", .move)] {
+            let json = Data(#"{"logChannel":"333333333333333333","logMode":"\#(raw)"}"#.utf8)
+            let settings = try JSONDecoder().decode(SuggestionsSettings.self, from: json)
+            #expect(settings.logMode == mode)
+            let body = try #require(
+                try JSONSerialization.jsonObject(with: JSONEncoder().encode(settings)) as? [String: Any])
+            #expect(body["logMode"] as? String == raw)
+        }
+    }
+
+    @Test("a server without the setting reads like the server does: a log channel keeps moving, none copies")
+    func logModeDefaults() throws {
+        let withChannel = try JSONDecoder().decode(
+            SuggestionsSettings.self, from: Data(#"{"logChannel":"333333333333333333"}"#.utf8))
+        #expect(withChannel.logMode == .move)
+        let without = try JSONDecoder().decode(SuggestionsSettings.self, from: Data(#"{}"#.utf8))
+        #expect(without.logMode == .copy)
+        // An unknown value is not an error either.
+        let unknown = try JSONDecoder().decode(
+            SuggestionsSettings.self, from: Data(#"{"logChannel":"","logMode":"archive"}"#.utf8))
+        #expect(unknown.logMode == .copy)
+        #expect(SuggestionsSettings().logMode == .copy)
+        #expect(SuggestionsSettings(logChannel: "1").logMode == .move)
+        #expect(SuggestionsSettings(logChannel: "1", logMode: .copy).logMode == .copy)
+    }
+
+    @Test("a save always carries the log mode, even one the person never touched")
+    @MainActor
+    func savesLogMode() async throws {
+        let clients = StubClients { endpoint in
+            if let saving = endpoint as? Endpoints.SaveModuleSettings<SuggestionsPage> {
+                return SavedModuleSettings(settings: saving.settings)
+            }
+            return try JSONDecoder().decode(SuggestionsPage.self, from: Data(Self.pageJSON.utf8))
+        }
+        let model = ModuleSettingsModel<SuggestionsPage>(server: "9", session: makeSignedInSession(clients: clients))
+        await model.load()
+        model.draft?.cooldownSeconds = 30
+        #expect(await model.save())
+        let sent = try #require(clients.calls.last?.endpoint as? Endpoints.SaveModuleSettings<SuggestionsPage>)
+        #expect(sent.settings.logMode == .copy)
+        let body = try #require(
+            try JSONSerialization.jsonObject(with: JSONEncoder().encode(sent.settings)) as? [String: Any])
+        #expect(body["logMode"] as? String == "copy")
+        // Changing the mode is a change of its own.
+        model.draft?.logMode = .move
+        #expect(model.hasChanges)
     }
 }

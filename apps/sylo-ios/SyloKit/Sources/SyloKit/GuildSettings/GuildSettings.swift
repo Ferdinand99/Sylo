@@ -254,16 +254,47 @@ public final class GuildSettingsModel {
     /// Goes up with every successful save, for a "saved" haptic.
     public private(set) var saveCount = 0
 
-    private let session: AppSession
+    /// Who has which dashboard level (Sylo 5.2); nil from a server without levels, or before it is read.
+    public private(set) var access: DashboardAccessSettings?
+    /// The Inbox and View roles the form edits; nil while ``access`` is nil.
+    public var accessDraft: DashboardAccessRoles?
+    /// The Inbox and View roles as last loaded or saved.
+    public private(set) var savedAccess: DashboardAccessRoles?
 
-    public init(server: ServerID, session: AppSession) {
+    private let session: AppSession
+    /// The server list gave this server a dashboard level, so it has the access route.
+    private let hasAccessLevels: Bool
+
+    /// - Parameter hasAccessLevels: Whether the server sent an `access` for this server (Sylo 5.2). Only
+    ///   then are the access roles read and saved, so an older server never gets a call it does not know.
+    public init(server: ServerID, session: AppSession, hasAccessLevels: Bool = false) {
         self.server = server
         self.session = session
+        self.hasAccessLevels = hasAccessLevels
+    }
+
+    /// Whether the Inbox or View roles differ from what the server has.
+    public var accessHasChanges: Bool {
+        guard let accessDraft, let savedAccess else { return false }
+        return !accessDraft.sameRoles(as: savedAccess)
+    }
+
+    /// Whether the person may change the Edit roles (the bot master roles): only the owner or someone with
+    /// Manage Server. True when the server does not say (an older Sylo, which lets every admin).
+    public var canChangeEditRoles: Bool { access?.canChangeEditRoles ?? true }
+
+    /// A note about the roles picked for Inbox and View, or nil: a role that is in two lists or that has
+    /// Edit already gets the stronger level on the server.
+    public var accessNote: String? {
+        guard let accessDraft else { return nil }
+        return accessDraft.conflict(editRoleIds: draft?.botMasterRoleIds ?? [])
     }
 
     /// Whether the draft differs from what the server has (a prefix's surrounding spaces do not
     /// count, they are not sent).
-    public var hasChanges: Bool { draft != nil && draft?.normalised != saved?.normalised }
+    public var hasChanges: Bool {
+        (draft != nil && draft?.normalised != saved?.normalised) || accessHasChanges
+    }
 
     /// Why the draft cannot be saved yet (a bad command prefix), or nil.
     public var draftProblem: String? {
@@ -285,14 +316,36 @@ public final class GuildSettingsModel {
             let error = NetworkError(error)
             if error != .cancelled, error != .unauthorized { errorMessage = error.userMessage }
         }
+        await loadAccess()
+    }
+
+    /// Reads who has which level. Best effort: the settings do not depend on it, and a server without the
+    /// route (or a failure) leaves the Dashboard access section out.
+    private func loadAccess() async {
+        // The server list gave a level (`access`) and the Sylo announces `access-levels`: only then is the route asked.
+        guard hasAccessLevels, await session.supports(.accessLevels) else { return }
+        do {
+            let loaded = try await session.send(Endpoints.LoadDashboardAccess(server: server))
+            let keepDraft = accessHasChanges
+            access = loaded
+            savedAccess = loaded.roles
+            if !keepDraft { accessDraft = loaded.roles }
+        } catch {
+            if NetworkError(error).isMissingRoute {
+                access = nil
+                savedAccess = nil
+                accessDraft = nil
+            }
+        }
     }
 
     /// Saves the draft, then reloads the page, since the server answers a save with only `ok` (a
-    /// reset colour comes back as the hex it stands for).
-    /// - Returns: Whether the settings are saved (also true when there was nothing to save).
+    /// reset colour comes back as the hex it stands for). The Inbox and View roles go to their own route,
+    /// and only when they changed, as the dashboard does.
+    /// - Returns: Whether everything that changed is saved (also true when there was nothing to save).
     @discardableResult
     public func save() async -> Bool {
-        guard let draft = draft?.normalised, hasChanges else { return true }
+        guard hasChanges else { return true }
         guard !isSaving else { return false }
         if let problem = draftProblem {
             saveError = problem
@@ -301,16 +354,38 @@ public final class GuildSettingsModel {
         isSaving = true
         defer { isSaving = false }
         saveError = nil
-        do {
-            _ = try await session.send(Endpoints.SaveGuildSettings(server: server, settings: draft))
-        } catch {
-            let error = NetworkError(error)
-            if error != .cancelled, error != .unauthorized { saveError = error.userMessage }
-            return false
+        var settingsSaved = false
+        if let draft = draft?.normalised, draft != saved?.normalised {
+            do {
+                _ = try await session.send(Endpoints.SaveGuildSettings(server: server, settings: draft))
+            } catch {
+                let error = NetworkError(error)
+                if error != .cancelled, error != .unauthorized { saveError = error.userMessage }
+                return false
+            }
+            // Saved: the draft is what the server has now, so the reload replaces it.
+            saved = draft
+            self.draft = draft
+            settingsSaved = true
         }
-        // Saved: the draft is what the server has now, so the reload replaces it.
-        saved = draft
-        self.draft = draft
+        if let roles = accessDraft, accessHasChanges {
+            do {
+                let answer = try await session.send(Endpoints.SaveDashboardAccess(server: server, roles: roles))
+                access = answer
+                savedAccess = answer.roles
+                accessDraft = answer.roles
+            } catch {
+                let error = NetworkError(error)
+                if error != .cancelled, error != .unauthorized {
+                    // Only say the settings were saved when they were sent. A failed save is no success haptic.
+                    saveError = settingsSaved
+                        ? "The settings were saved, but the dashboard access roles were not. \(error.userMessage)"
+                        : error.userMessage
+                }
+                if settingsSaved { await load() }
+                return false
+            }
+        }
         saveCount += 1
         await load()
         return true
@@ -319,5 +394,6 @@ public final class GuildSettingsModel {
     /// Throws the unsaved edits away.
     public func discardChanges() {
         draft = saved
+        accessDraft = savedAccess
     }
 }

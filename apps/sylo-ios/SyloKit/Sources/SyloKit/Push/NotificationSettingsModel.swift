@@ -6,7 +6,8 @@ import Observation
 /// the server's `/api/mobile/info` says it sends:
 /// - through the official Postal Pigeon (`push-pigeon`): the app registers there itself and gives
 ///   the server a handle, and the push carries no text (``NotificationRewriter`` fetches it);
-/// - directly, when it has its own APNs key;
+/// - directly, when it has its own APNs key, and only if it is the official hosted Sylo (any other
+///   server is never handed the raw APNs token);
 /// - else through the official relay first, so the server only ever gets the relay's token.
 ///
 /// A server that announces Pigeon, but another one than the official one, is used the old way if
@@ -58,7 +59,14 @@ public final class NotificationSettingsModel {
         guard let info else { return false }
         if usesPigeon(info) { return true }
         guard info.supports(.push) else { return false }
-        return info.pushRelay.map(PushRelay.isOfficial) ?? true
+        if let relay = info.pushRelay { return PushRelay.isOfficial(relay) }
+        return mayGetDeviceToken
+    }
+
+    /// Whether the signed-in server may be given the raw APNs token: only the official hosted Sylo.
+    private var mayGetDeviceToken: Bool {
+        guard let server = session.server else { return false }
+        return PushRelay.mayReceiveDeviceToken(server)
     }
 
     /// Why a server that can push gets no notifications on this device (a Pigeon or a relay other
@@ -70,6 +78,9 @@ public final class NotificationSettingsModel {
         }
         if info.supports(.push), let relay = info.pushRelay, !PushRelay.isOfficial(relay) {
             return Self.untrustedRelayMessage
+        }
+        if info.supports(.push), info.pushRelay == nil, !mayGetDeviceToken {
+            return Self.noRelayMessage
         }
         return nil
     }
@@ -165,6 +176,9 @@ public final class NotificationSettingsModel {
             }
             guard session.server == server else { return false }
         } else {
+            // The raw device token goes only to the official hosted Sylo (``isAvailable`` already said so;
+            // checked again here so no change above can send it elsewhere).
+            guard PushRelay.mayReceiveDeviceToken(server) else { return false }
             endpoint = Endpoints.RegisterPush(deviceToken: hex, environment: environment)
         }
 
@@ -327,6 +341,7 @@ public final class NotificationSettingsModel {
     static let invalidTokenMessage = "This device couldn't be set up for notifications. Try again later."
     static let unavailableMessage = "This Sylo server can't send notifications right now. Try again later."
     static let untrustedRelayMessage = "This Sylo server uses a notification relay the app doesn't trust."
+    static let noRelayMessage = "Notifications aren't available for this Sylo server. The app only gives this device's notification address to the official Sylo and its notification service."
     static let untrustedPigeonMessage = "This Sylo server uses a notification service the app doesn't trust."
     static let pigeonBusyMessage = "Notifications couldn't be set up right now. Try again later."
     static let modeChangedMessage = "This Sylo server changed how it sends notifications. Try again."

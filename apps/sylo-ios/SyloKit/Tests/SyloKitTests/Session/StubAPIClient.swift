@@ -12,10 +12,16 @@ final class StubClients: @unchecked Sendable {
     }
 
     typealias Handler = @Sendable (any APIEndpoint) throws -> Any
+    /// Runs after a call is recorded and before it is answered. A test waits in it (with
+    /// `Task.sleep`, never a blocked thread) to keep a call open while it asks for another one.
+    typealias Hold = @Sendable (any APIEndpoint) async throws -> Void
 
     private let lock = NSLock()
     private var handler: Handler
+    private var hold: Hold?
     private var sent: [Call] = []
+    private var progressSteps: [(sent: Int64, total: Int64)] = []
+    private var holdsUploads = false
 
     init(handler: @escaping Handler) {
         self.handler = handler
@@ -23,8 +29,27 @@ final class StubClients: @unchecked Sendable {
 
     var calls: [Call] { lock.withLock { sent } }
 
+    /// What an upload reports through its progress closure before it is answered.
+    func setUploadProgress(_ steps: [(sent: Int64, total: Int64)]) {
+        lock.withLock { progressSteps = steps }
+    }
+
+    /// Makes every upload wait (until its task is cancelled) instead of answering.
+    func holdUploads(_ hold: Bool) {
+        lock.withLock { holdsUploads = hold }
+    }
+
+    fileprivate var uploadBehaviour: (steps: [(sent: Int64, total: Int64)], holds: Bool) {
+        lock.withLock { (steps: progressSteps, holds: holdsUploads) }
+    }
+
     func setHandler(_ handler: @escaping Handler) {
         lock.withLock { self.handler = handler }
+    }
+
+    /// Makes `send` wait in `hold` before the handler answers; nil removes it.
+    func setHold(_ hold: Hold?) {
+        lock.withLock { self.hold = hold }
     }
 
     func make(_ server: ServerURL, _ token: String?) -> any APIClient {
@@ -39,6 +64,15 @@ final class StubClients: @unchecked Sendable {
         return try handler(endpoint)
     }
 
+    fileprivate func answerAfterHold(_ endpoint: any APIEndpoint, server: ServerURL, token: String?) async throws -> Any {
+        let (handler, hold) = lock.withLock {
+            sent.append(Call(endpoint: endpoint, server: server, token: token))
+            return (self.handler, self.hold)
+        }
+        try await hold?(endpoint)
+        return try handler(endpoint)
+    }
+
     private struct Client: APIClient {
         let owner: StubClients
         let server: ServerURL
@@ -46,13 +80,58 @@ final class StubClients: @unchecked Sendable {
 
         func send<E: APIEndpoint>(_ endpoint: E) async throws -> E.Response {
             do {
-                guard let response = try owner.answer(endpoint, server: server, token: token) as? E.Response else {
+                guard let response = try await owner.answerAfterHold(endpoint, server: server, token: token) as? E.Response else {
                     throw NetworkError.decoding("stub answered \(E.self) with the wrong type")
                 }
                 return response
             } catch {
                 throw NetworkError(error)
             }
+        }
+
+        /// An upload reports the steps it was given, may wait to be cancelled, then is answered like a send.
+        func upload<E: APIEndpoint>(
+            _ endpoint: E, progress: (@Sendable (Int64, Int64) -> Void)?
+        ) async throws -> E.Response {
+            let behaviour = owner.uploadBehaviour
+            for step in behaviour.steps { progress?(step.sent, step.total) }
+            if behaviour.holds {
+                do {
+                    try await Task.sleep(for: .seconds(60))
+                } catch {
+                    throw NetworkError.cancelled
+                }
+            }
+            return try await send(endpoint)
+        }
+
+        /// A download is answered with a ``DownloadedFile`` (or thrown error) from the handler.
+        func download<E: APIEndpoint>(_ endpoint: E) async throws -> DownloadedFile where E.Response == EmptyResponse {
+            do {
+                guard let file = try owner.answer(endpoint, server: server, token: token) as? DownloadedFile else {
+                    throw NetworkError.decoding("stub answered \(E.self) with something that is not a file")
+                }
+                return file
+            } catch {
+                throw NetworkError(error)
+            }
+        }
+
+        /// A download reports the steps it was given (the same ones as an upload), may wait to be
+        /// cancelled, then is answered like ``download(_:)``.
+        func download<E: APIEndpoint>(
+            _ endpoint: E, progress: (@Sendable (Int64, Int64) -> Void)?
+        ) async throws -> DownloadedFile where E.Response == EmptyResponse {
+            let behaviour = owner.uploadBehaviour
+            for step in behaviour.steps { progress?(step.sent, step.total) }
+            if behaviour.holds {
+                do {
+                    try await Task.sleep(for: .seconds(60))
+                } catch {
+                    throw NetworkError.cancelled
+                }
+            }
+            return try await download(endpoint)
         }
     }
 }

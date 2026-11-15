@@ -23,13 +23,10 @@ struct ServerStatsSettingsView: View {
                             Text(type.title).tag(type)
                         }
                     }
-                    TextField("Channel name", text: $stat.template, prompt: Text(verbatim: "Members: {count}"))
+                    LimitedTextField(title: "Channel name", text: $stat.template,
+                                     limit: ServerStatsSettings.maxTemplateLength,
+                                     prompt: Text(verbatim: "Members: {count}"))
                         .autocorrectionDisabled()
-                        .onChange(of: stat.template) {
-                            if stat.template.count > ServerStatsSettings.maxTemplateLength {
-                                stat.template = String(stat.template.prefix(ServerStatsSettings.maxTemplateLength))
-                            }
-                        }
                     if !stat.template.contains(ServerStatsSettings.countPlaceholder) {
                         Label("The name must include {count}, or this channel is dropped when you save.",
                               systemImage: "exclamationmark.triangle")

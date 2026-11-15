@@ -1,8 +1,7 @@
 import SwiftUI
 import SyloKit
 
-// Pieces several module screens share: the explanation at the top, the platform note, and the link
-// to the web dashboard for what the app leaves there.
+// Pieces several module screens share: the explanation at the top and the platform note.
 
 /// The explanation at the top of a module screen. Plain secondary text on the screen's own
 /// background, so it reads as help and not as a (disabled looking) field.
@@ -41,27 +40,6 @@ struct PlatformNoteSection: View {
                 if let platform = model.platform {
                     Text(verbatim: platform.displayName)
                 }
-            }
-        }
-    }
-}
-
-/// A row that opens the module's page in the web dashboard, for what the app does not do itself.
-struct DashboardLinkSection: View {
-    let server: ServerID
-    let module: ModuleID
-    let footer: LocalizedStringKey
-
-    @Environment(AppSession.self) private var session
-
-    var body: some View {
-        if let base = session.server {
-            Section {
-                Link(destination: base.dashboardURL(server: server, module: module)) {
-                    Label("Manage in the web dashboard", systemImage: "safari")
-                }
-            } footer: {
-                Text(footer)
             }
         }
     }

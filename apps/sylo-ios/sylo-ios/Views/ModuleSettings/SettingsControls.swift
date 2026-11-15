@@ -11,6 +11,11 @@ struct ChannelPicker: View {
     @Binding var selection: String
     let channels: [ChannelOption]
     var noneTitle: LocalizedStringKey = "None"
+    /// The module posts an embed here, so a channel where Sylo lacks Embed Links gets a note too (Sylo 5.2).
+    var embed = false
+    /// Show the health note (Sylo 5.2) under the picker. Only where the module posts in the channel, as on the web;
+    /// off by default, so every other caller is exactly what it was.
+    var health = false
 
     var body: some View {
         Picker(title, selection: $selection) {
@@ -23,6 +28,10 @@ struct ChannelPicker: View {
             }
         }
         .pickerStyle(.navigationLink)
+        // Sylo 5.2's health check: a note when Sylo cannot post in the picked channel.
+        if health {
+            HealthNote(subject: .channel(selection, embed: embed), isOn: true)
+        }
     }
 }
 
@@ -32,6 +41,9 @@ struct RolePicker: View {
     @Binding var selection: String
     let roles: [RoleOption]
     var noneTitle: LocalizedStringKey = "None"
+    /// Show the health note (Sylo 5.2) under the picker. Only where the module gives or takes away the role, as on
+    /// the web; off by default, so every other caller is exactly what it was.
+    var health = false
 
     var body: some View {
         Picker(title, selection: $selection) {
@@ -44,6 +56,10 @@ struct RolePicker: View {
             }
         }
         .pickerStyle(.navigationLink)
+        // Sylo 5.2's health check: a note when Sylo cannot give the picked role.
+        if health {
+            HealthNote(subject: .role(selection), isOn: true)
+        }
     }
 }
 
@@ -54,15 +70,31 @@ struct MultiPicker<Option: NamedOption>: View {
     let options: [Option]
     /// `#` for channels, `@` for roles.
     let prefix: String
+    /// The most the server keeps. Once reached, only a picked entry can still be changed (to
+    /// unpick it). nil means no limit.
+    var limit: Int?
+    /// Show the health note (Sylo 5.2) for each pick Sylo cannot use. Only where the module gives or takes away the
+    /// roles, as on the web; off by default, so every other caller is exactly what it was.
+    var health = false
 
     var body: some View {
         NavigationLink {
-            MultiPickerList(title: title, selection: $selection, options: options, prefix: prefix)
+            MultiPickerList(title: title, selection: $selection, options: options, prefix: prefix, limit: limit)
         } label: {
             LabeledContent(title) {
                 Text(summary)
             }
         }
+        // Sylo 5.2's health check: each picked role or channel Sylo cannot use gets a note with its name.
+        if health {
+            HealthNote(
+                subject: prefix == "#" ? .channels(selection, names: names, embed: false) : .roles(selection, names: names),
+                isOn: true)
+        }
+    }
+
+    private var names: [String: String] {
+        Dictionary(options.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
     }
 
     private var summary: String {
@@ -80,25 +112,42 @@ private struct MultiPickerList<Option: NamedOption>: View {
     @Binding var selection: [String]
     let options: [Option]
     let prefix: String
+    let limit: Int?
+
+    /// Counts only roles (or channels) that still exist; see ``SelectionLimit``.
+    private var isFull: Bool {
+        SelectionLimit.isFull(selection: selection, existing: options.map(\.id), limit: limit)
+    }
+
+    private func isDisabled(_ option: Option) -> Bool {
+        isFull && !selection.contains(option.id)
+    }
 
     var body: some View {
         List {
-            ForEach(options) { option in
-                Button {
-                    toggle(option.id)
-                } label: {
-                    HStack {
-                        Text(verbatim: prefix + option.name)
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        if selection.contains(option.id) {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(.tint)
-                                .fontWeight(.semibold)
+            Section {
+                ForEach(options) { option in
+                    Button {
+                        toggle(option.id)
+                    } label: {
+                        HStack {
+                            Text(verbatim: prefix + option.name)
+                                .foregroundStyle(isDisabled(option) ? .secondary : .primary)
+                            Spacer()
+                            if selection.contains(option.id) {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(.tint)
+                                    .fontWeight(.semibold)
+                            }
                         }
                     }
+                    .accessibilityAddTraits(selection.contains(option.id) ? .isSelected : [])
+                    .disabled(isDisabled(option))
                 }
-                .accessibilityAddTraits(selection.contains(option.id) ? .isSelected : [])
+            } footer: {
+                if let limit {
+                    Text("Pick up to \(limit).")
+                }
             }
             // Selected ids the server no longer has: shown so they can be removed.
             let missing = selection.filter { id in !options.contains { $0.id == id } }
@@ -157,30 +206,6 @@ struct NumberField: View {
         }
         .onChange(of: isFocused) {
             if !isFocused { value = min(max(value, range.lowerBound), range.upperBound) }
-        }
-    }
-}
-
-/// Several lines of text (a message, a template), with a character limit shown when it gets
-/// close.
-struct TextArea: View {
-    let title: LocalizedStringKey
-    @Binding var text: String
-    var limit: Int?
-    var lines: ClosedRange<Int> = 3...8
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            TextField(title, text: $text, axis: .vertical)
-                .lineLimit(lines)
-            if let limit, text.count > limit * 3 / 4 {
-                Text("\(text.count) of \(limit) characters")
-                    .font(.caption)
-                    .foregroundStyle(text.count > limit ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
-            }
-        }
-        .onChange(of: text) {
-            if let limit, text.count > limit { text = String(text.prefix(limit)) }
         }
     }
 }

@@ -98,13 +98,18 @@ public struct CountingState: Decodable, Sendable, Hashable {
         self.lastUserId = lastUserId
     }
 
-    private enum CodingKeys: String, CodingKey { case current, record, lastUserId }
+    private enum CodingKeys: String, CodingKey {
+        case current, record, lastUserId
+        /// The count calls answer with the stored row, whose column is `last_user_id`.
+        case lastUserIdColumn = "last_user_id"
+    }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         current = try c.decode(forKey: .current, or: 0)
         record = try c.decode(forKey: .record, or: 0)
         lastUserId = try c.decodeIfPresent(String.self, forKey: .lastUserId)
+            ?? c.decodeIfPresent(String.self, forKey: .lastUserIdColumn)
     }
 }
 

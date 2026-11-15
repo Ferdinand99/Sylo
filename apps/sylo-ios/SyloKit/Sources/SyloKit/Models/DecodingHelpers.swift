@@ -20,6 +20,12 @@ extension KeyedDecodingContainer {
         try decodeIfPresent([Lossy<Element>].self, forKey: key)?.compactMap(\.value) ?? []
     }
 
+    /// Like ``decodeLossyArray(of:forKey:)``, but nil when the field is missing or null, so a list
+    /// the server did not send can be told from an empty one.
+    func decodeLossyArrayIfPresent<Element: Decodable>(of type: Element.Type, forKey key: Key) throws -> [Element]? {
+        try decodeIfPresent([Lossy<Element>].self, forKey: key)?.compactMap(\.value)
+    }
+
     /// A URL sent as a string, nil when missing, null, empty or not a URL.
     func decodeURLIfPresent(forKey key: Key) throws -> URL? {
         guard let string = try decodeIfPresent(String.self, forKey: key), !string.isEmpty else { return nil }

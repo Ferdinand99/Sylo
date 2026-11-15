@@ -23,7 +23,7 @@ struct AutoReactSettingsView: View {
             }
 
             Section {
-                ChannelPicker(title: "Log channel", selection: $settings.logChannelId, channels: page.channels)
+                ChannelPicker(title: "Log channel", selection: $settings.logChannelId, channels: page.channels, embed: true, health: true)
             } footer: {
                 Text("Posts one line here every time a rule triggers: who it reacted to and what changed.")
             }
@@ -52,7 +52,7 @@ struct AutoReactSettingsView: View {
                                     unit: "%")
                     }
                     RolePicker(title: "Also change a role", selection: $rule.roleId, roles: page.roles,
-                               noneTitle: "No role change")
+                               noneTitle: "No role change", health: true)
                     if !rule.roleId.isEmpty {
                         Picker("Role change", selection: $rule.roleAction) {
                             ForEach(AutoReactRoleAction.allCases, id: \.self) { action in
