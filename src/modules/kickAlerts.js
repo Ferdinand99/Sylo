@@ -17,6 +17,7 @@ import { settleEndedPost } from './lib/liveAlerts.js';
 import { encodeLiveValue, decodeLiveValue, normaliseOnEnd } from '../lib/liveValue.js';
 import { log } from '../lib/log.js';
 import { every } from './schedule.js';
+import { createQuarantine, fetchIsolated } from './lib/batchIsolation.js';
 
 const API = 'https://api.kick.com/public/v1';
 const TOKEN_URL = 'https://id.kick.com/oauth/token';
@@ -97,20 +98,26 @@ async function getChannels(slugs) {
     token = { value: null, expiresAt: 0 }; // force a refresh next call
     throw new Error('Kick 401');
   }
-  if (!res.ok) throw new Error(`Kick /channels ${res.status}`);
+  if (!res.ok) throw Object.assign(new Error(`Kick /channels ${res.status}`), { status: res.status });
   return (await res.json()).data ?? [];
 }
 
 /**
- * Live channels for a set of slugs, keyed by lowercased slug. Only currently-live
- * channels are included.
+ * Slugs the Kick API rejected (a 4xx for a request holding only that slug), left out of the
+ * shared poll with a growing backoff so one saved value cannot stop alerts for every server.
  */
-export async function fetchLiveChannels(slugs) {
+export const rejectedSlugs = createQuarantine();
+
+/**
+ * Live channels for a set of slugs, keyed by lowercased slug. Only currently-live
+ * channels are included. A slug that Kick rejects is isolated (see fetchIsolated), skipped
+ * and reported through `onRejected(slug, err, waitMs)`.
+ */
+export async function fetchLiveChannels(slugs, { onRejected } = {}) {
   const out = new Map();
-  for (let i = 0; i < slugs.length; i += 50) {
-    for (const ch of await getChannels(slugs.slice(i, i + 50))) {
-      if (ch?.stream?.is_live && ch.slug) out.set(String(ch.slug).toLowerCase(), ch);
-    }
+  const found = await fetchIsolated(slugs, 50, getChannels, { quarantine: rejectedSlugs, onRejected });
+  for (const ch of found) {
+    if (ch?.stream?.is_live && ch.slug) out.set(String(ch.slug).toLowerCase(), ch);
   }
   return out;
 }
@@ -166,7 +173,8 @@ export function buildPayload(channel, alert) {
 
 // --- poll loop -------------------------------------------------------
 
-async function tick() {
+/** One poll; exported for tests. */
+export async function tick() {
   if (!allClientsReady() || !config.kickEnabled) return;
 
   const jobs = [];
@@ -178,15 +186,26 @@ async function tick() {
   if (!jobs.length) return;
 
   const slugs = [...new Set(jobs.map((j) => j.alert.slug))];
+  rejectedSlugs.prune(new Set(slugs));
   let live;
   try {
-    live = await fetchLiveChannels(slugs);
+    live = await fetchLiveChannels(slugs, {
+      onRejected: (slug, err, waitMs) => {
+        const guilds = [...new Set(jobs.filter((j) => j.alert.slug === slug).map((j) => j.guildId))];
+        log.warn(
+          'kick-alerts',
+          `Kick rejected slug "${slug}" (${err.message}); skipping it for ${Math.round(waitMs / 60_000)} min. Saved in: ${guilds.join(', ')}`
+        );
+      },
+    });
   } catch (err) {
     log.error('kick-alerts', 'poll failed:', err.message);
     return;
   }
 
   for (const { guildId, alert } of jobs) {
+    // Rejected by Kick: neither live nor offline as far as we know, so leave its state alone.
+    if (rejectedSlugs.has(alert.slug)) continue;
     const channel = live.get(alert.slug);
     if (!channel) {
       const row = await seenRow(guildId, SCOPE, alert.slug);

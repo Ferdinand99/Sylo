@@ -17,6 +17,7 @@ import { settleEndedPost } from './lib/liveAlerts.js';
 import { normaliseOnEnd } from '../lib/liveValue.js';
 import { log } from '../lib/log.js';
 import { every } from './schedule.js';
+import { createQuarantine, fetchIsolated } from './lib/batchIsolation.js';
 
 const HELIX = 'https://api.twitch.tv/helix';
 const TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
@@ -92,30 +93,37 @@ async function helix(path, params) {
     token = { value: null, expiresAt: 0 }; // force refresh next call
     throw new Error('Twitch 401');
   }
-  if (!res.ok) throw new Error(`Twitch ${path} ${res.status}`);
+  if (!res.ok) throw Object.assign(new Error(`Twitch ${path} ${res.status}`), { status: res.status });
   return (await res.json()).data ?? [];
 }
 
-/** Live streams for a set of logins, keyed by lowercased login. */
-export async function fetchLiveStreams(logins) {
+/**
+ * Logins the Helix API rejected (a 4xx for a request holding only that login), left out of the
+ * shared poll with a growing backoff so one saved value cannot stop alerts for every server.
+ */
+export const rejectedLogins = createQuarantine();
+
+/**
+ * Live streams for a set of logins, keyed by lowercased login. A login that Helix rejects is
+ * isolated (see fetchIsolated), skipped and reported through `onRejected(login, err, waitMs)`.
+ */
+export async function fetchLiveStreams(logins, { onRejected } = {}) {
   const out = new Map();
-  for (let i = 0; i < logins.length; i += 100) {
-    const batch = logins.slice(i, i + 100);
-    for (const s of await helix('/streams', { user_login: batch })) {
-      out.set(s.user_login.toLowerCase(), s);
-    }
-  }
+  const found = await fetchIsolated(logins, 100, (batch) => helix('/streams', { user_login: batch }), {
+    quarantine: rejectedLogins,
+    onRejected,
+  });
+  for (const s of found) out.set(s.user_login.toLowerCase(), s);
   return out;
 }
 
-/** User records (for avatar / display name), keyed by lowercased login. */
+/** User records (for avatar / display name), keyed by lowercased login. A rejected login is just omitted. */
 export async function fetchUsers(logins) {
   const out = new Map();
-  for (let i = 0; i < logins.length; i += 100) {
-    for (const u of await helix('/users', { login: logins.slice(i, i + 100) })) {
-      out.set(u.login.toLowerCase(), u);
-    }
-  }
+  const found = await fetchIsolated(logins, 100, (batch) => helix('/users', { login: batch }), {
+    quarantine: createQuarantine(),
+  });
+  for (const u of found) out.set(u.login.toLowerCase(), u);
   return out;
 }
 
@@ -166,7 +174,8 @@ export function buildPayload(stream, user, alert) {
 
 // --- poll loop -------------------------------------------------------
 
-async function tick() {
+/** One poll; exported for tests. */
+export async function tick() {
   if (!allClientsReady() || !config.twitchEnabled) return;
 
   // Gather every alert across enabled guilds.
@@ -179,10 +188,19 @@ async function tick() {
   if (!jobs.length) return;
 
   const logins = [...new Set(jobs.map((j) => j.alert.login))];
+  rejectedLogins.prune(new Set(logins));
   let streams;
   let users;
   try {
-    streams = await fetchLiveStreams(logins);
+    streams = await fetchLiveStreams(logins, {
+      onRejected: (login, err, waitMs) => {
+        const guilds = [...new Set(jobs.filter((j) => j.alert.login === login).map((j) => j.guildId))];
+        log.warn(
+          'twitch-alerts',
+          `Twitch rejected login "${login}" (${err.message}); skipping it for ${Math.round(waitMs / 60_000)} min. Saved in: ${guilds.join(', ')}`
+        );
+      },
+    });
     users = await fetchUsers([...streams.keys()]);
   } catch (err) {
     log.error('twitch-alerts', 'poll failed:', err.message);
@@ -190,6 +208,8 @@ async function tick() {
   }
 
   for (const { guildId, alert } of jobs) {
+    // Rejected by Twitch: neither live nor offline as far as we know, so leave its state alone.
+    if (rejectedLogins.has(alert.login)) continue;
     const stream = streams.get(alert.login);
     if (!stream) {
       const post = await announcedPost(guildId, alert.login);
