@@ -21,17 +21,13 @@ import { describeTime } from '../formatTime.js';
 import ListPageHead from '../components/ListPageHead.jsx';
 import RowActions from '../components/RowActions.jsx';
 import EmptyList from '../components/EmptyList.jsx';
+import { isKnownZone, msToWallClock, serverTimeNote } from '../serverTime.js';
 
-function msToLocalInput(ms) {
-  if (!ms) return '';
-  const d = new Date(ms);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function scheduleLabel(r, schedulePresets, weekdays) {
+function scheduleLabel(r, schedulePresets, weekdays, timeZone) {
   if (r.mode === 'single') {
-    return r.runAt ? `once, ${describeTime(r.runAt).text}` : 'once — no time set';
+    if (!r.runAt) return 'once — no time set';
+    const zone = isKnownZone(timeZone) ? timeZone.trim() : undefined;
+    return `once, ${describeTime(r.runAt, { timeZone: zone }).text}${zone ? serverTimeNote(zone) : ''}`;
   }
   const preset = schedulePresets.find(([mins]) => Number(mins) === r.intervalMinutes);
   const every = preset ? preset[1].toLowerCase() : `every ${r.intervalMinutes}m`;
@@ -44,7 +40,7 @@ function scheduleLabel(r, schedulePresets, weekdays) {
           .sort((a, b) => a - b)
           .map((n) => names.get(n))
           .join('/')}`;
-  return `${every}${days}`;
+  return `${every}${days}${days ? serverTimeNote(timeZone) : ''}`;
 }
 
 function ReminderForm({
@@ -53,6 +49,7 @@ function ReminderForm({
   channels,
   schedulePresets,
   weekdays,
+  timeZone,
   minIntervalMinutes,
   maxIntervalMinutes,
   onSave,
@@ -70,12 +67,12 @@ function ReminderForm({
     content: embed0 ? initial.spec?.content || '' : '',
   }));
   const [mode, setMode] = useState(initial.mode === 'single' ? 'single' : 'multiple');
-  const [runAt, setRunAt] = useState(msToLocalInput(initial.runAt));
+  const [runAt, setRunAt] = useState(msToWallClock(initial.runAt, timeZone));
   const [intervalMinutes, setIntervalMinutes] = useState(initial.intervalMinutes);
   const [enableStart, setEnableStart] = useState(Boolean(initial.startAt));
-  const [startAt, setStartAt] = useState(msToLocalInput(initial.startAt));
+  const [startAt, setStartAt] = useState(msToWallClock(initial.startAt, timeZone));
   const [enableEnd, setEnableEnd] = useState(Boolean(initial.endAt));
-  const [endAt, setEndAt] = useState(msToLocalInput(initial.endAt));
+  const [endAt, setEndAt] = useState(msToWallClock(initial.endAt, timeZone));
   const [days, setDays] = useState(new Set(initial.days.length ? initial.days : [0, 1, 2, 3, 4, 5, 6]));
   const [testing, setTesting] = useState(false);
 
@@ -216,7 +213,7 @@ function ReminderForm({
 
         {mode === 'single' ? (
           <div className="v2-field u-mt-2">
-            <label>Send once at</label>
+            <label>Send once at{serverTimeNote(timeZone)}</label>
             <input
               type="datetime-local"
               value={runAt}
@@ -251,7 +248,7 @@ function ReminderForm({
                   checked={enableStart}
                   onChange={(e) => setEnableStart(e.target.checked)}
                 />
-                Add start time
+                Add start time{serverTimeNote(timeZone)}
               </label>
               <input
                 type="datetime-local"
@@ -264,7 +261,7 @@ function ReminderForm({
             <div className="v2-field-row">
               <label className="v2-check">
                 <input type="checkbox" checked={enableEnd} onChange={(e) => setEnableEnd(e.target.checked)} />
-                Add end time
+                Add end time{serverTimeNote(timeZone)}
               </label>
               <input
                 type="datetime-local"
@@ -276,7 +273,7 @@ function ReminderForm({
             </div>
 
             <div className="v2-field">
-              <label>Day of the week</label>
+              <label>Day of the week{serverTimeNote(timeZone)}</label>
               <div className="v2-field-row">
                 {weekdays.map(([n, label]) => (
                   <label className="v2-check" key={n}>
@@ -412,6 +409,7 @@ export default function Reminders() {
     channels: d.channels,
     schedulePresets: d.schedulePresets,
     weekdays: d.weekdays,
+    timeZone: d.timeZone,
     minIntervalMinutes: d.minIntervalMinutes,
     maxIntervalMinutes: d.maxIntervalMinutes,
     saving,
@@ -477,7 +475,7 @@ export default function Reminders() {
                     <p>
                       #{channel ? channel.name : r.channelId} ·{' '}
                       <span title={r.mode === 'single' && r.runAt ? describeTime(r.runAt).title : undefined}>
-                        {scheduleLabel(r, d.schedulePresets, d.weekdays)}
+                        {scheduleLabel(r, d.schedulePresets, d.weekdays, d.timeZone)}
                       </span>
                     </p>
                     {editingId === r.id ? (
