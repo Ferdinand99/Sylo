@@ -847,10 +847,13 @@ const listChanged = (things) => things.map((t) => `${label(t.kind, t.name)}${cle
  * channel or role of an item is created (who the choices are, Sylo's own permissions, whether the person may
  * hand out the roles); what was created is audited as it is made and named in the result, even when a later
  * step fails.
- * @param {{ guild: any, selections: Array<{ id: string, replace?: boolean, fields?: Record<string, { id?: string, create?: boolean, fix?: boolean }> }>, actor: string }} opts
+ * `mayChangeChannels` says whether the person asking may change the permissions of a channel that exists (the
+ * route checks Manage Channels and Manage Roles live): without it, an item that would do so (a picked channel with
+ * the change ticked, or an existing channel reused by its name) is refused, whatever the selection says.
+ * @param {{ guild: any, selections: Array<{ id: string, replace?: boolean, fields?: Record<string, { id?: string, create?: boolean, fix?: boolean }> }>, actor: string, mayChangeChannels?: boolean }} opts
  * @returns {Promise<Array<{ id: string, name: string, status: 'applied'|'skipped'|'failed', message: string, warnings: string[], created: Array<{ kind: string, name: string, id: string }>, reused: Array<{ kind: string, name: string, id: string }>, changed: Array<{ kind: string, name: string, id: string }> }>>}
  */
-export async function applySetup({ guild, selections, actor }) {
+export async function applySetup({ guild, selections, actor, mayChangeChannels = false }) {
   const byId = new Map(selections.map((s) => [s.id, s]));
   const channelsNow = () => guildTextChannels(guild);
   const rolesNow = () => assignableRoles(guild);
@@ -978,7 +981,13 @@ export async function applySetup({ guild, selections, actor }) {
       res.reused.push({ kind: field.kind, name: existing.name, id: existing.id });
     }
 
-    // 3. Sylo's own permissions, and the caps.
+    // 3. The person's own right to change a channel that exists, Sylo's own permissions, and the caps.
+    if (fixes.length && !mayChangeChannels) {
+      return fail(
+        res,
+        "You need Manage Channels and Manage Roles in this server to change a channel's permissions."
+      );
+    }
     const newChannels = toCreate.filter((f) => f.kind === 'channel').length;
     const newRoles = toCreate.filter((f) => f.kind === 'role').length;
     if ((newChannels || fixes.length) && botHas(guild, 'ManageChannels') === false) {

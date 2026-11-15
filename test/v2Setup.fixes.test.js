@@ -339,7 +339,8 @@ const clean = () => {
   failEditAt = 0;
 };
 const logging = (fields) => ({ id: 'logging', replace: true, fields });
-const run = (items) => applySetup({ guild: app.guild, actor: 'Dashboard', selections: items });
+const run = (items) =>
+  applySetup({ guild: app.guild, actor: 'Dashboard', selections: items, mayChangeChannels: true });
 
 test('on a server that hides channels behind a role, a log channel the verified members can see is not offered as private', async () => {
   clean();
@@ -416,6 +417,32 @@ test('"change its permissions" closes the channel to every role but the staff ro
     (await auditRows(GID, 'setup:channel'))[0].detail,
     /^changed who can see or post in #server-log/
   );
+});
+
+test('without the right to change channel permissions, "create" with the change ticked leaves an existing channel alone', async () => {
+  clean();
+  const members = addRole('Members');
+  const staff = addRole('Support team');
+  addChannel('server-log', F.ViewChannel | F.SendMessages, { roleAllow: { [members]: F.ViewChannel } });
+  const selections = [logging({ channel: { create: true, fix: true }, viewRole: { id: staff } })];
+  const before = edits.length;
+  const [refused] = await applySetup({
+    guild: app.guild,
+    actor: 'Dashboard',
+    selections,
+    mayChangeChannels: false,
+  });
+  assert.equal(refused.status, 'failed');
+  assert.match(refused.message, /You need Manage Channels and Manage Roles/);
+  assert.equal(edits.length, before, 'no overwrite was edited');
+  // The same request from someone who may change them goes through.
+  const [ok] = await applySetup({
+    guild: app.guild,
+    actor: 'Dashboard',
+    selections,
+    mayChangeChannels: true,
+  });
+  assert.equal(ok.status, 'applied', ok.message);
 });
 
 test('a channel that still cannot be made private is not called private: the item fails and says what was changed', async () => {

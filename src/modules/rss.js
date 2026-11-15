@@ -142,6 +142,25 @@ export function sourceLabel(feed = {}) {
   return feedSource(feed.url);
 }
 
+/**
+ * A feed with its address cut to the origin ("https://example.com/…"); feeds by name (Reddit) are kept.
+ * A feed URL can carry a token, so every response that shows feeds to someone below Edit uses this.
+ */
+export function maskFeedUrl(feed) {
+  const mask = (u) => {
+    try {
+      return `${new URL(u).origin}/…`;
+    } catch {
+      return '…';
+    }
+  };
+  return {
+    ...feed,
+    ref: /^https?:\/\//i.test(feed.ref) ? mask(feed.ref) : feed.ref,
+    url: feed.url ? mask(feed.url) : feed.url,
+  };
+}
+
 export function normaliseRssConfig(raw = {}) {
   const seenKeys = new Set();
   return {

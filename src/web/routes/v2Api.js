@@ -34,9 +34,12 @@ import {
 import {
   checkLevelRewardGrants,
   checkModuleGrants,
+  checkRoleGrants,
   guardRoleGrants,
   RoleGrantError,
+  specGrants,
 } from '../middleware/roleGrants.js';
+import { composedMentionPolicy } from '../lib/composedMentions.js';
 import {
   accessRouter,
   requestCan,
@@ -99,6 +102,7 @@ import {
   getGuildModules,
   listEnabledModuleConfigs,
   setGuildModule,
+  checkSwitchOn,
 } from '../../db/modules.js';
 import {
   normaliseLevelingConfig,
@@ -115,6 +119,7 @@ import {
   MIN_INTERVAL_MINUTES,
   MAX_INTERVAL_MINUTES,
   normaliseReminderConfig,
+  reminderMentions,
   remindersMayPing,
 } from '../../modules/scheduledMessages.js';
 import {
@@ -211,7 +216,12 @@ import {
   DEFAULT_LIVE_MESSAGE as YT_DEFAULT_LIVE_MSG,
 } from '../../modules/youtubeAlerts.js';
 import { syncSubscriptions as syncYoutubeWebsub } from '../../modules/youtubeWebsub.js';
-import { normaliseRssConfig, DEFAULT_TEMPLATE as RSS_DEFAULT_TPL, FEED_TYPES } from '../../modules/rss.js';
+import {
+  normaliseRssConfig,
+  maskFeedUrl,
+  DEFAULT_TEMPLATE as RSS_DEFAULT_TPL,
+  FEED_TYPES,
+} from '../../modules/rss.js';
 import { clearScope } from '../../db/postedKeys.js';
 import { deleteBoardEntries } from '../../db/starboard.js';
 import {
@@ -646,6 +656,9 @@ router.post(
       ),
     ];
     const enabled = Boolean(req.body.enabled);
+    // Switching modules on brings back what their settings hand out: if the person may not do that for one of
+    // them, none is switched on (a half-applied bulk change would be shown wrongly by the page).
+    if (enabled) await checkSwitchOn(req.guild.id, ids);
     for (const id of ids) {
       await setGuildModule(req.guild.id, id, { enabled });
       if (id === 'introductions' && !enabled) cancelIntroductionSessions(req.guild.id);
@@ -1721,22 +1734,6 @@ router.post(
   })
 );
 
-/** A feed with its URL cut to the origin ("https://example.com/…"); feeds by name (Reddit) are kept. */
-function maskFeedUrl(feed) {
-  const mask = (u) => {
-    try {
-      return `${new URL(u).origin}/…`;
-    } catch {
-      return '…';
-    }
-  };
-  return {
-    ...feed,
-    ref: /^https?:\/\//i.test(feed.ref) ? mask(feed.ref) : feed.ref,
-    url: feed.url ? mask(feed.url) : feed.url,
-  };
-}
-
 router.get(
   '/guilds/:guildId/modules/rss/config',
   asyncHandler(async (req, res) => {
@@ -2096,19 +2093,23 @@ router.post(
     if (!/^\d{17,20}$/.test(rec.channel_id)) {
       return res.status(400).json({ error: 'Pick a channel before publishing.', rec: composedRecJson(rec) });
     }
+    // A new post (first publish, a re-publish after unpublish, another channel) is a new place the role buttons
+    // and menus hand out their roles: the person publishing must be able to hand out every one of them.
+    if (!rec.message_id) await checkRoleGrants(specGrants(normalisedSpec));
     try {
       if (rec.message_id) {
         await editComposed(guild, rec.channel_id, rec.message_id, normalisedSpec);
         return res.json({ rec: composedRecJson(rec), status: 'updated' });
       }
-      const message = await sendComposed(guild, rec.channel_id, normalisedSpec);
+      const { allowedMentions, rolesSilent } = await composedMentionPolicy(req, guild, normalisedSpec);
+      const message = await sendComposed(guild, rec.channel_id, normalisedSpec, { allowedMentions });
       rec = await updateComposed(guild.id, rec.id, {
         name,
         channelId: rec.channel_id,
         messageId: message.id,
         spec: normalisedSpec,
       });
-      return res.json({ rec: composedRecJson(rec), status: 'sent' });
+      return res.json({ rec: composedRecJson(rec), status: 'sent', rolesSilent });
     } catch (err) {
       return res.status(400).json({ error: err.message, rec: composedRecJson(rec) });
     }
@@ -3329,7 +3330,13 @@ router.post(
       return res.status(400).json({ error: 'Add a message or an embed.' });
     }
     try {
-      await sendComposed(req.guild, r.channelId, r.spec);
+      // The test posts like the reminder will: it pings only when the server's choice (owner or Manage
+      // Server) allows it.
+      const allowPings = remindersMayPing(
+        (await getGuildModule(req.guild.id, 'reminders')).config,
+        (await listScheduled(req.guild.id)).length
+      );
+      await sendComposed(req.guild, r.channelId, r.spec, { allowedMentions: reminderMentions(allowPings) });
       res.json({ ok: true });
     } catch (err) {
       res.status(400).json({ error: err.message });
@@ -3539,7 +3546,7 @@ router.post(
   platformActionLimit, // every save publishes
   asyncHandler(async (req, res) => {
     const guild = req.guild;
-    const cfg = (await getGuildModule(guild.id, 'roles')).config;
+    const { config: cfg, enabled: rolesOn } = await getGuildModule(guild.id, 'roles');
     const list = Array.isArray(cfg.reactionMessages) ? cfg.reactionMessages : [];
 
     const channelId = /^\d{17,20}$/.test(req.body.channelId ?? '') ? req.body.channelId : '';
@@ -3570,7 +3577,8 @@ router.post(
     };
     // The guard on the save below would refuse a role this person may not hand out, but only
     // after the message was posted: check first, so a refused set never reaches the channel.
-    await checkModuleGrants('roles', cfg, {
+    // This save switches the module on, which checks everything it holds, not only this set.
+    await checkModuleGrants('roles', rolesOn ? cfg : {}, {
       ...cfg,
       reactionMessages: existing ? list.map((x) => (String(x.id) === id ? rm : x)) : [...list, rm],
     });

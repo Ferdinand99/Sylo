@@ -68,7 +68,7 @@ const NONE = Object.freeze({ level: null, member: null });
 const REFRESH_MS = 60_000;
 const refreshedAt = new Map(); // `${guild key}|${user id}` -> when
 
-async function refreshStaleMember(key, userId, { write }) {
+export async function refreshStaleMember(key, userId, { write }) {
   if (config.intentGuildMembers || !userId) return;
   if ((splitPlatformGuildId(key)?.platform ?? 'discord') !== 'discord') return;
   const id = `${key}|${userId}`;

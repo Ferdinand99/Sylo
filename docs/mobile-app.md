@@ -450,6 +450,13 @@ A request above the person's level gets `403` with `access` (their level) and
   `viewRoleIds` changes them; it needs `edit`, and changing `editRoleIds` (the
   bot-master roles) also needs Manage Server, as on the settings page.
 - Ticket notifications go to `inbox` and `edit` (and ticket staff) only.
+- Publishing a message (`POST .../messages/:id` with `action: "publish"`) pings a
+  role in the text only when the person could ping it themselves: the owner,
+  Manage Server or Mention Everyone, or a role that is mentionable. The answer
+  carries `rolesSilent`, the names of roles in the text that were shown but not
+  pinged (an empty list when none); the app can show it as a notice. Publishing a
+  message with role buttons or menus needs the right to hand out every one of
+  those roles, and answers `403` otherwise.
 
 ---
 

@@ -12,7 +12,8 @@ import { loadCommands } from '../src/bot/loadCommands.js';
 import { routeComponent } from '../src/bot/lib/components.js';
 import { GROUPS, otherCommands } from '../src/bot/commands/help.js';
 import { credit } from '../src/modules/lib/economy.js';
-import { normaliseEconomyConfig } from '../src/modules/lib/economyConfig.js';
+import { createItem } from '../src/db/economyShop.js';
+import { normaliseEconomyConfig, normaliseItem } from '../src/modules/lib/economyConfig.js';
 import * as balance from '../src/bot/commands/balance.js';
 import * as daily from '../src/bot/commands/daily.js';
 import * as work from '../src/bot/commands/work.js';
@@ -343,6 +344,33 @@ test('/rob refuses when the join time cannot be read at all', async () => {
   await rob.execute(unknown);
   assert.match(said(unknown), /can't verify how long they've been here/);
   assert.equal(await cash(V), 1000);
+});
+
+test('/eco add, set and reset-user are refused while the shop sells a role the caller could not hand out', async () => {
+  await enable();
+  const HIGH = '800000000000000900';
+  await createItem(G, normaliseItem({ name: 'Legend pass', price: 50, type: 'role', roleId: HIGH }));
+  const as = (sub, options) => {
+    const i = interaction({ userId: STAFF, sub, manageGuild: true, options: { user: V, ...options } });
+    i.guild.roles = { cache: new Map([[HIGH, { id: HIGH, name: 'Legend', position: 20 }]]) };
+    i.member = { id: STAFF, permissions: { has: () => false }, roles: { highest: { position: 5 } } };
+    return i;
+  };
+  for (const [sub, options] of [
+    ['add', { amount: 100 }],
+    ['set', { amount: 100 }],
+    ['reset-user', {}],
+  ]) {
+    const i = as(sub, options);
+    await eco.execute(i);
+    assert.match(said(i), /Legend is above or equal to your highest role/, sub);
+  }
+  assert.equal(await cash(V), 0, 'nothing was credited');
+  // Taking money is not a grant.
+  await credit(G, V, 80, { kind: 'daily', config });
+  const take = as('remove', { amount: 30 });
+  await eco.execute(take);
+  assert.equal(await cash(V), 50);
 });
 
 test('/eco needs Manage Server, and changes money with a reason', async () => {

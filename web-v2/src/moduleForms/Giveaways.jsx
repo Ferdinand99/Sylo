@@ -129,6 +129,9 @@ export default function Giveaways() {
             <option value="here">@here</option>
             <option value="everyone">@everyone</option>
           </select>
+          <p className="v2-field-hint">
+            Only the server owner or someone with Manage Server can make giveaways ping @here or @everyone.
+          </p>
         </div>
 
         <div className="v2-field">
