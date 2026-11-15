@@ -15,6 +15,7 @@ import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { plural } from '../components/Meta.jsx';
 import { formatCount } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
+import Callout from '../components/Callout.jsx';
 import { Icon } from '../components/icons.jsx';
 
 // Plain names for the error sources that are not a module (a module's own name comes from the server).
@@ -72,6 +73,28 @@ function Sparkline({ history }) {
         {lo}–{hi} ms over the last {plural(history.length, 'minute')}
       </p>
     </>
+  );
+}
+
+/** The name an imported backup is stored under (src/db/backup.js). */
+export const isImportedBackup = (name) => /^sylo-imported-/.test(name);
+
+/**
+ * Said before an uploaded Postgres dump is restored: the SQL in the file is run by the database
+ * with the rights of the role Sylo connects as.
+ */
+function UploadedSqlWarning({ risks = [], docsUrl }) {
+  return (
+    <p>
+      <strong>This file was uploaded.</strong> A Postgres dump holds SQL, and restoring it runs that SQL with
+      the rights of the database role Sylo connects as
+      {risks.length ? <> (this role has {risks.join(', ')})</> : null}. Restore only a file you made or trust.{' '}
+      {docsUrl ? (
+        <a href={docsUrl} target="_blank" rel="noreferrer">
+          Use a role with few rights
+        </a>
+      ) : null}
+    </p>
   );
 }
 
@@ -174,8 +197,13 @@ export default function Health() {
       title: 'Restore the database?',
       body: (
         <>
-          All current data is replaced with <strong className="v2-break">{name}</strong> and the bot restarts.
-          A <code>prerestore</code> snapshot is taken first.
+          <p>
+            All current data is replaced with <strong className="v2-break">{name}</strong> and the bot
+            restarts. A <code>prerestore</code> snapshot is taken first.
+          </p>
+          {d.db.postgres && isImportedBackup(name) ? (
+            <UploadedSqlWarning risks={d.db.roleRisks} docsUrl={d.db.roleDocsUrl} />
+          ) : null}
         </>
       ),
       confirmLabel: 'Restore and restart',
@@ -199,6 +227,13 @@ export default function Health() {
         <>
           <strong className="v2-break">{file.name}</strong> is stored as a snapshot. Nothing is restored until
           you press Restore on its row.
+          {d.db.postgres ? (
+            <>
+              {' '}
+              Restoring a Postgres dump runs the SQL in it with the rights of Sylo's database role, so import
+              only files you made or trust.
+            </>
+          ) : null}
         </>
       ),
       confirmLabel: 'Import',
@@ -441,6 +476,19 @@ export default function Health() {
             {fileName ? null : <span className="v2-field-hint">Choose a file first.</span>}
           </form>
         </div>
+        {d.db.postgres && d.db.roleRisks?.length ? (
+          <Callout tone="warning" title="The database role has more rights than Sylo needs">
+            <p>
+              The role Sylo connects as has {d.db.roleRisks.join(', ')}. A restored dump runs its SQL with
+              those rights.{' '}
+              {d.db.roleDocsUrl ? (
+                <a href={d.db.roleDocsUrl} target="_blank" rel="noreferrer">
+                  How to set up a role with few rights
+                </a>
+              ) : null}
+            </p>
+          </Callout>
+        ) : null}
         <p className="v2-field-hint v2-backup-help">
           Importing stores the file as a snapshot; you then Restore it. Restoring replaces the live database
           and restarts the bot (a <code>prerestore</code> snapshot is taken first).

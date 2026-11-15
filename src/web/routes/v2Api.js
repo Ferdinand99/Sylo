@@ -331,6 +331,7 @@ import {
   isBackupName,
   inspectDbFile,
 } from '../../db/backup.js';
+import { roleRisks, lastRolePrivileges, ROLE_DOCS_URL } from '../../db/dbRole.js';
 import { offsiteBackupStatus } from '../../db/offsiteBackup.js';
 import { MODULES, getModule } from '../../modules/registry.js';
 import { timeAgo, formatUptime, formatBytes } from '../lib/format.js';
@@ -2800,6 +2801,9 @@ router.get(
         size: formatBytes(dbInfo.size),
         wal: dbInfo.wal === null ? null : formatBytes(dbInfo.wal),
         postgres: Boolean(config.databaseUrl),
+        // Rights of the database role that are more than Sylo needs (empty when fine, or on SQLite).
+        roleRisks: roleRisks(lastRolePrivileges()),
+        roleDocsUrl: ROLE_DOCS_URL,
         intervalHours: config.backupIntervalHours,
         retention: config.backupRetention,
         offsite: offsiteBackupStatus(),

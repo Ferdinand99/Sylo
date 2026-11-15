@@ -100,7 +100,7 @@ At least one platform must be configured.
 | `GAMETOOLS_API_BASE`      | `https://api.gametools.network` | Stats API base URL |
 | `STATS_CACHE_TTL_MINUTES` | `5`                             | How long stats lookups are cached |
 | `DATABASE_PATH`           | `./data/sylo.db`                | SQLite file path |
-| `DATABASE_URL`            | —                               | Optional: a `postgres://` URL to use Postgres instead of SQLite. Hosted-scale deployments only — see [docs/postgres.md](postgres.md). Unset (default) means nothing about the setup below changes. |
+| `DATABASE_URL`            | —                               | Optional: a `postgres://` URL to use Postgres instead of SQLite. Hosted-scale deployments only — see [docs/postgres.md](postgres.md), and use a [role with few rights](postgres.md#least-privilege-database-role), not a superuser. Unset (default) means nothing about the setup below changes. |
 | `BACKUP_INTERVAL_HOURS`   | `24`                            | Scheduled DB snapshot interval; `0` disables it (pre-migration + manual still run) |
 | `BACKUP_RETENTION`        | `14`                            | How many DB snapshots to keep in `<data>/backups` |
 | `BACKUP_DIR`              | `<db dir>/backups`              | Where DB snapshots are written |

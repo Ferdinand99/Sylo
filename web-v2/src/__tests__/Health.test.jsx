@@ -1,6 +1,8 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Health from '../pages/Health.jsx';
+
+vi.mock('../components/ConfirmDialog.jsx', () => ({ confirmDialog: vi.fn().mockResolvedValue(false) }));
 
 vi.mock('../api.js', () => ({
   getHealth: vi.fn(),
@@ -14,6 +16,7 @@ vi.mock('../api.js', () => ({
   ApiError: class ApiError extends Error {},
 }));
 const { getHealth } = await import('../api.js');
+const { confirmDialog } = await import('../components/ConfirmDialog.jsx');
 
 function health(sessionSecret) {
   return {
@@ -82,5 +85,60 @@ describe('Health: session secret warning', () => {
     render(<Health />);
     await screen.findByText('Dev-log channel');
     expect(screen.queryByText(/session secret/i)).toBeNull();
+  });
+});
+
+describe('Health: restoring an uploaded Postgres dump', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const pgHealth = (db = {}) => ({
+    ...health(),
+    db: {
+      ...health().db,
+      postgres: true,
+      roleRisks: [],
+      roleDocsUrl: 'https://example.test/docs/postgres.md#least-privilege-database-role',
+      ...db,
+    },
+    backups: [
+      { name: 'sylo-imported-20261116.dump', size: '1 MB', ago: '1m ago' },
+      { name: 'sylo-20261116.dump', size: '1 MB', ago: '2m ago' },
+    ],
+  });
+  const restoreButtons = () => screen.getAllByRole('button', { name: 'Restore' });
+  const dialogBody = (call) => render(<div>{confirmDialog.mock.calls[call][0].body}</div>);
+
+  it('says the dump runs with the database role rights before an imported dump is restored', async () => {
+    getHealth.mockResolvedValue(pgHealth({ roleRisks: ['SUPERUSER'] }));
+    render(<Health />);
+    await screen.findByText('sylo-imported-20261116.dump');
+    fireEvent.click(restoreButtons()[0]);
+    await waitFor(() => expect(confirmDialog).toHaveBeenCalledTimes(1));
+    const { container } = dialogBody(0);
+    expect(container.textContent).toMatch(/This file was uploaded/);
+    expect(container.textContent).toMatch(/runs that SQL with the rights of the database role/);
+    expect(container.textContent).toMatch(/SUPERUSER/);
+    expect(container.querySelector('a')?.getAttribute('href')).toMatch(/least-privilege-database-role/);
+  });
+
+  it('does not add that warning for a backup Sylo made itself', async () => {
+    getHealth.mockResolvedValue(pgHealth());
+    render(<Health />);
+    await screen.findByText('sylo-20261116.dump');
+    fireEvent.click(restoreButtons()[1]);
+    await waitFor(() => expect(confirmDialog).toHaveBeenCalledTimes(1));
+    expect(dialogBody(0).container.textContent).not.toMatch(/This file was uploaded/);
+  });
+
+  it('shows a note on the page when the role is stronger than needed, and not otherwise', async () => {
+    getHealth.mockResolvedValue(pgHealth({ roleRisks: ['SUPERUSER', 'CREATEDB'] }));
+    const first = render(<Health />);
+    expect(await screen.findByText(/more rights than Sylo needs/i)).toBeTruthy();
+    first.unmount();
+
+    getHealth.mockResolvedValue(pgHealth());
+    render(<Health />);
+    await screen.findByText('Dev-log channel');
+    expect(screen.queryByText(/more rights than Sylo needs/i)).toBeNull();
   });
 });
