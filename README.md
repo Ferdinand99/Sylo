@@ -7,29 +7,56 @@
 
 # Sylo
 
-**A multi-function Discord and Fluxer bot with a MEE6-style web dashboard.**
-Add the hosted instance in one click, or self-host it with Docker or Unraid.
+**A friendly Discord and Fluxer bot with a web dashboard and an iOS app.**
+Moderation, tickets, welcome flows, an economy and alerts, in one place and free for every server.
 
-[![Add to Discord](https://img.shields.io/badge/add%20to-Discord-5865F2?logo=discord&logoColor=white)](https://discord.com/oauth2/authorize?client_id=1374856793469227029)
-[![Discord](https://img.shields.io/discord/1545464180340039751?logo=discord&logoColor=white&label=community&color=5865F2)](https://discord.gg/GAzR9k5hhS)
-[![Test](https://github.com/Ferdinand99/Sylo/actions/workflows/test.yml/badge.svg)](https://github.com/Ferdinand99/Sylo/actions/workflows/test.yml)
 [![Release](https://img.shields.io/github/v/release/Ferdinand99/Sylo?sort=semver&label=release)](https://github.com/Ferdinand99/Sylo/releases)
-[![Docker Hub](https://img.shields.io/docker/v/iwgamin/sylo?sort=semver&logo=docker&logoColor=white&label=docker%20hub)](https://hub.docker.com/r/iwgamin/sylo)
-[![Pulls](https://img.shields.io/docker/pulls/iwgamin/sylo?logo=docker&logoColor=white&label=pulls)](https://hub.docker.com/r/iwgamin/sylo)
-[![GHCR](https://img.shields.io/badge/ghcr.io-Ferdinand99%2FSylo-2496ED?logo=github&logoColor=white)](https://github.com/Ferdinand99/Sylo/pkgs/container/sylo)
-[![Node](https://img.shields.io/badge/node-%E2%89%A522-5FA04E?logo=node.js&logoColor=white)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/github/license/Ferdinand99/Sylo)](LICENSE)
-[![iOS app on the App Store](https://img.shields.io/badge/iOS%20app-App%20Store-0D96F6?logo=apple&logoColor=white)](https://apps.apple.com/app/sylo-server-manager/id6824036901)
-[![Website](https://img.shields.io/badge/website-sylobot.com-7C6CFF)](https://sylobot.com)
-[![Roadmap](https://img.shields.io/badge/roadmap-app.sylobot.com-8B5CF6)](https://app.sylobot.com/roadmap)
+[![Free, no premium tier](https://img.shields.io/badge/free-no%20premium%20tier-2EA44F)](#what-sylo-does)
+[![Discord and Fluxer](https://img.shields.io/badge/runs%20on-Discord%20%7C%20Fluxer-5865F2?logo=discord&logoColor=white)](docs/fluxer.md)
+[![Community](https://img.shields.io/discord/1545464180340039751?logo=discord&logoColor=white&label=community&color=5865F2)](https://discord.gg/GAzR9k5hhS)
 
 [Add to Discord](https://discord.com/oauth2/authorize?client_id=1374856793469227029) ·
 [Dashboard](https://app.sylobot.com) ·
+[iOS app](https://apps.apple.com/app/sylo-server-manager/id6824036901) ·
 [Self-host](#self-host) ·
 [Docs](#documentation) ·
 [Community](https://discord.gg/GAzR9k5hhS)
 
+<br />
+
+<img src="docs/media/sylo-demo.gif" alt="A short demo: the dashboard's Needs attention list leads to a role warning right at the setting, then the Sylo iOS app shows the same server on four phone screens." width="900" />
+
+<!-- full video: drag the mp4 into this README on GitHub to get a user-attachments URL -->
+
 </div>
+
+## A look at Sylo
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/media/overview.webp" alt="The Pixel Harbor server overview in the dark dashboard, with a Needs attention list: open tickets, appeals and applications, two unfinished modules and a role Sylo cannot give." />
+      <br /><sub><b>Overview.</b> Needs attention lists what is waiting for you, with a Fix button.</sub>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/media/health-check.webp" alt="The Birthdays settings page in the dark dashboard with a yellow warning under the birthday role picker: Sylo cannot give this role, move Sylo's role above it in the server's role settings." />
+      <br /><sub><b>Health check.</b> Sylo says what it cannot do and how to fix it, right at the setting.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <img src="docs/media/setup-wizard.webp" alt="The setup wizard on step two, Goals, with Welcome new members and Community engagement ticked." />
+      <br /><sub><b>Setup wizard.</b> Pick your goals, review what Sylo proposes, then apply.</sub>
+    </td>
+    <td width="50%" valign="top">
+      <img src="docs/media/ios-app.webp" alt="The Sylo iOS app on an iPhone showing the Pixel Harbor server, with the same Needs attention list as the dashboard." />
+      <br /><sub><b>iOS app.</b> Sylo – Server Manager: the same server, in your pocket.</sub>
+    </td>
+  </tr>
+</table>
+
+<sub>All screenshots show demo data from a made-up server.</sub>
 
 > [!TIP]
 > ### 📱 The Sylo app is on the App Store
@@ -40,22 +67,39 @@ Add the hosted instance in one click, or self-host it with Docker or Unraid.
 > tickets and get notified about new ones.
 > Feedback is welcome in the [community Discord](https://discord.gg/GAzR9k5hhS).
 
----
-
 ## What Sylo does
 
-Sylo bundles 40 per-server **modules**. Each one is switched on and configured
-from the dashboard. The bot, the dashboard and every module run in **one Node
-process and one container**, and in-process sharding keeps it that way past
-Discord's 2,500-server gateway limit.
+Sylo bundles 43 per-server **modules**. Each one is switched on and configured
+from the dashboard. Every feature is free for every server: there is no premium
+tier.
+
+- 🛡️ **Moderation and safety.** Case log, warnings and auto-actions, auto-moderation
+  (it can sync to Discord's native AutoMod), server logging and channel cleanup.
+- 🎫 **Tickets, appeals and applications.** Members open a ticket by DM, staff answer
+  from the dashboard or the app; ban appeals and application forms get the same inbox
+  treatment.
+- 👋 **Welcome and verification.** Welcome and leave messages, a rich welcome channel,
+  introduction cards, reaction roles and autoroles, and verification by button or captcha.
+- 💰 **Economy and shop.** A server currency earned by chatting and in voice, a bank,
+  paying each other, a shop with roles and custom items, plus levels with rank cards
+  and a public leaderboard.
+- 📣 **Alerts and community tools.** Twitch, YouTube, Kick, RSS, GitHub and free-game
+  alerts, plus polls, giveaways, events, starboard, suggestions, birthdays, reminders
+  and custom commands.
+- 🖥️ **Dashboard and app.** A setup wizard, a Needs attention list, an audit log with
+  undo, a command palette (Ctrl+K), dashboard access levels, message templates and the
+  iOS app with push notifications for new tickets.
+
+<details>
+<summary><b>All 43 modules</b></summary>
 
 | Area | Modules |
 |---|---|
-| **Moderation & safety** | [Moderation](docs/modules/moderation.md) (case log, warnings, auto-actions) · [Auto-moderation](docs/modules/automod.md) (can sync to Discord's native AutoMod) · [Server logging](docs/modules/logging.md) · [Verification](docs/modules/verification.md) (button or Turnstile captcha) · [Ban appeals](docs/modules/appeals.md) · [Tickets / modmail](docs/modules/tickets.md) · [Channel cleanup](docs/modules/channel-cleanup.md) · Honeypot (beta) |
-| **Welcome & roles** | [Welcome & leave](docs/modules/welcome.md) · [Welcome channel](docs/modules/welcome-channel.md) · [Reaction roles & autoroles](docs/modules/roles.md) (emoji, buttons or dropdown) · [Temporary roles](docs/modules/temp-roles.md) (beta) · [Birthdays](docs/modules/birthdays.md) |
-| **Engagement** | [Leveling](docs/modules/leveling.md) (image rank cards, public leaderboard) · [Invite tracker](docs/modules/invite-tracker.md) · [Starboard](docs/modules/starboard.md) · [Quote board](docs/modules/quote-board.md) (beta, optional public page) · [Polls](docs/modules/polls.md) · [Giveaways](docs/modules/giveaways.md) · [Events](docs/modules/events.md) (beta) · [Suggestions](docs/modules/suggestions.md) (beta) · [Counting](docs/modules/counting.md) · [Game stats](docs/modules/game-stats.md) (Battlefield, OSRS, RS3) |
+| **Moderation & safety** | [Moderation](docs/modules/moderation.md) (case log, warnings, auto-actions) · [Auto-moderation](docs/modules/automod.md) (can sync to Discord's native AutoMod) · [Server logging](docs/modules/logging.md) · [Verification](docs/modules/verification.md) (button or Turnstile captcha) · [Ban appeals](docs/modules/appeals.md) · [Tickets / modmail](docs/modules/tickets.md) · [Applications](docs/modules/applications.md) (forms for staff to accept or deny) · [Channel cleanup](docs/modules/channel-cleanup.md) · Honeypot (beta) |
+| **Welcome & roles** | [Welcome & leave](docs/modules/welcome.md) · [Welcome channel](docs/modules/welcome-channel.md) · [Introductions](docs/modules/introductions.md) (membership cards) · [Reaction roles & autoroles](docs/modules/roles.md) (emoji, buttons or dropdown) · [Temporary roles](docs/modules/temp-roles.md) (beta) · [Birthdays](docs/modules/birthdays.md) |
+| **Engagement** | [Leveling](docs/modules/leveling.md) (image rank cards, public leaderboard) · [Economy](docs/modules/economy.md) (currency and shop, beta) · [Invite tracker](docs/modules/invite-tracker.md) · [Starboard](docs/modules/starboard.md) · [Quote board](docs/modules/quote-board.md) (beta, optional public page) · [Polls](docs/modules/polls.md) · [Giveaways](docs/modules/giveaways.md) · [Events](docs/modules/events.md) (beta) · [Suggestions](docs/modules/suggestions.md) (beta) · [Counting](docs/modules/counting.md) · [Game stats](docs/modules/game-stats.md) (Battlefield, OSRS, RS3) |
 | **Automation** | [Custom commands](docs/modules/custom-commands.md) · [Autoresponder](docs/modules/autoresponder.md) · [Auto-react](docs/modules/auto-react.md) · [Auto threads](docs/modules/auto-threads.md) (beta, Discord only) · [Reminders](docs/modules/reminders.md) · [Sticky messages](docs/modules/sticky.md) · [AFK](docs/modules/afk.md) · [Temporary voice channels](docs/modules/temp-voice.md) |
-| **Alerts** | [Twitch](docs/modules/twitch-alerts.md) · [YouTube](docs/modules/youtube-alerts.md) · [Kick](docs/modules/kick-alerts.md) · [RSS / Atom](docs/modules/rss.md) (also Reddit, Mastodon, Bluesky) · [GitHub](docs/modules/github.md) · [Free games](docs/modules/free-games.md) · [App Store Connect](docs/modules/apple-connect.md) (owner only) |
+| **Alerts** | [Twitch](docs/modules/twitch-alerts.md) · [YouTube](docs/modules/youtube-alerts.md) · [Kick](docs/modules/kick-alerts.md) · [RSS / Atom](docs/modules/rss.md) (also Reddit, Mastodon, Bluesky) · [GitHub](docs/modules/github.md) · [Free games](docs/modules/free-games.md) · [App Store Connect](docs/modules/apple-connect.md) (instance operator only) |
 | **Insights** | [Server statistics](docs/modules/server-stats.md) (live counter channels) · [Server insights](docs/modules/insights.md) (activity charts, aggregate counts only) |
 
 The [module index](docs/modules/README.md) has one page per module: what it
@@ -71,7 +115,139 @@ has no slash commands yet, so commands run from chat (`!ping`). See
 > Since 4.0 this repository covers Fluxer itself. Its database is not migrated
 > automatically; see [Coming from Sylo-Fluxer](docs/fluxer.md#coming-from-sylo-fluxer).
 
+</details>
+
+## Use the hosted Sylo
+
+You don't have to run anything yourself. Sylo is a Discord-verified bot:
+
+1. [Add Sylo to your server](https://discord.com/oauth2/authorize?client_id=1374856793469227029).
+2. Sign in to the dashboard at **[app.sylobot.com](https://app.sylobot.com)**
+   with Discord (or Fluxer) and turn on the modules you want.
+
+Questions and announcements live on the
+[community Discord](https://discord.gg/GAzR9k5hhS). Service status:
+[status.sylobot.com](https://status.sylobot.com/).
+
+## Self-host
+
+[![Test](https://github.com/Ferdinand99/Sylo/actions/workflows/test.yml/badge.svg)](https://github.com/Ferdinand99/Sylo/actions/workflows/test.yml)
+[![Docker Hub](https://img.shields.io/docker/v/iwgamin/sylo?sort=semver&logo=docker&logoColor=white&label=docker%20hub)](https://hub.docker.com/r/iwgamin/sylo)
+[![Pulls](https://img.shields.io/docker/pulls/iwgamin/sylo?logo=docker&logoColor=white&label=pulls)](https://hub.docker.com/r/iwgamin/sylo)
+[![GHCR](https://img.shields.io/badge/ghcr.io-Ferdinand99%2FSylo-2496ED?logo=github&logoColor=white)](https://github.com/Ferdinand99/Sylo/pkgs/container/sylo)
+[![Node](https://img.shields.io/badge/node-%E2%89%A522-5FA04E?logo=node.js&logoColor=white)](https://nodejs.org)
+[![Website](https://img.shields.io/badge/website-sylobot.com-7C6CFF)](https://sylobot.com)
+[![Roadmap](https://img.shields.io/badge/roadmap-app.sylobot.com-8B5CF6)](https://app.sylobot.com/roadmap)
+
+Sylo needs **Node.js 22+** (or Docker) and a Discord application with a bot. The
+full guide, with every environment variable, the Discord application setup, a
+reverse proxy, backups, upgrades, rollback and troubleshooting, is
+**[docs/self-hosting.md](docs/self-hosting.md)**.
+
+### Docker
+
+```bash
+cp .env.example .env              # set DISCORD_TOKEN and DISCORD_CLIENT_ID
+docker compose up -d --build      # builds from source, data in ./data
+```
+
+Or run a prebuilt multi-arch image (`linux/amd64` + `linux/arm64`):
+
+```bash
+docker run -d --name sylo -p 3000:3000 --env-file .env \
+  -v "$PWD/data:/app/data" --restart unless-stopped iwgamin/sylo:latest
+```
+
+| Tag | What it is |
+|---|---|
+| `iwgamin/sylo:latest`, `:X.Y.Z`, `:X.Y` ([Docker Hub](https://hub.docker.com/r/iwgamin/sylo) · [GHCR](https://github.com/Ferdinand99/Sylo/pkgs/container/sylo)) | Stable releases. What the Unraid template pulls. |
+| `ghcr.io/ferdinand99/sylo:main`, `:sha-<short>` (GHCR only) | Rolling build of every push to `main`. |
+
+<details>
+<summary><b>Unraid, from source, minimal configuration, backups and monitoring</b></summary>
+
+### Unraid
+
+Sylo is in **Community Applications**: search for "Sylo". The template lives in
+[Ferdinand99/unraid-templates](https://github.com/Ferdinand99/unraid-templates).
+Put the data directory on a real local disk (for example
+`/mnt/cache/appdata/sylo`), **not** `/mnt/user`, because SQLite in WAL mode needs
+working file locks. Details: [Unraid](docs/self-hosting.md#unraid) and
+[SQLite on a network mount](docs/self-hosting.md#sqlite-on-a-network-mount).
+
+### From source
+
+```bash
+git clone https://github.com/Ferdinand99/Sylo.git
+cd Sylo
+npm install
+cp .env.example .env
+npm run build:v2     # once, so the dashboard can serve /v2
+npm start
+```
+
+The dashboard is then on `http://<host>:3000` (`WEB_PORT`).
+
+### Minimal configuration
+
+| Variable | Needed for |
+|---|---|
+| `DISCORD_TOKEN`, `DISCORD_CLIENT_ID` | Running on Discord (Developer Portal → Bot / General Information) |
+| `FLUXER_TOKEN`, `FLUXER_CLIENT_ID` | Running on Fluxer, instead of or next to Discord ([docs/fluxer.md](docs/fluxer.md)) |
+| `DISCORD_CLIENT_SECRET` | "Log in with Discord" on the dashboard. Without a client secret the dashboard runs **open** |
+| `SESSION_SECRET` | Optional. Sylo makes one and keeps it in `<data>/session-secret`, so logins survive restarts; set this only to use your own long random string |
+| `DASHBOARD_URL` | The public URL behind a reverse proxy; also used for captcha and appeal links |
+| `OWNER_IDS` | Your Discord user id(s); limits `/health` and the bot-wide pages to you |
+
+At least one platform must be configured. Keep an open dashboard on `localhost`
+or a trusted LAN only. Both privileged gateway intents are on by default; turn
+off the ones you don't need with `INTENT_GUILD_MEMBERS=false` /
+`INTENT_MESSAGE_CONTENT=false`. Everything else (alert API keys, backups,
+logging, push) is optional and listed in [`.env.example`](.env.example) and the
+[environment variable table](docs/self-hosting.md#environment-variables).
+
+### Backups and monitoring
+
+Sylo snapshots its database to `<data>/backups` before every schema migration
+and on a schedule. The **Health** page lists, creates, downloads, imports and
+restores snapshots. Copies can also go off-site to WebDAV (for example
+Nextcloud) or a Discord webhook, optionally encrypted with
+`BACKUP_ENCRYPTION_KEY`. `GET /health` returns JSON status for health checks,
+and `GET /metrics` serves Prometheus metrics; a ready-made Grafana dashboard is
+in [docs/grafana-dashboard.json](docs/grafana-dashboard.json). See
+[Backups](docs/self-hosting.md#backups) and
+[Off-site backups](docs/self-hosting.md#off-site-backups).
+
+</details>
+
+## Sylo app (iOS)
+
+**Sylo – Server Manager** is a native SwiftUI app (source in
+[`apps/sylo-ios`](apps/sylo-ios)) that signs in to the hosted Sylo or your own
+instance and manages your servers through the same API as the dashboard. It
+covers everything a server administrator can do there, with push notifications
+for new tickets. Get it on the
+[App Store](https://apps.apple.com/app/sylo-server-manager/id6824036901).
+
+A self-hosted instance needs nothing extra beyond a working dashboard login
+(Discord or Fluxer OAuth). Notifications reach the phone through the hosted
+relay unless you set `PUSH_RELAY_URL=` to turn them off. Sign-in flow,
+endpoints, tokens and permissions: [docs/mobile-app.md](docs/mobile-app.md).
+
+## Dashboard
+
+- **[Dashboard](docs/dashboard-v2.md).** A React single-page app at `/v2`, the
+  only dashboard since 5.0. Old dashboard links open the matching page in it. It covers every module, the builders for embeds, reaction
+  roles, custom commands and the welcome channel, tickets, moderation, appeals,
+  insights and the operator pages. The command list and the roadmap are public.
+- **Public pages.** Shareable leaderboards (`/leaderboard/:id`, `/lb/:slug`),
+  member verification (`/verify`) and ban appeals (`/appeal`). These pages are
+  server-rendered and use no JavaScript framework.
+
 ## How it works
+
+<details>
+<summary><b>Architecture diagram and notes</b></summary>
 
 ```mermaid
 flowchart LR
@@ -140,119 +316,7 @@ flowchart LR
   the APNs key (the hosted Sylo), otherwise through the relay on
   `app.sylobot.com` (`src/lib/push.js`, `src/web/routes/pushRelay.js`).
 
-## Use the hosted Sylo
-
-You don't have to run anything yourself. Sylo is a Discord-verified bot:
-
-1. [Add Sylo to your server](https://discord.com/oauth2/authorize?client_id=1374856793469227029).
-2. Sign in to the dashboard at **[app.sylobot.com](https://app.sylobot.com)**
-   with Discord (or Fluxer) and turn on the modules you want.
-
-Questions and announcements live on the
-[community Discord](https://discord.gg/GAzR9k5hhS). Service status:
-[status.sylobot.com](https://status.sylobot.com/).
-
-## Self-host
-
-Sylo needs **Node.js 22+** (or Docker) and a Discord application with a bot. The
-full guide, with every environment variable, the Discord application setup, a
-reverse proxy, backups, upgrades, rollback and troubleshooting, is
-**[docs/self-hosting.md](docs/self-hosting.md)**.
-
-### Docker
-
-```bash
-cp .env.example .env              # set DISCORD_TOKEN and DISCORD_CLIENT_ID
-docker compose up -d --build      # builds from source, data in ./data
-```
-
-Or run a prebuilt multi-arch image (`linux/amd64` + `linux/arm64`):
-
-```bash
-docker run -d --name sylo -p 3000:3000 --env-file .env \
-  -v "$PWD/data:/app/data" --restart unless-stopped iwgamin/sylo:latest
-```
-
-| Tag | What it is |
-|---|---|
-| `iwgamin/sylo:latest`, `:X.Y.Z`, `:X.Y` ([Docker Hub](https://hub.docker.com/r/iwgamin/sylo) · [GHCR](https://github.com/Ferdinand99/Sylo/pkgs/container/sylo)) | Stable releases. What the Unraid template pulls. |
-| `ghcr.io/ferdinand99/sylo:main`, `:sha-<short>` (GHCR only) | Rolling build of every push to `main`. |
-
-### Unraid
-
-Sylo is in **Community Applications**: search for "Sylo". The template lives in
-[Ferdinand99/unraid-templates](https://github.com/Ferdinand99/unraid-templates).
-Put the data directory on a real local disk (for example
-`/mnt/cache/appdata/sylo`), **not** `/mnt/user`, because SQLite in WAL mode needs
-working file locks. Details: [Unraid](docs/self-hosting.md#unraid) and
-[SQLite on a network mount](docs/self-hosting.md#sqlite-on-a-network-mount).
-
-### From source
-
-```bash
-git clone https://github.com/Ferdinand99/Sylo.git
-cd Sylo
-npm install
-cp .env.example .env
-npm run build:v2     # once, so the dashboard can serve /v2
-npm start
-```
-
-The dashboard is then on `http://<host>:3000` (`WEB_PORT`).
-
-### Minimal configuration
-
-| Variable | Needed for |
-|---|---|
-| `DISCORD_TOKEN`, `DISCORD_CLIENT_ID` | Running on Discord (Developer Portal → Bot / General Information) |
-| `FLUXER_TOKEN`, `FLUXER_CLIENT_ID` | Running on Fluxer, instead of or next to Discord ([docs/fluxer.md](docs/fluxer.md)) |
-| `DISCORD_CLIENT_SECRET` | "Log in with Discord" on the dashboard. Without a client secret the dashboard runs **open** |
-| `SESSION_SECRET` | Optional. Sylo makes one and keeps it in `<data>/session-secret`, so logins survive restarts; set this only to use your own long random string |
-| `DASHBOARD_URL` | The public URL behind a reverse proxy; also used for captcha and appeal links |
-| `OWNER_IDS` | Your Discord user id(s); limits `/health` and the bot-wide pages to you |
-
-At least one platform must be configured. Keep an open dashboard on `localhost`
-or a trusted LAN only. Both privileged gateway intents are on by default; turn
-off the ones you don't need with `INTENT_GUILD_MEMBERS=false` /
-`INTENT_MESSAGE_CONTENT=false`. Everything else (alert API keys, backups,
-logging, push) is optional and listed in [`.env.example`](.env.example) and the
-[environment variable table](docs/self-hosting.md#environment-variables).
-
-### Backups and monitoring
-
-Sylo snapshots its database to `<data>/backups` before every schema migration
-and on a schedule. The **Health** page lists, creates, downloads, imports and
-restores snapshots. Copies can also go off-site to WebDAV (for example
-Nextcloud) or a Discord webhook, optionally encrypted with
-`BACKUP_ENCRYPTION_KEY`. `GET /health` returns JSON status for health checks,
-and `GET /metrics` serves Prometheus metrics; a ready-made Grafana dashboard is
-in [docs/grafana-dashboard.json](docs/grafana-dashboard.json). See
-[Backups](docs/self-hosting.md#backups) and
-[Off-site backups](docs/self-hosting.md#off-site-backups).
-
-## Sylo app (iOS)
-
-**Sylo – Server Manager** is a native SwiftUI app (source in
-[`apps/sylo-ios`](apps/sylo-ios)) that signs in to the hosted Sylo or your own
-instance and manages your servers through the same API as the dashboard. It
-covers everything a server administrator can do there, with push notifications
-for new tickets. Get it on the
-[App Store](https://apps.apple.com/app/sylo-server-manager/id6824036901).
-
-A self-hosted instance needs nothing extra beyond a working dashboard login
-(Discord or Fluxer OAuth). Notifications reach the phone through the hosted
-relay unless you set `PUSH_RELAY_URL=` to turn them off. Sign-in flow,
-endpoints, tokens and permissions: [docs/mobile-app.md](docs/mobile-app.md).
-
-## Dashboard
-
-- **[Dashboard](docs/dashboard-v2.md).** A React single-page app at `/v2`, the
-  only dashboard since 5.0. Old dashboard links open the matching page in it. It covers every module, the builders for embeds, reaction
-  roles, custom commands and the welcome channel, tickets, moderation, appeals,
-  insights and the operator pages. The command list and the roadmap are public.
-- **Public pages.** Shareable leaderboards (`/leaderboard/:id`, `/lb/:slug`),
-  member verification (`/verify`) and ban appeals (`/appeal`). These pages are
-  server-rendered and use no JavaScript framework.
+</details>
 
 ## Development
 
