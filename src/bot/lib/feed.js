@@ -1,17 +1,22 @@
-// A tiny, dependency-free parser for RSS 2.0 and Atom feeds. Regex-based rather
+// A tiny, dependency-free parser for RSS 2.0 and Atom feeds. Scan-based rather
 // than a real XML parser: feeds in the wild are messy, but the handful of fields
 // we need sit shallow in each item/entry. Extracted from the YouTube-alerts
 // module and generalised so both it and the RSS module share one code path.
 //
-// Feed bodies are remote and untrusted, so every regex is bounded: `grab` caps
-// the string it scans, the lazy `[\s\S]` matches are length-limited, and
-// parseFeed() caps the whole document. That keeps a hostile or truncated feed
-// from turning a lazy match into quadratic backtracking.
+// Feed bodies are remote and untrusted and parsing runs on the shared event
+// loop, so it must cost time linear in the (capped) body. Every lookup below is
+// a single left-to-right scan: tags are found with a literal-prefix regex, the
+// end of a tag or element is found with an index that only ever moves forward,
+// and attributes are read by a small tokenizer. No pattern nests an unbounded
+// span inside another, because that is what lets a small crafted body (`<feed
+// <author>` repeated, `<enclosure ` repeated, ...) cost seconds of backtracking.
 
 const MAX_DOC = 4_000_000; // ~4 MB — far above any real feed
 const MAX_ENTRIES = 100; // a feed of countless tiny items would mean a DB lookup per item per poll
 const MAX_SCAN = 300_000; // per grab() call
 const MAX_FIELD = 200_000; // per CDATA / tag-text capture
+const MAX_TAG = 10_000; // longest opening tag we read attributes from
+const MAX_LINKS = 50; // <link> elements considered per entry
 
 /**
  * First capture group of `re` in `s` (scanning at most `maxScan` chars, default
@@ -52,36 +57,147 @@ function safeFromCodePoint(n) {
   }
 }
 
+/**
+ * Opening tags `<name ...>` in `s`, left to right, each as { attrs, end } where
+ * `end` is the index just past the `>`. A tag is read up to the next `<` or `>`
+ * (XML forbids `<` in attribute values), so a run of unterminated `<name `
+ * starts is skipped in one pass instead of each one rescanning the rest.
+ * Self-closing tags (`<name/>`) are reported too when `selfClosing` is set.
+ */
+function* openTags(s, name, selfClosing = false) {
+  const re = new RegExp(`<${name}(?=[\\s>${selfClosing ? '/' : ''}])`, 'gi');
+  const delim = /[<>]/g;
+  let stop = -1; // index of the next '<' or '>' at or after the last tag start
+  let m;
+  while ((m = re.exec(s))) {
+    const from = m.index + name.length + 1;
+    if (stop < from) {
+      delim.lastIndex = from;
+      const d = delim.exec(s);
+      if (!d) return; // no '<' or '>' left: no further tag can be complete
+      stop = d.index;
+    }
+    if (s[stop] !== '>' || stop - from > MAX_TAG) continue;
+    yield { attrs: s.slice(from, stop), end: stop + 1 };
+  }
+}
+
+const isSpace = (c) => c === ' ' || c === '\t' || c === '\n' || c === '\r' || c === '\f';
+
+/** Attributes of one tag as a lower-cased-name map, first occurrence wins. Linear. */
+function parseAttrs(attrs) {
+  const out = new Map();
+  const n = attrs.length;
+  let i = 0;
+  while (i < n) {
+    while (i < n && (isSpace(attrs[i]) || attrs[i] === '/')) i++;
+    const nameStart = i;
+    while (i < n && !isSpace(attrs[i]) && attrs[i] !== '=' && attrs[i] !== '/') i++;
+    const name = attrs.slice(nameStart, i).toLowerCase();
+    while (i < n && isSpace(attrs[i])) i++;
+    if (attrs[i] !== '=') {
+      if (i === nameStart) i++; // nothing consumed (a stray character): step over it
+      continue;
+    }
+    i++;
+    while (i < n && isSpace(attrs[i])) i++;
+    let value;
+    const q = attrs[i];
+    if (q === '"' || q === "'") {
+      const close = attrs.indexOf(q, i + 1);
+      if (close === -1) break;
+      value = attrs.slice(i + 1, close);
+      i = close + 1;
+    } else {
+      const valueStart = i;
+      while (i < n && !isSpace(attrs[i])) i++;
+      value = attrs.slice(valueStart, i);
+    }
+    if (name && !out.has(name)) out.set(name, value);
+  }
+  return out;
+}
+
 /** Text content of the first `<tag>…</tag>` in `block` (CDATA-aware, decoded). */
 function tagText(tag, block) {
-  const raw = grab(
-    new RegExp(`<${tag}(?:\\s[^>]{0,10000})?>([\\s\\S]{0,${MAX_FIELD}}?)</${tag}>`, 'i'),
-    block
-  );
-  return raw == null ? '' : decodeEntities(stripCdata(raw));
+  const s = String(block).slice(0, MAX_SCAN);
+  const closeRe = new RegExp(`</${tag}>`, 'gi');
+  let close = null; // first closing tag at or after the current opening tag; only moves forward
+  for (const open of openTags(s, tag)) {
+    if (!close || close.index < open.end) {
+      closeRe.lastIndex = open.end;
+      close = closeRe.exec(s);
+      if (!close) return '';
+    }
+    if (close.index - open.end <= MAX_FIELD)
+      return decodeEntities(stripCdata(s.slice(open.end, close.index)));
+  }
+  return '';
+}
+
+/** Name inside the first `<author>` at or after `from`: `<author>…<name>X</name>`. */
+function authorName(s, from = 0) {
+  const author = /<author>/gi;
+  author.lastIndex = from;
+  const a = author.exec(s);
+  if (!a) return null;
+  const name = /<name>([^<]*)<\/name>/gi;
+  name.lastIndex = a.index + a[0].length;
+  return (name.exec(s) || [])[1] || null;
+}
+
+/** First attribute `want` (e.g. url) of the first matching `<tag>`; `ok` filters tags by their attributes. */
+function firstAttr(s, tag, want, ok = () => true) {
+  for (const { attrs } of openTags(s, tag, true)) {
+    const a = parseAttrs(attrs);
+    if (a.get(want) && ok(a)) return a.get(want);
+  }
+  return null;
 }
 
 /** A media/enclosure image URL from an item/entry block, if any. */
 function imageFrom(block) {
+  const s = String(block).slice(0, MAX_SCAN);
+  const isImage = (a) => /^image\//i.test(a.get('type') || '');
   return (
-    grab(/<media:thumbnail[^>]*\burl="([^"]+)"/i, block) ||
-    grab(/<media:content[^>]*\burl="([^"]+)"[^>]*type="image\//i, block) ||
-    grab(/<enclosure[^>]*\burl="([^"]+)"[^>]*type="image\//i, block) ||
-    grab(/<itunes:image[^>]*\bhref="([^"]+)"/i, block) ||
+    firstAttr(s, 'media:thumbnail', 'url') ||
+    firstAttr(s, 'media:content', 'url', isImage) ||
+    firstAttr(s, 'enclosure', 'url', isImage) ||
+    firstAttr(s, 'itunes:image', 'href') ||
     null
   );
 }
 
 function atomLink(block) {
   // Prefer rel="alternate" (or no rel); never rel="self" / "edit".
-  const links = [...String(block).matchAll(/<link\b([^>]*)\/?>/gi)].map((m) => m[1]);
-  const pick = (want) =>
-    links.find((attrs) => {
-      const rel = grab(/\brel="([^"]+)"/i, attrs);
-      return want === null ? !rel : rel === want;
-    });
-  const attrs = pick('alternate') || pick(null) || links.find((a) => grab(/\brel="([^"]+)"/i, a) !== 'self');
-  return attrs ? grab(/\bhref="([^"]+)"/i, attrs) : null;
+  const s = String(block).slice(0, MAX_SCAN);
+  const links = [];
+  for (const { attrs } of openTags(s, 'link', true)) {
+    links.push(parseAttrs(attrs));
+    if (links.length >= MAX_LINKS) break;
+  }
+  const pick = (want) => links.find((a) => (want === null ? !a.get('rel') : a.get('rel') === want));
+  const chosen = pick('alternate') || pick(null) || links.find((a) => a.get('rel') !== 'self');
+  return chosen ? chosen.get('href') || null : null;
+}
+
+/** Feed-level author of an Atom document: the first `<author>` name after the first `<feed`. */
+function atomFeedAuthor(s) {
+  const doc = s.slice(0, MAX_SCAN);
+  const feed = /<feed/i.exec(doc);
+  return feed ? authorName(doc, feed.index + feed[0].length) : null;
+}
+
+/** RSS `<channel>` text up to its first `<item` (or `</channel>`): where the feed title lives. */
+function channelHead(s) {
+  const doc = s.slice(0, MAX_SCAN);
+  const open = /<channel>/i.exec(doc);
+  if (!open) return '';
+  const from = open.index + open[0].length;
+  const stop = /<item[\s>]|<\/channel>/gi;
+  stop.lastIndex = from;
+  const end = stop.exec(doc);
+  return end ? doc.slice(from, end.index) : '';
 }
 
 /**
@@ -103,9 +219,7 @@ function atomLink(block) {
 export function parseFeed(xml) {
   const s = String(xml ?? '').slice(0, MAX_DOC);
   const atom = /<feed[\s>]/i.test(s) && !/<rss[\s>]/i.test(s);
-  const feedAuthor = atom
-    ? grab(/<feed[\s\S]*?<author>[\s\S]*?<name>([^<]*)<\/name>/i, s)
-    : tagText('title', grab(/<channel>([\s\S]*?)(?:<item[\s>]|<\/channel>)/i, s) || '');
+  const feedAuthor = atom ? atomFeedAuthor(s) : tagText('title', channelHead(s));
 
   const blocks = atom
     ? s
@@ -127,7 +241,7 @@ export function parseFeed(xml) {
       : tagText('pubDate', block) || tagText('dc:date', block) || tagText('date', block);
     const author =
       tagText('dc:creator', block) ||
-      grab(/<author>[\s\S]*?<name>([^<]*)<\/name>/i, block) ||
+      authorName(String(block).slice(0, MAX_SCAN)) ||
       tagText('author', block) ||
       decodeEntities(feedAuthor || '');
 

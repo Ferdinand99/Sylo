@@ -25,3 +25,38 @@ test('reactors reads every page', async () => {
 test('reactors stops at its cap', async () => {
   assert.equal((await reactors(fakeReaction(250), 120)).size, 120);
 });
+
+test('reactors stops when the source ignores the cursor (a page adds nobody new)', async () => {
+  let calls = 0;
+  const same = new Map(Array.from({ length: 100 }, (_, i) => [String(i), { id: String(i), bot: false }]));
+  const rx = {
+    users: {
+      cache: new Map(),
+      fetch: async () => {
+        calls += 1;
+        return same;
+      },
+    },
+  };
+  assert.equal((await reactors(rx)).size, 100);
+  assert.ok(calls <= 2, `fetched ${calls} times`);
+});
+
+test('reactors never reads more than its page limit', async () => {
+  let calls = 0;
+  let n = 0;
+  const rx = {
+    users: {
+      cache: new Map(),
+      fetch: async () => {
+        calls += 1;
+        // Always a full page of new users: only the hard page limit ends this.
+        return new Map(
+          Array.from({ length: 100 }, () => [String(100000000000000000n + BigInt(n++)), { bot: false }])
+        );
+      },
+    },
+  };
+  await reactors(rx, 1_000_000);
+  assert.ok(calls <= 60, `fetched ${calls} pages`);
+});

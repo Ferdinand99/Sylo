@@ -140,7 +140,8 @@ async function tick() {
     const inGuild = Boolean(guildByKey(r.guild_id));
 
     if (r.mode === 'single') {
-      await markSingleFired(r.id, now); // claim it first so a crash can't double-fire
+      // Claim it first so a crash can't double-fire, and so a tick that read the same row can't either.
+      if (!(await markSingleFired(r.id, now, r.run_at))) continue;
       if (enabled && inGuild) {
         const payload = reminderPayload(r, allowPings);
         if (payload) await sendToChannel(r.guild_id, r.channel_id, payload);
@@ -149,7 +150,8 @@ async function tick() {
     }
 
     // recurring
-    await advanceReminder(r.id, r.interval_minutes, now); // claim + schedule next occurrence
+    // Claim + schedule the next occurrence; false means another tick already took this one.
+    if (!(await advanceReminder(r.id, r.interval_minutes, now, r.next_run_at))) continue;
 
     if (!inGuild) {
       await deleteScheduled(r.guild_id, r.id);
@@ -168,6 +170,10 @@ async function tick() {
   }
 }
 
-every('reminders', TICK_MS, () => {
-  tick().catch((err) => log.error('module:reminders', 'tick failed:', err.message));
-});
+// Return the promise: the scheduler skips a tick while the previous one is still running.
+every('reminders', TICK_MS, () =>
+  tick().catch((err) => log.error('module:reminders', 'tick failed:', err.message))
+);
+
+/** For tests. */
+export const _tick = tick;

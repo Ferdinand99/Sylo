@@ -10,7 +10,8 @@ import http from 'node:http';
 process.env.DASHBOARD_URL = 'https://sylo.example.com';
 const { startWebApp } = await import('./helpers/webApp.js');
 const { config } = await import('../src/config.js');
-const { subscribe, topicUrl, websubEnabled } = await import('../src/modules/youtubeWebsub.js');
+const { subscribe, topicUrl, websubEnabled, callbackToken } = await import('../src/modules/youtubeWebsub.js');
+const { getWebsub } = await import('../src/db/youtubeWebsub.js');
 
 const realFetch = globalThis.fetch;
 const channelId = 'UC' + 'o'.repeat(22);
@@ -48,7 +49,7 @@ test('open mode: the hub (Host = the DASHBOARD_URL host) gets through the host r
   const app = await startWebApp();
   try {
     assert.equal(await subscribe(channelId), true);
-    const path = `/webhooks/youtube/${channelId}?hub.mode=subscribe&hub.topic=${encodeURIComponent(topicUrl(channelId))}&hub.challenge=hi`;
+    const path = `/webhooks/youtube/${channelId}?hub.mode=subscribe&hub.topic=${encodeURIComponent(topicUrl(channelId))}&hub.challenge=hi&k=${callbackToken((await getWebsub(channelId)).secret, channelId)}`;
 
     const hub = await requestWithHost(app.base, path, 'sylo.example.com');
     assert.equal(hub.status, 200);
