@@ -39,37 +39,39 @@ export function parseInboxQuery(raw) {
   return { kind: m[1] ? m[1].toLowerCase() : null, number };
 }
 
-const KINDS = {
-  ticket: async (guildId, n) => {
-    const t = await getTicket(n);
-    return t && t.guild_id === guildId
-      ? { kind: 'ticket', number: t.id, status: t.status, href: `/guilds/${guildId}/tickets/${t.id}` }
-      : null;
-  },
-  suggestion: async (guildId, n) => {
-    const s = await getSuggestionByNumber(guildId, n);
-    return s
-      ? { kind: 'suggestion', number: s.number, status: s.status, href: `/guilds/${guildId}/m/suggestions` }
-      : null;
-  },
-  appeal: async (guildId, n) => {
-    const a = await getAppeal(guildId, n);
-    return a
-      ? { kind: 'appeal', number: Number(a.id), status: a.status, href: `/guilds/${guildId}/appeals` }
-      : null;
-  },
-  application: async (guildId, n) => {
-    const s = await getSubmission(guildId, n);
-    return s
-      ? {
-          kind: 'application',
-          number: s.id,
-          status: s.status,
-          href: `/guilds/${guildId}/applications/${s.id}`,
-        }
-      : null;
-  },
-};
+const KINDS = new Map(
+  Object.entries({
+    ticket: async (guildId, n) => {
+      const t = await getTicket(n);
+      return t && t.guild_id === guildId
+        ? { kind: 'ticket', number: t.id, status: t.status, href: `/guilds/${guildId}/tickets/${t.id}` }
+        : null;
+    },
+    suggestion: async (guildId, n) => {
+      const s = await getSuggestionByNumber(guildId, n);
+      return s
+        ? { kind: 'suggestion', number: s.number, status: s.status, href: `/guilds/${guildId}/m/suggestions` }
+        : null;
+    },
+    appeal: async (guildId, n) => {
+      const a = await getAppeal(guildId, n);
+      return a
+        ? { kind: 'appeal', number: Number(a.id), status: a.status, href: `/guilds/${guildId}/appeals` }
+        : null;
+    },
+    application: async (guildId, n) => {
+      const s = await getSubmission(guildId, n);
+      return s
+        ? {
+            kind: 'application',
+            number: s.id,
+            status: s.status,
+            href: `/guilds/${guildId}/applications/${s.id}`,
+          }
+        : null;
+    },
+  })
+);
 
 router.get(
   '/search/inbox',
@@ -77,11 +79,13 @@ router.get(
   asyncHandler(async (req, res) => {
     const parsed = parseInboxQuery(req.query.q);
     if (!parsed) return res.json({ items: [] });
-    // Only the lookups defined above: a kind from the query never picks anything else off the object.
-    const kinds = (parsed.kind ? [parsed.kind] : Object.keys(KINDS)).filter((k) => Object.hasOwn(KINDS, k));
+    // Only the lookups defined above (a Map, so a kind from the query never reaches anything else).
+    const kinds = parsed.kind ? [parsed.kind] : [...KINDS.keys()];
     const items = [];
     for (const kind of kinds) {
-      const item = await KINDS[kind](req.guild.id, parsed.number);
+      const lookup = KINDS.get(kind);
+      if (!lookup) continue;
+      const item = await lookup(req.guild.id, parsed.number);
       if (item) items.push(item);
     }
     res.json({ items });
