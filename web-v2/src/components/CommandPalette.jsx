@@ -107,6 +107,7 @@ function PaletteDialog({ onClose, guildId, guilds }) {
   const operator = useOperator();
   const dialogRef = useRef(null);
   const settled = useRef(false);
+  const closeTimer = useRef(null);
   const titleId = useId();
   const listId = useId();
   const [shown, setShown] = useState(false);
@@ -145,7 +146,11 @@ function PaletteDialog({ onClose, guildId, guilds }) {
       else dialog.setAttribute('open', '');
     }
     const raf = requestAnimationFrame(() => setShown(true));
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      // The close animation's timer must not fire after the palette is gone.
+      clearTimeout(closeTimer.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -161,7 +166,7 @@ function PaletteDialog({ onClose, guildId, guilds }) {
     settled.current = true;
     setShown(false);
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    setTimeout(
+    closeTimer.current = setTimeout(
       () => {
         dialogRef.current?.close?.();
         onClose();
