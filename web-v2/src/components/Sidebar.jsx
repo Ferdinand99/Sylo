@@ -113,7 +113,12 @@ export default function Sidebar({ activeGuildId, open, onClose, returnFocusRef }
   // An Inbox-level person gets the moderation tools only (access.jsx); a quiet link at the foot of the
   // sidebar switches to the full, still locked, navigation and back.
   const { focused, canFocus, showEverything, setShowEverything } = useAccess();
-  const nav = navModel({ guildId: activeGuildId, data, operator, focused: Boolean(activeGuildId) && focused });
+  const nav = navModel({
+    guildId: activeGuildId,
+    data,
+    operator,
+    focused: Boolean(activeGuildId) && focused,
+  });
 
   return (
     <>

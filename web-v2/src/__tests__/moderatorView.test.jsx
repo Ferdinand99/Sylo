@@ -49,7 +49,15 @@ const MOD_TOOLS = [
   'Member data',
   'Audit log',
 ];
-const SETUP_PAGES = ['Overview', 'Server settings', 'Commands', 'Leaderboard', 'Welcome', 'Leveling', 'Roadmap'];
+const SETUP_PAGES = [
+  'Overview',
+  'Server settings',
+  'Commands',
+  'Leaderboard',
+  'Welcome',
+  'Leveling',
+  'Roadmap',
+];
 
 function setLevel(level) {
   api.getGuildAccess.mockImplementation((id) => Promise.resolve({ level: id === G ? level : 'edit' }));
@@ -160,14 +168,17 @@ describe('the focused moderator view', () => {
     expect(hasLink('Server settings')).toBe(true);
   });
 
-  it.each(['view', 'edit'])('%s keeps the overview and the full navigation, with no switch', async (level) => {
-    setLevel(level);
-    const router = await open();
-    expect(router.state.location.pathname).toBe(`/guilds/${G}`);
-    expect(screen.getByText('overview page')).toBeTruthy();
-    for (const name of [...MOD_TOOLS, ...SETUP_PAGES]) expect(hasLink(name), name).toBe(true);
-    expect(screen.queryByRole('button', { name: /Show everything|Show only moderation/ })).toBeNull();
-  });
+  it.each(['view', 'edit'])(
+    '%s keeps the overview and the full navigation, with no switch',
+    async (level) => {
+      setLevel(level);
+      const router = await open();
+      expect(router.state.location.pathname).toBe(`/guilds/${G}`);
+      expect(screen.getByText('overview page')).toBeTruthy();
+      for (const name of [...MOD_TOOLS, ...SETUP_PAGES]) expect(hasLink(name), name).toBe(true);
+      expect(screen.queryByRole('button', { name: /Show everything|Show only moderation/ })).toBeNull();
+    }
+  );
 
   it("opens another server on its own level, not the previous server's", async () => {
     // Inbox in G, Edit in H.
@@ -191,8 +202,16 @@ describe('the focused moderator view', () => {
     await open();
     fireEvent.click(screen.getByRole('button', { name: 'Search the dashboard' }));
     const labels = () => screen.getAllByRole('option').map((o) => o.textContent);
-    for (const name of MOD_TOOLS) expect(labels().some((l) => l.startsWith(name)), name).toBe(true);
-    for (const name of SETUP_PAGES) expect(labels().some((l) => l.startsWith(name)), name).toBe(false);
+    for (const name of MOD_TOOLS)
+      expect(
+        labels().some((l) => l.startsWith(name)),
+        name
+      ).toBe(true);
+    for (const name of SETUP_PAGES)
+      expect(
+        labels().some((l) => l.startsWith(name)),
+        name
+      ).toBe(false);
     // A typed text finds no module or settings page either.
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'welcome' } });
     expect(screen.queryAllByRole('option').filter((o) => /Welcome/.test(o.textContent))).toHaveLength(0);
@@ -231,7 +250,9 @@ describe('the models of the focused view', () => {
   });
 
   it('gives the palette no module pages and no setup pages', () => {
-    const keys = paletteItems({ guildId: G, data: overview, operator: false, focused: true }).map((i) => i.key);
+    const keys = paletteItems({ guildId: G, data: overview, operator: false, focused: true }).map(
+      (i) => i.key
+    );
     expect(keys.some((k) => k.startsWith('module:'))).toBe(false);
     expect(keys).not.toContain('page:settings');
     expect(keys).not.toContain('page:overview');
