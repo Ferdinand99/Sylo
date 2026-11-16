@@ -312,6 +312,8 @@ export const mobileApiRouter = Router();
 // sign-in is on and both Discord and Fluxer logins are set up. `access-levels`: View / Inbox / Edit
 // dashboard access, with `access` on each GET /api/v2/guilds entry and GET/POST
 // /api/v2/guilds/:id/access. `message-move`: a posted message moves to its new channel on publish.
+// `update-notice`: operators only, GET /api/v2/update (a newer Sylo release, optionally what Wise Wren sees)
+// and, with Wise Wren set up, POST /api/v2/update/wren/approve and GET /api/v2/update/wren/runs/:id.
 const FEATURES = Object.freeze([
   'app-login',
   'live-access',
@@ -328,6 +330,7 @@ const FEATURES = Object.freeze([
   'duplicate',
   'message-templates',
   'message-move',
+  'update-notice',
 ]);
 
 // Public and ahead of the open-mode guard: the app calls it before anyone signs in, and an open-mode

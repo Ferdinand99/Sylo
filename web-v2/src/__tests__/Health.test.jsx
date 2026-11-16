@@ -11,6 +11,9 @@ vi.mock('../api.js', () => ({
   restoreBackup: vi.fn(),
   importBackup: vi.fn(),
   backupDownloadUrl: vi.fn(),
+  getUpdate: vi.fn().mockResolvedValue({ enabled: false, current: '5.0.0', available: false }),
+  approveUpdate: vi.fn(),
+  getUpdateRun: vi.fn(),
   ApiError: class ApiError extends Error {},
 }));
 const { getHealth } = await import('../api.js');
