@@ -11,7 +11,7 @@ import express from 'express';
 
 await startOAuthApp();
 const { pkceChallenge } = await import('../src/db/apiTokens.js');
-const { createApp } = await import('../src/web/server.js');
+const { createApp, centralErrorHandler } = await import('../src/web/server.js');
 const { forbidOwner } = await import('../src/web/middleware/auth.js');
 const { ticketAccessLevel } = await import('../src/web/middleware/ticketAccess.js');
 const { ticketsRouter } = await import('../src/web/routes/v2Staff.js');
@@ -136,8 +136,7 @@ test('the error page from the operator guard (auth.js) is plain', async () => {
 });
 
 test('the error page from the server error handler (server.js) is plain', async () => {
-  const handler = app.router.stack.map((l) => l.handle).find((h) => h.length === 4);
-  assert.ok(handler, 'the central error handler');
+  const handler = centralErrorHandler;
   for (const err of [
     new LimitError('You reached the limit.'),
     new RoleGrantError('That role is above yours.'),
@@ -164,8 +163,7 @@ test('the error page renders with and without a title, heading and message', asy
 // The ticket access guard (ticketAccess.js) is the first thing the tickets router of the v2 API runs
 // (v2Staff.js). This mounts that router behind the server's own central error handler, with a
 // signed-in account chosen per request, to test what the guard answers.
-async function withTicketsRouter(run) {
-  const central = app.router.stack.map((l) => l.handle).find((h) => h.length === 4);
+async function withTicketsRouter(run, { seen = [] } = {}) {
   const mini = express();
   mini.use((req, _res, next) => {
     req.account =
@@ -180,7 +178,10 @@ async function withTicketsRouter(run) {
     next();
   });
   mini.use('/guilds/:guildId/tickets', ticketsRouter);
-  mini.use(central);
+  mini.use((err, req, res, next) => {
+    seen.push(err);
+    centralErrorHandler(err, req, res, next);
+  });
   const server = await new Promise((resolve) => {
     const srv = mini.listen(0, () => resolve(srv));
   });
@@ -208,17 +209,30 @@ test('the ticket access guard refuses a person without access with a plain answe
 
 test('a failed ticket access lookup goes to the error handler instead of hanging the request', async (t) => {
   const logged = t.mock.method(log, 'error', () => {});
-  await ticketAccessLevel({ account: { id: 'acc-1', identities: [] } }).then(
-    () => assert.fail('a lookup without a server must not turn into a level'),
-    (err) => assert.ok(err instanceof Error, 'the lookup rejects, it is not swallowed into a level')
+  const failing = {
+    id: 'acc-1',
+    get identities() {
+      throw new Error('lookup failed: secret detail');
+    },
+  };
+  await assert.rejects(
+    ticketAccessLevel({ account: failing, params: { guildId: D_GUILD }, method: 'GET' }),
+    /lookup failed/,
+    'the lookup rejects: a failure is not swallowed into a level'
   );
-  await withTicketsRouter(async (url) => {
-    const res = await fetch(url, {
-      headers: { accept: 'text/html', 'x-lookup': 'fails' },
-      signal: AbortSignal.timeout(5000),
-    });
-    assert.equal(res.status, 500, 'answered, not hung');
-    assert.deepEqual(await res.json(), { error: 'Internal server error' }, 'no detail of the failure');
-  });
+  const seen = [];
+  await withTicketsRouter(
+    async (url) => {
+      const res = await fetch(url, {
+        headers: { accept: 'text/html', 'x-lookup': 'fails' },
+        signal: AbortSignal.timeout(5000),
+      });
+      assert.equal(res.status, 500, 'answered, not hung');
+      assert.deepEqual(await res.json(), { error: 'Internal server error' }, 'no detail of the failure');
+    },
+    { seen }
+  );
+  assert.equal(seen.length, 1, 'the error reached the central error handler');
+  assert.match(seen[0].message, /lookup failed/);
   assert.equal(logged.mock.callCount(), 1, 'recorded once, with the route pattern');
 });
