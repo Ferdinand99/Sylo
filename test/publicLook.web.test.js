@@ -493,3 +493,16 @@ test('saving the invite background keeps the retry gate and the check limit, so 
   // A save that does not touch the splash is not counted against that limit.
   assert.equal((await save({ accent: '#5865f2', background: 'none' })).status, 200);
 });
+
+test('a stored picture is always served as image/webp, whatever its mime column says', async () => {
+  await putLookImage(GID, 'splash', {
+    hash: '0123456789abcdef',
+    mime: 'text/html',
+    data: await pic(10, 10, 'webp'),
+    origin: 'o',
+  });
+  const res = await get(`/look/${GID}.0123456789abcdef.webp`);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'image/webp');
+  assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+});
