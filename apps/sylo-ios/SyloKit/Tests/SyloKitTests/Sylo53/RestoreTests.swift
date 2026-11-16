@@ -256,7 +256,8 @@ extension APIClientTests {
         var request = try #require(mock.requests.first)
         #expect(request.url.absoluteString == "https://example.com/sylo/api/v2/guilds/900000000000000201/public-page-look")
         #expect(request.header("Content-Type") == "application/json")
-        let json = try #require(try JSONSerialization.jsonObject(with: try #require(request.body)) as? [String: Any])
+        let savedBody = try #require(request.body)
+        let json = try #require(try JSONSerialization.jsonObject(with: savedBody) as? [String: Any])
         #expect(Set(json.keys) == ["accent", "background"])
 
         mock.reset([.json(200, publicLookJSON)])
@@ -265,7 +266,8 @@ extension APIClientTests {
         request = try #require(mock.requests.first)
         #expect(request.url.absoluteString == "https://example.com/sylo/api/v2/guilds/900000000000000201/public-page-look/image")
         #expect(request.header("Content-Type") == "multipart/form-data; boundary=B")
-        let text = String(decoding: try #require(request.body), as: UTF8.self)
+        let uploadBody = try #require(request.body)
+        let text = String(decoding: uploadBody, as: UTF8.self)
         #expect(text.contains(#"name="file""#))
     }
 
