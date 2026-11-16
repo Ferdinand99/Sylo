@@ -27,7 +27,7 @@ export function toUpdateError(err) {
   if (err instanceof UpdateError) return err;
   if (err instanceof WrenError) {
     const status =
-      err.kind === 'conflict'
+      err.kind === 'conflict' || err.kind === 'refused'
         ? 409
         : err.kind === 'not_found'
           ? 404
@@ -39,61 +39,97 @@ export function toUpdateError(err) {
   return null;
 }
 
+/** What the dashboard tells an operator in open mode, where nobody is signed in. */
+export const OPEN_MODE_TEXT =
+  'Update now needs a dashboard login: without one, anyone who can reach this dashboard could use it. Set up a login, or set WISE_WREN_ALLOW_OPEN_MODE=true to allow it anyway.';
+
 /**
  * @param {{
  *   checker: { get(opts?: { force?: boolean }): Promise<any> },
  *   wren: ReturnType<typeof import('../../lib/wiseWren.js').createWrenClient> | null,
+ *   store?: { get(): Promise<{ id: number } | null>, set(run: { id: number }): Promise<void> },
+ *   openModeBlocked?: () => boolean,
  *   now?: () => number,
  * }} deps
+ *
+ * `store` keeps the run Sylo last approved, so "Update now" stays off while it runs, also across the
+ * restart the update causes. It is a run id only: the Wise Wren target token may read a run by id but
+ * not list runs. `openModeBlocked` says Update now is refused because nobody is signed in.
  */
-export function createUpdateService({ checker, wren, now = Date.now }) {
+export function createUpdateService({
+  checker,
+  wren,
+  store = null,
+  openModeBlocked = () => false,
+  now = Date.now,
+}) {
   let seen = null; // { at, value } of the last Wise Wren read
+  let inflight = null; // the read in progress, shared by everyone who asks meanwhile
+  let lastRunId = null; // the run approved by this process
 
   const drop = () => {
     seen = null;
+    inflight = null;
   };
 
-  async function readWren() {
-    if (seen && now() - seen.at < WREN_CACHE_MS) return seen.value;
-    const value = await readWrenUncached();
-    seen = { at: now(), value };
-    return value;
+  async function knownRunId() {
+    if (lastRunId) return lastRunId;
+    try {
+      return (await store?.get())?.id ?? null;
+    } catch {
+      return null;
+    }
   }
 
+  function readWren() {
+    if (seen && now() - seen.at < WREN_CACHE_MS) return Promise.resolve(seen.value);
+    if (!inflight) {
+      const mine = readWrenUncached()
+        .then((value) => {
+          if (inflight === mine) seen = { at: now(), value };
+          return value;
+        })
+        .finally(() => {
+          if (inflight === mine) inflight = null;
+        });
+      inflight = mine;
+    }
+    return inflight;
+  }
+
+  // The target and the run Sylo approved, asked at the same time (a read is short or it is broken).
   async function readWrenUncached() {
-    const out = { target: null, readable: true, error: null, latestRun: null };
-    try {
-      out.target = await wren.target();
-    } catch (err) {
-      if (err instanceof WrenError && err.kind === 'forbidden') {
-        // A token that may approve but not read: the notice still works, from the GitHub check.
-        out.readable = false;
-      } else if (err instanceof WrenError) {
-        out.error = { code: `wren_${err.kind}`, message: err.message };
-        return out;
-      } else throw err;
+    const out = { target: null, error: null, latestRun: null };
+    const runId = await knownRunId();
+    const [target, run] = await Promise.allSettled([wren.target(), runId ? wren.run(runId) : null]);
+    if (target.status === 'rejected') {
+      if (!(target.reason instanceof WrenError)) throw target.reason;
+      // A 403 here means the token is for another target (or may not read this one): an error to fix.
+      out.error = { code: `wren_${target.reason.kind}`, message: target.reason.message };
+      return out;
     }
-    try {
-      out.latestRun = await wren.latestRun();
-    } catch (err) {
-      if (!(err instanceof WrenError)) throw err;
-      // Not readable (or Wren hiccuped): the page just has no run to show.
-    }
+    out.target = target.value;
+    if (run.status === 'rejected') {
+      if (!(run.reason instanceof WrenError)) throw run.reason;
+      // Wren hiccuped: the page just has no run to show now.
+    } else out.latestRun = run.value;
     return out;
   }
 
   /** Why "Update now" is not offered, or null when it is. */
-  function whyNot(check, w) {
+  function whyNot(w) {
     if (w.error) return null;
+    if (openModeBlocked()) return OPEN_MODE_TEXT;
     if (w.latestRun && !w.latestRun.finished) return 'An update of Sylo is already running in Wise Wren.';
-    if (!w.readable) return check.available ? null : 'No newer Sylo release is out.';
     const t = w.target;
     if (!t) return null;
     if (t.blockedReason) return `Wise Wren would refuse it: ${t.blockedReason}`;
     if (t.mode === 'notify') {
       return 'Wise Wren only notifies for this target. Change its mode in Wise Wren to allow updates.';
     }
-    if (t.status === 'update') return null;
+    if (t.status === 'update') {
+      return t.versionKey ? null : 'Wise Wren shows no version to approve yet. Try again in a moment.';
+    }
     if (t.status === 'current')
       return 'Wise Wren does not see an update yet. It checks every few hours; use Check now there.';
     return 'Wise Wren cannot tell yet whether Sylo has an update.';
@@ -104,17 +140,17 @@ export function createUpdateService({ checker, wren, now = Date.now }) {
    * @param {{ force?: boolean }} [opts]
    */
   async function status({ force = false } = {}) {
-    const check = await checker.get({ force });
-    if (!wren) return { ...check, wren: null };
     if (force) drop();
-    const w = await readWren();
-    const blocked = whyNot(check, w);
+    // GitHub and Wise Wren are asked at the same time.
+    const [check, w] = await Promise.all([checker.get({ force }), wren ? readWren() : null]);
+    if (!wren) return { ...check, wren: null };
+    const blocked = whyNot(w);
     return {
       ...check,
       wren: {
         configured: true,
         error: w.error,
-        readable: w.readable,
+        openMode: openModeBlocked(),
         target: w.target
           ? {
               name: w.target.name,
@@ -130,38 +166,42 @@ export function createUpdateService({ checker, wren, now = Date.now }) {
         updateSeen: w.target?.status === 'update',
         canApprove: !w.error && blocked === null,
         whyNot: blocked,
+        // The run Sylo last approved (the page follows it while it is not finished).
         latestRun: w.latestRun,
       },
     };
   }
 
   /**
-   * Ask Wise Wren to update Sylo now. Approves exactly the version Wren shows when it can be read.
+   * Ask Wise Wren to update Sylo now: exactly the version Wren shows.
    * @returns {Promise<{ runId: number, status: string, from: string }>}
    */
   async function approve() {
     if (!wren) throw new UpdateError(404, 'wren_off', 'Wise Wren is not set up for this Sylo.');
+    // Before anything is asked of Wise Wren: nobody is signed in.
+    if (openModeBlocked()) throw new UpdateError(409, 'open_mode', OPEN_MODE_TEXT);
     // Always a fresh read: the approval must be for the version Wren shows now.
     drop();
     const w = await readWren();
     if (w.error) throw new UpdateError(502, w.error.code, w.error.message);
-    const check = await checker.get();
-    const why = whyNot(check, w);
+    const why = whyNot(w);
     if (why) throw new UpdateError(409, 'not_approvable', why);
-    const { runId, status } = await wren.approve(w.target?.versionKey ?? null);
+    const check = await checker.get();
+    const { runId, status } = await wren.approve(w.target.versionKey);
+    lastRunId = runId;
+    try {
+      await store?.set({ id: runId });
+    } catch {
+      // kept in memory for this process; only a restart would forget it
+    }
     drop();
     return { runId, status, from: check.current };
   }
 
-  /** One run for GET /api/v2/update/wren/runs/:id; `readable: false` when the token cannot read runs. */
+  /** One run for GET /api/v2/update/wren/runs/:id (a run of another target is a not_found). */
   async function run(id) {
     if (!wren) throw new UpdateError(404, 'wren_off', 'Wise Wren is not set up for this Sylo.');
-    try {
-      return { readable: true, run: await wren.run(id) };
-    } catch (err) {
-      if (err instanceof WrenError && err.kind === 'forbidden') return { readable: false, run: null };
-      throw err;
-    }
+    return { run: await wren.run(id) };
   }
 
   return { status, approve, run, drop };

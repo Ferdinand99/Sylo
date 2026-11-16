@@ -106,8 +106,9 @@ At least one platform must be configured.
 | `BACKUP_DIR`              | `<db dir>/backups`              | Where DB snapshots are written |
 | `UPDATE_CHECK`            | `on`                            | The [update notice](#update-notice-and-update-now) for operators: Sylo looks up its newest GitHub release (at most every 6 hours). `off` turns it off and nothing is requested |
 | `WISE_WREN_URL`           | —                               | Optional: address of your [Wise Wren](https://github.com/Ferdinand99/Wise-Wren), to update Sylo from the dashboard. Needs the next two as well. `https`, or `http` on your own network |
-| `WISE_WREN_TOKEN`         | —                               | A Wise Wren API token that may approve Sylo's target. A secret: never shown in the dashboard, never logged |
+| `WISE_WREN_TOKEN`         | —                               | A Wise Wren **target token** for Sylo's target (Wise Wren: Settings → Target tokens): it can read and approve only that target. A secret: never shown in the dashboard, never logged |
 | `WISE_WREN_TARGET_ID`     | —                               | The id of Sylo's target in Wise Wren (the number in the target page's address) |
+| `WISE_WREN_ALLOW_OPEN_MODE` | `false`                       | Only matters when the dashboard has no login (open mode): then **Update now** is refused, because anyone who can reach the dashboard could use it. `true` allows it anyway |
 | `LOG_LEVEL`               | `info`                          | `debug` / `info` / `warn` / `error` |
 | `LOG_FORMAT`              | `text`                          | `text` or `json` (`LOG_JSON=1` = json) |
 | `NODE_ENV`                | `development`                   | Set to `production` in deployment |
@@ -447,18 +448,26 @@ and the Sylo app shows the same to operators (see [mobile-app.md](mobile-app.md#
 
   1. In Wise Wren, make sure Sylo shows up as a target and that the agent's `[updates]` allow list
      includes it.
-  2. Create an API token in Wise Wren that may approve that target. If your Wise Wren offers a token
-     limited to a single target, use it: a leaked token then cannot update anything else.
+  2. In Wise Wren, make a **target token** (Settings → Target tokens) for that target. It can read and
+     approve that one target and nothing else, so a leaked token cannot update anything else. Use the
+     token's `ww_…` value below.
   3. Set `WISE_WREN_URL`, `WISE_WREN_TOKEN` and `WISE_WREN_TARGET_ID` (all three) and restart Sylo.
 
   Sylo then shows what Wise Wren sees for the target. **Update now** (operators only, after a
   confirmation) approves that exact version in Wise Wren, which stops Sylo, takes a snapshot, starts the
   new version and rolls back if it does not come up healthy. The Health page follows the run and
-  reconnects by itself when Sylo restarts. The token stays on the server: it is never sent to the
-  browser or the app, and never logged. Sylo only calls three Wise Wren routes, all for the one
-  target: `GET /api/v1/targets/<id>`, `POST /api/v1/targets/<id>/approve` and `GET /api/v1/runs/<id>`.
-  A token that can approve but not read still works: the notice then relies on the GitHub check.
-  Without these settings only the notice and the command are shown.
+  reconnects by itself when Sylo restarts. Sylo remembers the run it approved (in its database), so
+  **Update now** stays off while that run is going, also after the restart. If Wise Wren refuses (the
+  version changed, a run is already going, the target only notifies), you see Wise Wren's own words.
+  The token stays on the server: it is never sent to the browser or the app, and never logged. Sylo only
+  calls three Wise Wren routes, all for the one target: `GET /api/v1/targets/<id>`,
+  `POST /api/v1/targets/<id>/approve` and `GET /api/v1/runs/<id>`. Without these settings only the notice
+  and the command are shown.
+- **Open mode.** When the dashboard has no login (no `DISCORD_CLIENT_SECRET` or `FLUXER_CLIENT_SECRET`),
+  everyone who can reach it counts as an operator. **Update now** is refused there (the notice, the
+  command and what Wise Wren sees are still shown, and Sylo logs a warning at start), because it spends
+  Sylo's Wise Wren token on behalf of whoever sent the request. Set up a login, or set
+  `WISE_WREN_ALLOW_OPEN_MODE=true` if you accept that on a network you trust.
 
 ### Upgrading to 5.0
 

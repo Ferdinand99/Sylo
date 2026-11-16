@@ -76,7 +76,6 @@ function ReleaseNotes({ notes, notesText }) {
 function UpdateProgress({ id, from, onClose }) {
   const [view, setView] = useState({
     run: null,
-    readable: true,
     down: false,
     wrenError: null,
     version: null,
@@ -93,7 +92,7 @@ function UpdateProgress({ id, from, onClose }) {
       let finished = false;
       try {
         const res = await getUpdateRun(id);
-        next = { run: res.run, readable: res.readable, down: false, wrenError: null };
+        next = { run: res.run, down: false, wrenError: null };
         finished = Boolean(res.run?.finished);
       } catch (err) {
         if (syloIsDown(err)) {
@@ -106,7 +105,7 @@ function UpdateProgress({ id, from, onClose }) {
         }
       }
       // Back after a restart, or finished, or no run to read: Sylo's own version tells whether it worked.
-      if (!next.down && (wasDown || finished || next.readable === false)) {
+      if (!next.down && (wasDown || finished)) {
         try {
           const status = await loadUpdateStatus({ fresh: true });
           if (status?.current && status.current !== from) next.version = status.current;
@@ -142,13 +141,6 @@ function UpdateProgress({ id, from, onClose }) {
     );
   } else if (view.down) {
     body = <>Sylo is restarting. This page keeps trying and shows the result as soon as Sylo is back.</>;
-  } else if (!view.readable) {
-    body = (
-      <>
-        Wise Wren is updating Sylo. Its token cannot show the steps, so this page waits for Sylo to come back
-        on the new version.
-      </>
-    );
   } else {
     body = (
       <>
@@ -157,7 +149,7 @@ function UpdateProgress({ id, from, onClose }) {
       </>
     );
   }
-  const tone = view.version ? 'success' : view.down || !view.readable ? 'working' : said.tone;
+  const tone = view.version ? 'success' : view.down ? 'working' : said.tone;
 
   return (
     <div className={`v2-upd-progress is-${tone}`} role="status" aria-live="polite">

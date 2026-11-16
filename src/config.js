@@ -250,6 +250,9 @@ const updateCheck = !/^(0|false|no|off)$/i.test(process.env.UPDATE_CHECK?.trim()
 // dashboard's "Update now". All three settings are needed; the token is a secret.
 const { settings: wiseWren, problem: wiseWrenProblem } = readWrenSettings(process.env);
 if (wiseWrenProblem) console.error(`[config] ${wiseWrenProblem}`);
+// Without a dashboard login nobody is signed in, so "Update now" would be open to everyone who can reach
+// the dashboard. It is refused there unless this says it is wanted anyway.
+const wiseWrenAllowOpenMode = optionalBool('WISE_WREN_ALLOW_OPEN_MODE', false);
 const kickClientSecret = optionalOrNull('KICK_CLIENT_SECRET');
 // Signs session cookies and short-lived tokens (e.g. verification links), so it
 // must always exist. SESSION_SECRET wins; otherwise a generated secret is kept in
@@ -381,6 +384,7 @@ export const config = Object.freeze({
   // The update notice (see above), and Wise Wren's address, token and target id (null = off).
   updateCheck,
   wiseWren,
+  wiseWrenAllowOpenMode,
   // URLs that server admins type in (RSS feeds, the welcome card background) are fetched by
   // the server, so private, loopback and link-local addresses are refused (src/lib/safeFetch.js).
   // A self-hosted instance that wants feeds from its own network can allow them.
@@ -419,3 +423,10 @@ export const config = Object.freeze({
   // Misc
   nodeEnv: optional('NODE_ENV', 'development'),
 });
+
+if (config.wiseWren && !config.authEnabled && !config.wiseWrenAllowOpenMode) {
+  console.error(
+    '[config] Wise Wren is set up, but the dashboard has no login (open mode), so "Update now" is off: ' +
+      'anyone who can reach the dashboard could use it. Set up a login, or set WISE_WREN_ALLOW_OPEN_MODE=true to allow it.'
+  );
+}

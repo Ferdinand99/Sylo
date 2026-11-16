@@ -15,7 +15,8 @@ const { createUpdateChecker } = await import('../src/lib/updateCheck.js');
 const { createWrenClient } = await import('../src/lib/wiseWren.js');
 const { listBotAudit } = await import('../src/db/botAudit.js');
 
-const wren = await startFakeWren();
+// The recommended token: limited to the one target.
+const wren = await startFakeWren({ targetToken: true });
 test.after(() => wren.close());
 
 const RELEASE = {
@@ -26,8 +27,17 @@ const RELEASE = {
 };
 
 let githubCalls = 0;
-function useService({ withWren = true } = {}) {
+function useService({ withWren = true, openModeBlocked = () => false } = {}) {
   githubCalls = 0;
+  wren.state.runs.clear();
+  wren.state.force = {};
+  Object.assign(wren.state.target, {
+    status: 'update',
+    effective_mode: 'approve',
+    blocked_reason: null,
+    version_key: 'sylo=sha256:4f90abcd',
+  });
+  let remembered = null;
   const checker = createUpdateChecker({
     version: '5.2.0',
     fetchImpl: async () => {
@@ -39,6 +49,8 @@ function useService({ withWren = true } = {}) {
     createUpdateService({
       checker,
       wren: withWren ? createWrenClient({ url: wren.url, token: FAKE_TOKEN, targetId: wren.targetId }) : null,
+      store: { get: async () => remembered, set: async (run) => void (remembered = run) },
+      openModeBlocked,
     })
   );
 }
@@ -106,13 +118,13 @@ test('without Wise Wren the notice still works and approving is a 404', async ()
   assert.equal((await res.json()).code, 'wren_off');
 });
 
-test('?refresh=1 asks GitHub again, with a budget of its own', async () => {
+test('?refresh=1 is a request to look again, limited per operator and by a minimum interval for the instance', async () => {
   useService({ withWren: false });
   await operator.get('/update');
   await operator.get('/update');
   assert.equal(githubCalls, 1, 'the cache answers the second read');
   assert.equal((await operator.get('/update?refresh=1')).status, 200);
-  assert.equal(githubCalls, 2);
+  assert.equal(githubCalls, 1, 'GitHub was asked a moment ago: the minimum interval serves the cache');
   let limited = 0;
   for (let i = 0; i < 8; i++) if ((await operator.get('/update?refresh=1')).status === 429) limited++;
   assert.ok(limited >= 1, 'too many re-checks are refused');
@@ -156,7 +168,7 @@ test('Update now: approves the version Wren shows, records who asked, and the ru
   run.status = 'running';
   run.steps = [{ step: 'stop', status: 'running', duration_ms: null, log: 'secret path /mnt/user/appdata' }];
   const progress = await (await operator.get(`/update/wren/runs/${started.runId}`)).json();
-  assert.equal(progress.readable, true);
+  assert.deepEqual(Object.keys(progress), ['run']);
   assert.equal(progress.run.status, 'running');
   assert.equal(progress.run.finished, false);
   assert.deepEqual(progress.run.steps, [{ step: 'stop', status: 'running', durationMs: null }]);
@@ -168,7 +180,7 @@ test('Update now: approves the version Wren shows, records who asked, and the ru
   assert.equal(status.wren.canApprove, false);
 });
 
-test("a run that is not this target's, an unknown run and a junk id are 404s", async () => {
+test("a run that is not this target's is refused by Wren (a 502 here), an unknown run and a junk id are 404s", async () => {
   useService();
   wren.state.runs.set(500, {
     id: 500,
@@ -176,7 +188,10 @@ test("a run that is not this target's, an unknown run and a junk id are 404s", a
     status: 'running',
     steps: [],
   });
-  assert.equal((await operator.get('/update/wren/runs/500')).status, 404);
+  // A single-target token is refused another target's run (403 in Wren, never a 403 for the operator).
+  const other = await operator.get('/update/wren/runs/500');
+  assert.equal(other.status, 502);
+  assert.equal((await other.json()).code, 'wren_forbidden');
   assert.equal((await operator.get('/update/wren/runs/424242')).status, 404);
   assert.equal((await operator.get('/update/wren/runs/abc')).status, 404);
   assert.equal((await operator.get('/update/wren/runs/1;rm')).status, 404);
@@ -190,13 +205,25 @@ test("a run that is not this target's, an unknown run and a junk id are 404s", a
 });
 
 test('Wise Wren refusing is shown as its words with a 409; a wrong token is a 502, never a 401', async () => {
+  // Sylo already knows it would be refused (the target only notifies): a 409 before Wren is asked.
   useService();
-  wren.state.runs.clear();
   wren.state.target.effective_mode = 'notify';
   let res = await operator.post('/update/wren/approve');
   assert.equal(res.status, 409);
   assert.match((await res.json()).error, /only notifies/);
-  wren.state.target.effective_mode = 'approve';
+
+  // Wren refuses at the moment of approving (the version changed): a 400 in Wren, a 409 with its words here.
+  useService();
+  wren.state.force['POST approve'] = [
+    400,
+    { error: { code: 'bad_request', message: 'The version changed since you looked; approve the new one.' } },
+  ];
+  res = await operator.post('/update/wren/approve');
+  assert.equal(res.status, 409);
+  const refused = await res.json();
+  assert.equal(refused.code, 'wren_refused');
+  assert.match(refused.error, /version changed/);
+  wren.state.force = {};
 
   setUpdateService(
     createUpdateService({

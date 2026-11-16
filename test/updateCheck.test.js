@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   CHECK_TTL_MS,
+  FORCE_MIN_INTERVAL_MS,
   RETRY_AFTER_FAILURE_MS,
   UPDATE_COMMAND,
   compareVersions,
@@ -165,7 +166,10 @@ test('the answer is cached for six hours, then asked again; many callers share o
   await checker.get();
   assert.equal(calls.length, 2, 'asked again after six hours');
   await checker.get({ force: true });
-  assert.equal(calls.length, 3, 'force asks at once');
+  assert.equal(calls.length, 2, 'a forced check right after a look is served from the cache');
+  clock += FORCE_MIN_INTERVAL_MS;
+  await checker.get({ force: true });
+  assert.equal(calls.length, 3, 'a forced check asks again after the minimum interval');
 });
 
 test('UPDATE_CHECK=off: nothing is requested', async () => {
@@ -259,4 +263,57 @@ test('a request that never answers is cut off by the timeout', async () => {
   clearTimeout(keepAlive);
   assert.ok(Date.now() - started < 2000);
   assert.equal(s.checkFailed, true);
+});
+
+test('"Check again" cannot be used to hammer GitHub: a minimum interval for the whole instance, and no force during a failure backoff', async () => {
+  let clock = 20_000_000;
+  let calls = 0;
+  let fail = false;
+  const checker = createUpdateChecker({
+    version: '5.2.0',
+    now: () => clock,
+    fetchImpl: async () => {
+      calls++;
+      return fail
+        ? new Response('nope', { status: 503 })
+        : new Response(JSON.stringify(release()), { status: 200 });
+    },
+  });
+  await checker.get();
+  for (let i = 0; i < 10; i++) await checker.get({ force: true });
+  assert.equal(calls, 1, 'ten forced checks in the same moment are one request');
+  clock += FORCE_MIN_INTERVAL_MS - 1;
+  await checker.get({ force: true });
+  assert.equal(calls, 1);
+  clock += 1;
+  fail = true;
+  await checker.get({ force: true });
+  assert.equal(calls, 2, 'allowed after the minimum interval');
+  // It failed: the failure backoff is respected, force or not.
+  clock += FORCE_MIN_INTERVAL_MS * 2;
+  for (let i = 0; i < 5; i++) assert.equal((await checker.get({ force: true })).checkFailed, true);
+  assert.equal(calls, 2, 'no forced request while a failure is waited out');
+  clock += RETRY_AFTER_FAILURE_MS;
+  fail = false;
+  assert.equal((await checker.get({ force: true })).checkFailed, false);
+  assert.equal(calls, 3);
+});
+
+test('the body is capped while it streams: a huge answer is cut off, not read to the end', async () => {
+  let pulled = 0;
+  const chunk = new TextEncoder().encode('x'.repeat(300_000));
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins
+  const body = new ReadableStream({
+    pull(controller) {
+      pulled++;
+      if (pulled > 50) return controller.close();
+      controller.enqueue(chunk);
+    },
+  });
+  const s = await createUpdateChecker({
+    version: '5.2.0',
+    fetchImpl: async () => new Response(body, { status: 200 }),
+  }).get();
+  assert.equal(s.checkFailed, true);
+  assert.ok(pulled < 10, `read ${pulled} chunks of 50`);
 });

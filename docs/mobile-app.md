@@ -685,25 +685,28 @@ table below. Writes are rate limited (5 approvals a minute, 6 re-checks a minute
   `GET /api/v2/changelog` (`items[].text` is inline markdown with `https` links only, to render as text,
   never as HTML). Release notes that are not in that format come as `notesText`, plain text.
 - `wren` is `null` when Wise Wren is not set up. Otherwise it has `configured`, `error` (`null`, or
-  `{ code, message }` when Wise Wren could not be asked), `readable` (false for a token that may approve but
-  not read), `target` (`{ name, server, status, installedVersion, latestVersion, mode, lastCheckedAt }`
-  or `null`), `updateSeen` (Wise Wren sees an update), `canApprove`, `whyNot` (the reason when it cannot,
-  in words), and `latestRun` (the target's newest run, see below, or `null`). It never has Wise Wren's
-  address, the token or the version key.
+  `{ code, message }` when Wise Wren could not be asked or does not accept Sylo's token), `openMode` (the
+  dashboard has no login, so Update now is off unless the operator allowed it), `target`
+  (`{ name, server, status, installedVersion, latestVersion, mode, lastCheckedAt }` or `null`),
+  `updateSeen` (Wise Wren sees an update), `canApprove`, `whyNot` (the reason when it cannot, in words), and
+  `latestRun` (the run Sylo last approved, as below, or `null`; Sylo remembers it across its own restart).
+  While `latestRun` is not `finished`, `canApprove` is false and the page or app should follow that run.
+  It never has Wise Wren's address, the token or the version key.
 
 `POST /api/v2/update/wren/approve` (no body) asks Wise Wren to update Sylo now and answers
 `{ runId, status, from }`, where `from` is the version it started from. It approves exactly the version Wise
-Wren shows. Errors are `{ error, code }`: `404` (`wren_off`) when Wise Wren is not set up, `409` when there is
-nothing to approve or Wise Wren refuses (`not_approvable`, `wren_conflict`), `429`, and `502`
-(`wren_unreachable`, `wren_unauthorized`, `wren_forbidden`, `wren_server`, `wren_invalid`) when Wise Wren
-cannot be reached or does not accept Sylo's token. These are never `401` or `403`, which stay for the
-operator's own sign-in.
+Wren shows. Errors are `{ error, code }`: `404` (`wren_off`) when Wise Wren is not set up; `409` when there is
+nothing to approve (`not_approvable`), when Wise Wren refuses (`wren_refused`, with Wise Wren's own message:
+the version changed, a run is already going, the agent would refuse it), or in open mode (`open_mode`);
+`429`; and `502` (`wren_unreachable`, `wren_unauthorized`, `wren_forbidden`, `wren_server`, `wren_invalid`)
+when Wise Wren cannot be reached or does not accept Sylo's token. These are never `401` or `403`, which stay
+for the operator's own sign-in.
 
-`GET /api/v2/update/wren/runs/:id` answers `{ readable, run }`: `run` is
+`GET /api/v2/update/wren/runs/:id` answers `{ run }`, where `run` is
 `{ id, status, finished, ok, detail, version, createdAt, startedAt, finishedAt, steps: [{ step, status, durationMs }] }`
 (`status`: `queued`, `running`, `succeeded`, `rolled_back`, `failed`, `rollback_failed`, `refused`,
-`cancelled`, `lapsed`; `finished` is true for all but the first two). `readable: false, run: null` when the
-token cannot read runs. A run that is not the Sylo target's is a `404`. Poll it every few seconds, up to
+`cancelled`, `lapsed`; `finished` is true for all but the first two). A run that is not the Sylo target's
+is refused (`404`, or `502` `wren_forbidden` from a token limited to one target). Poll it every few seconds, up to
 60 requests a minute.
 
 **Sylo restarts during an update**, so these requests fail for a while (a dropped connection, or `502`/`503`
@@ -714,7 +717,7 @@ when `GET /api/v2/update` (or `GET /api/mobile/info`) reports a `current` / `ver
 | --- | --- | --- |
 | `GET /api/v2/update[?refresh=1]` | Operators only | The update notice above |
 | `POST /api/v2/update/wren/approve` | Operators only | `{ runId, status, from }` |
-| `GET /api/v2/update/wren/runs/:id` | Operators only | `{ readable, run }` |
+| `GET /api/v2/update/wren/runs/:id` | Operators only | `{ run }` |
 
 ---
 

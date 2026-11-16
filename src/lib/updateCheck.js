@@ -10,7 +10,10 @@ export const UPDATE_COMMAND = 'docker compose pull && docker compose up -d';
 export const CHECK_TTL_MS = 6 * 60 * 60 * 1000;
 // After a failed check the next one waits this long, so a dead network is not asked every few seconds.
 export const RETRY_AFTER_FAILURE_MS = 30 * 60 * 1000;
-export const REQUEST_TIMEOUT_MS = 8000;
+// "Check again" can bring the next request forward, but not more often than this for the whole instance
+// (GitHub allows an anonymous address 60 requests an hour), and never while a failure is being waited out.
+export const FORCE_MIN_INTERVAL_MS = 60 * 1000;
+export const REQUEST_TIMEOUT_MS = 5000;
 const MAX_BODY_CHARS = 1_000_000;
 const MAX_NOTES_CHARS = 20_000;
 const MAX_NOTES_TEXT = 4000;
@@ -61,6 +64,28 @@ export function compareVersions(a, b) {
     if (x.nums[i] !== y.nums[i]) return x.nums[i] > y.nums[i] ? 1 : -1;
   }
   return comparePre(x.pre, y.pre);
+}
+
+/** The body as text, read as it streams and cut off with an error once it passes `max` characters. */
+async function readCapped(res, max) {
+  if (!res.body?.getReader) {
+    const text = await res.text();
+    if (text.length > max) throw new Error('the answer is too large');
+    return text;
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let text = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    text += decoder.decode(value, { stream: true });
+    if (text.length > max) {
+      await reader.cancel().catch(() => {});
+      throw new Error('the answer is too large');
+    }
+  }
+  return text + decoder.decode();
 }
 
 /** `[label](url)` links in a changelog line keep only https targets: anything else shows as its label. */
@@ -147,8 +172,10 @@ export function createUpdateChecker({
   /** @type {Promise<void> | null} */
   let inflight = null;
   let warned = false;
+  let lastAttempt = 0;
 
   async function fetchLatest() {
+    lastAttempt = now();
     try {
       const res = await (fetchImpl ?? globalThis.fetch)(url, {
         headers: {
@@ -162,8 +189,7 @@ export function createUpdateChecker({
       if (!res.ok) throw new Error(`GitHub answered ${res.status}`);
       const declared = Number(res.headers.get('content-length'));
       if (Number.isFinite(declared) && declared > MAX_BODY_CHARS) throw new Error('the answer is too large');
-      const text = await res.text();
-      if (text.length > MAX_BODY_CHARS) throw new Error('the answer is too large');
+      const text = await readCapped(res, MAX_BODY_CHARS);
       const release = shapeRelease(JSON.parse(text));
       if (!release) throw new Error('no usable release in the answer');
       const at = now();
@@ -186,7 +212,14 @@ export function createUpdateChecker({
    */
   async function get({ force = false } = {}) {
     if (!enabled) return view(null, false, 0);
-    if (!cached || force || now() >= cached.until) {
+    // A forced check is a request to look sooner; it is served from the cache when the last look was a
+    // moment ago or a failure is being waited out.
+    const forced =
+      force &&
+      cached &&
+      !(cached.failed && now() < cached.until) &&
+      now() - lastAttempt >= FORCE_MIN_INTERVAL_MS;
+    if (!cached || forced || now() >= cached.until) {
       inflight ??= fetchLatest().finally(() => {
         inflight = null;
       });

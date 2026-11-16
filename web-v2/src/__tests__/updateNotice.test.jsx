@@ -64,7 +64,6 @@ const status = (over = {}) => ({
 const wrenState = (over = {}) => ({
   configured: true,
   error: null,
-  readable: true,
   target: { name: 'sylo', server: 'LANBox', status: 'update', mode: 'approve' },
   updateSeen: true,
   canApprove: true,
@@ -195,7 +194,6 @@ describe('UpdateNotice', () => {
     api.getUpdate.mockResolvedValue(status({ wren: wrenState() }));
     api.approveUpdate.mockResolvedValue({ runId: 12, status: 'queued', from: '5.2.0' });
     api.getUpdateRun.mockResolvedValue({
-      readable: true,
       run: { id: 12, status: 'queued', finished: false, ok: false, steps: [] },
     });
     render(<UpdateNotice />);
@@ -248,7 +246,6 @@ describe('UpdateNotice', () => {
     api.getUpdateRun
       // Wise Wren is stopping Sylo...
       .mockResolvedValueOnce({
-        readable: true,
         run: {
           id: 12,
           status: 'running',
@@ -262,7 +259,6 @@ describe('UpdateNotice', () => {
       .mockRejectedValueOnce(new api.ApiError('Unexpected response (HTTP 502)', { status: 502 }))
       // ...and back, with the run finished.
       .mockResolvedValue({
-        readable: true,
         run: { id: 12, status: 'succeeded', finished: true, ok: true, steps: [] },
       });
     api.getUpdate.mockResolvedValue(
@@ -297,7 +293,6 @@ describe('UpdateNotice', () => {
     writeStoredRun({ id: 12, from: '5.2.0' });
     api.getUpdate.mockResolvedValue(status({ wren: wrenState() }));
     api.getUpdateRun.mockResolvedValue({
-      readable: true,
       run: { id: 12, status: 'rolled_back', finished: true, ok: false, steps: [] },
     });
     render(<UpdateNotice />);
@@ -310,29 +305,11 @@ describe('UpdateNotice', () => {
     expect(api.getUpdateRun.mock.calls.length).toBe(calls);
   });
 
-  it('with a token that cannot read runs, waits for Sylo to come back on the new version', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    writeStoredRun({ id: 12, from: '5.2.0' });
-    api.getUpdate.mockResolvedValueOnce(status({ wren: wrenState({ readable: false }) }));
-    api.getUpdateRun.mockResolvedValue({ readable: false, run: null });
-    api.getUpdate.mockResolvedValueOnce(status({ wren: wrenState({ readable: false }) }));
-    api.getUpdate.mockResolvedValue(
-      status({ current: '5.3.0', available: false, latest: '5.3.0', notes: null })
-    );
-    render(<UpdateNotice />);
-    expect(await screen.findByText(/Its token cannot show the steps/)).toBeTruthy();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(3100);
-    });
-    expect(await screen.findByText(/Sylo is now on 5\.3\.0/)).toBeTruthy();
-  });
-
   it('picks up an update that is already running in Wise Wren', async () => {
     api.getUpdate.mockResolvedValue(
       status({ wren: wrenState({ latestRun: { id: 31, status: 'running', finished: false } }) })
     );
     api.getUpdateRun.mockResolvedValue({
-      readable: true,
       run: { id: 31, status: 'running', finished: false, ok: false, steps: [] },
     });
     render(<UpdateNotice />);

@@ -13,7 +13,8 @@ import {
   shapeRun,
 } from '../src/lib/wiseWren.js';
 
-const wren = await startFakeWren();
+// The recommended token: limited to this one target (the run list and other targets answer 403).
+const wren = await startFakeWren({ targetToken: true });
 test.after(() => wren.close());
 
 const settings = { url: wren.url, token: FAKE_TOKEN, targetId: wren.targetId };
@@ -22,7 +23,15 @@ const reset = () => {
   wren.requests.length = 0;
   wren.state.force = {};
   wren.state.delayMs = 0;
+  wren.state.runs.clear();
+  Object.assign(wren.state.target, {
+    status: 'update',
+    effective_mode: 'approve',
+    blocked_reason: null,
+    version_key: 'sylo=sha256:4f90abcd',
+  });
 };
+const KEY = 'sylo=sha256:4f90abcd';
 
 async function failure(promise) {
   try {
@@ -115,33 +124,58 @@ test('the target: what Wren sees, shaped, with the bearer token and no body', as
   assert.equal(req.body, '');
 });
 
-test('approve: the exact version key, then the run id; without a key an empty body', async () => {
+test('approve: the exact version key, then the run id; an approval without a key is never sent', async () => {
   reset();
-  const started = await client().approve('sylo=sha256:4f90abcd');
+  const started = await client().approve(KEY);
   assert.deepEqual(started, { runId: started.runId, status: 'queued' });
   assert.ok(Number.isSafeInteger(started.runId));
   const [req] = wren.requests;
   assert.equal(req.method, 'POST');
   assert.equal(req.url, `/api/v1/targets/${wren.targetId}/approve`);
   assert.equal(req.headers['content-type'], 'application/json');
-  assert.deepEqual(JSON.parse(req.body), { version_key: 'sylo=sha256:4f90abcd' });
+  assert.deepEqual(JSON.parse(req.body), { version_key: KEY });
 
   reset();
-  await client().approve(null);
-  assert.deepEqual(JSON.parse(wren.requests[0].body), {});
+  for (const missing of [null, undefined, '']) {
+    const err = await failure(client().approve(missing));
+    assert.equal(err.kind, 'refused');
+  }
+  assert.equal(wren.requests.length, 0, 'nothing asked of Wren without a version key');
 });
 
-test("approve: a version that is not the one Wren sees is refused as a conflict, with Wren's words", async () => {
+test("approve: Wren's refusals (400 and 409) are `refused`, with Wren's own words", async () => {
+  // The version changed since Sylo looked: a 400 in the real Wren.
   reset();
-  const err = await failure(client().approve('sylo=sha256:old'));
-  assert.equal(err.kind, 'conflict');
+  let err = await failure(client().approve('sylo=sha256:old'));
+  assert.equal(err.kind, 'refused');
+  assert.equal(err.status, 400);
+  assert.match(err.message, /version changed/);
+
+  // A second approval while a run is queued or running.
+  reset();
+  await client().approve(KEY);
+  err = await failure(client().approve(KEY));
+  assert.equal(err.kind, 'refused');
+  assert.match(err.message, /already queued or running/);
+
+  // Notify-only and no update are 400s too; an agent that would refuse the target is a 409.
+  reset();
+  wren.state.target.effective_mode = 'notify';
+  assert.match((await failure(client().approve(KEY))).message, /notify-only/);
+  reset();
+  wren.state.target.status = 'current';
+  assert.match((await failure(client().approve(KEY))).message, /no update/);
+  reset();
+  wren.state.target.blocked_reason = 'not allowed by its [updates] list';
+  err = await failure(client().approve(KEY));
+  assert.equal(err.kind, 'refused');
   assert.equal(err.status, 409);
-  assert.match(err.message, /newer version/);
+  assert.match(err.message, /agent would refuse this update: not allowed/);
 });
 
 test('a run: steps without logs, only a run of this target', async () => {
   reset();
-  const { runId } = await client().approve(null);
+  const { runId } = await client().approve(KEY);
   const run = wren.state.runs.get(runId);
   run.status = 'running';
   run.steps = [
@@ -171,20 +205,38 @@ test('a run: steps without logs, only a run of this target', async () => {
     status: 'succeeded',
     steps: [],
   });
+  // (A plain write token can read it; a target token is refused it by Wren, see below.)
+  wren.state.targetToken = false;
   assert.equal((await failure(client().run(99))).kind, 'not_found');
+  wren.state.targetToken = true;
   assert.equal((await failure(client().run(0))).kind, 'not_found');
   assert.equal((await failure(client().run('7; drop'))).kind, 'not_found');
 });
 
-test('the newest run of the target, or null', async () => {
+test('a single-target token: the run list and other targets are refused, and Sylo never asks for them', async () => {
   reset();
-  wren.state.runs.clear();
-  assert.equal(await client().latestRun(), null);
-  const { runId } = await client().approve(null);
-  const latest = await client().latestRun();
-  assert.equal(latest.id, runId);
-  assert.equal(latest.status, 'queued');
-  assert.match(wren.requests.at(-1).url, new RegExp(`^/api/v1/runs\\?target_id=${wren.targetId}&limit=1$`));
+  // What Wren does for such a token (so a client that asked would fail):
+  const direct = (path) =>
+    fetch(`${wren.url}${path}`, { headers: { authorization: `Bearer ${FAKE_TOKEN}` } });
+  assert.equal((await direct(`/api/v1/runs?target_id=${wren.targetId}&limit=1`)).status, 403);
+  assert.equal((await direct('/api/v1/targets/99')).status, 403);
+  wren.requests.length = 0;
+  const c = client();
+  await c.target();
+  const { runId } = await c.approve(KEY);
+  await c.run(runId);
+  assert.ok(
+    wren.requests.every((r) => !r.url.startsWith('/api/v1/runs?')),
+    'no run list'
+  );
+  // A run of another target: the token is refused it (403), and Sylo would not show it anyway.
+  wren.state.runs.set(99, {
+    id: 99,
+    target: { id: 8, kind: 'container', name: 'other' },
+    status: 'running',
+    steps: [],
+  });
+  assert.equal((await failure(c.run(99))).kind, 'forbidden');
 });
 
 test('terminal states are finished; only succeeded is ok', () => {
@@ -210,6 +262,7 @@ test('errors by status: unauthorized, forbidden, not found, rate limited, server
     [401, 'unauthorized'],
     [403, 'forbidden'],
     [404, 'not_found'],
+    [400, 'bad_request'],
     [409, 'conflict'],
     [429, 'rate_limited'],
     [500, 'server'],
@@ -224,12 +277,18 @@ test('errors by status: unauthorized, forbidden, not found, rate limited, server
     assert.doesNotMatch(err.message, new RegExp(FAKE_TOKEN));
     assert.doesNotMatch(err.message, /127\.0\.0\.1/);
   }
-  // Wren's own short error text is kept; a long or missing one is replaced.
+  // Wren's own short error text is kept (its envelope is {"error": {"code", "message"}}), a long or missing
+  // one is replaced, and a plain string error is read too.
   reset();
-  wren.state.force['POST approve'] = [409, { error: 'The agent would refuse this update: not allowed.' }];
-  assert.match((await failure(client().approve(null))).message, /would refuse this update/);
-  wren.state.force['POST approve'] = [409, { error: 'x'.repeat(500) }];
-  assert.doesNotMatch((await failure(client().approve(null))).message, /xxxxx/);
+  wren.state.force['GET target'] = [
+    403,
+    { error: { code: 'forbidden', message: 'This token is for another target.' } },
+  ];
+  assert.match((await failure(client().target())).message, /for another target/);
+  wren.state.force['GET target'] = [500, { error: { code: 'x', message: 'x'.repeat(500) } }];
+  assert.doesNotMatch((await failure(client().target())).message, /xxxxx/);
+  wren.state.force['GET target'] = [500, { error: 'Plain text error' }];
+  assert.match((await failure(client().target())).message, /Plain text error/);
   reset();
 });
 
@@ -245,7 +304,7 @@ test('an answer that is not JSON, or not an object, is invalid; a missing run id
   wren.state.force['GET target'] = [200, 'not an object'];
   assert.equal((await failure(client().target())).kind, 'invalid');
   wren.state.force['POST approve'] = [200, { status: 'queued' }];
-  assert.equal((await failure(client().approve(null))).kind, 'invalid');
+  assert.equal((await failure(client().approve(KEY))).kind, 'invalid');
   reset();
 });
 
@@ -260,7 +319,7 @@ test('unreachable and too slow are their own kinds, and the error never carries 
 
   reset();
   wren.state.delayMs = 300;
-  const slow = await failure(createWrenClient(settings, { timeoutMs: 50 }).target());
+  const slow = await failure(createWrenClient(settings, { readTimeoutMs: 50 }).target());
   assert.equal(slow.kind, 'unreachable');
   assert.match(slow.message, /in time/);
   reset();
@@ -281,7 +340,7 @@ test('a redirect is not followed, so the token never reaches another address', a
   await new Promise((r) => redirecting.listen(0, '127.0.0.1', r));
   try {
     const url = `http://127.0.0.1:${redirecting.address().port}`;
-    const err = await failure(createWrenClient({ ...settings, url }).approve(null));
+    const err = await failure(createWrenClient({ ...settings, url }).approve(KEY));
     assert.equal(err.kind, 'server');
     assert.match(err.message, /redirect/);
     assert.deepEqual(seen, [], 'nothing was sent to the redirect target');
@@ -297,14 +356,13 @@ test('only the three routes on the one target are ever called', async () => {
   reset();
   const c = client();
   await c.target();
-  const { runId } = await c.approve(null);
+  const { runId } = await c.approve(KEY);
   await c.run(runId);
-  await c.latestRun();
   for (const r of wren.requests) {
     assert.match(
       `${r.method} ${r.url}`,
       new RegExp(
-        `^(GET /api/v1/targets/${wren.targetId}|POST /api/v1/targets/${wren.targetId}/approve|GET /api/v1/runs/\\d+|GET /api/v1/runs\\?target_id=${wren.targetId}&limit=1)$`
+        `^(GET /api/v1/targets/${wren.targetId}|POST /api/v1/targets/${wren.targetId}/approve|GET /api/v1/runs/\\d+)$`
       )
     );
     assert.equal(r.headers.authorization, `Bearer ${FAKE_TOKEN}`);

@@ -13,6 +13,7 @@ import { createUpdateService, toUpdateError } from '../lib/updateService.js';
 import { createUpdateChecker } from '../../lib/updateCheck.js';
 import { createWrenClient } from '../../lib/wiseWren.js';
 import { recordBotAudit } from '../../db/botAudit.js';
+import { getAppSetting, setAppSetting } from '../../db/appSettings.js';
 import { config } from '../../config.js';
 import { log } from '../../lib/log.js';
 
@@ -20,10 +21,37 @@ const { version } = createRequire(import.meta.url)('../../../package.json');
 
 const router = accessRouter('');
 
+// The run Sylo last approved, kept in the database so it is still known after the restart the update
+// causes (and "Update now" stays off while it runs). Only the run id, and only for the same target.
+const RUN_KEY = 'update.wren.lastRun';
+const runStore = {
+  async get() {
+    try {
+      const run = JSON.parse((await getAppSetting(RUN_KEY)) ?? 'null');
+      return Number.isSafeInteger(run?.id) && run.targetId === config.wiseWren?.targetId
+        ? { id: run.id }
+        : null;
+    } catch {
+      return null;
+    }
+  },
+  async set(run) {
+    await setAppSetting(RUN_KEY, JSON.stringify({ id: run.id, targetId: config.wiseWren?.targetId }));
+  },
+};
+
+/**
+ * Open mode (no dashboard login): nobody is signed in, so "Update now" is refused unless
+ * WISE_WREN_ALLOW_OPEN_MODE=true.
+ */
+const openModeBlocked = () => !config.authEnabled && !config.wiseWrenAllowOpenMode;
+
 /** The one service the routes use; tests that need another call `setUpdateService`. */
 let service = createUpdateService({
   checker: createUpdateChecker({ enabled: config.updateCheck, version, log }),
   wren: config.wiseWren ? createWrenClient(config.wiseWren) : null,
+  store: runStore,
+  openModeBlocked,
 });
 
 /** Replace the service (tests only). */

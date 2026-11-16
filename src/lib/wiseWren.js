@@ -2,11 +2,11 @@
 // access to the Docker socket: an operator who runs Wise Wren can let the dashboard ask it to update
 // Sylo's own target. This file is the whole client: what Wise Wren knows about the target, "approve
 // the update" and the progress of the run. It only ever calls three Wise Wren routes, all on the one
-// target id that WISE_WREN_TARGET_ID names:
+// target id that WISE_WREN_TARGET_ID names (the routes a Wise Wren target token is allowed):
 //
-//   GET  /api/v1/targets/{id}        what Wren sees (an update, the version key, why it would refuse)
+//   GET  /api/v1/targets/{id}          what Wren sees (an update, the version key, why it would refuse)
 //   POST /api/v1/targets/{id}/approve  approve exactly that version
-//   GET  /api/v1/runs/{id}           the run's steps (and GET /api/v1/runs?target_id={id}&limit=1)
+//   GET  /api/v1/runs/{id}             a run's steps (the id comes from the approval)
 //
 // The token (WISE_WREN_TOKEN) is a secret: it is only ever put in the Authorization header of these
 // requests. It is not in any error, log line or answer this file produces, and nothing here follows
@@ -105,7 +105,7 @@ export function readWrenSettings(env) {
  * is written here or is Wren's own short error text, and holds no token.
  */
 export class WrenError extends Error {
-  /** @param {'unreachable'|'unauthorized'|'forbidden'|'not_found'|'conflict'|'rate_limited'|'bad_request'|'server'|'invalid'} kind */
+  /** @param {'unreachable'|'unauthorized'|'forbidden'|'not_found'|'conflict'|'refused'|'rate_limited'|'bad_request'|'server'|'invalid'} kind */
   constructor(kind, message, status = null) {
     super(message);
     this.name = 'WrenError';
@@ -129,15 +129,27 @@ const FALLBACK_TEXT = {
   forbidden: 'Wise Wren does not allow this token to do that.',
   not_found: 'Wise Wren does not know this target.',
   conflict: 'Wise Wren refused this update.',
+  refused: 'Wise Wren refused this update.',
   rate_limited: 'Wise Wren says to slow down; try again in a moment.',
   bad_request: 'Wise Wren did not accept the request.',
   server: 'Wise Wren had an error.',
 };
 
-/** Wren's own error text when it sent a short one, never anything that could be markup or a secret. */
+/**
+ * Wren's own error text when it sent a short one, never anything that could be markup or a secret.
+ * Every /api/v1 error is `{"error": {"code", "message"}}`; a plain string error or a top-level
+ * `message` are read too.
+ */
 function errorText(body) {
+  const e = body?.error;
   const raw =
-    typeof body?.error === 'string' ? body.error : typeof body?.message === 'string' ? body.message : '';
+    typeof e?.message === 'string'
+      ? e.message
+      : typeof e === 'string'
+        ? e
+        : typeof body?.message === 'string'
+          ? body.message
+          : '';
   const text = raw.replace(/\s+/g, ' ').trim();
   if (!text || text.length > 300) return '';
   return text;
@@ -202,14 +214,21 @@ export function shapeTarget(t) {
   };
 }
 
+// A read is quick or it is broken; an approval may take Wren a moment longer.
+export const READ_TIMEOUT_MS = 4000;
+export const APPROVE_TIMEOUT_MS = 10_000;
+
 /**
  * @param {{ url: string, token: string, targetId: number }} settings
- * @param {{ fetchImpl?: typeof fetch, timeoutMs?: number }} [opts]
+ * @param {{ fetchImpl?: typeof fetch, readTimeoutMs?: number, approveTimeoutMs?: number }} [opts]
  */
-export function createWrenClient(settings, { fetchImpl, timeoutMs = 10_000 } = {}) {
+export function createWrenClient(
+  settings,
+  { fetchImpl, readTimeoutMs = READ_TIMEOUT_MS, approveTimeoutMs = APPROVE_TIMEOUT_MS } = {}
+) {
   const { url, token, targetId } = settings;
 
-  async function call(method, path, body) {
+  async function call(method, path, body, timeoutMs = readTimeoutMs) {
     let res;
     try {
       res = await (fetchImpl ?? globalThis.fetch)(`${url}${path}`, {
@@ -259,16 +278,30 @@ export function createWrenClient(settings, { fetchImpl, timeoutMs = 10_000 } = {
       return shapeTarget(await call('GET', `/api/v1/targets/${targetId}`));
     },
     /**
-     * Approve the update now. With a `versionKey` the approval is for exactly that version (Wren
-     * refuses it when a newer one has appeared); without one Wren approves whatever it sees.
+     * Approve exactly the update with this version key (Wren refuses it when a newer one has appeared,
+     * when a run is already queued or running, when the target only notifies, or when there is no
+     * update). Those refusals are `refused`, with Wren's own words.
      * @returns {Promise<{ runId: number, status: string }>}
      */
     async approve(versionKey) {
-      const data = await call(
-        'POST',
-        `/api/v1/targets/${targetId}/approve`,
-        versionKey ? { version_key: versionKey } : {}
-      );
+      if (typeof versionKey !== 'string' || !versionKey) {
+        throw new WrenError('refused', 'Wise Wren shows no version to approve yet.');
+      }
+      let data;
+      try {
+        data = await call(
+          'POST',
+          `/api/v1/targets/${targetId}/approve`,
+          { version_key: versionKey },
+          approveTimeoutMs
+        );
+      } catch (err) {
+        // 400 and 409 on an approval are Wren saying no to the action, not Sylo sending junk.
+        if (err instanceof WrenError && (err.kind === 'bad_request' || err.kind === 'conflict')) {
+          throw new WrenError('refused', err.message, err.status);
+        }
+        throw err;
+      }
       if (!Number.isSafeInteger(data.run_id)) {
         throw new WrenError('invalid', 'Wise Wren did not say which run it started.');
       }
@@ -280,13 +313,6 @@ export function createWrenClient(settings, { fetchImpl, timeoutMs = 10_000 } = {
       const run = shapeRun(await call('GET', `/api/v1/runs/${id}`));
       if (!run || run.targetId !== targetId) throw new WrenError('not_found', 'No such run.');
       return run;
-    },
-    /** The newest run of the target (without steps), or null when it has none. */
-    async latestRun() {
-      const data = await call('GET', `/api/v1/runs?target_id=${targetId}&limit=1`);
-      const [first] = Array.isArray(data.runs) ? data.runs : [];
-      const run = shapeRun(first);
-      return run && run.targetId === targetId ? run : null;
     },
   };
 }
