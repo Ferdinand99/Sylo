@@ -6,7 +6,6 @@ import { guildKey, guildByKey, platformOfClient } from '../../platform/platformO
 import { config } from '../../config.js';
 import { Events, StringSelectMenuBuilder, ActionRowBuilder } from 'discord.js';
 import { lookupTicketGuilds, canOpenTicketIn, ingestUserDM } from '../../modules/tickets.js';
-import { getOpenTicket } from '../../db/tickets.js';
 import { registerComponent } from '../lib/components.js';
 import { handleQuestionnaireMessage, looksLikeQuestionnairePrompt } from '../lib/dmQuestionnaire.js';
 import { lateAnswerWindowMs } from '../../modules/applications.js';
@@ -70,25 +69,31 @@ async function handleDM(message) {
   if (!payload.content && payload.attachments.length === 0) return;
 
   // Only the servers on the platform this DM arrived on: a user id means nothing on the other one.
-  const { guilds, incomplete } = await lookupTicketGuilds(message.author, message.client);
-  if (guilds.length === 0) {
-    // `incomplete`: the lookup is capped per message, so some servers were not checked yet.
+  const { guilds, openGuilds, openComplete, incomplete } = await lookupTicketGuilds(
+    message.author,
+    message.client
+  );
+
+  // The open tickets come from the database, so they are certain. A follow-up goes to the one
+  // server where the member has an open ticket, however much of the rest could be checked.
+  if (openComplete && openGuilds.length === 1) {
+    await ingestUserDM(openGuilds[0], message.author, payload);
+    await message.react('✅').catch(() => {});
+    return;
+  }
+  // Some servers could not be checked yet (the lookup is capped per message). Never open a new
+  // ticket from that: the right server may be one of those. Ask for the message again; the
+  // retry continues with the servers not checked yet.
+  if (incomplete && openGuilds.length === 0) {
     await message
-      .reply(
-        incomplete
-          ? 'I could not check all servers yet. Please send your message again in a few seconds.'
-          : "I'm not set up to take messages for any server you're in right now."
-      )
+      .reply('I could not check all servers yet. Please send your message again in a few seconds.')
       .catch(() => {});
     return;
   }
-
-  // If there's exactly one open ticket already, keep the conversation there.
-  const openFlags = await Promise.all(guilds.map((g) => getOpenTicket(guildKey(g), message.author.id)));
-  const openGuilds = guilds.filter((g, i) => openFlags[i]);
-  if (openGuilds.length === 1) {
-    await ingestUserDM(openGuilds[0], message.author, payload);
-    await message.react('✅').catch(() => {});
+  if (guilds.length === 0) {
+    await message
+      .reply("I'm not set up to take messages for any server you're in right now.")
+      .catch(() => {});
     return;
   }
   if (openGuilds.length === 0 && guilds.length === 1) {
@@ -117,10 +122,25 @@ async function handleDM(message) {
 
 async function handleSelect(interaction) {
   const picked = guildByKey(interaction.values[0]);
+  const stashed = pending.get(interaction.user.id);
+  if (!stashed || Date.now() - stashed.at > PENDING_TTL) {
+    pending.delete(interaction.user.id);
+    await interaction
+      .update({ content: 'That request expired — send your message again.', components: [] })
+      .catch(() => {});
+    return;
+  }
   // Still one the member may open a ticket in (a member there, tickets on): the menu could be old.
   const guild = picked && (await canOpenTicketIn(interaction.user, picked)) ? picked : null;
+  if (!guild) {
+    // The message stays stashed and the menu stays up, so the member can pick again.
+    await interaction
+      .reply({ content: 'I could not confirm that server right now. Pick it again in a moment.' })
+      .catch(() => {});
+    return;
+  }
   const payload = takeStash(interaction.user.id);
-  if (!guild || !payload) {
+  if (!payload) {
     await interaction
       .update({ content: 'That request expired — send your message again.', components: [] })
       .catch(() => {});
