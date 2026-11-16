@@ -199,19 +199,29 @@ async function fetchFeed(ytChannelId) {
 const CHANNEL_ID = '(UC[\\w-]{20,})';
 /** How far past an anchor each lookup reads. The page is full of other videos and channels, so a
  * field is only trusted close to the thing that says whose it is, never "anywhere on the page". */
-const CURRENT_VIDEO_SCAN = 3_000;
+const CURRENT_VIDEO_SCAN = 8_000;
+const PAGE_OWNER_SCAN = 500;
 const OWNER_SCAN = 4_000;
 const TITLE_SCAN = 1_500;
 /** videoDetails carries the whole description, so its object may be long: read it up to this size. */
 const VIDEO_DETAILS_MAX = 64_000;
 
-/** The JSON object that follows `anchor` (like `"videoDetails":`), or null when it is missing, cut off or not JSON. */
-function jsonObjectAfter(page, anchor, maxLen) {
-  const at = page.indexOf(anchor);
+/**
+ * The JSON object that follows `anchor` (like `"currentVideoEndpoint":`), or null when it is missing,
+ * cut off or not JSON. With `startsWith` the first occurrence of the anchor whose object begins with
+ * that text is used: a page has several "videoDetails" objects, and only the player's starts with its
+ * video id.
+ */
+function jsonObjectAfter(page, anchor, maxLen, startsWith = '{') {
+  let at = page.indexOf(anchor);
+  let i = -1;
+  while (at >= 0) {
+    i = at + anchor.length;
+    while (/\s/.test(page[i] ?? '')) i += 1;
+    if (page.startsWith(startsWith, i)) break;
+    at = page.indexOf(anchor, at + anchor.length);
+  }
   if (at < 0) return null;
-  let i = at + anchor.length;
-  while (/\s/.test(page[i] ?? '')) i += 1;
-  if (page[i] !== '{') return null;
   const limit = Math.min(page.length, i + maxLen);
   let depth = 0;
   let inString = false;
@@ -246,6 +256,8 @@ function grabAfter(page, anchor, re, len) {
   return (page.slice(from, from + len).match(re) || [])[1] || null;
 }
 
+const validVideoId = (id) => (typeof id === 'string' && /^[\w-]{11}$/.test(id) ? id : null);
+
 /**
  * Read a /channel/<id>/live page. It only counts as that channel's live stream when the video on
  * the page belongs to the watched channel: with no player response the page shows recommended
@@ -254,7 +266,7 @@ function grabAfter(page, anchor, re, len) {
  */
 function readLivePage(html, ytChannelId) {
   const page = html.length > PAGE_MAX_SCAN ? html.slice(0, PAGE_MAX_SCAN) : html;
-  const details = jsonObjectAfter(page, '"videoDetails":', VIDEO_DETAILS_MAX);
+  const details = jsonObjectAfter(page, '"videoDetails":', VIDEO_DETAILS_MAX, '{"videoId":');
 
   // With the video's own details, its own flag decides; an upcoming or ended video of the channel
   // is not live, even when a recommended stream on the same page is.
@@ -265,18 +277,20 @@ function readLivePage(html, ytChannelId) {
 
   const videoId =
     grabPage(/<link rel="canonical" href="https:\/\/www\.youtube\.com\/watch\?v=([\w-]{11})">/, page) ||
-    (typeof details?.videoId === 'string' && /^[\w-]{11}$/.test(details.videoId) ? details.videoId : null) ||
-    grabAfter(
-      page,
-      '"currentVideoEndpoint":',
-      /"watchEndpoint":\s*\{[^{}]*?"videoId":"([\w-]{11})"/,
-      CURRENT_VIDEO_SCAN
+    validVideoId(details?.videoId) ||
+    validVideoId(
+      jsonObjectAfter(page, '"currentVideoEndpoint":', CURRENT_VIDEO_SCAN)?.watchEndpoint?.videoId
     );
   if (!videoId) return { live: false };
 
   const owner =
     (typeof details?.channelId === 'string' ? details.channelId : null) ||
-    grabPage(new RegExp(`"externalChannelId":"${CHANNEL_ID}"`), page) ||
+    grabAfter(
+      page,
+      '"pageOwnerDetails":',
+      new RegExp(`"externalChannelId":"${CHANNEL_ID}"`),
+      PAGE_OWNER_SCAN
+    ) ||
     grabAfter(page, '"videoOwnerRenderer":', new RegExp(`"browseId":"${CHANNEL_ID}"`), OWNER_SCAN);
   // Never announce what cannot be verified, and never end a running post because of it.
   if (!owner) return { live: null, reason: 'owner unknown' };
