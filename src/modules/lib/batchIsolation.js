@@ -7,10 +7,12 @@
 //     itself is fine. This always fits the budget, so a clean batch is never left out because
 //     another one needed a long search.
 //  2. only the batches that failed are halved until the rejected items stand alone. This has its
-//     own budget (EXTRA_REQUESTS), spread over the failing batches in turn. When it runs out, the
-//     items of the halves not reached are left out of this poll (never failed): the next poll,
-//     with the found values already quarantined and the batches cut differently (the start
-//     rotates), reaches them. A poll never fails because the budget ran out.
+//     own budget (EXTRA_REQUESTS) and goes depth first: one failed batch is searched down to single
+//     values before the next is started, so every poll isolates (and so quarantines) values, however
+//     many there are. When the budget runs out, the items of the chunks not reached are left out of
+//     this poll (never failed) and remembered as suspects: the next poll batches them apart from
+//     the clean values, so the clean ones are always fetched, and searches them first. A poll never
+//     fails because the budget ran out.
 // The values found are quarantined with a growing backoff after the poll.
 //
 // Item fault or request fault? Only the statuses that can mean "this value" count (400, 404, 422);
@@ -44,6 +46,8 @@ export function createQuarantine({
   const entries = new Map();
   let good = null;
   let turn = 0;
+  /** @type {Set<string>} */
+  let suspects = new Set();
   return {
     /** True while the item is waiting out its backoff. */
     has(key) {
@@ -79,6 +83,13 @@ export function createQuarantine({
     setGood(item) {
       good = item;
     },
+    /** Values left unchecked inside a failed chunk when the last poll ran out of budget. */
+    get suspects() {
+      return suspects;
+    },
+    setSuspects(items) {
+      suspects = new Set(items);
+    },
     /** Where the next poll starts in its list of `length` items: a different place each time. */
     nextStart(length, step) {
       const start = length > 0 ? turn % length : 0;
@@ -101,7 +112,8 @@ export function createQuarantine({
  *   rejected: Array<{ item: string, err: Error, waitMs: number, strikes: number }>,
  *   unresolved: Set<string>,
  *   inconclusive: boolean,
- * }>} `unresolved`: the items this poll knows nothing about (quarantined before, rejected now, or
+ *   skipped: number,
+ * }>} `skipped`: how many items were left out only because the budget ran out. `unresolved`: the items this poll knows nothing about (quarantined before, rejected now, or
  *   not reached when the budget ran out); their stored state must be left alone.
  */
 export async function fetchIsolated(items, size, fetchBatch, { quarantine, extraRequests = EXTRA_REQUESTS }) {
@@ -134,43 +146,62 @@ export async function fetchIsolated(items, size, fetchBatch, { quarantine, extra
     unresolved.add(item);
     return false;
   });
-  const start = quarantine.nextStart(live.length, size);
-  const order = [...live.slice(start), ...live.slice(0, start)];
+  // Values left unchecked in a failed chunk by an earlier poll go in batches of their own, after
+  // the others, so clean values never wait behind them.
+  const suspect = live.filter((item) => quarantine.suspects.has(item));
+  const clean = live.filter((item) => !quarantine.suspects.has(item));
+  const start = quarantine.nextStart(clean.length, size);
+  const batches = [];
+  for (const group of [[...clean.slice(start), ...clean.slice(0, start)], suspect]) {
+    for (let i = 0; i < group.length; i += size) batches.push(group.slice(i, i + size));
+  }
 
   // Phase 1: one request per batch.
-  const queue = [];
-  for (let i = 0; i < order.length; i += size) {
-    const batch = order.slice(i, i + size);
+  const failed = [];
+  for (const batch of batches) {
     const answer = await ask(batch);
     if (answer === true) continue;
     if (batch.length === 1) found.push({ item: batch[0], err: answer });
-    else queue.push(batch);
+    else failed.push(batch);
   }
 
-  // Phase 2: halve the failed batches, in turn, until the budget is used up.
+  // Phase 2: search the failed batches depth first until the budget is used up. Both halves of a
+  // chunk are asked; the failed ones go on a stack with the first half on top.
   let spare = extraRequests;
-  while (queue.length > 0) {
-    const batch = queue.shift();
-    const mid = Math.ceil(batch.length / 2);
-    for (const half of [batch.slice(0, mid), batch.slice(mid)]) {
+  const left = new Set(); // unchecked because the budget ran out
+  const stack = failed.reverse();
+  while (stack.length > 0) {
+    const chunk = stack.pop();
+    if (spare <= 0) {
+      for (const item of chunk) left.add(item);
+      continue;
+    }
+    const mid = Math.ceil(chunk.length / 2);
+    const halves = [chunk.slice(0, mid), chunk.slice(mid)];
+    const next = [];
+    for (const half of halves) {
       if (spare <= 0) {
-        for (const item of half) unresolved.add(item);
+        for (const item of half) left.add(item);
         continue;
       }
       spare -= 1;
       const answer = await ask(half);
       if (answer === true) continue;
       if (half.length === 1) found.push({ item: half[0], err: answer });
-      else queue.push(half);
+      else next.push(half);
     }
+    for (const half of next.reverse()) stack.push(half);
   }
+  for (const item of left) unresolved.add(item);
 
   let inconclusive = false;
   let quarantineFound = found.length > 0;
   if (quarantineFound) {
     if (canary && !found.some((f) => f.item === canary)) {
-      // Is the platform refusing everything? One request with a value that was fine before.
-      const answer = await ask([canary], false);
+      // Is the platform refusing everything? One request with a value that was fine before. A
+      // failure of this request of any kind counts as "refused": it must not throw away what the
+      // poll already fetched.
+      const answer = await ask([canary], false).catch((err) => err);
       if (answer !== true) {
         quarantine.setGood(null); // it may have gone bad itself: pick a fresh one next time
         if (succeeded === 0) throw found[0].err;
@@ -183,6 +214,9 @@ export async function fetchIsolated(items, size, fetchBatch, { quarantine, extra
   }
   if (lastOk !== null) quarantine.setGood(lastOk);
 
+  // What the next poll should batch apart: the unchecked, and the found that were not quarantined.
+  quarantine.setSuspects([...left, ...(quarantineFound ? [] : found.map((f) => f.item))]);
+
   const rejected = [];
   for (const { item, err } of found) {
     unresolved.add(item);
@@ -190,7 +224,7 @@ export async function fetchIsolated(items, size, fetchBatch, { quarantine, extra
     const waitMs = quarantine.add(item);
     rejected.push({ item, err, waitMs, strikes: quarantine.strikes(item) });
   }
-  return { results, rejected, unresolved, inconclusive };
+  return { results, rejected, unresolved, inconclusive, skipped: left.size };
 }
 
 /**

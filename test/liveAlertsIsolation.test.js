@@ -592,3 +592,210 @@ test('twitch tick: two guilds with 50 poisoned logins each, first in order, cann
     runtime.client = null;
   }
 });
+
+// --- round 4: enough poisoned values that one poll cannot search them all ------------------------
+
+/** Poll until every poisoned value is quarantined; report how many polls it took and how long a victim waited. */
+async function converge({ size, poisonCount, victimsEachSide, maxPolls }) {
+  const quarantine = createQuarantine();
+  const poison = Array.from({ length: poisonCount }, (_, i) => `_p${i}`);
+  const victims = [
+    ...Array.from({ length: victimsEachSide }, (_, i) => `va${i}`),
+    ...Array.from({ length: victimsEachSide }, (_, i) => `vb${i}`),
+  ];
+  const items = [...victims.slice(0, victimsEachSide), ...poison, ...victims.slice(victimsEachSide)];
+  const ask = async (batch) => {
+    if (batch.some((i) => i.startsWith('_'))) throw rejected(400);
+    return batch;
+  };
+  const waited = new Map(victims.map((v) => [v, 0]));
+  let longest = 0;
+  let polls = 0;
+  while (polls < maxPolls && poison.some((p) => !quarantine.has(p))) {
+    const out = await fetchIsolated(items, size, ask, { quarantine });
+    polls += 1;
+    for (const v of victims) {
+      waited.set(v, out.results.includes(v) ? 0 : waited.get(v) + 1);
+      longest = Math.max(longest, waited.get(v));
+    }
+  }
+  const clean = await fetchIsolated(items, size, ask, { quarantine });
+  return { polls, longest, clean, victims, poison, quarantine };
+}
+
+for (const [label, size, poisonCount] of [
+  ['200 Twitch logins', 100, 200],
+  ['250 Kick slugs', 50, 250],
+]) {
+  test(`fetchIsolated: ${label} spread over several guilds are all quarantined within a bounded number of polls`, async () => {
+    const r = await converge({ size, poisonCount, victimsEachSide: 30, maxPolls: 12 });
+    assert.ok(
+      r.poison.every((p) => r.quarantine.has(p)),
+      'all quarantined'
+    );
+    assert.ok(r.polls <= 6, `${r.polls} polls`);
+    assert.ok(r.longest <= r.polls, `a victim next to them waited ${r.longest} polls`);
+    assert.deepEqual(
+      [...r.clean.results].sort(),
+      [...r.victims].sort(),
+      'then every poll fetches the victims'
+    );
+    assert.equal(r.clean.skipped, 0);
+  });
+}
+
+test('fetchIsolated: every poll isolates values, however many there are', async () => {
+  const quarantine = createQuarantine();
+  const poison = Array.from({ length: 400 }, (_, i) => `_p${i}`);
+  const ask = async (batch) => {
+    if (batch.some((i) => i.startsWith('_'))) throw rejected(400);
+    return batch;
+  };
+  let before = 0;
+  for (let n = 0; n < 4; n += 1) {
+    await fetchIsolated([...poison, 'victim'], 100, ask, { quarantine });
+    assert.ok(quarantine.size >= before + 20, `poll ${n + 1} added ${quarantine.size - before}`);
+    before = quarantine.size;
+  }
+});
+
+test('fetchIsolated: a 429 or 5xx on the canary does not throw away what the poll fetched', async () => {
+  for (const status of [429, 503]) {
+    const quarantine = createQuarantine();
+    quarantine.setGood('known-good');
+    const out = await fetchIsolated(
+      ['fine1', 'bad', 'fine2'],
+      1,
+      async (batch) => {
+        if (batch[0] === 'bad') throw rejected(400);
+        if (batch[0] === 'known-good') throw rejected(status);
+        return batch;
+      },
+      { quarantine }
+    );
+    assert.deepEqual(out.results.sort(), ['fine1', 'fine2'], String(status));
+    assert.equal(quarantine.size, 0, 'not quarantined this poll');
+  }
+});
+
+test('twitch tick: 200 poisoned logins in four guilds converge, with warnings that count and name nothing', async (t) => {
+  const warned = t.mock.method(log, 'warn', () => {});
+  const failed = t.mock.method(log, 'error', () => {});
+  twitch.rejectedLogins.setGood(null);
+  const sent = [];
+  const owners = ['900000000000000511', '900000000000000512', '900000000000000513', '900000000000000514'];
+  const guilds = new Map(owners.map((id) => [id, fakeGuild(id, sent)]));
+  guilds.set(VICTIM, fakeGuild(VICTIM, sent));
+  runtime.client = { isReady: () => true, guilds: { cache: guilds } };
+  for (const g of guilds.values()) g.client = runtime.client;
+  const names = [];
+  for (const [n, id] of owners.entries()) {
+    const alerts = Array.from({ length: 50 }, (_, i) => ({
+      login: `_r4${n}x${String(i).padStart(2, '0')}`,
+      channelId: CH_A,
+    }));
+    names.push(...alerts.map((a) => a.login));
+    await setGuildModule(id, 'twitch-alerts', { enabled: true, config: { alerts } });
+  }
+  await setGuildModule(VICTIM, 'twitch-alerts', {
+    enabled: true,
+    config: { alerts: [{ login: 'victimr4', channelId: CH_A }] },
+  });
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const u = new URL(String(url));
+    if (u.hostname === 'id.twitch.tv') return Response.json({ access_token: 't', expires_in: 3600 });
+    const logins = u.searchParams.getAll(u.pathname.endsWith('/users') ? 'login' : 'user_login');
+    if (logins.some((l) => l.startsWith('_'))) return new Response('{}', { status: 400 });
+    if (u.pathname.endsWith('/streams')) {
+      return Response.json({ data: logins.filter((l) => l === 'victimr4').map(twitchStream) });
+    }
+    return Response.json({ data: [] });
+  };
+  try {
+    let polls = 0;
+    while (polls < 8 && (sent.length === 0 || names.some((l) => !twitch.rejectedLogins.has(l)))) {
+      await twitch.tick();
+      polls += 1;
+    }
+    assert.equal(failed.mock.callCount(), 0);
+    assert.ok(polls <= 7, `${polls} polls`);
+    assert.equal(sent.length, 1);
+    assert.ok(names.every((l) => twitch.rejectedLogins.has(l)));
+    const skippedWarnings = warned.mock.calls
+      .map((c) => String(c.arguments[1]))
+      .filter((m) => /could not be checked this poll/.test(m));
+    assert.ok(skippedWarnings.length >= 1, 'warned while the search was cut short');
+    for (const m of skippedWarnings) assert.doesNotMatch(m, /_r4/, 'counts only, no values');
+  } finally {
+    globalThis.fetch = realFetch;
+    runtime.client = null;
+  }
+});
+
+test('kick tick: 250 poisoned slugs in five guilds converge and a guild behind them is announced', async (t) => {
+  t.mock.method(log, 'warn', () => {});
+  const failed = t.mock.method(log, 'error', () => {});
+  kick.rejectedSlugs.setGood(null);
+  const sent = [];
+  const owners = [
+    '900000000000000521',
+    '900000000000000522',
+    '900000000000000523',
+    '900000000000000524',
+    '900000000000000525',
+  ];
+  const guilds = new Map(owners.map((id) => [id, fakeGuild(id, sent)]));
+  guilds.set(VICTIM, fakeGuild(VICTIM, sent));
+  runtime.client = { isReady: () => true, guilds: { cache: guilds } };
+  for (const g of guilds.values()) g.client = runtime.client;
+  const names = [];
+  for (const [n, id] of owners.entries()) {
+    const alerts = Array.from({ length: 50 }, (_, i) => ({
+      slug: `-r4${n}x${String(i).padStart(2, '0')}`,
+      channelId: CH_A,
+    }));
+    names.push(...alerts.map((a) => a.slug));
+    await setGuildModule(id, 'kick-alerts', { enabled: true, config: { alerts } });
+  }
+  await setGuildModule(VICTIM, 'kick-alerts', {
+    enabled: true,
+    config: { alerts: [{ slug: 'victimkr4', channelId: CH_A }] },
+  });
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const u = new URL(String(url));
+    if (u.hostname === 'id.kick.com') return Response.json({ access_token: 't', expires_in: 3600 });
+    const slugs = u.searchParams.getAll('slug');
+    if (slugs.some((s) => s.startsWith('-'))) return new Response('{}', { status: 400 });
+    return Response.json({
+      data: slugs
+        .filter((s) => s === 'victimkr4')
+        .map((slug) => ({
+          slug,
+          stream_title: 'hi',
+          category: { name: 'g' },
+          stream: {
+            is_live: true,
+            start_time: '2026-11-16T00:00:00Z',
+            viewer_count: 2,
+            url: 'https://kick.com/victimkr4',
+          },
+        })),
+    });
+  };
+  try {
+    let polls = 0;
+    while (polls < 9 && (sent.length === 0 || names.some((s) => !kick.rejectedSlugs.has(s)))) {
+      await kick.tick();
+      polls += 1;
+    }
+    assert.equal(failed.mock.callCount(), 0);
+    assert.ok(polls <= 8, `${polls} polls`);
+    assert.equal(sent.length, 1);
+    assert.ok(names.every((s) => kick.rejectedSlugs.has(s)));
+  } finally {
+    globalThis.fetch = realFetch;
+    runtime.client = null;
+  }
+});

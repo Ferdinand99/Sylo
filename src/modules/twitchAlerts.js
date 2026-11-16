@@ -105,18 +105,18 @@ export const rejectedLogins = createQuarantine();
 
 /**
  * Live streams for a set of logins, keyed by lowercased login. A login that Helix rejects is
- * isolated (see fetchIsolated) and left out. `report({ rejected, unresolved })` is called once with
+ * isolated (see fetchIsolated) and left out. `report({ rejected, unresolved, inconclusive, skipped })` is called once with
  * the logins rejected now and every login this poll knows nothing about.
  */
 export async function fetchLiveStreams(logins, { report } = {}) {
   const out = new Map();
-  const { results, rejected, unresolved, inconclusive } = await fetchIsolated(
+  const { results, rejected, unresolved, inconclusive, skipped } = await fetchIsolated(
     logins,
     100,
     (batch) => helix('/streams', { user_login: batch }),
     { quarantine: rejectedLogins }
   );
-  report?.({ rejected, unresolved, inconclusive });
+  report?.({ rejected, unresolved, inconclusive, skipped });
   for (const s of results) out.set(s.user_login.toLowerCase(), s);
   return out;
 }
@@ -205,8 +205,14 @@ export async function tick() {
   let unresolved = new Set();
   try {
     streams = await fetchLiveStreams(logins, {
-      report: ({ rejected, unresolved: left, inconclusive }) => {
+      report: ({ rejected, unresolved: left, inconclusive, skipped }) => {
         unresolved = left;
+        if (skipped > 0) {
+          log.warn(
+            'twitch-alerts',
+            `${skipped} saved logins could not be checked this poll: the platform refuses requests that hold some of them and the search ran out of requests. They are checked again at the next poll, apart from the others.`
+          );
+        }
         if (inconclusive) {
           log.warn(
             'twitch-alerts',
