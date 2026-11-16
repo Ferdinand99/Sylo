@@ -33,8 +33,8 @@ const VIDEO_FEED_XML = (videoId) =>
     <entry><yt:videoId>${videoId}</yt:videoId><title>New upload</title>
       <published>2024-06-01T00:00:00+00:00</published></entry></feed>`;
 
-const LIVE_HTML = (videoId) =>
-  `<html>"isLive":true<link rel="canonical" href="https://www.youtube.com/watch?v=${videoId}"></html>`;
+const LIVE_HTML = (videoId, channel = YT_CHANNEL) =>
+  `<html>"isLive":true"externalChannelId":"${channel}"<link rel="canonical" href="https://www.youtube.com/watch?v=${videoId}"></html>`;
 
 test('runAlert (onVideo): a failed send leaves the video unseen so it retries next poll', async () => {
   const videoId = 'failvideo01';
@@ -72,7 +72,7 @@ test('runAlert (onLive): a failed post leaves the stream unrecorded so it retrie
   const ytChannel = YT_CHANNEL + '-live-fail';
   const videoId = 'livefail001';
   const realFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(LIVE_HTML(videoId));
+  globalThis.fetch = async () => new Response(LIVE_HTML(videoId, ytChannel));
   setClient(false);
 
   try {
@@ -89,7 +89,7 @@ test('runAlert (onLive): a successful post records the stream as known', async (
   const ytChannel = YT_CHANNEL + '-live-ok';
   const videoId = 'liveok00001';
   const realFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(LIVE_HTML(videoId));
+  globalThis.fetch = async () => new Response(LIVE_HTML(videoId, ytChannel));
   setClient(true);
 
   try {

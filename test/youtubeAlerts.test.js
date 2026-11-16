@@ -115,8 +115,8 @@ test('resolveYtChannel: a channel id past the old 300 KB scan cap is still found
   });
 });
 
-test('checkLive: a videoId past the old 300 KB scan cap is still found', async () => {
-  const html = `<html>"isLive":true${PAST_OLD_CAP}<script>"videoId":"abcdefghijk"</script></html>`;
+test('checkLive: a video id and owner past the old 300 KB scan cap is still found', async () => {
+  const html = `<html>"isLive":true${PAST_OLD_CAP}<link rel="canonical" href="https://www.youtube.com/watch?v=abcdefghijk">"externalChannelId":"${UC}"</html>`;
   await withMockedFetch(new Response(html), async (warnings) => {
     assert.deepEqual(await checkLive(UC), { live: true, videoId: 'abcdefghijk', title: 'Live now' });
     assert.equal(warnings.length, 0);
