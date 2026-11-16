@@ -1,23 +1,27 @@
-// Isolate one rejected item from a shared, batched platform request.
+// Isolate rejected items from a shared, batched platform request.
 //
 // The Twitch and Kick alert modules poll every server's streamers together. If the platform
-// answers a batch with a 4xx because of one stored login or slug, that single value must not stop
-// the poll for every other server. fetchIsolated() splits such a batch in half until the rejected
-// item stands alone, and keeps the results of the rest. After the poll the rejected items are
-// quarantined with a growing backoff, so the next polls leave them out.
+// answers a batch with a 4xx because of stored logins or slugs, those values must not stop the
+// poll for every other server. fetchIsolated() works in two phases:
+//  1. one request per batch. A batch that answers is done, and counts as evidence that the request
+//     itself is fine. This always fits the budget, so a clean batch is never left out because
+//     another one needed a long search.
+//  2. only the batches that failed are halved until the rejected items stand alone. This has its
+//     own budget (EXTRA_REQUESTS), spread over the failing batches in turn. When it runs out, the
+//     items of the halves not reached are left out of this poll (never failed): the next poll,
+//     with the found values already quarantined and the batches cut differently (the start
+//     rotates), reaches them. A poll never fails because the budget ran out.
+// The values found are quarantined with a growing backoff after the poll.
 //
-// Item fault or request fault? The poll's own evidence decides. If at least one request of the
-// poll succeeded, an item that is rejected on its own is at fault, however many there are. If no
-// request of the poll succeeded, the request is at fault (bad credentials, a blocked address, an
-// outage): nothing is quarantined and the poll fails like any other failed poll. Only the
-// statuses that can mean "this value" count (400, 404, 422); 5xx, network errors, 401, 429 and the
-// other 4xx fail the poll.
-//
-// The cost is capped: a poll makes at most `batches + EXTRA_REQUESTS` requests. When that runs
-// out, the batches not yet resolved are left out of this poll (not failed); each poll quarantines
-// the values it found, so the next poll resolves more.
+// Item fault or request fault? Only the statuses that can mean "this value" count (400, 404, 422);
+// 5xx, network errors, 401, 429 and the other 4xx fail the poll. Before values are quarantined, one
+// canary request is sent with a value that an earlier poll saw accepted. If the canary fails the
+// same way, the platform is refusing everything (bad credentials, a blocked address, an outage,
+// flapping): nothing is quarantined, and when no request of the poll succeeded the poll fails like
+// any other failed poll. If no value is known to be good yet and nothing succeeded, the poll cannot
+// tell: nothing is quarantined and it reports `inconclusive`.
 
-/** Requests per poll beyond one per batch, for finding rejected items. */
+/** Requests per poll, beyond one per batch, for finding the rejected items. */
 export const EXTRA_REQUESTS = 120;
 
 /** Statuses that can mean "this value was refused", as against a problem with the request. */
@@ -38,6 +42,8 @@ export function createQuarantine({
 } = {}) {
   /** @type {Map<string, { until: number, strikes: number }>} */
   const entries = new Map();
+  let good = null;
+  let turn = 0;
   return {
     /** True while the item is waiting out its backoff. */
     has(key) {
@@ -66,53 +72,61 @@ export function createQuarantine({
     get size() {
       return entries.size;
     },
+    /** A value that the platform accepted in an earlier poll (the canary), or null. */
+    get lastGood() {
+      return good;
+    },
+    setGood(item) {
+      good = item;
+    },
+    /** Where the next poll starts in its list of `length` items: a different place each time. */
+    nextStart(length, step) {
+      const start = length > 0 ? turn % length : 0;
+      turn += step;
+      return start;
+    },
   };
 }
 
 /**
- * Run `fetchBatch` over `items` in chunks of `size`, bisecting any chunk the platform rejects.
+ * Run `fetchBatch` over `items` in chunks of `size`, halving the chunks the platform rejects.
  *
  * @template T
  * @param {string[]} items
  * @param {number} size
  * @param {(batch: string[]) => Promise<T[]>} fetchBatch   throws an error with `.status` on a non-OK answer
- * @param {{ quarantine: ReturnType<typeof createQuarantine>, maxRequests?: number }} o
+ * @param {{ quarantine: ReturnType<typeof createQuarantine>, extraRequests?: number }} o
  * @returns {Promise<{
  *   results: T[],
  *   rejected: Array<{ item: string, err: Error, waitMs: number, strikes: number }>,
  *   unresolved: Set<string>,
+ *   inconclusive: boolean,
  * }>} `unresolved`: the items this poll knows nothing about (quarantined before, rejected now, or
- *   not reached when the request budget ran out); their stored state must be left alone.
+ *   not reached when the budget ran out); their stored state must be left alone.
  */
-export async function fetchIsolated(items, size, fetchBatch, { quarantine, maxRequests }) {
+export async function fetchIsolated(items, size, fetchBatch, { quarantine, extraRequests = EXTRA_REQUESTS }) {
   const results = [];
   const unresolved = new Set();
   const found = []; // rejected on their own: { item, err }
-  let requests = 0;
+  const canary = quarantine.lastGood;
   let succeeded = 0;
-  const budget = maxRequests ?? Math.ceil(items.length / size) + EXTRA_REQUESTS;
+  let lastOk = null;
 
-  const run = async (batch) => {
-    if (requests >= budget) {
-      for (const item of batch) unresolved.add(item);
-      return;
-    }
-    requests += 1;
+  /** @returns {Promise<true | Error>} true when the platform answered; the error for a refused value */
+  const ask = async (batch, keepResults = true) => {
     try {
-      results.push(...(await fetchBatch(batch)));
+      const got = await fetchBatch(batch);
+      if (keepResults) results.push(...got);
     } catch (err) {
       if (!isRejectedStatus(err?.status)) throw err;
-      if (batch.length === 1) {
-        found.push({ item: batch[0], err });
-        return;
-      }
-      const mid = Math.ceil(batch.length / 2);
-      await run(batch.slice(0, mid));
-      await run(batch.slice(mid));
-      return;
+      return err;
     }
-    succeeded += 1;
-    for (const item of batch) quarantine.clear(item);
+    if (keepResults) {
+      succeeded += 1;
+      lastOk = batch[0];
+      for (const item of batch) quarantine.clear(item);
+    }
+    return true;
   };
 
   const live = items.filter((item) => {
@@ -120,17 +134,63 @@ export async function fetchIsolated(items, size, fetchBatch, { quarantine, maxRe
     unresolved.add(item);
     return false;
   });
-  for (let i = 0; i < live.length; i += size) await run(live.slice(i, i + size));
+  const start = quarantine.nextStart(live.length, size);
+  const order = [...live.slice(start), ...live.slice(0, start)];
 
-  // Nothing succeeded: the request is at fault, not the items. Quarantine nothing.
-  if (found.length > 0 && succeeded === 0) throw found[0].err;
+  // Phase 1: one request per batch.
+  const queue = [];
+  for (let i = 0; i < order.length; i += size) {
+    const batch = order.slice(i, i + size);
+    const answer = await ask(batch);
+    if (answer === true) continue;
+    if (batch.length === 1) found.push({ item: batch[0], err: answer });
+    else queue.push(batch);
+  }
 
-  const rejected = found.map(({ item, err }) => {
-    const waitMs = quarantine.add(item);
+  // Phase 2: halve the failed batches, in turn, until the budget is used up.
+  let spare = extraRequests;
+  while (queue.length > 0) {
+    const batch = queue.shift();
+    const mid = Math.ceil(batch.length / 2);
+    for (const half of [batch.slice(0, mid), batch.slice(mid)]) {
+      if (spare <= 0) {
+        for (const item of half) unresolved.add(item);
+        continue;
+      }
+      spare -= 1;
+      const answer = await ask(half);
+      if (answer === true) continue;
+      if (half.length === 1) found.push({ item: half[0], err: answer });
+      else queue.push(half);
+    }
+  }
+
+  let inconclusive = false;
+  let quarantineFound = found.length > 0;
+  if (quarantineFound) {
+    if (canary && !found.some((f) => f.item === canary)) {
+      // Is the platform refusing everything? One request with a value that was fine before.
+      const answer = await ask([canary], false);
+      if (answer !== true) {
+        quarantine.setGood(null); // it may have gone bad itself: pick a fresh one next time
+        if (succeeded === 0) throw found[0].err;
+        quarantineFound = false; // flapping: some requests answer, some are refused
+      }
+    } else if (succeeded === 0) {
+      inconclusive = true; // nothing answered and nothing to compare with
+      quarantineFound = false;
+    }
+  }
+  if (lastOk !== null) quarantine.setGood(lastOk);
+
+  const rejected = [];
+  for (const { item, err } of found) {
     unresolved.add(item);
-    return { item, err, waitMs, strikes: quarantine.strikes(item) };
-  });
-  return { results, rejected, unresolved };
+    if (!quarantineFound) continue;
+    const waitMs = quarantine.add(item);
+    rejected.push({ item, err, waitMs, strikes: quarantine.strikes(item) });
+  }
+  return { results, rejected, unresolved, inconclusive };
 }
 
 /**

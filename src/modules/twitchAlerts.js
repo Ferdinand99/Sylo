@@ -110,13 +110,13 @@ export const rejectedLogins = createQuarantine();
  */
 export async function fetchLiveStreams(logins, { report } = {}) {
   const out = new Map();
-  const { results, rejected, unresolved } = await fetchIsolated(
+  const { results, rejected, unresolved, inconclusive } = await fetchIsolated(
     logins,
     100,
     (batch) => helix('/streams', { user_login: batch }),
     { quarantine: rejectedLogins }
   );
-  report?.({ rejected, unresolved });
+  report?.({ rejected, unresolved, inconclusive });
   for (const s of results) out.set(s.user_login.toLowerCase(), s);
   return out;
 }
@@ -205,8 +205,14 @@ export async function tick() {
   let unresolved = new Set();
   try {
     streams = await fetchLiveStreams(logins, {
-      report: ({ rejected, unresolved: left }) => {
+      report: ({ rejected, unresolved: left, inconclusive }) => {
         unresolved = left;
+        if (inconclusive) {
+          log.warn(
+            'twitch-alerts',
+            'Every request of this poll was refused and no earlier accepted value is known to check against, so nothing was quarantined.'
+          );
+        }
         const warning = rejectedWarning('Twitch logins', rejected, (login) => [
           ...new Set(jobs.filter((j) => j.alert.login === login).map((j) => j.guildId)),
         ]);

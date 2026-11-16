@@ -111,15 +111,15 @@ export const rejectedSlugs = createQuarantine();
 /**
  * Live channels for a set of slugs, keyed by lowercased slug. Only currently-live
  * channels are included. A slug that Kick rejects is isolated (see fetchIsolated) and left out.
- * `report({ rejected, unresolved })` is called once with the slugs rejected now and every slug
+ * `report({ rejected, unresolved, inconclusive })` is called once with the slugs rejected now and every slug
  * this poll knows nothing about.
  */
 export async function fetchLiveChannels(slugs, { report } = {}) {
   const out = new Map();
-  const { results, rejected, unresolved } = await fetchIsolated(slugs, 50, getChannels, {
+  const { results, rejected, unresolved, inconclusive } = await fetchIsolated(slugs, 50, getChannels, {
     quarantine: rejectedSlugs,
   });
-  report?.({ rejected, unresolved });
+  report?.({ rejected, unresolved, inconclusive });
   for (const ch of results) {
     if (ch?.stream?.is_live && ch.slug) out.set(String(ch.slug).toLowerCase(), ch);
   }
@@ -195,8 +195,14 @@ export async function tick() {
   let unresolved = new Set();
   try {
     live = await fetchLiveChannels(slugs, {
-      report: ({ rejected, unresolved: left }) => {
+      report: ({ rejected, unresolved: left, inconclusive }) => {
         unresolved = left;
+        if (inconclusive) {
+          log.warn(
+            'kick-alerts',
+            'Every request of this poll was refused and no earlier accepted value is known to check against, so nothing was quarantined.'
+          );
+        }
         const warning = rejectedWarning('Kick slugs', rejected, (slug) => [
           ...new Set(jobs.filter((j) => j.alert.slug === slug).map((j) => j.guildId)),
         ]);

@@ -80,9 +80,10 @@ test('fetchIsolated: a failure that is not about a value still fails the whole p
   }
 });
 
-test('fetchIsolated: when no request of the poll succeeded the request is at fault, nothing is quarantined', async () => {
+test('fetchIsolated: when nothing succeeds and a value known to be good is refused too, the request is at fault', async () => {
   for (const count of [3, 40]) {
     const quarantine = createQuarantine();
+    quarantine.setGood('known-good'); // accepted in an earlier poll
     const items = Array.from({ length: count }, (_, i) => `item${i}`);
     await assert.rejects(
       fetchIsolated(items, 50, async () => Promise.reject(rejected(400)), { quarantine }),
@@ -90,6 +91,101 @@ test('fetchIsolated: when no request of the poll succeeded the request is at fau
     );
     assert.equal(quarantine.size, 0, `${count} items`);
   }
+});
+
+test('fetchIsolated: nothing succeeds but the known-good value is accepted: the values are at fault', async () => {
+  const quarantine = createQuarantine();
+  quarantine.setGood('known-good');
+  const out = await fetchIsolated(
+    ['bad1', 'bad2'],
+    50,
+    async (batch) => {
+      if (batch.every((i) => i === 'known-good')) return batch;
+      throw rejected(400);
+    },
+    { quarantine }
+  );
+  assert.deepEqual(out.rejected.map((r) => r.item).sort(), ['bad1', 'bad2']);
+  assert.equal(quarantine.size, 2);
+  assert.equal(out.inconclusive, false);
+});
+
+test('fetchIsolated: nothing succeeds and nothing is known to be good: nothing is quarantined, and it says so', async () => {
+  const quarantine = createQuarantine();
+  const out = await fetchIsolated(['a', 'b', 'c'], 50, async () => Promise.reject(rejected(400)), {
+    quarantine,
+  });
+  assert.equal(out.inconclusive, true);
+  assert.equal(quarantine.size, 0);
+  assert.deepEqual([...out.unresolved].sort(), ['a', 'b', 'c']);
+});
+
+test('fetchIsolated: when the platform flaps (some answer, some are refused) and the canary is refused, nothing is quarantined', async () => {
+  const quarantine = createQuarantine();
+  quarantine.setGood('known-good');
+  const out = await fetchIsolated(
+    ['fine1', 'flaky', 'fine2'],
+    1,
+    async (batch) => {
+      if (batch[0] === 'flaky' || batch[0] === 'known-good') throw rejected(404);
+      return batch;
+    },
+    { quarantine }
+  );
+  assert.deepEqual(out.results.sort(), ['fine1', 'fine2']);
+  assert.equal(quarantine.size, 0, 'a value the platform refuses only while it flaps is not quarantined');
+  assert.ok(out.unresolved.has('flaky'), 'its state is left alone this poll');
+  assert.equal(quarantine.lastGood, 'fine2', 'a fresh good value for the next canary');
+});
+
+test('fetchIsolated: poison values filling the first batch cannot fail the poll or leave later batches out', async () => {
+  const quarantine = createQuarantine();
+  const poison = Array.from({ length: 100 }, (_, i) => `_bad${i}`);
+  const victims = Array.from({ length: 30 }, (_, i) => `victim${i}`);
+  const ask = async (batch) => {
+    if (batch.some((i) => i.startsWith('_'))) throw rejected(400);
+    return batch;
+  };
+  // Bisecting 100 poison values takes about 199 requests; the budget is 120.
+  const first = await fetchIsolated([...poison, ...victims], 100, ask, { quarantine });
+  assert.deepEqual([...first.results].sort(), [...victims].sort(), 'the later batch was fetched');
+  assert.ok(first.rejected.length > 0 && first.rejected.length < 100, 'some found, the budget ended');
+  // Later polls finish the job, with what was found left out.
+  let polls = 1;
+  while (polls < 6 && poison.some((p) => !quarantine.has(p))) {
+    const next = await fetchIsolated([...poison, ...victims], 100, ask, { quarantine });
+    assert.ok(next.results.length > 0 || next.unresolved.size > 0);
+    polls += 1;
+  }
+  assert.ok(
+    poison.every((p) => quarantine.has(p)),
+    `all quarantined within ${polls} polls`
+  );
+  assert.ok(polls <= 4, `bounded: ${polls} polls`);
+  const last = await fetchIsolated([...poison, ...victims], 100, ask, { quarantine });
+  assert.deepEqual(
+    [...last.results].sort(),
+    [...victims].sort(),
+    'once the poison is quarantined, a clean poll'
+  );
+});
+
+test('fetchIsolated: the start rotates, so the same values are not always last', async () => {
+  const quarantine = createQuarantine();
+  const items = Array.from({ length: 8 }, (_, i) => `i${i}`);
+  const firsts = [];
+  for (let n = 0; n < 4; n += 1) {
+    await fetchIsolated(
+      items,
+      2,
+      async (batch) => {
+        if (n === firsts.length && !firsts[n]) firsts.push(batch[0]);
+        return batch;
+      },
+      { quarantine }
+    );
+  }
+  assert.equal(new Set(firsts).size, 4, 'each poll starts somewhere else');
 });
 
 test('fetchIsolated: a request budget leaves the rest of the poll out instead of failing it', async () => {
@@ -107,7 +203,7 @@ test('fetchIsolated: a request budget leaves the rest of the poll out instead of
       if (batch.some((i) => i.startsWith('_'))) throw rejected(400);
       return batch;
     },
-    { quarantine, maxRequests: 6 }
+    { quarantine, extraRequests: 2 }
   );
   assert.equal(calls, 6);
   assert.ok(out.results.length > 0, 'what was fetched is kept');
@@ -432,6 +528,65 @@ test('kick tick: a request-level 403 quarantines no good slug', async (t) => {
     assert.equal(sent.length, 0);
     assert.equal(failed.mock.callCount(), 1);
     assert.equal(kick.rejectedSlugs.has('wafk1') || kick.rejectedSlugs.has('wafk2'), false);
+  } finally {
+    globalThis.fetch = realFetch;
+    runtime.client = null;
+  }
+});
+
+test('twitch tick: two guilds with 50 poisoned logins each, first in order, cannot block the guilds after them', async (t) => {
+  twitch.rejectedLogins.setGood(null); // an earlier test may have left a value this one's stub refuses
+  t.mock.method(log, 'warn', () => {});
+  const failed = t.mock.method(log, 'error', () => {});
+  const sent = [];
+  const second = '900000000000000503';
+  const guilds = new Map([
+    [ATTACKER, fakeGuild(ATTACKER, sent)],
+    [second, fakeGuild(second, sent)],
+    [VICTIM, fakeGuild(VICTIM, sent)],
+  ]);
+  runtime.client = { isReady: () => true, guilds: { cache: guilds } };
+  for (const g of guilds.values()) g.client = runtime.client;
+  const poisoned = (tag) =>
+    Array.from({ length: 50 }, (_, i) => ({
+      login: `_${tag}${String(i).padStart(2, '0')}`,
+      channelId: CH_A,
+    }));
+  await setGuildModule(ATTACKER, 'twitch-alerts', { enabled: true, config: { alerts: poisoned('aa') } });
+  await setGuildModule(second, 'twitch-alerts', { enabled: true, config: { alerts: poisoned('bb') } });
+  await setGuildModule(VICTIM, 'twitch-alerts', {
+    enabled: true,
+    config: { alerts: [{ login: 'victimlate', channelId: CH_A }] },
+  });
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const u = new URL(String(url));
+    if (u.hostname === 'id.twitch.tv') return Response.json({ access_token: 't', expires_in: 3600 });
+    const logins = u.searchParams.getAll(u.pathname.endsWith('/users') ? 'login' : 'user_login');
+    if (logins.some((l) => l.startsWith('_'))) return new Response('{}', { status: 400 });
+    if (u.pathname.endsWith('/streams')) {
+      return Response.json({ data: logins.filter((l) => l === 'victimlate').map(twitchStream) });
+    }
+    return Response.json({ data: [] });
+  };
+  try {
+    // The batches are cut from a rotating start, so a guild behind the poisoned ones may share a
+    // batch with them in a poll; the poll still does not fail, and within a few polls the poisoned
+    // logins are quarantined and the guild is announced.
+    const all = [...poisoned('aa'), ...poisoned('bb')];
+    let polls = 0;
+    while (polls < 8 && (sent.length === 0 || all.some((p) => !twitch.rejectedLogins.has(p.login)))) {
+      await twitch.tick();
+      polls += 1;
+      assert.equal(failed.mock.callCount(), 0, `poll ${polls} did not fail`);
+    }
+    assert.equal(sent.length, 1, `the guild after the poisoned ones is announced (after ${polls} polls)`);
+    assert.equal(sent[0].guild, VICTIM);
+    assert.ok(
+      all.every((p) => twitch.rejectedLogins.has(p.login)),
+      'all poisoned logins quarantined'
+    );
+    assert.ok(polls <= 6, `bounded: ${polls} polls`);
   } finally {
     globalThis.fetch = realFetch;
     runtime.client = null;
