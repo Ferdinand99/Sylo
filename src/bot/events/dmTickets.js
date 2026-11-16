@@ -69,7 +69,7 @@ async function handleDM(message) {
   if (!payload.content && payload.attachments.length === 0) return;
 
   // Only the servers on the platform this DM arrived on: a user id means nothing on the other one.
-  const { guilds, openGuilds, openComplete, incomplete } = await lookupTicketGuilds(
+  const { guilds, openGuilds, openComplete, openRemembered, incomplete } = await lookupTicketGuilds(
     message.author,
     message.client
   );
@@ -96,7 +96,9 @@ async function handleDM(message) {
       .catch(() => {});
     return;
   }
-  if (openGuilds.length === 0 && guilds.length === 1) {
+  // Not when an open ticket server was skipped from memory ("left"): the member may have come back
+  // to it, and a new ticket in the one other server could be the wrong one. They pick instead.
+  if (openGuilds.length === 0 && guilds.length === 1 && !openRemembered) {
     await ingestUserDM(guilds[0], message.author, payload);
     await message.react('✅').catch(() => {});
     return;

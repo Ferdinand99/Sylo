@@ -316,6 +316,7 @@ async function findTicketGuilds(user, client) {
 
   // 1. Open tickets, from the database: complete, and kept across restarts.
   let openComplete = true;
+  let openRemembered = false;
   let openProbes = 0;
   const handled = new Set();
   for (const key of await openTicketGuildKeys(user.id)) {
@@ -327,6 +328,7 @@ async function findTicketGuilds(user, client) {
     if (isMember === null) {
       if ((notMember.get(`${user.id}|${key}`) ?? 0) > Date.now()) {
         isMember = false; // left, or refused: remembered
+        openRemembered = true; // not a fresh answer: the member may have come back
       } else if (
         openProbes >= OPEN_PROBES_PER_DM ||
         !takeWindow(openWindows, user.id, OPEN_PROBES_PER_USER_PER_MINUTE)
@@ -384,17 +386,18 @@ async function findTicketGuilds(user, client) {
   if (found.length) {
     foundBefore.set(user.id, { guilds: new Set(found.map(guildKey)), at: Date.now() });
   }
-  return { guilds: found, openGuilds, openComplete, incomplete };
+  return { guilds: found, openGuilds, openComplete, openRemembered, incomplete };
 }
 
 /**
  * Where can this sender open or continue a ticket? `guilds`: servers with tickets on that the user
  * is a member of; `openGuilds`: those where the user has an open ticket, and `openComplete`: that
- * list is certain; `incomplete`: some servers could not be checked yet (the caps), so `guilds` may
+ * list is certain; `openRemembered`: an open ticket server was skipped on the strength of an
+ * earlier answer ("left"), not a fresh one; `incomplete`: some servers could not be checked yet (the caps), so `guilds` may
  * be missing some. Pass the client the DM arrived on to look only at that platform's servers.
  * A complete answer for one user is reused for a few seconds, so a burst of DMs does the work
  * once; an incomplete one is not reused, so a retry makes progress.
- * @returns {Promise<{ guilds: import('discord.js').Guild[], openGuilds: import('discord.js').Guild[], openComplete: boolean, incomplete: boolean }>}
+ * @returns {Promise<{ guilds: import('discord.js').Guild[], openGuilds: import('discord.js').Guild[], openComplete: boolean, openRemembered: boolean, incomplete: boolean }>}
  */
 export function lookupTicketGuilds(user, client) {
   const key = `${client ? platformOfClient(client) : 'all'}|${user.id}`;

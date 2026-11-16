@@ -541,3 +541,39 @@ test('"not a member" is remembered shortly, a refused lookup for long, and a joi
     [plain.id]
   );
 });
+
+test('an open ticket server remembered as "left" does not decide an automatic new ticket elsewhere', async (t) => {
+  _resetTicketLookup();
+  t.mock.timers.enable({ apis: ['Date'], now: 25_000_000 });
+  const user = { id: '780000000000000001' };
+  const fetches = [];
+  const x = await ticketGuild(fetches); // the member has an open ticket here, and is not a member
+  await createTicket(x.id, user.id);
+  const y = await ticketGuild(fetches, { cached: [user.id] }); // the only other server
+  const guilds = [x, y];
+  const replies = [];
+  const events = new EventEmitter();
+  register(events);
+
+  // First DM: a fresh answer says not a member of X, so the one server found is used.
+  events.emit('messageCreate', dmFrom(user, guilds, replies));
+  await settle();
+  assert.ok(await getOpenTicket(y.id, user.id), 'a fresh answer: opened in the one server found');
+
+  // Second member, same situation, but the answer for X comes from memory (they may have come back).
+  const user2 = { id: '780000000000000002' };
+  const x2 = await ticketGuild(fetches);
+  await createTicket(x2.id, user2.id);
+  const y2 = await ticketGuild(fetches, { cached: [user2.id] });
+  const first = await lookupTicketGuilds(user2, clientOf([x2, y2]));
+  assert.equal(first.openRemembered, false);
+  t.mock.timers.tick(LOOKUP_REUSE_MS + 1);
+  const second = await lookupTicketGuilds(user2, clientOf([x2, y2]));
+  assert.equal(second.openRemembered, true);
+  const before = replies.length;
+  events.emit('messageCreate', dmFrom(user2, [x2, y2], replies));
+  await settle();
+  assert.equal(await getOpenTicket(y2.id, user2.id), undefined, 'nothing opened in the other server');
+  assert.equal(replies.length, before + 1);
+  assert.ok(replies.at(-1).components, 'the member gets the picker');
+});
