@@ -222,8 +222,16 @@ test('the same person who owns both servers agrees on both sides at once', async
     [F_KEY],
     'the Fluxer servers this person owns are offered'
   );
-  const res = await both.post(`/guilds/${D_GUILD}/mirror/request`, { targetGuildId: F_KEY });
+  const res = await both.post(`/guilds/${D_GUILD}/mirror/request`, {
+    targetGuildId: F_KEY,
+    options: { mirrorDeletes: true },
+  });
   const body = await res.json();
+  assert.equal(
+    body.pair.options.mirrorDeletes,
+    true,
+    'the owner of both servers can switch deletion on at once'
+  );
   assert.equal(body.code, null);
   assert.equal(body.agreed, true);
   assert.equal(body.pair.status, 'ready');
@@ -238,10 +246,18 @@ test('an owner of one server who is only an Administrator of the other is not en
   owners({ discord: mixed.ids.discord, fluxer: 'someone-else' }); // owns Discord, is not the Fluxer owner
   const state = await (await mixed.get(`/guilds/${D_GUILD}/mirror`)).json();
   assert.deepEqual(state.candidates, [], 'a Fluxer server they do not own is not offered');
-  const res = await mixed.post(`/guilds/${D_GUILD}/mirror/request`, { targetGuildId: F_KEY });
+  const res = await mixed.post(`/guilds/${D_GUILD}/mirror/request`, {
+    targetGuildId: F_KEY,
+    options: { mirrorDeletes: true },
+  });
   const body = await res.json();
   assert.equal(res.status, 200);
   assert.equal(body.agreed, false, 'no automatic agreement for a server they do not own');
+  assert.deepEqual(
+    [body.pair.options.mirrorDeletes, body.pair.options.mirrorDeletesRequested],
+    [false, true],
+    'deletion is only asked for: the Fluxer owner has to turn it on'
+  );
   assert.ok(body.code, 'the Fluxer owner has to agree with the code');
   assert.equal((await mixed.post(`/guilds/${F_KEY}/mirror/accept`, { code: body.code })).status, 403);
   assert.equal((await db.getPairBySource(D_GUILD)).status, 'pending');

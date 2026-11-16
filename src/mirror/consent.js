@@ -91,6 +91,19 @@ export async function requirePairConsent(pairOrId) {
   return pair;
 }
 
+/**
+ * The options of a request. Real deletion on Fluxer only takes effect when the same person owns both servers; for
+ * anyone else it is kept as a request that the owner of the Fluxer server has to turn on with their own switch.
+ */
+function askedOptions(options, targetOwner) {
+  const out = normaliseOptions(options);
+  if (out.mirrorDeletes || out.mirrorDeletesRequested) {
+    out.mirrorDeletesRequested = true;
+    out.mirrorDeletes = Boolean(targetOwner) && out.mirrorDeletes;
+  }
+  return out;
+}
+
 /** A pair that has never copied anything may be replaced by a new request; one that has, may not. */
 const replaceable = (pair) =>
   pair.status === PAIR_STATUS.PENDING ||
@@ -162,12 +175,12 @@ export async function requestMirror({
     codeAttempts: 0,
     lastError: '',
     failures: 0,
-    ...(options ? { options: normaliseOptions(options) } : {}),
+    ...(options ? { options: askedOptions(options, targetOwner) } : {}),
   };
   if (pair) {
     pair = await updatePair(pair.id, fields, now);
   } else {
-    pair = await createPair({ sourceGuild, targetGuild, options: normaliseOptions(options), now });
+    pair = await createPair({ sourceGuild, targetGuild, options: askedOptions(options, targetOwner), now });
     pair = await updatePair(pair.id, fields, now);
   }
   return { pair, code };

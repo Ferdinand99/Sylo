@@ -594,3 +594,65 @@ test('a copied economy comes over switched off, with a note', async () => {
   assert.equal(there.enabled, false);
   assert.equal(there.config.startingBalance, 100, 'the settings are there for its owner to look at');
 });
+
+test('a mirrored Administrator role deleted on Fluxer is made again without its permissions, ordered, then granted', async () => {
+  const s = await scenario({ withExpressions: false });
+  s.discord.roles.cache.get(s.k.mod).permissions = { bitfield: BIT.Administrator | BIT.ViewChannel };
+  await s.engine.startCopy(s.pair.id);
+  await drain(s);
+  const first = await mapped(s, 'role', s.k.mod);
+  assert.equal(roleBits(s, first) & ADMIN, ADMIN, 'the first copy granted it');
+
+  // Somebody deletes the role on Fluxer; it is edited on Discord, so the mirror syncs it.
+  s.fluxer.guild.roles.delete(first);
+  s.discord.roles.cache.get(s.k.mod).name = 'Moderators';
+  s.fluxer.calls.length = 0;
+  await s.engine.noteSourceChange(s.k.src, { kind: 'role', op: 'sync', id: s.k.mod });
+  await s.engine.runPair(s.pair.id);
+
+  const again = await mapped(s, 'role', s.k.mod);
+  assert.notEqual(again, first, 'a new role was made');
+  const calls = s.fluxer.calls;
+  const made = calls.findIndex((c) => c.op === 'createRole');
+  const ordered = calls.findIndex((c) => c.op === 'setRolePositions');
+  const granted = calls.findIndex((c) => c.op === 'editRole' && c.id === again);
+  assert.ok(made >= 0 && made < ordered && ordered < granted, 'made, then ordered, then granted');
+  assert.equal(BigInt(calls[made].spec.permissions) & ADMIN, 0n, 'made without Administrator');
+  assert.equal(roleBits(s, again) & ADMIN, ADMIN, 'and granted at the end');
+  assert.ok((await db.getMapping(s.pair.id, 'role', s.k.mod)).specHash, 'final');
+  assert.ok(s.fluxer.guild.roles.get(SYLO_ROLE).position > s.fluxer.guild.roles.get(again).position);
+});
+
+test('a role adopted after a crash waits for the order too, and gets its permissions after it', async () => {
+  const s = await scenario({ withExpressions: false });
+  s.discord.roles.cache.get(s.k.mod).permissions = { bitfield: BIT.Administrator };
+  await s.engine.startCopy(s.pair.id);
+  for (;;) {
+    const job = await db.nextDueJob(s.pair.id, s.clock.now);
+    if (job.kind === 'role' && job.sourceId === s.k.mod) break;
+    await s.engine.runPair(s.pair.id, { maxJobs: 1 });
+  }
+  const job = await db.nextDueJob(s.pair.id, s.clock.now);
+  assert.equal(await db.claimJob(job.id, s.clock.now), true);
+  // The dead run made the role with everything it asked for, but never wrote it down.
+  const madeId = await s.fluxer.target.createRole({
+    name: 'Mod',
+    color: 0,
+    hoist: false,
+    mentionable: true,
+    permissions: String(ADMIN),
+  });
+  const { engine } = engineFor({ discord: s.discord, fluxer: s.fluxer, clock: s.clock });
+  await engine.resumeAfterRestart();
+  s.engine = engine;
+  s.fluxer.calls.length = 0;
+  assert.equal((await drain(s)).status, 'live');
+  const adopted = await db.getMapping(s.pair.id, 'role', s.k.mod);
+  assert.deepEqual([adopted.targetId, adopted.owned], [madeId, false]);
+  const edits = s.fluxer.ops('editRole').filter((c) => c.id === madeId);
+  const ordered = s.fluxer.calls.findIndex((c) => c.op === 'setRolePositions');
+  assert.equal(BigInt(edits[0].spec.permissions) & ADMIN, 0n, 'first stripped');
+  assert.equal(roleBits(s, madeId) & ADMIN, ADMIN, 'and granted after the order');
+  assert.ok(s.fluxer.calls.indexOf(edits.at(-1)) > ordered);
+  assert.ok(adopted.specHash || (await db.getMapping(s.pair.id, 'role', s.k.mod)).specHash);
+});

@@ -166,3 +166,20 @@ test('the consent check can be replaced (the bridge can plug its link codes in)'
   assert.equal((await requirePairConsent(pair.id)).id, pair.id);
   await rejects(requirePairConsent(999_999), 'no-consent');
 });
+
+test('real deletion asked for in a request takes effect only when the same person owns both servers', async () => {
+  await db.deletePair((await db.getPairBySource(D1))?.id ?? 0).catch(() => {});
+  const other = await ask({ targetOwner: false, options: { mirrorDeletes: true } });
+  assert.deepEqual(
+    [other.pair.options.mirrorDeletes, other.pair.options.mirrorDeletesRequested],
+    [false, true],
+    'a request only, until the Fluxer owner turns it on'
+  );
+  const own = await ask({ targetOwner: true, options: { mirrorDeletes: true } });
+  assert.deepEqual([own.pair.options.mirrorDeletes, own.pair.options.mirrorDeletesRequested], [true, true]);
+  const plain = await ask({ targetOwner: false, options: { roles: false } });
+  assert.deepEqual(
+    [plain.pair.options.mirrorDeletes, plain.pair.options.mirrorDeletesRequested],
+    [false, false]
+  );
+});

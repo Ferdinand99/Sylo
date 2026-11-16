@@ -186,7 +186,7 @@ export function createEngine(overrides = {}) {
 
   /** The roles on Fluxer that rank above Sylo's (ignoring the roles the mirror made, which are ordered under it). */
   async function rolesAboveSylo(pairId, target) {
-    const own = (await store.listMappings(pairId, 'role')).filter((m) => m.owned).map((m) => m.targetId);
+    const own = (await store.listMappings(pairId, 'role')).map((m) => m.targetId);
     return target.rolesAboveSylo(own);
   }
 
@@ -530,8 +530,12 @@ export function createEngine(overrides = {}) {
         await store.deleteMapping(ctx.pair.id, 'role', roleId); // deleted on Fluxer: make it again
       }
     }
-    const fresh = elevated && !(await rolesOrdered(ctx));
+    // Every creation or adoption, in the first copy and in continuous mode alike (also a role that was deleted on Fluxer
+    // and is made again), starts without the powerful permissions. The order step then runs, and only after it do the
+    // grant jobs give them back. `newRole` makes sure the order is set again and asked for.
+    const fresh = elevated;
     const createSpec = fresh ? stripped : spec;
+    const newRole = () => roleMadeOnFluxer(ctx);
     if (ctx.job?.recovering) {
       const found = await adoptable(
         ctx,
@@ -550,6 +554,7 @@ export function createEngine(overrides = {}) {
           label: role.name,
           now: deps.now(),
         });
+        await newRole();
         return done('adopted what an interrupted run made', { notes, remote: true });
       }
     }
@@ -565,6 +570,7 @@ export function createEngine(overrides = {}) {
         label: role.name,
         now: deps.now(),
       });
+      await newRole();
     } catch (err) {
       // The role was made but a second call failed: track it (with no fingerprint, so the next run updates it)
       // instead of leaving it untracked and making another.
@@ -579,6 +585,7 @@ export function createEngine(overrides = {}) {
           label: role.name,
           now: deps.now(),
         });
+        await newRole();
       }
       throw err;
     }
@@ -588,11 +595,28 @@ export function createEngine(overrides = {}) {
     });
   }
 
+  /**
+   * A role was made (or adopted, or made again) on Fluxer: its place in the order is not set yet. Forget that the order
+   * was set, so the order step really runs; in continuous mode, ask for it now (in a copy the plan's order step follows).
+   */
+  async function roleMadeOnFluxer(ctx) {
+    await store.deleteMapping(ctx.pair.id, 'order', 'roles');
+    if (ctx.job?.phase === 'copy') return;
+    await store.enqueueJob({
+      pairId: ctx.pair.id,
+      phase: 'sync',
+      op: 'reorder',
+      kind: 'roles',
+      sourceId: 'roles',
+      stepKey: 'reorder:roles',
+      now: deps.now(),
+    });
+  }
+
   /** After the role order is set: ask again for every role that was made without its powerful permissions. */
   async function enqueueGrants(ctx) {
-    const pending = (await store.listMappings(ctx.pair.id, 'role')).filter(
-      (m) => m.owned && m.specHash === ''
-    );
+    // Adopted roles wait too (they are not Sylo's to delete, but an interrupted run made them and they are ordered).
+    const pending = (await store.listMappings(ctx.pair.id, 'role')).filter((m) => m.specHash === '');
     for (const m of pending) {
       await store.enqueueJob({
         pairId: ctx.pair.id,
