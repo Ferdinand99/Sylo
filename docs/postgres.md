@@ -162,9 +162,10 @@ SELECT pg_has_role(current_user, 'pg_execute_server_program', 'MEMBER') AS exec_
        pg_has_role(current_user, 'pg_write_server_files', 'MEMBER') AS write_files;
 ```
 
-Every value should be `f`. Restores are never blocked because of the role; the Health page asks
-you to confirm before it restores an uploaded dump and says that its SQL runs with the role's
-rights. Even with a least-privilege role, a restored dump can still do anything that role may do
+Every value should be `f`. Restores are never blocked because of the role. Before it restores an
+uploaded dump the Health page says that its SQL runs with the role's rights, and the server does
+not restore one unless the request names the snapshot (`confirm`) and sets `acknowledgeSql: true`
+(the dashboard sends both after its warning; other clients of the API must do the same). Even with a least-privilege role, a restored dump can still do anything that role may do
 inside the Sylo database (create functions and triggers, change or delete any row), so restore only
 files you made or trust.
 
