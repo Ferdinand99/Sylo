@@ -22,6 +22,7 @@ import {
   SYLO_ACCENT,
   accentCheck,
   effectiveAccent,
+  effectiveAccentText,
   fallbackNote,
   imageHashOf,
   lookCss,
@@ -131,9 +132,17 @@ export const _resetSplashRetry = () => lastFailure.clear();
 export async function refreshSplash(guild, { force = false, now = Date.now(), fetch = safeFetch } = {}) {
   const key = guildKeyOfGuild(guild);
   const running = inFlight.get(key);
-  if (running) return running;
-  const job = doRefresh(guild, key, { force, now, fetch }).finally(() => inFlight.delete(key));
-  inFlight.set(key, job);
+  if (running) {
+    // A check that is already running answers for everyone who did not ask for more. A forced one (a save, the
+    // "check now" button) must not take the answer of an unforced one, which may have stopped at the retry gate:
+    // it runs after it.
+    if (!force || running.force) return running.job;
+    return running.job.then(() => refreshSplash(guild, { force, now, fetch }));
+  }
+  const job = doRefresh(guild, key, { force, now, fetch }).finally(() => {
+    if (inFlight.get(key)?.job === job) inFlight.delete(key);
+  });
+  inFlight.set(key, { job, force });
   return job;
 }
 
@@ -223,6 +232,7 @@ export async function lookView(guild, key) {
     },
     effective: {
       accent: effectiveAccent(row.accent),
+      accentText: effectiveAccentText(row.accent),
       contrast: { dark: check.dark, light: check.light },
       fallback: check.fallback,
       note: fallbackNote(row.accent),

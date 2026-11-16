@@ -103,7 +103,7 @@ const DRY_RUN = process.argv.includes('--dry-run');
 const CHUNK = 1000;
 // A table with a binary column (the pictures of collectibles, up to about a megabyte each) is copied in small
 // chunks, so a chunk never holds hundreds of megabytes. The bytes are copied as they are (a Buffer is a BYTEA).
-const CHUNK_OF = { collectible_images: 10 };
+const CHUNK_OF = { collectible_images: 10, public_look_images: 10 };
 
 function fail(msg) {
   console.error(`\n✖ ${msg}`);

@@ -1,10 +1,12 @@
-// The server's own look on the public member pages (the application form, the ban appeal, the event and quote
-// pages, the web shop): an accent colour and a background, and nothing else. The community owns the content,
+// The server's own look on the public member pages (the application form, the ban appeal, the quote page, the
+// leaderboards, the web shop; not the event pages, which carry no server address): an accent colour and a
+// background, and nothing else. The community owns the content,
 // Sylo owns the frame: the layout, the typography, the components, the light and dark themes and the
 // readability stay Sylo's, and every page ends with a "Powered by Sylo" link that cannot be turned off.
 //
 // This file is the pure part: checking an accent colour, the contrast rule, and the style sheet a page loads.
-// The style sheet carries custom properties only (--accent, --on-accent, --look-image). Everything that uses
+// The style sheet carries custom properties only (--accent, --on-accent, --accent-hover, --accent-text,
+// --look-image). Everything that uses
 // them (the card, the dim overlay, the buttons) is written once in Sylo's own style sheets, so a server cannot
 // change a rule, only the two values the rules read.
 import { createHash } from 'node:crypto';
@@ -17,12 +19,18 @@ export const SYLO_ACCENT = Object.freeze({ dark: '#38c8f0', light: '#076787' });
 /** The colour of the card the form sits on, per theme (--bg-surface). */
 export const CARD = Object.freeze({ dark: '#161618', light: '#ffffff' });
 /**
- * The least contrast an accent needs against the card: 3:1, the WCAG minimum for interface elements and large text
- * (links on these pages are underlined). No colour reaches 4.5:1 on both the dark and the light card, so a higher bar
- * would send every server back to Sylo's colour in one theme; at 3:1 mid-tones such as #5865f2 read in both.
+ * The least contrast an accent needs against the card to be used at all: 3:1, the WCAG minimum for interface
+ * elements (fills, borders, focus rings, bars). No colour reaches 4.5:1 on both the dark and the light card, so a
+ * higher bar would send every server back to Sylo's colour in one theme; at 3:1 mid-tones such as #5865f2 read in
+ * both. Where the accent is used as TEXT (links, the active pill, top ranks) the page uses --accent-text instead:
+ * the accent, or the same hue lightened (dark theme) or darkened (light theme) until it reaches 4.5:1 (accentText).
  * The text on a button fill is chosen separately and always reaches 4.5:1 (onAccent).
  */
 export const MIN_CONTRAST = 3;
+/** WCAG AA for text. */
+export const MIN_TEXT_CONTRAST = 4.5;
+/** The page colour behind the card, per theme (--bg-main). */
+export const PAGE = Object.freeze({ dark: '#0b0b0d', light: '#f5f5f7' });
 
 const HEX = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i;
 
@@ -68,6 +76,41 @@ export function onAccent(accent) {
   return contrast(accent, '#ffffff') >= contrast(accent, '#000000') ? '#ffffff' : '#000000';
 }
 
+const hex2 = (n) =>
+  Math.round(Math.min(255, Math.max(0, n)))
+    .toString(16)
+    .padStart(2, '0');
+
+/** The colour `t` (0 to 1) of the way from `a` to `b`, both '#rrggbb'. */
+export function mixHex(a, b, t) {
+  const [x, y] = [channels(a), channels(b)];
+  return `#${x.map((c, i) => hex2(c + (y[i] - c) * t)).join('')}`;
+}
+
+/**
+ * The accent as a text colour in a theme: the accent itself when it reaches 4.5:1 against the card, the page and
+ * the accent-tinted card (the active pill), else the same hue mixed toward white (dark theme) or black (light
+ * theme) in small steps until it does. Always reaches 4.5:1 on all three, so the server's colour stays
+ * recognisable and the text stays readable.
+ * @param {string} accent  '#rrggbb'
+ * @param {'dark' | 'light'} theme
+ */
+export function accentText(accent, theme) {
+  const backs = [CARD[theme], PAGE[theme], mixHex(CARD[theme], accent, 0.14)];
+  const ok = (c) => backs.every((b) => contrast(c, b) >= MIN_TEXT_CONTRAST);
+  if (ok(accent)) return accent;
+  const target = theme === 'dark' ? '#ffffff' : '#000000';
+  for (let t = 0.02; t < 1; t += 0.02) {
+    const c = mixHex(accent, target, t);
+    if (ok(c)) return c;
+  }
+  return target;
+}
+
+/** The fill of a hovered button: the accent moved 14 % away from the text on it, so the text keeps its contrast. */
+export const accentHover = (accent) =>
+  mixHex(accent, onAccent(accent) === '#ffffff' ? '#000000' : '#ffffff', 0.14);
+
 /**
  * Is the accent readable on the card, in each theme? `fallback` lists the themes where Sylo's own accent is
  * used instead, because this one would be too faint or too dark to read there.
@@ -98,6 +141,15 @@ export function effectiveAccent(accent) {
   };
 }
 
+/** The colour of accent TEXT that is really used per theme (see accentText; Sylo's own where the accent is not used). */
+export function effectiveAccentText(accent) {
+  const check = accentCheck(accent);
+  return {
+    dark: accent && check.dark.ok ? accentText(accent, 'dark') : SYLO_ACCENT.dark,
+    light: accent && check.light.ok ? accentText(accent, 'light') : SYLO_ACCENT.light,
+  };
+}
+
 /** The sentence that says Sylo's accent was used, or null when the chosen one is fine everywhere. */
 export function fallbackNote(accent) {
   const { fallback } = accentCheck(accent);
@@ -123,16 +175,16 @@ export const imageHashOf = (data) => createHash('sha256').update(data).digest('h
  * @param {{ accent: string, imageUrl: string | null }} look
  */
 export function lookCss({ accent, imageUrl }) {
+  // Only a colour this code wrote: never stored text (a restored backup, a future import) into a style sheet.
+  if (accent && !/^#[0-9a-f]{6}$/.test(accent)) throw new Error('bad look accent');
   const lines = [
     "/* The look of one server's public pages: an accent colour and a background, nothing else. */",
   ];
   const check = accentCheck(accent);
-  if (accent && check.dark.ok) {
-    lines.push(`:root { --accent: ${accent}; --on-accent: ${onAccent(accent)}; }`);
-  }
-  if (accent && check.light.ok) {
-    lines.push(`:root[data-theme='light'] { --accent: ${accent}; --on-accent: ${onAccent(accent)}; }`);
-  }
+  const props = (theme) =>
+    `--accent: ${accent}; --on-accent: ${onAccent(accent)}; --accent-hover: ${accentHover(accent)}; --accent-text: ${accentText(accent, theme)};`;
+  if (accent && check.dark.ok) lines.push(`:root { ${props('dark')} }`);
+  if (accent && check.light.ok) lines.push(`:root[data-theme='light'] { ${props('light')} }`);
   if (imageUrl) {
     // Only an address this site made (see src/web/routes/publicLook.js): never user text.
     if (!/^\/look\/[a-z0-9-]+\.[0-9a-f]{16}\.webp$/.test(imageUrl)) throw new Error('bad look image address');

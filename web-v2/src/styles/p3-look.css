@@ -1,13 +1,16 @@
 /* The look of a server's public pages inside the dashboard (the application form, the web shop) and the
-   "Powered by Sylo" line. The server's style sheet (/look/...) sets only custom properties: --accent and
-   --on-accent (the dashboard already reads them) and --look-image. Everything here is Sylo's: the dim overlay, the
+   "Powered by Sylo" line. The server's style sheet (/look/...) sets only custom properties: --accent,
+   --on-accent, --accent-hover and --accent-text (the dashboard already reads them) and --look-image. Everything here is Sylo's: the dim overlay, the
    panel the page sits on, the primary button taking the accent. public.css has the same for the EJS pages. */
 :root {
   --look-dim: rgba(0, 0, 0, 0.58);
   --look-panel: 90%;
 }
+/* Light theme: the picture is veiled with light, not black, and the panel is all but opaque, so Sylo's own text
+   keeps 4.5:1 whatever the picture is (tested in __tests__/lookPanel.test.js). */
 :root[data-theme='light'] {
-  --look-dim: rgba(0, 0, 0, 0.42);
+  --look-dim: rgba(245, 245, 247, 0.5);
+  --look-panel: 99%;
 }
 
 .v2-powered {
@@ -48,6 +51,11 @@ body.has-look-image .v2-public-page {
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
 }
+/* Over a picture the top bar's glass is always on (it is otherwise only on once the page scrolls), so the brand
+   and the theme switch never sit directly on the picture. */
+body.has-look-image .v2-topbar::before {
+  opacity: 1;
+}
 body.has-look-image .v2-powered {
   padding-top: 0;
 }
@@ -55,7 +63,7 @@ body.has-look-image .v2-powered a {
   display: inline-block;
   padding: 3px 12px;
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--bg-main) 88%, transparent);
+  background: color-mix(in srgb, var(--bg-main) var(--look-panel), transparent);
 }
 @media (prefers-reduced-transparency: reduce) {
   body.has-look-image .v2-public-page,
@@ -122,7 +130,7 @@ body.has-look-image .v2-powered a {
   font-size: var(--fs-sm);
 }
 .v2-look-preview-link {
-  color: var(--accent);
+  color: var(--accent-text);
   text-decoration: underline;
 }
 .v2-look-preview-field {

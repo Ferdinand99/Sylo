@@ -73,7 +73,12 @@ const s = {
 export async function getPublicLook(guildId) {
   const row = await s.getLook.get(guildId);
   return row
-    ? { accent: row.accent, background: row.background, updatedAt: Number(row.updated_at) }
+    ? {
+        // only a colour this code wrote (normaliseAccent): anything else in the row (a restored backup) is none
+        accent: /^#[0-9a-f]{6}$/.test(row.accent) ? row.accent : '',
+        background: row.background,
+        updatedAt: Number(row.updated_at),
+      }
     : { accent: '', background: 'none', updatedAt: 0 };
 }
 

@@ -88,6 +88,9 @@ describe('Server settings: Public pages', () => {
 
     fireEvent.change(input, { target: { value: '#5865F2' } });
     expect(preview.style.getPropertyValue('--accent')).toBe('#5865f2');
+    // the link in the preview uses the text colour made from the accent (4.5:1), not the accent itself
+    expect(preview.style.getPropertyValue('--accent-text')).toMatch(/^#[0-9a-f]{6}$/);
+    expect(preview.style.getPropertyValue('--accent-text')).not.toBe('#5865f2');
     expect(screen.queryByText(/too hard to read/)).toBeNull();
     expect(screen.getByText('Submit application')).toBeTruthy();
     expect(screen.getByText('Powered by Sylo', { selector: 'p' })).toBeTruthy();

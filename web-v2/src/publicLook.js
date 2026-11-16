@@ -1,9 +1,9 @@
 // The server's own look on the public member pages, on the page side (the server's half is
-// src/lib/publicLook.js, which has the last word; the contrast rule below is the same, so the settings preview can
+// src/lib/publicLook.js, which has the last word; the contrast rules below are the same, so the settings preview can
 // say at once what a colour will do). Two things:
 //   - useServerLook(look): the pages a member opens inside the dashboard (the application form, the web shop)
 //     load the server's style sheet (custom properties only) and mark <body>, the same way the server renders the
-//     appeal, event and quote pages.
+//     appeal, quote and leaderboard pages (the event pages take no look: they carry no server address).
 //   - the accent rules the "Public pages" settings preview uses.
 import { useEffect } from 'react';
 
@@ -12,6 +12,10 @@ export const SYLO_ACCENT = { dark: '#38c8f0', light: '#076787' };
 export const CARD = { dark: '#161618', light: '#ffffff' };
 /** The least contrast of an accent against the card (3:1, see src/lib/publicLook.js). */
 export const MIN_CONTRAST = 3;
+/** WCAG AA for text, what accent text is held to. */
+export const MIN_TEXT_CONTRAST = 4.5;
+/** The page colour behind the card, per theme. */
+export const PAGE = { dark: '#0b0b0d', light: '#f5f5f7' };
 
 /** '#rrggbb' in lower case, '' for none, null when it is not a colour. */
 export function normaliseAccent(value) {
@@ -40,6 +44,34 @@ export function contrast(a, b) {
   return (hi + 0.05) / (lo + 0.05);
 }
 
+const hex2 = (n) =>
+  Math.round(Math.min(255, Math.max(0, n)))
+    .toString(16)
+    .padStart(2, '0');
+const channels = (hex) => {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+
+/** The colour `t` of the way from `a` to `b`, both '#rrggbb'. */
+export function mixHex(a, b, t) {
+  const [x, y] = [channels(a), channels(b)];
+  return `#${x.map((c, i) => hex2(c + (y[i] - c) * t)).join('')}`;
+}
+
+/** The accent as a text colour in a theme (the same rule as the server: 4.5:1 on card, page and tinted card). */
+export function accentText(accent, theme) {
+  const backs = [CARD[theme], PAGE[theme], mixHex(CARD[theme], accent, 0.14)];
+  const ok = (c) => backs.every((b) => contrast(c, b) >= MIN_TEXT_CONTRAST);
+  if (ok(accent)) return accent;
+  const target = theme === 'dark' ? '#ffffff' : '#000000';
+  for (let t = 0.02; t < 1; t += 0.02) {
+    const c = mixHex(accent, target, t);
+    if (ok(c)) return c;
+  }
+  return target;
+}
+
 /** The text colour on a fill of this accent. */
 export const onAccent = (accent) =>
   contrast(accent, '#ffffff') >= contrast(accent, '#000000') ? '#ffffff' : '#000000';
@@ -54,6 +86,7 @@ export function accentOutcome(accent) {
       ratio: ratio == null ? null : Math.round(ratio * 100) / 100,
       ok,
       color: accent && ok ? accent : SYLO_ACCENT[theme],
+      text: accent && ok ? accentText(accent, theme) : SYLO_ACCENT[theme],
     };
   }
   return out;

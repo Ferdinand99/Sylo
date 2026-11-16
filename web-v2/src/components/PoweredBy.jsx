@@ -3,7 +3,7 @@
 export default function PoweredBy() {
   return (
     <footer className="v2-powered">
-      <a href="https://github.com/Ferdinand99/Sylo" rel="noopener noreferrer">
+      <a href="https://sylobot.com" rel="noopener noreferrer">
         Powered by Sylo
       </a>
     </footer>

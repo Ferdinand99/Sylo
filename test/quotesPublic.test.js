@@ -115,8 +115,7 @@ test('no ids leak: not the author, the saver, the channel or the message, and no
   }
   assert.doesNotMatch(html, /\/channels\//);
   // The one outward link every public page has: "Powered by Sylo", with rel="noreferrer".
-  const poweredBy =
-    /<a href="https:\/\/github\.com\/Ferdinand99\/Sylo" rel="noopener noreferrer">Powered by Sylo<\/a>/;
+  const poweredBy = /<a href="https:\/\/sylobot\.com" rel="noopener noreferrer">Powered by Sylo<\/a>/;
   assert.match(html, poweredBy);
   assert.doesNotMatch(html.replace(poweredBy, ''), /<a [^>]*href="https?:/i, 'no outward links but that one');
   // nothing that looks like a snowflake besides the server's own id

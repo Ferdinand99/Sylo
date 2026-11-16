@@ -126,6 +126,13 @@ test('a member sees their balance, the items for sale (not the paused ones) and 
   const page = await view(res);
   assert.deepEqual(page.currency, { name: 'gold', emoji: '💰' });
   assert.deepEqual(page.balance, { cash: 250, bank: 0, total: 250 });
+  // the server's own look (accent colour, background): none until it chose one
+  assert.equal(page.look, null);
+  const { setPublicLook } = await import('../src/db/publicLook.js');
+  await setPublicLook(D_GUILD, { accent: '#5865f2', background: 'none' });
+  const looked = await view(await me.get(`/shop/${D_GUILD}`));
+  assert.match(looked.look.css, new RegExp(`^/look/${D_GUILD}\\.[0-9a-f]{16}\\.css$`));
+  assert.equal(looked.look.image, false);
   assert.deepEqual(
     page.items.map((i) => i.name),
     ['Cheap', 'Dear', 'VIP']

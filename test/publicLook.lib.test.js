@@ -86,7 +86,10 @@ test('the text on an accent fill is white or near-black, whichever reads better'
 
 test('the style sheet holds custom properties only, and the accent only in the themes where it is readable', () => {
   const both = lookCss({ accent: '#5865f2', imageUrl: null });
-  assert.match(both, /:root \{ --accent: #5865f2; --on-accent: #ffffff; \}/);
+  assert.match(
+    both,
+    /:root \{ --accent: #5865f2; --on-accent: #ffffff; --accent-hover: #[0-9a-f]{6}; --accent-text: #[0-9a-f]{6}; \}/
+  );
   assert.match(both, /:root\[data-theme='light'\] \{ --accent: #5865f2;/);
   assert.doesNotMatch(both, /--look-image/);
 

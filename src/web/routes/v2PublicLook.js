@@ -1,5 +1,6 @@
 // JSON API for Server settings → Public pages: the server's own look on the pages its members open without the
-// dashboard (the application form, the ban appeal, the event and quote pages, the web shop). An accent colour and
+// dashboard (the application form, the web shop, the ban appeal, the quote page and the leaderboards; the event
+// pages carry no server address and take no look). An accent colour and
 // a background, nothing else: the layout, the type, the components and the "Powered by Sylo" link stay Sylo's.
 //
 // Mounted at /guilds/:guildId AFTER the admin guard in v2Api.js, so req.guild is set. Every route here needs the

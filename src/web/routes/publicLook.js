@@ -6,7 +6,8 @@
 // Both addresses are guild-scoped and named by a content hash. The style sheet is only served while the hash is
 // the one of the server's current look (so an old address is a plain 404, never a stale look), and the picture
 // is looked up in THIS server's own pictures by its hash, never by a path. Anything else gets the same plain 404
-// with no detail. The files are immutable: a change is a new address.
+// with no detail. The style sheet is immutable (a change is a new address). The picture is named by its hash too,
+// but is kept by caches for a day only, so a picture a server removed does not outlive its removal for long.
 //
 // The style sheet holds custom properties only (lib/publicLook.js) and the picture is a WebP Sylo made, so the
 // page's strict CSP stays as it is: styles and images from this site only.
@@ -25,7 +26,6 @@ const notFound = (res) =>
     .send('Not found');
 
 const FILE_HEADERS = {
-  'Cache-Control': 'public, max-age=31536000, immutable',
   'X-Content-Type-Options': 'nosniff',
   'Content-Security-Policy': "default-src 'none'; sandbox",
   'Cross-Origin-Resource-Policy': 'same-origin',
@@ -44,13 +44,18 @@ router.get('/:file', async (req, res, next) => {
     if (kind === 'css') {
       const css = await cssFor(key, hash);
       if (css == null) return notFound(res);
-      res.set({ ...FILE_HEADERS, 'Content-Type': 'text/css; charset=utf-8' });
+      res.set({
+        ...FILE_HEADERS,
+        'Cache-Control': 'public, max-age=31536000, immutable',
+        'Content-Type': 'text/css; charset=utf-8',
+      });
       return res.send(css);
     }
     const image = await readLookImage(key, hash);
     if (!image) return notFound(res);
     res.set({
       ...FILE_HEADERS,
+      'Cache-Control': 'public, max-age=86400',
       'Content-Type': image.mime,
       'Content-Length': String(image.data.length),
     });

@@ -174,7 +174,7 @@ h4 {
 }
 
 a {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   text-decoration: none;
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;

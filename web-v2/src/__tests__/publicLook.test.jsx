@@ -40,6 +40,9 @@ describe('the accent rules agree with the server', () => {
       expect(mine.light.color, c).toBe(theirs.light);
       expect(mine.dark.ok, c).toBe(check.dark.ok);
       expect(mine.light.ok, c).toBe(check.light.ok);
+      const text = server.effectiveAccentText(c);
+      expect(mine.dark.text, c).toBe(text.dark);
+      expect(mine.light.text, c).toBe(text.light);
       expect(accentNote(c), c).toBe(server.fallbackNote(c));
       if (c) expect(onAccent(c), c).toBe(server.onAccent(c));
     }
@@ -97,7 +100,7 @@ describe('the Powered by Sylo link', () => {
       );
       const link = container.querySelector('footer a');
       expect(link.textContent).toBe('Powered by Sylo');
-      expect(link.getAttribute('href')).toBe('https://github.com/Ferdinand99/Sylo');
+      expect(link.getAttribute('href')).toBe('https://sylobot.com');
       expect(link.getAttribute('rel')).toBe('noopener noreferrer');
       unmount();
     }

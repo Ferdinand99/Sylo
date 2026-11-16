@@ -22,7 +22,8 @@ const currentTheme = () =>
 
 /**
  * Server settings → Public pages: the server's own accent colour and background on the pages its members open
- * without the dashboard (the application form, the ban appeal, the event and quote pages, the web shop). Only
+ * without the dashboard (the application form, the web shop, the ban appeal, the quote page and the leaderboards;
+ * the event pages carry no server address and take no look). Only
  * these two things change; the layout, the type, the light and dark themes and the "Powered by Sylo" link stay
  * Sylo's. The preview is the application form page. Edit level only (the section is not shown below it).
  */
@@ -57,6 +58,7 @@ export default function PublicPagesSettings({ guildId }) {
   const theme = currentTheme();
   const outcome = accentOutcome(invalid ? '' : normalised);
   const shown = outcome[theme].color;
+  const shownText = outcome[theme].text;
 
   const splash = data.splash;
   const image =
@@ -113,9 +115,10 @@ export default function PublicPagesSettings({ guildId }) {
     <div className="v2-group v2-section-gap" id="public-pages">
       <h2 className="v2-group-title">Public pages</h2>
       <p className="v2-field-hint">
-        Give the pages your members open without the dashboard (application forms, ban appeals, events, quotes
-        and the web shop) your server&apos;s accent colour and a background. Only these two things change: the
-        layout, the type, the light and dark themes and the &quot;Powered by Sylo&quot; link stay as they are.
+        Give the pages your members open without the dashboard (application forms, the web shop, ban appeals,
+        the quote page and the leaderboards) your server&apos;s accent colour and a background. Only these two
+        things change: the layout, the type, the light and dark themes and the &quot;Powered by Sylo&quot;
+        link stay as they are.
       </p>
       <form onSubmit={onSave} data-savebar>
         <div className="v2-field">
@@ -222,6 +225,7 @@ export default function PublicPagesSettings({ guildId }) {
           aria-label="Preview of an application form page with this accent colour and background"
           style={{
             '--accent': shown,
+            '--accent-text': shownText,
             '--on-accent': onAccent(shown),
             ...(image
               ? { backgroundImage: `linear-gradient(var(--look-dim), var(--look-dim)), url("${image}")` }

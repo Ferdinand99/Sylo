@@ -414,9 +414,12 @@ transparency). Every route here needs the **edit** level, the read too (a lower 
 The answer has `accent` and `background` (what was saved), `platform`, `upload` (`null` or `{ bytes, url, updatedAt }`),
 `splash` (`available`: the server has an invite background on the platform, Discord and Fluxer both have one;
 `copied`: `null` or `{ url, checkedAt, updatedAt }`, Sylo's own copy), `limits` and `sylo` (Sylo's accent per theme)
-and `effective`: `accent` (the colour really used, per theme: `dark` and `light`), `contrast` (the ratio of the
-accent to the card per theme and whether it reaches the 3:1 Sylo asks for), `fallback` (the themes where it does not and Sylo's own
-colour is used instead), `note` (the sentence to show when `fallback` is not empty, else `null`) and `backgroundUrl`.
+`backgrounds` (the three values the app may send) and `effective`: `accent` (the colour really used for fills and
+borders, per theme: `dark` and `light`), `accentText` (the colour used for text, per theme: the accent, or the same hue
+lightened or darkened to reach 4.5:1), `contrast` (the ratio of the accent to the card per theme and whether it reaches
+the 3:1 Sylo asks for), `fallback` (the themes where it does not and Sylo's own colour is used instead), `note` (the
+sentence to show when `fallback` is not empty, else `null`), `backgroundUrl` (the picture of the chosen background,
+or `null`) and `css` (the path of the style sheet public pages load, or `null` when the server chose nothing).
 A `400` for a colour that is not `#rgb` or `#rrggbb`, for `upload` with no picture or for `discord-splash`
 when the server has none; `502` when the invite background could not be downloaded. The urls are paths on the
 Sylo server itself (the app prefixes the server address); the pictures are never loaded from the platform's CDN.

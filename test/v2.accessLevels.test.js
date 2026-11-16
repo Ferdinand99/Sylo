@@ -148,6 +148,7 @@ const WRITES = [
   ['/access', { viewRoleIds: [VIEW, OTHER_ROLE] }, 200],
   ['/setup/apply', { items: [] }, 400],
   ['/public-page-look', { accent: '', background: 'none' }, 200],
+  ['/public-page-look/image', {}, 415],
   ['/public-page-look/image/delete', {}, 200],
   ['/public-page-look/splash/refresh', {}, 200],
 ];
@@ -707,4 +708,29 @@ test("the server's look on its public pages is Edit only, the read too, on the w
   // Fluxer servers have the same routes behind the same guard.
   const fluxer = await person({ platform: 'fluxer', roles: [VIEW] });
   assert.equal((await fluxer.app.get(`/guilds/${F_KEY}/public-page-look`)).status, 403);
+});
+
+test("Fluxer: an Edit person saves the server's look, and its files answer at the fluxer-<id> address", async () => {
+  await setBotMasterRoles(F_KEY, [MASTER]);
+  const { app } = await person({ platform: 'fluxer', roles: [MASTER] });
+  const saved = await app.post(`/guilds/${F_KEY}/public-page-look`, {
+    accent: '#5865f2',
+    background: 'none',
+  });
+  assert.equal(saved.status, 200);
+  const look = await saved.json();
+  assert.equal(look.platform, 'fluxer');
+  assert.match(look.effective.css, new RegExp(`^/look/fluxer-${F_GUILD}\\.[0-9a-f]{16}\\.css$`));
+  const sheet = await browser().get(look.effective.css);
+  assert.equal(sheet.status, 200);
+  assert.match(await sheet.text(), /--accent: #5865f2;/);
+  // the Discord server with the same digits has no such look
+  assert.equal((await browser().get(look.effective.css.replace(`fluxer-${F_GUILD}`, F_GUILD))).status, 404);
+  // a page of that server renders it: the public leaderboard
+  await setGuildModule(F_KEY, 'leveling', { enabled: true, config: { publicLeaderboard: true } });
+  const page = await browser().get(`/leaderboard/${encodeURIComponent(F_KEY)}`);
+  assert.equal(page.status, 200);
+  const html = await page.text();
+  assert.ok(html.includes(look.effective.css));
+  assert.match(html, /<body class="has-look">/);
 });

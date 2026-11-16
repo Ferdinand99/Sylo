@@ -160,7 +160,7 @@ test('an upload becomes a WebP of at most 1920 px with the metadata gone, served
   const served = await get(v.upload.url);
   assert.equal(served.status, 200);
   assert.equal(served.headers.get('content-type'), 'image/webp');
-  assert.equal(served.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+  assert.equal(served.headers.get('cache-control'), 'public, max-age=86400');
   assert.equal(served.headers.get('cross-origin-resource-policy'), 'same-origin');
   assert.equal(served.headers.get('set-cookie'), null);
   const body = Buffer.from(await served.arrayBuffer());
@@ -354,7 +354,7 @@ test('a page view of a splash server copies the splash in the background, once, 
 test('the public pages take the accent and the background, and always end with the Powered by Sylo link', async () => {
   await setGuildModule(GID, 'quote-board', { enabled: true, config: { publicPage: true } });
   await setGuildModule(GID, 'appeals', { enabled: true });
-  const link = /<a href="https:\/\/github\.com\/Ferdinand99\/Sylo"[^>]*>Powered by Sylo<\/a>/;
+  const link = /<a href="https:\/\/sylobot\.com"[^>]*>Powered by Sylo<\/a>/;
 
   const plain = await (await get(`/quotes/${GID}`)).text();
   assert.doesNotMatch(plain, /\/look\//, 'a server with no look gets plain Sylo');
@@ -417,4 +417,62 @@ test('purging a server removes its look and both pictures', async () => {
   assert.equal(rows().length, 0);
   assert.deepEqual(await getPublicLook(GID), { accent: '', background: 'none', updatedAt: 0 });
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM guild_public_look WHERE guild_id = ?').get(GID).n, 0);
+});
+
+test('a forced check that lands while an unforced one is running is not answered by it', async () => {
+  cdnBody = await pic(100, 100, 'webp');
+  app.guild.splash = 'f1';
+  cdnStatus = 500;
+  assert.equal((await refreshSplash(app.guild, { force: true })).status, 'failed'); // starts the retry gate
+  cdnStatus = 200;
+  // The page view's check stops at the gate; the save's (forced) check, started right behind it, must still run.
+  const unforced = refreshSplash(app.guild);
+  const forced = refreshSplash(app.guild, { force: true });
+  assert.equal((await unforced).status, 'failed');
+  assert.equal((await forced).status, 'updated');
+  assert.equal(cdnHits, 2, 'one failed download and one that worked');
+  assert.ok(await getLookImageMeta(GID, 'splash'));
+});
+
+test('the style sheet is kept for a year (its address is its content), the picture for a day', async () => {
+  const up = await json(await putFile(upload(await pic(40, 40))));
+  const v = await json(await save({ accent: '#5865f2', background: 'upload' }));
+  assert.equal(
+    (await get(v.effective.css)).headers.get('cache-control'),
+    'public, max-age=31536000, immutable'
+  );
+  assert.equal((await get(up.upload.url)).headers.get('cache-control'), 'public, max-age=86400');
+});
+
+test('the leaderboards take the look too, and end with the Powered by Sylo link', async () => {
+  await setGuildModule(GID, 'leveling', { enabled: true, config: { publicLeaderboard: true } });
+  await setGuildModule(GID, 'economy', { enabled: true, config: { publicLeaderboard: true } });
+  const link = /<a href="https:\/\/sylobot\.com"[^>]*>Powered by Sylo<\/a>/;
+  for (const path of [`/leaderboard/${GID}`, `/economy/${GID}`]) {
+    const plain = await get(path);
+    assert.equal(plain.status, 200, path);
+    const plainHtml = await plain.text();
+    assert.doesNotMatch(plainHtml, /has-look|\/look\//, path);
+    assert.match(plainHtml, link);
+  }
+  await json(await putFile(upload(await pic(200, 100))));
+  const v = await json(await save({ accent: '#5865f2', background: 'upload' }));
+  for (const path of [`/leaderboard/${GID}`, `/economy/${GID}`]) {
+    const html = await (await get(path)).text();
+    assert.ok(html.includes(`<link rel="stylesheet" href="${v.effective.css}" />`), path);
+    assert.match(html, /<body class="has-look has-look-image">/, path);
+    assert.match(html, link, path);
+  }
+});
+
+test('the "Powered by Sylo" line is the same muted frame link on every page, whatever the accent', async () => {
+  await setGuildModule(GID, 'quote-board', { enabled: true, config: { publicPage: true } });
+  await save({ accent: '#ff0000', background: 'none' });
+  const html = await (await get(`/quotes/${GID}`)).text();
+  assert.match(
+    html,
+    /<p class="lb-foot muted small"><a href="https:\/\/sylobot\.com" rel="noopener noreferrer">Powered by Sylo<\/a><\/p>/
+  );
+  const css = await (await get('/public.css')).text();
+  assert.match(css, /body \.lb-foot a,\s*body \.auth-foot a \{\s*color: var\(--text-muted\);/);
 });

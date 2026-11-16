@@ -90,12 +90,17 @@ Fluxer: Sylo downloads it once, keeps its own copy, checks it once a day and ser
 browser never talks to Discord or Fluxer. The settings show a live preview of the application form page.
 
 What stays Sylo's: the layout, the type, the components, the light and dark themes, the readability and the small
-"Powered by Sylo" link at the bottom of every public page, which cannot be turned off. The page always sits on a
-semi-opaque card over a dim overlay (opaque for visitors who ask for reduced transparency). An accent that is too hard
-to read on the card (less than 3:1 against it) is not used in that theme (the light or the dark one): Sylo's own
-colour stays there, and the settings say so. The dashboard and the Sylo app are never restyled. The event pages take
-no server look, because they carry no server address on purpose. The file addresses are `/look/<server>.<hash>.css`
-and `.webp`; the content security policy is unchanged (styles and images from Sylo only).
+"Powered by Sylo" link (to sylobot.com) at the bottom of every public page, which cannot be turned off. The page always
+sits on a semi-opaque card over a dim overlay (a light veil in the light theme, and an all but opaque panel, so Sylo's
+own text stays readable on any picture; fully opaque for visitors who ask for reduced transparency). The accent is held
+to 3:1 against the card for fills, borders and focus rings: below that it is not used in that theme (the light or the
+dark one), Sylo's own colour stays there, and the settings say so. Where the accent is used as text (links, the active
+pill, top ranks) the pages use a text colour made from it: the accent itself when it reaches 4.5:1 on the card and the
+page, otherwise the same hue lightened (dark theme) or darkened (light theme) until it does. The text on a button
+fill is black or white, whichever reads better, also when hovered. The dashboard and the Sylo app are never restyled.
+The event pages take no server look, because they carry no server address on purpose. The file addresses are
+`/look/<server>.<hash>.css` and `.webp`; the style sheet is kept by caches for a year (its address is its content),
+a picture for a day. The content security policy is unchanged (styles and images from Sylo only).
 
 ## Duplicate and templates
 

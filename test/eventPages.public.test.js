@@ -266,8 +266,7 @@ test('an event past its end is ended even before the clock tick has closed it', 
 
 // The one outward link every public page has: "Powered by Sylo", with rel="noreferrer" so the address of the page
 // (and the token in it) is never sent on. The event page takes no server look: it has no server id in it.
-const POWERED_BY =
-  /<a href="https:\/\/github\.com\/Ferdinand99\/Sylo" rel="noopener noreferrer">Powered by Sylo<\/a>/;
+const POWERED_BY = /<a href="https:\/\/sylobot\.com" rel="noopener noreferrer">Powered by Sylo<\/a>/;
 
 test('no host, no member, no role, no channel and no id of any kind', async () => {
   const html = await page(ev);
