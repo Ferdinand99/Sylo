@@ -15,7 +15,7 @@ vi.mock('../api.js', () => ({
   backupDownloadUrl: vi.fn(),
   ApiError: class ApiError extends Error {},
 }));
-const { getHealth } = await import('../api.js');
+const { getHealth, restoreBackup } = await import('../api.js');
 const { confirmDialog } = await import('../components/ConfirmDialog.jsx');
 
 function health(sessionSecret) {
@@ -120,6 +120,24 @@ describe('Health: restoring an uploaded Postgres dump', () => {
     expect(container.textContent).toMatch(/SUPERUSER/);
     expect(container.querySelector('a')?.getAttribute('href')).toMatch(/least-privilege-database-role/);
   });
+
+  it.each([
+    [0, 'sylo-imported-20261116.dump', true],
+    [1, 'sylo-20261116.dump', false],
+  ])(
+    'restore button %i sends the name, with acknowledgeSql %s only for an uploaded dump',
+    async (index, name, ack) => {
+      getHealth.mockResolvedValue(pgHealth());
+      restoreBackup.mockResolvedValue({ ok: true });
+      confirmDialog.mockResolvedValue(true);
+      render(<Health />);
+      await screen.findByText(name);
+      fireEvent.click(restoreButtons()[index]);
+      await waitFor(() => expect(restoreBackup).toHaveBeenCalledTimes(1));
+      expect(restoreBackup).toHaveBeenLastCalledWith(name, { acknowledgeSql: ack });
+      confirmDialog.mockResolvedValue(false);
+    }
+  );
 
   it('does not add that warning for a backup Sylo made itself', async () => {
     getHealth.mockResolvedValue(pgHealth());

@@ -37,3 +37,48 @@ test(
     if (warned.length) assert.match(warned[0][1], /docs\/postgres\.md#least-privilege-database-role/);
   }
 );
+
+test(
+  'dbRole queries tell a role without extra rights from one that has them',
+  { skip: !url && 'DATABASE_URL not set (sqlite-only run)' },
+  async (t) => {
+    const { ROLE_QUERIES, privilegesFromRow, roleRisks } = await import('../src/db/dbRole.js');
+    const postgres = (await import('postgres')).default;
+    const admin = postgres(url);
+    t.after(() => admin.end({ timeout: 1 }));
+    const [me] =
+      await admin`SELECT current_user AS name, rolsuper, rolcreaterole FROM pg_roles WHERE rolname = current_user`;
+    if (!me.rolsuper && !me.rolcreaterole) return t.skip('the test role cannot create roles');
+
+    const role = 'sylo_test_lowpriv';
+    await admin.unsafe(`DROP ROLE IF EXISTS ${role}`);
+    await admin.unsafe(`CREATE ROLE ${role} LOGIN PASSWORD 'lowpriv' NOSUPERUSER NOCREATEDB NOCREATEROLE`);
+    const asRole = new URL(url);
+    asRole.username = role;
+    asRole.password = 'lowpriv';
+    const ask = async () => {
+      const low = postgres(asRole.toString());
+      try {
+        return privilegesFromRow((await low.unsafe(ROLE_QUERIES.full))[0]);
+      } finally {
+        await low.end({ timeout: 1 });
+      }
+    };
+    try {
+      assert.deepEqual(roleRisks(await ask()), [], 'a plain login role has no extra rights');
+
+      await admin.unsafe(`GRANT pg_execute_server_program TO ${role}`);
+      assert.deepEqual(roleRisks(await ask()), ['pg_execute_server_program']);
+
+      if (me.rolsuper) {
+        // It is not a superuser itself, but may become one.
+        await admin.unsafe(`GRANT ${me.name} TO ${role}`);
+        assert.ok(roleRisks(await ask()).includes('membership of a superuser role'));
+      }
+      await admin.unsafe(`ALTER ROLE ${role} CREATEDB`);
+      assert.ok(roleRisks(await ask()).includes('CREATEDB'));
+    } finally {
+      await admin.unsafe(`DROP ROLE IF EXISTS ${role}`);
+    }
+  }
+);

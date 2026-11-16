@@ -211,7 +211,7 @@ export default function Health() {
     });
     if (!ok) return;
     const result = await run(
-      () => restoreBackup(name),
+      () => restoreBackup(name, { acknowledgeSql: Boolean(d.db.postgres && isImportedBackup(name)) }),
       () => 'Restoring…'
     );
     if (result?.ok) setRestoring(name);

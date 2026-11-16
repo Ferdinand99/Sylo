@@ -302,8 +302,13 @@ export const sendDevLogErrorTest = () => postJson('/api/v2/health/dev-log-error-
 export const createBackup = () => postJson('/api/v2/health/backups', {});
 export const deleteBackup = (name) =>
   postJson(`/api/v2/health/backups/${encodeURIComponent(name)}/delete`, {});
-export const restoreBackup = (name) =>
-  postJson(`/api/v2/health/backups/${encodeURIComponent(name)}/restore`, {});
+// `acknowledgeSql`: the person was told that an uploaded Postgres dump runs its SQL with the rights
+// of the database role (the server requires it for those). `confirm` names the snapshot.
+export const restoreBackup = (name, { acknowledgeSql = false } = {}) =>
+  postJson(`/api/v2/health/backups/${encodeURIComponent(name)}/restore`, {
+    confirm: name,
+    ...(acknowledgeSql ? { acknowledgeSql: true } : {}),
+  });
 export const importBackup = (file) =>
   apiFetch('/api/v2/health/backups/import', {
     method: 'POST',

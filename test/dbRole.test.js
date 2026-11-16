@@ -18,6 +18,7 @@ const plain = {
   execProgram: false,
   readFiles: false,
   writeFiles: false,
+  superMember: false,
 };
 
 test('a role with no extra rights gets no warning', () => {
@@ -34,6 +35,7 @@ test('superuser, CREATEROLE and CREATEDB each warn, naming the right and linking
     ['execProgram', 'pg_execute_server_program'],
     ['readFiles', 'pg_read_server_files'],
     ['writeFiles', 'pg_write_server_files'],
+    ['superMember', 'membership of a superuser role'],
   ]) {
     const warning = rolePrivilegeWarning({ ...plain, [key]: true });
     assert.match(warning, new RegExp(label), key);
@@ -44,8 +46,11 @@ test('superuser, CREATEROLE and CREATEDB each warn, naming the right and linking
   assert.deepEqual(roleRisks({ ...plain, superuser: true, createDb: true }), ['SUPERUSER', 'CREATEDB']);
 });
 
-test('the docs link points at the least-privilege section of docs/postgres.md', () => {
-  assert.match(ROLE_DOCS_URL, /docs\/postgres\.md#least-privilege-database-role$/);
+test('the docs link points at the least-privilege section of the docs of this version', () => {
+  assert.match(
+    ROLE_DOCS_URL,
+    /\/blob\/v\d+\.\d+\.\d+[^/]*\/docs\/postgres\.md#least-privilege-database-role$/
+  );
 });
 
 test('on SQLite there is nothing to read and nothing to warn about', async () => {

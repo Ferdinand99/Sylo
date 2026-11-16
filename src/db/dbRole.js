@@ -9,9 +9,10 @@
 // should have none of that: docs/postgres.md (Least-privilege database role).
 import { config } from '../config.js';
 import { prepare } from './driver.js';
+import { BUILD, REPO_URL } from '../bot/lib/buildInfo.js';
 
-export const ROLE_DOCS_URL =
-  'https://github.com/Ferdinand99/Sylo/blob/main/docs/postgres.md#least-privilege-database-role';
+// The docs of this version, so the link matches the behaviour the reader runs.
+export const ROLE_DOCS_URL = `${REPO_URL}/blob/v${BUILD.version}/docs/postgres.md#least-privilege-database-role`;
 
 /**
  * @typedef {object} RolePrivileges
@@ -22,6 +23,7 @@ export const ROLE_DOCS_URL =
  * @property {boolean} execProgram  member of pg_execute_server_program
  * @property {boolean} readFiles    member of pg_read_server_files
  * @property {boolean} writeFiles   member of pg_write_server_files
+ * @property {boolean} superMember  member of a superuser role (it can SET ROLE to it)
  */
 
 const yes = (v) => v === true || v === 1 || v === 't';
@@ -36,6 +38,7 @@ export function roleRisks(p) {
   if (p.execProgram) risks.push('pg_execute_server_program');
   if (p.readFiles) risks.push('pg_read_server_files');
   if (p.writeFiles) risks.push('pg_write_server_files');
+  if (p.superMember) risks.push('membership of a superuser role');
   return risks;
 }
 
@@ -60,12 +63,35 @@ const FULL = `
   SELECT current_user AS name, r.rolsuper, r.rolcreaterole, r.rolcreatedb,
     pg_has_role(current_user, 'pg_execute_server_program', 'MEMBER') AS exec_program,
     pg_has_role(current_user, 'pg_read_server_files', 'MEMBER') AS read_files,
-    pg_has_role(current_user, 'pg_write_server_files', 'MEMBER') AS write_files
+    pg_has_role(current_user, 'pg_write_server_files', 'MEMBER') AS write_files,
+    EXISTS (SELECT 1 FROM pg_roles s WHERE s.rolsuper AND pg_has_role(current_user, s.oid, 'MEMBER')) AS super_member
   FROM pg_roles r WHERE r.rolname = current_user`;
-// Servers before Postgres 11 have no predefined roles to ask about.
+// Servers before Postgres 11 have no predefined roles to ask about. Only that case (an unknown
+// role or function) uses this shorter question; any other error means "could not tell", never
+// "no extra rights".
 const BASIC = `
-  SELECT current_user AS name, r.rolsuper, r.rolcreaterole, r.rolcreatedb
+  SELECT current_user AS name, r.rolsuper, r.rolcreaterole, r.rolcreatedb,
+    EXISTS (SELECT 1 FROM pg_roles s WHERE s.rolsuper AND pg_has_role(current_user, s.oid, 'MEMBER')) AS super_member
   FROM pg_roles r WHERE r.rolname = current_user`;
+const UNDEFINED_OBJECT_OR_FUNCTION = new Set(['42704', '42883']);
+
+/** The answer of FULL or BASIC as RolePrivileges (null for no row). */
+export function privilegesFromRow(row) {
+  if (!row) return null;
+  return {
+    name: String(row.name),
+    superuser: yes(row.rolsuper),
+    createRole: yes(row.rolcreaterole),
+    createDb: yes(row.rolcreatedb),
+    execProgram: yes(row.exec_program),
+    readFiles: yes(row.read_files),
+    writeFiles: yes(row.write_files),
+    superMember: yes(row.super_member),
+  };
+}
+
+/** The two questions, for tests that ask them over a connection of their own. */
+export const ROLE_QUERIES = { full: FULL, basic: BASIC };
 
 /**
  * Read the privileges of the connected role. Postgres only; resolves to null on SQLite or when the
@@ -76,19 +102,10 @@ export async function readRolePrivileges() {
   if (!config.databaseUrl) return null;
   for (const sql of [FULL, BASIC]) {
     try {
-      const row = await prepare(sql).get();
-      if (!row) return null;
-      return {
-        name: String(row.name),
-        superuser: yes(row.rolsuper),
-        createRole: yes(row.rolcreaterole),
-        createDb: yes(row.rolcreatedb),
-        execProgram: yes(row.exec_program),
-        readFiles: yes(row.read_files),
-        writeFiles: yes(row.write_files),
-      };
-    } catch {
-      // try the simpler question
+      return privilegesFromRow(await prepare(sql).get());
+    } catch (err) {
+      if (!UNDEFINED_OBJECT_OR_FUNCTION.has(err?.code)) return null; // could not tell
+      // an older server: try the simpler question
     }
   }
   return null;
