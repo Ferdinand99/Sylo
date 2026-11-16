@@ -9,10 +9,12 @@
 // should have none of that: docs/postgres.md (Least-privilege database role).
 import { config } from '../config.js';
 import { prepare } from './driver.js';
-import { BUILD, REPO_URL } from '../bot/lib/buildInfo.js';
+import { REPO_URL } from '../bot/lib/buildInfo.js';
 
-// The docs of this version, so the link matches the behaviour the reader runs.
-export const ROLE_DOCS_URL = `${REPO_URL}/blob/v${BUILD.version}/docs/postgres.md#least-privilege-database-role`;
+// The docs on the default branch: a link to a release tag would point at docs without this
+// section until the first release that has it (and 404 for a build that has no tag). The section
+// only ever gets better, so the newest text is the right one for every version.
+export const ROLE_DOCS_URL = `${REPO_URL}/blob/main/docs/postgres.md#least-privilege-database-role`;
 
 /**
  * @typedef {object} RolePrivileges

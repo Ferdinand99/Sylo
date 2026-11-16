@@ -46,11 +46,8 @@ test('superuser, CREATEROLE and CREATEDB each warn, naming the right and linking
   assert.deepEqual(roleRisks({ ...plain, superuser: true, createDb: true }), ['SUPERUSER', 'CREATEDB']);
 });
 
-test('the docs link points at the least-privilege section of the docs of this version', () => {
-  assert.match(
-    ROLE_DOCS_URL,
-    /\/blob\/v\d+\.\d+\.\d+[^/]*\/docs\/postgres\.md#least-privilege-database-role$/
-  );
+test('the docs link points at the least-privilege section of docs/postgres.md on the default branch', () => {
+  assert.match(ROLE_DOCS_URL, /\/blob\/main\/docs\/postgres\.md#least-privilege-database-role$/);
 });
 
 test('on SQLite there is nothing to read and nothing to warn about', async () => {
