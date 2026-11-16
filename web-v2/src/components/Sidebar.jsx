@@ -141,9 +141,7 @@ export default function Sidebar({ activeGuildId, open, onClose, returnFocusRef }
         aria-label="Dashboard"
         inert={isDrawer && !open}
       >
-        {nav.top.length ? (
-          <NavLinks items={nav.top} pathname={pathname} onClose={onClose} />
-        ) : null}
+        {nav.top.length ? <NavLinks items={nav.top} pathname={pathname} onClose={onClose} /> : null}
         {/* The groups that belong to a server only exist once one is chosen: before that they would be a
             long column of greyed-out links. */}
         {activeGuildId ? (
