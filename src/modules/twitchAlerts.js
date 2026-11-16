@@ -108,13 +108,13 @@ export const rejectedLogins = createQuarantine();
  * isolated (see fetchIsolated) and left out. `report({ rejected, unresolved, inconclusive, skipped })` is called once with
  * the logins rejected now and every login this poll knows nothing about.
  */
-export async function fetchLiveStreams(logins, { report } = {}) {
+export async function fetchLiveStreams(logins, { report, groupOf } = {}) {
   const out = new Map();
   const { results, rejected, unresolved, inconclusive, skipped } = await fetchIsolated(
     logins,
     100,
     (batch) => helix('/streams', { user_login: batch }),
-    { quarantine: rejectedLogins }
+    { quarantine: rejectedLogins, groupOf }
   );
   report?.({ rejected, unresolved, inconclusive, skipped });
   for (const s of results) out.set(s.user_login.toLowerCase(), s);
@@ -199,12 +199,19 @@ export async function tick() {
   if (!jobs.length) return;
 
   const logins = [...new Set(jobs.map((j) => j.alert.login))];
+  // The server that saved each login (the lowest id, if several did): rejected values are batched
+  // by it, see lib/batchIsolation.js.
+  const savedBy = new Map();
+  for (const j of jobs)
+    if (!savedBy.has(j.alert.login) || j.guildId < savedBy.get(j.alert.login))
+      savedBy.set(j.alert.login, j.guildId);
   rejectedLogins.prune(new Set(logins));
   let streams;
   let users;
   let unresolved = new Set();
   try {
     streams = await fetchLiveStreams(logins, {
+      groupOf: (login) => savedBy.get(login) ?? null,
       report: ({ rejected, unresolved: left, inconclusive, skipped }) => {
         unresolved = left;
         if (skipped > 0) {

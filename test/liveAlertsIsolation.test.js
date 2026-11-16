@@ -799,3 +799,88 @@ test('kick tick: 250 poisoned slugs in five guilds converge and a guild behind t
     runtime.client = null;
   }
 });
+
+// --- round 5: fresh poison every poll from a few servers, the canary before the search -----------
+
+for (const [label, size, perGuild] of [
+  ['Twitch: 150 new rejected logins per poll from 3 servers', 100, 50],
+  ['Kick: 100 new rejected slugs per poll from 3 servers', 50, 34],
+]) {
+  test(`fetchIsolated: ${label} do not keep other servers' values unresolved`, async () => {
+    const quarantine = createQuarantine();
+    const victims = Array.from({ length: 20 }, (_, i) => `victim${i}`);
+    const owner = new Map();
+    victims.forEach((v, i) => owner.set(v, `v${i % 2}`));
+    const ask = async (batch) => {
+      if (batch.some((i) => i.startsWith('_'))) throw rejected(400);
+      return batch;
+    };
+    const fetchedEveryPoll = [];
+    for (let poll = 1; poll <= 8; poll += 1) {
+      // The same three servers save new rejected values every poll.
+      const fresh = [];
+      for (const g of ['a', 'b', 'c']) {
+        for (let i = 0; i < perGuild; i += 1) {
+          const name = `_${g}${poll}x${i}`;
+          owner.set(name, `bad-${g}`);
+          fresh.push(name);
+        }
+      }
+      const items = [...fresh.slice(0, perGuild), ...victims, ...fresh.slice(perGuild)];
+      const out = await fetchIsolated(items, size, ask, { quarantine, groupOf: (i) => owner.get(i) ?? null });
+      fetchedEveryPoll.push(victims.every((v) => out.results.includes(v)));
+    }
+    assert.ok(
+      fetchedEveryPoll.slice(1).every(Boolean),
+      `victims fetched in every poll after the first: ${fetchedEveryPoll.join(',')}`
+    );
+  });
+}
+
+test('fetchIsolated: a server is flagged when one of its values is found rejected, and only then', async () => {
+  const quarantine = createQuarantine();
+  const ask = async (batch) => {
+    if (batch.includes('_bad')) throw rejected(400);
+    return batch;
+  };
+  const group = (i) => (i === '_bad' ? 'guild-a' : 'guild-b');
+  await fetchIsolated(['_bad', 'ok1', 'ok2'], 10, ask, { quarantine, groupOf: group });
+  assert.equal(quarantine.isFlagged('guild-a'), true);
+  assert.equal(quarantine.isFlagged('guild-b'), false);
+});
+
+test('fetchIsolated: when no batch answers and the canary is refused too, the poll fails before the search', async () => {
+  const quarantine = createQuarantine();
+  quarantine.setGood('known-good');
+  const items = Array.from({ length: 300 }, (_, i) => `_x${i}`);
+  let calls = 0;
+  await assert.rejects(
+    fetchIsolated(
+      items,
+      100,
+      async () => {
+        calls += 1;
+        throw rejected(400);
+      },
+      { quarantine }
+    ),
+    /rejected 400/
+  );
+  assert.equal(calls, 3 + 1, 'three batches and the canary, no search');
+  assert.equal(quarantine.size, 0);
+});
+
+test('fetchIsolated: when no batch answers but the canary does, the search runs and the values are quarantined', async () => {
+  const quarantine = createQuarantine();
+  quarantine.setGood('known-good');
+  const out = await fetchIsolated(
+    ['_x1', '_x2'],
+    10,
+    async (batch) => {
+      if (batch.every((i) => i === 'known-good')) return batch;
+      throw rejected(400);
+    },
+    { quarantine }
+  );
+  assert.deepEqual(out.rejected.map((r) => r.item).sort(), ['_x1', '_x2']);
+});

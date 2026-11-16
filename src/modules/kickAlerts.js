@@ -114,7 +114,7 @@ export const rejectedSlugs = createQuarantine();
  * `report({ rejected, unresolved, inconclusive, skipped })` is called once with the slugs rejected now and every slug
  * this poll knows nothing about.
  */
-export async function fetchLiveChannels(slugs, { report } = {}) {
+export async function fetchLiveChannels(slugs, { report, groupOf } = {}) {
   const out = new Map();
   const { results, rejected, unresolved, inconclusive, skipped } = await fetchIsolated(
     slugs,
@@ -122,6 +122,7 @@ export async function fetchLiveChannels(slugs, { report } = {}) {
     getChannels,
     {
       quarantine: rejectedSlugs,
+      groupOf,
     }
   );
   report?.({ rejected, unresolved, inconclusive, skipped });
@@ -195,11 +196,19 @@ export async function tick() {
   if (!jobs.length) return;
 
   const slugs = [...new Set(jobs.map((j) => j.alert.slug))];
+  // The server that saved each slug (the lowest id, if several did): rejected values are batched
+  // by it, see lib/batchIsolation.js.
+  const savedBy = new Map();
+  for (const j of jobs) {
+    if (!savedBy.has(j.alert.slug) || j.guildId < savedBy.get(j.alert.slug))
+      savedBy.set(j.alert.slug, j.guildId);
+  }
   rejectedSlugs.prune(new Set(slugs));
   let live;
   let unresolved = new Set();
   try {
     live = await fetchLiveChannels(slugs, {
+      groupOf: (slug) => savedBy.get(slug) ?? null,
       report: ({ rejected, unresolved: left, inconclusive, skipped }) => {
         unresolved = left;
         if (skipped > 0) {

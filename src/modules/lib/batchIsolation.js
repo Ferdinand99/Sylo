@@ -5,14 +5,23 @@
 // poll for every other server. fetchIsolated() works in two phases:
 //  1. one request per batch. A batch that answers is done, and counts as evidence that the request
 //     itself is fine. This always fits the budget, so a clean batch is never left out because
-//     another one needed a long search.
+//     another one needed a long search. Batches are cut in this order: the values of groups (servers)
+//     not known to save rejected values, in one pool; then the suspects (see below) of those
+//     groups; then, for each flagged group, its own values on their own. If no batch answered, one
+//     canary request (below) is sent before phase 2, and a refused canary fails the poll at once.
 //  2. only the batches that failed are halved until the rejected items stand alone. This has its
 //     own budget (EXTRA_REQUESTS) and goes depth first: one failed batch is searched down to single
 //     values before the next is started, so every poll isolates (and so quarantines) values, however
-//     many there are. When the budget runs out, the items of the chunks not reached are left out of
-//     this poll (never failed) and remembered as suspects: the next poll batches them apart from
-//     the clean values, so the clean ones are always fetched, and searches them first. A poll never
-//     fails because the budget ran out.
+//     many there are. Failed batches are searched in the order they were cut, so the pool's failures
+//     come before the suspects' and the flagged groups'. When the budget runs out, the items of the
+//     chunks not reached are left out of this poll (never failed) and remembered as suspects: the
+//     next poll batches them after the clean values, so the clean ones are always fetched. A poll
+//     never fails because the budget ran out.
+//  A group (the server that saved a value, `groupOf`) is flagged when one of its values was found
+//  rejected, for FLAG_TTL_MS after the last time. Its values are never batched with other groups'
+//  values again while flagged, so a server that keeps saving fresh rejected values (150 a poll)
+//  cannot keep other servers' values unresolved. Not every group is batched apart all the time
+//  because that would cost one request per server per poll, however small.
 // The values found are quarantined with a growing backoff after the poll.
 //
 // Item fault or request fault? Only the statuses that can mean "this value" count (400, 404, 422);
@@ -25,6 +34,9 @@
 
 /** Requests per poll, beyond one per batch, for finding the rejected items. */
 export const EXTRA_REQUESTS = 120;
+
+/** How long a group stays flagged after one of its values was last found rejected. */
+export const FLAG_TTL_MS = 2 * 60 * 60_000;
 
 /** Statuses that can mean "this value was refused", as against a problem with the request. */
 const VALUE_STATUSES = new Set([400, 404, 422]);
@@ -48,6 +60,8 @@ export function createQuarantine({
   let turn = 0;
   /** @type {Set<string>} */
   let suspects = new Set();
+  /** @type {Map<string, number>} group -> when its flag runs out */
+  const flagged = new Map();
   return {
     /** True while the item is waiting out its backoff. */
     has(key) {
@@ -83,6 +97,19 @@ export function createQuarantine({
     setGood(item) {
       good = item;
     },
+    /** Flag a group (a server that saved a rejected value) for FLAG_TTL_MS from now. */
+    flag(group) {
+      flagged.set(group, now() + FLAG_TTL_MS);
+    },
+    isFlagged(group) {
+      const until = flagged.get(group);
+      if (until === undefined) return false;
+      if (until <= now()) {
+        flagged.delete(group);
+        return false;
+      }
+      return true;
+    },
     /** Values left unchecked inside a failed chunk when the last poll ran out of budget. */
     get suspects() {
       return suspects;
@@ -106,7 +133,7 @@ export function createQuarantine({
  * @param {string[]} items
  * @param {number} size
  * @param {(batch: string[]) => Promise<T[]>} fetchBatch   throws an error with `.status` on a non-OK answer
- * @param {{ quarantine: ReturnType<typeof createQuarantine>, extraRequests?: number }} o
+ * @param {{ quarantine: ReturnType<typeof createQuarantine>, extraRequests?: number, groupOf?: (item: string) => string | null }} o
  * @returns {Promise<{
  *   results: T[],
  *   rejected: Array<{ item: string, err: Error, waitMs: number, strikes: number }>,
@@ -116,7 +143,12 @@ export function createQuarantine({
  * }>} `skipped`: how many items were left out only because the budget ran out. `unresolved`: the items this poll knows nothing about (quarantined before, rejected now, or
  *   not reached when the budget ran out); their stored state must be left alone.
  */
-export async function fetchIsolated(items, size, fetchBatch, { quarantine, extraRequests = EXTRA_REQUESTS }) {
+export async function fetchIsolated(
+  items,
+  size,
+  fetchBatch,
+  { quarantine, extraRequests = EXTRA_REQUESTS, groupOf = () => null }
+) {
   const results = [];
   const unresolved = new Set();
   const found = []; // rejected on their own: { item, err }
@@ -146,23 +178,50 @@ export async function fetchIsolated(items, size, fetchBatch, { quarantine, extra
     unresolved.add(item);
     return false;
   });
-  // Values left unchecked in a failed chunk by an earlier poll go in batches of their own, after
-  // the others, so clean values never wait behind them.
-  const suspect = live.filter((item) => quarantine.suspects.has(item));
-  const clean = live.filter((item) => !quarantine.suspects.has(item));
-  const start = quarantine.nextStart(clean.length, size);
+  // Cut the batches: the pool of unflagged groups first, then its suspects (values left unchecked
+  // in a failed chunk by an earlier poll), then each flagged group on its own.
+  const flaggedItems = new Map(); // group -> items
+  const pool = [];
+  const poolSuspects = [];
+  for (const item of live) {
+    const group = groupOf(item);
+    if (group !== null && quarantine.isFlagged(group)) {
+      if (!flaggedItems.has(group)) flaggedItems.set(group, []);
+      flaggedItems.get(group).push(item);
+    } else if (quarantine.suspects.has(item)) poolSuspects.push(item);
+    else pool.push(item);
+  }
+  const start = quarantine.nextStart(pool.length, size);
   const batches = [];
-  for (const group of [[...clean.slice(start), ...clean.slice(0, start)], suspect]) {
-    for (let i = 0; i < group.length; i += size) batches.push(group.slice(i, i + size));
+  for (const list of [
+    [...pool.slice(start), ...pool.slice(0, start)],
+    poolSuspects,
+    ...flaggedItems.values(),
+  ]) {
+    for (let i = 0; i < list.length; i += size) batches.push(list.slice(i, i + size));
   }
 
   // Phase 1: one request per batch.
   const failed = [];
+  let firstFailure = null;
   for (const batch of batches) {
     const answer = await ask(batch);
     if (answer === true) continue;
+    firstFailure ??= answer;
     if (batch.length === 1) found.push({ item: batch[0], err: answer });
     else failed.push(batch);
+  }
+
+  // Nothing answered: before spending the search budget, ask the canary. Refused too means the
+  // request is at fault, and the poll fails now instead of after 120 more refused requests.
+  let canaryAnswered = false;
+  if (succeeded === 0 && firstFailure !== null && canary) {
+    const answer = await ask([canary], false).catch((err) => err);
+    if (answer !== true) {
+      quarantine.setGood(null);
+      throw firstFailure;
+    }
+    canaryAnswered = true;
   }
 
   // Phase 2: search the failed batches depth first until the budget is used up. Both halves of a
@@ -197,7 +256,9 @@ export async function fetchIsolated(items, size, fetchBatch, { quarantine, extra
   let inconclusive = false;
   let quarantineFound = found.length > 0;
   if (quarantineFound) {
-    if (canary && !found.some((f) => f.item === canary)) {
+    if (canaryAnswered) {
+      // already asked, and the platform answers it: the values are at fault
+    } else if (canary && !found.some((f) => f.item === canary)) {
       // Is the platform refusing everything? One request with a value that was fine before. A
       // failure of this request of any kind counts as "refused": it must not throw away what the
       // poll already fetched.
@@ -221,6 +282,8 @@ export async function fetchIsolated(items, size, fetchBatch, { quarantine, extra
   for (const { item, err } of found) {
     unresolved.add(item);
     if (!quarantineFound) continue;
+    const group = groupOf(item);
+    if (group !== null) quarantine.flag(group);
     const waitMs = quarantine.add(item);
     rejected.push({ item, err, waitMs, strikes: quarantine.strikes(item) });
   }
