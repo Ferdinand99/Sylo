@@ -46,10 +46,19 @@ body.has-look-image {
 body.has-look-image .v2-public-page {
   margin-top: 16px;
   margin-bottom: 16px;
+  /* The panel is as tall as its page, not the window, so a short page leaves the picture showing. */
+  flex: none;
   border-radius: var(--radius);
   background: color-mix(in srgb, var(--bg-main) var(--look-panel), transparent);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
+}
+/* On a phone the panel is not edge to edge: a margin all round lets the picture show on every side. */
+@media (max-width: 600px) {
+  body.has-look-image .v2-public-page {
+    margin: 12px;
+    width: auto;
+  }
 }
 /* Over a picture the top bar's glass is always on (it is otherwise only on once the page scrolls), so the brand
    and the theme switch never sit directly on the picture. */
@@ -154,8 +163,13 @@ body.has-look-image .v2-powered a {
   font-size: var(--fs-xs);
   color: var(--text-muted);
 }
-.v2-look-ratio {
-  white-space: nowrap;
+/* Air between the intro and the first field, and around the warning about a hard-to-read colour. */
+.v2-look-intro {
+  margin-bottom: 16px;
+}
+.v2-look-warning {
+  margin-top: 12px;
+  margin-bottom: 0;
 }
 @media (prefers-reduced-transparency: reduce) {
   .v2-look-preview.has-image .v2-look-preview-panel,

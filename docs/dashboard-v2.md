@@ -87,7 +87,9 @@ things change and nothing else: the **accent colour** (buttons, links and highli
 background is none, a picture you upload (PNG, JPEG or WebP, at most 2 MB; Sylo stores a re-encoded copy without
 metadata, at most 1920 pixels wide, and serves it itself), or the server's **invite background** on Discord or
 Fluxer: Sylo downloads it once, keeps its own copy, checks it once a day and serves it itself, so a visitor's
-browser never talks to Discord or Fluxer. The settings show a live preview of the application form page.
+browser never talks to Discord or Fluxer. The settings show a live preview of the application form page. The section
+is saved with the Settings page's own Save bar, so leaving the page with unsaved changes here asks first, like any other
+form. On a phone the page keeps a margin around its panel so the picture shows on every side.
 
 What stays Sylo's: the layout, the type, the components, the light and dark themes, the readability and the small
 "Powered by Sylo" link (to sylobot.com) at the bottom of every public page, which cannot be turned off. The page always

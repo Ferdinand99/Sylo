@@ -1,6 +1,7 @@
 import { configure, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PublicPagesSettings from '../components/PublicPagesSettings.jsx';
+import { usePublicLookForm } from '../components/usePublicLookForm.js';
 import { AccessProvider } from '../access.jsx';
 
 // the whole suite runs on two busy CPUs in CI: role queries with names are slow in jsdom
@@ -35,11 +36,24 @@ const look = (over = {}) => ({
   ...over,
 });
 
+// The page (Settings.jsx) keeps the section's state and saves it with its bar; this stands in for the bar.
+function Harness() {
+  const look = usePublicLookForm(GUILD);
+  return (
+    <>
+      <PublicPagesSettings look={look} />
+      <button type="button" disabled={!look.dirty || look.busy} onClick={look.save}>
+        Save public pages
+      </button>
+    </>
+  );
+}
+
 function renderSection(level = 'edit') {
   api.getGuildAccess.mockResolvedValue({ level });
   return render(
     <AccessProvider guildId={GUILD}>
-      <PublicPagesSettings guildId={GUILD} />
+      <Harness />
     </AccessProvider>
   );
 }
@@ -93,21 +107,37 @@ describe('Server settings: Public pages', () => {
     // the link in the preview uses the text colour made from the accent (4.5:1), not the accent itself
     expect(preview.style.getPropertyValue('--accent-text')).toMatch(/^#[0-9a-f]{6}$/);
     expect(preview.style.getPropertyValue('--accent-text')).not.toBe('#5865f2');
-    expect(screen.queryByText(/too hard to read/)).toBeNull();
+    expect(screen.queryByText(/to read on the card/)).toBeNull();
+    expect(screen.getByText(/Readable in both themes\./)).toBeTruthy();
     expect(screen.getByText('Submit application')).toBeTruthy();
     expect(screen.getByText('Powered by Sylo', { selector: 'p' })).toBeTruthy();
 
-    // a deep blue is hard to read on the dark card (the theme now shown): Sylo's colour, and the note says so
+    // a deep blue is hard to read on the dark card (the theme now shown): Sylo's colour, and a warning says so
     fireEvent.change(input, { target: { value: '#1a2a6c' } });
     expect(preview.style.getPropertyValue('--accent')).toBe(SYLO.dark);
-    expect(
-      screen.getByText(/too hard to read on the card in the dark theme, so public pages use Sylo/)
-    ).toBeTruthy();
+    const warning = screen.getByText(
+      /too dark to read on the card in the dark theme, so public pages use Sylo's own colour there\. Pick a lighter shade for the dark theme\./
+    );
+    expect(warning.closest('.v2-callout').classList.contains('is-warning')).toBe(true);
+    expect(screen.getByText(/Too dark for the dark theme\./)).toBeTruthy();
 
     // the light theme reads it, and the preview follows the theme of the dashboard
     document.documentElement.setAttribute('data-theme', 'light');
     fireEvent.change(input, { target: { value: '#1a2a6d' } });
     expect(preview.style.getPropertyValue('--accent')).toBe('#1a2a6d');
+  });
+
+  it('says it in plain words, with no contrast ratios on the page', async () => {
+    api.getPublicLook.mockResolvedValue(look());
+    const { container } = renderSection();
+    const input = await screen.findByLabelText('Accent colour');
+    // a pale yellow is fine on the dark card but too light for the light theme
+    fireEvent.change(input, { target: { value: '#ffd166' } });
+    expect(screen.getByText(/Too light for the light theme\./)).toBeTruthy();
+    expect(screen.getByText(/Pick a darker shade for the light theme\./)).toBeTruthy();
+    expect(container.textContent).not.toMatch(/\d:1/);
+    // the numbers are for the tooltip
+    expect(screen.getByText(/Shown in the dark theme\./).getAttribute('title')).toMatch(/light: 1\.\d+:1/);
   });
 
   it('refuses a colour that is not one and keeps the save button off', async () => {
