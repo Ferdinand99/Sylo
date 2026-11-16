@@ -33,6 +33,10 @@ import {
   recordFeedFailure,
   recordFeedSuccess,
   pruneFeedHealth,
+  liveDue,
+  recordLiveFailure,
+  recordLiveSuccess,
+  pruneLiveHealth,
 } from './lib/youtubeFeedHealth.js';
 
 const FEED = 'https://www.youtube.com/feeds/videos.xml?channel_id=';
@@ -224,7 +228,12 @@ async function fetchFeed(ytChannelId) {
 
 // --- live check ------------------------------------------------------
 
-/** @returns {Promise<{ live: boolean, videoId?: string, title?: string }>} */
+/**
+ * Is the channel live? `live: null` means unknown: the page could not be read (an HTTP error, a
+ * timeout, a body past the cap), which is not the same as "not live" and must not end a live post.
+ * The caller counts it (lib/youtubeFeedHealth.js) instead of a log line per failure.
+ * @returns {Promise<{ live: boolean|null, videoId?: string, title?: string, status?: number, reason?: string }>}
+ */
 export async function checkLive(ytChannelId) {
   try {
     const res = await fetch(`https://www.youtube.com/channel/${ytChannelId}/live`, {
@@ -232,12 +241,11 @@ export async function checkLive(ytChannelId) {
       signal: AbortSignal.timeout(10_000),
       redirect: 'follow',
     });
-    // Not-ok is a real fetch problem (blocked/rate-limited/etc.) — worth a
-    // log, unlike "not currently live", which is the normal, frequent
-    // outcome of this poll and would just be noise.
+    // Not-ok is a real fetch problem (blocked/rate-limited/etc.), unlike "not currently live",
+    // which is the normal, frequent outcome of this poll. Unknown, never "not live".
     if (!res.ok) {
-      log.warn('youtube-alerts', `live check ${ytChannelId}: HTTP ${res.status}`);
-      return { live: false };
+      await res.body?.cancel?.().catch(() => {});
+      return { live: null, status: res.status, reason: `HTTP ${res.status}` };
     }
     const html = await readTextCapped(res, MAX_PAGE_BYTES);
     const isLive = /"isLive":true/.test(html) || /"isLiveNow":true/.test(html);
@@ -252,8 +260,8 @@ export async function checkLive(ytChannelId) {
     );
     return videoId ? { live: true, videoId, title } : { live: false };
   } catch (err) {
-    log.warn('youtube-alerts', `live check ${ytChannelId}: ${err.message}`);
-    return { live: false };
+    const timedOut = err?.name === 'TimeoutError' || err?.name === 'AbortError';
+    return { live: null, reason: timedOut ? 'timeout' : String(err?.message ?? err) };
   }
 }
 
@@ -330,38 +338,45 @@ async function tick() {
   if (!allClientsReady()) return;
   await pruneYoutube();
 
-  const watched = new Set();
+  // One clock for the whole pass: the backoff compares it with the clock of the last pass, so a slow
+  // earlier alert must not push a later one past its slot.
+  const now = Date.now();
+  const watchedFeeds = new Set();
+  const watchedLive = new Set();
   for (const guild of allGuilds()) {
     if (!(await isModuleEnabled(guildKey(guild), 'youtube-alerts'))) continue;
     const cfg = normaliseYoutubeConfig((await getGuildModule(guildKey(guild), 'youtube-alerts')).config);
     for (const alert of cfg.alerts) {
-      if (alert.onVideo) watched.add(alert.ytChannelId);
+      if (alert.onVideo) watchedFeeds.add(alert.ytChannelId);
+      if (alert.onLive) watchedLive.add(alert.ytChannelId);
       try {
-        await runAlert(guildKey(guild), alert);
+        await runAlert(guildKey(guild), alert, now);
       } catch (err) {
         log.error('youtube-alerts', `${alert.ytChannelId}:`, err.message);
       }
     }
   }
   // Only after a whole pass: a channel nobody watches any more must not keep its failure count.
-  pruneFeedHealth(watched);
+  pruneFeedHealth(watchedFeeds);
+  pruneLiveHealth(watchedLive);
 }
 
 /**
  * Poll one channel's feed and announce what is new. A feed that cannot be reached is counted, not
  * logged (lib/youtubeFeedHealth.js), and polled less often until it answers. Nothing is marked
  * seen meanwhile, so the poll that gets an answer announces whatever was missed.
+ * @returns {Promise<boolean>} whether the feed was read (false: backing off, or it failed)
  */
 async function pollFeed(guildId, alert, now) {
   const c = alert.ytChannelId;
-  if (!feedDue(c, now)) return;
+  if (!feedDue(c, now)) return false;
   let entries;
   try {
     entries = await fetchFeed(c);
   } catch (err) {
     if (!(err instanceof FeedUnavailableError)) throw err;
     recordFeedFailure(c, err, POLL_MS, now);
-    return;
+    return false;
   }
   recordFeedSuccess(c);
   if (!(await hasSeenAny(guildId, c))) {
@@ -376,6 +391,7 @@ async function pollFeed(guildId, alert, now) {
       await announceVideo(guildId, alert, e);
     }
   }
+  return true;
 }
 
 /** @param {number} [now]  for tests: the clock the feed backoff reads */
@@ -383,10 +399,25 @@ export async function runAlert(guildId, alert, now = Date.now()) {
   const c = alert.ytChannelId;
 
   // A dead feed does not stop the live check below: that reads another page.
-  if (alert.onVideo) await pollFeed(guildId, alert, now);
+  const feedRead = alert.onVideo ? await pollFeed(guildId, alert, now) : true;
 
   if (alert.onLive) {
+    // The live branch marks the stream as seen, which would make an alert whose feed was never read
+    // look seeded: the first good feed poll would then announce every old upload. Wait for the seed.
+    if (!feedRead && !(await hasSeenAny(guildId, c))) return;
+    if (!liveDue(c, now)) return;
     const state = await checkLive(c);
+    if (state.live === null) {
+      // Unknown, not "not live": leave a running live post alone and do not announce again.
+      recordLiveFailure(
+        c,
+        new FeedUnavailableError(state.reason ?? 'unknown', state.status ?? null),
+        POLL_MS,
+        now
+      );
+      return;
+    }
+    recordLiveSuccess(c);
     const known = await liveVideoId(guildId, c);
     if (state.live && state.videoId !== known) {
       const name = alert.name || 'A channel';
@@ -428,8 +459,7 @@ export async function runAlert(guildId, alert, now = Date.now()) {
 every(
   'youtube-alerts',
   POLL_MS,
-  () => {
-    tick().catch((err) => log.error('youtube-alerts', 'tick failed:', err.message));
-  },
+  // Returned, so the scheduler sees a tick that is still running and skips the next one.
+  () => tick().catch((err) => log.error('youtube-alerts', 'tick failed:', err.message)),
   { firstDelayMs: 40_000 }
 );

@@ -677,6 +677,11 @@ test('a failing YouTube feed is not reported before a day, for a 5xx, once it an
 
   _resetFeedHealthForTests();
   failFeed(404, Date.now() - 2 * DAY);
+  failFeed(503, Date.now() - 60_000);
+  assert.deepEqual(await run(), [], 'a 5xx in between starts the count again');
+
+  _resetFeedHealthForTests();
+  failFeed(404, Date.now() - 2 * DAY);
   assert.deepEqual(await run(ytAlert({ onVideo: false })), [], 'announcements for new videos are off');
   assert.equal((await run()).length, 1);
   recordFeedSuccess(YT);
