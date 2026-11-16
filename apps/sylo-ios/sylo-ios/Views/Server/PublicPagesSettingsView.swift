@@ -186,7 +186,9 @@ struct PublicPagesSettingsView: View {
         let fill = AccentColour.effective(accent, dark: dark)
         return Section {
             PublicLookPreview(
-                accent: Color(hex: fill) ?? .accentColor, onAccent: Color(hex: AccentColour.onAccent(fill)) ?? .white,
+                accent: Color(hex: fill) ?? .accentColor,
+                accentText: Color(hex: AccentColour.effectiveText(accent, dark: dark)) ?? .accentColor,
+                onAccent: Color(hex: AccentColour.onAccent(fill)) ?? .white,
                 imagePath: model.previewImagePath, isDark: dark)
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
@@ -290,6 +292,8 @@ struct PublicPagesSettingsView: View {
 /// overlay over the picture, the semi-opaque card, one button in the accent colour, and the "Powered by Sylo" link.
 private struct PublicLookPreview: View {
     let accent: Color
+    /// The colour of links and labels: the accent lightened or darkened until it reads, as on the pages.
+    let accentText: Color
     let onAccent: Color
     let imagePath: String?
     let isDark: Bool
@@ -323,10 +327,10 @@ private struct PublicLookPreview: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("YOUR SERVER")
                 .font(.caption2.weight(.semibold))
-                .foregroundStyle(accent)
+                .foregroundStyle(accentText)
             Text("Staff application")
                 .font(.headline)
-            (Text("Tell us a little about you. ") + Text("Read the rules first").foregroundStyle(accent) + Text("."))
+            (Text("Tell us a little about you. ") + Text("Read the rules first").foregroundStyle(accentText) + Text("."))
                 .font(.footnote)
             Text("Why do you want to join?")
                 .font(.footnote)

@@ -10,6 +10,7 @@ struct ModerationTabView: View {
     let session: AppSession
     private let showsAppeals: Bool
     private let showsCommands: Bool
+    private let initialPart: Part
 
     /// The open appeals, kept by ``ServerView`` for the tab's badge; the Appeals segment shows it too.
     @Environment(OpenAppealsModel.self) private var openAppeals: OpenAppealsModel?
@@ -27,6 +28,7 @@ struct ModerationTabView: View {
         self.session = session
         self.showsAppeals = showsAppeals
         self.showsCommands = showsCommands
+        self.initialPart = initialPart
         _part = State(initialValue: initialPart)
     }
 
@@ -34,6 +36,15 @@ struct ModerationTabView: View {
     private var appealsTitle: LocalizedStringKey {
         if let count = openAppeals?.count, count > 0 { return "Appeals (\(count))" }
         return "Appeals"
+    }
+
+    /// The part shown: the chosen one, unless it is not offered here.
+    private var visiblePart: Part {
+        switch part {
+        case .appeals where !showsAppeals: .infractions
+        case .commands where !showsCommands: .infractions
+        default: part
+        }
     }
 
     var body: some View {
@@ -49,7 +60,7 @@ struct ModerationTabView: View {
                 .padding(.vertical, 8)
             }
 
-            switch part {
+            switch visiblePart {
             case .infractions:
                 ModerationView(server: server, session: session)
             case .appeals:
@@ -59,6 +70,9 @@ struct ModerationTabView: View {
                 CommandsView(server: server, session: session, isEmbedded: true).disabledBelow()
             }
         }
+        // The focused view starts on Appeals when that is where the server opens; the overview that decides it may
+        // arrive after this view was made, so the start is applied again when it changes.
+        .onChange(of: initialPart) { _, start in part = start }
     }
 }
 

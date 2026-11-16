@@ -268,6 +268,7 @@ struct UpdatesRow: View {
                 }
             }
         }
-        .task(id: session.generation) { await model.load() }
+        // Reads the status only: following a run belongs to the screen that shows it.
+        .task(id: session.generation) { await model.load(followsRun: false) }
     }
 }

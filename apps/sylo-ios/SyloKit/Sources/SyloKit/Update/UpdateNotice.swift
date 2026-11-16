@@ -461,18 +461,24 @@ public final class UpdateModel {
         self.giveUpAfter = giveUpAfter
     }
 
-    /// Reads the notice. A run that is already going (started here earlier, or in Wise Wren) is followed too.
-    public func load(refresh: Bool = false) async {
+    /// Reads the notice. A run that is already going (started here earlier, or in Wise Wren) is followed too, also
+    /// when this read fails: Sylo is down while it restarts, and the person who looked away comes back to that.
+    /// - Parameter followsRun: False for a row that only shows the status, so nothing keeps asking for a screen
+    ///   that is not there.
+    public func load(refresh: Bool = false, followsRun: Bool = true) async {
         isLoading = true
-        defer { isLoading = false }
         let generation = session.generation
+        defer {
+            isLoading = false
+            if followsRun, session.generation == generation { resumeOpenRun() }
+        }
         do {
             let loaded = try await session.send(Endpoints.LoadUpdate(refresh: refresh))
             guard session.generation == generation else { return }
             status = loaded
             isRefused = false
             errorMessage = nil
-            if following == nil, progress?.isDone != true, let run = loaded.wren?.latestRun, !run.isFinished {
+            if followsRun, following == nil, progress?.isDone != true, let run = loaded.wren?.latestRun, !run.isFinished {
                 follow(runID: run.id, from: loaded.current)
             }
         } catch {
@@ -523,10 +529,19 @@ public final class UpdateModel {
         following = nil
     }
 
-    /// Starts following a run. A second call while one is followed is ignored.
+    /// Asks again for a run that was being followed and is not done (the person left the screen).
+    private func resumeOpenRun() {
+        guard following == nil, let open = progress, !open.isDone else { return }
+        follow(runID: open.runID, from: open.from)
+    }
+
+    /// Starts following a run. A second call while one is followed is ignored. The last state of the same run is
+    /// kept, so the screen does not fall back to "approved" when it is picked up again.
     public func follow(runID: Int, from: String) {
         guard following == nil else { return }
-        progress = UpdateProgress(runID: runID, from: from)
+        if progress?.runID != runID || progress?.isDone == true {
+            progress = UpdateProgress(runID: runID, from: from)
+        }
         followCount += 1
         let mine = followCount
         following = Task { [weak self] in
@@ -543,8 +558,22 @@ public final class UpdateModel {
         case .server(let status):
             // Wise Wren's refusals come as JSON with the words; a proxy's 502 or 503 has none.
             return status.message == nil
+        case .notFound:
+            // A reverse proxy without an upstream answers "404 page not found" as plain text while Sylo restarts;
+            // Sylo's own 404s (a run that is not Sylo's, Wise Wren not set up) carry their words.
+            return error.serverMessage == nil
         default:
             return false
+        }
+    }
+
+    /// Whether a failed read will fail the same way next time, so asking on is no use: the account is no longer an
+    /// operator, or the run or Wise Wren is not there.
+    public nonisolated static func isPermanent(_ error: NetworkError) -> Bool {
+        switch error {
+        case .forbidden: true
+        case .notFound: error.serverMessage != nil
+        default: false
         }
     }
 
@@ -557,6 +586,7 @@ public final class UpdateModel {
             var finished = false
             var down = false
             var problem: String?
+            var permanent = false
             var run: WrenRun?
             do {
                 let answer = try await session.send(Endpoints.LoadUpdateRun(id: runID))
@@ -570,6 +600,7 @@ public final class UpdateModel {
                     wasDown = true
                 } else {
                     problem = error.userMessage
+                    permanent = Self.isPermanent(error)
                 }
             }
             var newVersion: String?
@@ -577,6 +608,8 @@ public final class UpdateModel {
             if !down, wasDown || finished {
                 if let fresh = try? await session.send(Endpoints.LoadUpdate()), session.generation == generation {
                     status = fresh
+                    // Sylo answered: the restart is over, so the version is read again only when the run ends.
+                    wasDown = false
                     if !fresh.current.isEmpty, fresh.current != from { newVersion = fresh.current }
                 }
             }
@@ -588,7 +621,7 @@ public final class UpdateModel {
             if let newVersion { next.newVersion = newVersion }
             let timedOut = newVersion == nil && !finished && clock.now - started > giveUpAfter
             next.timedOut = timedOut
-            next.isDone = newVersion != nil || finished || timedOut
+            next.isDone = newVersion != nil || finished || timedOut || permanent
             progress = next
             if next.isDone { break }
             try? await Task.sleep(for: pollEvery)

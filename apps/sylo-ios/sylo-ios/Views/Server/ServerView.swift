@@ -32,6 +32,8 @@ struct ServerView: View {
     @AppStorage(ModeratorView.showEverythingKey) private var showEverything = false
     /// The read of what this Sylo announces has finished, whether or not it worked.
     @State private var featureCheckDone = false
+    /// The short wait for that read is over: the app draws as it would without the features.
+    @State private var featureWaitOver = false
 
     enum ServerTab: Hashable {
         case modules, tickets, tools, moderation, settings
@@ -55,9 +57,10 @@ struct ServerView: View {
     /// Whether this Sylo announces the focused view; nil while that is not known (the read of its features is
     /// on its way), so an Inbox person never sees the full app flash before it narrows.
     private var supportsModeratorView: Bool? {
-        if session.has(.moderatorView) { return true }
-        if session.featuresKnown || featureCheckDone { return false }
-        return nil
+        ModeratorView.supports(
+            hasFeature: session.has(.moderatorView), featuresRead: session.featuresKnown || featureCheckDone,
+            // The sign-in already read this server's info: a Sylo without the feature is known at once.
+            serverInfoKnown: session.serverInfo != nil, waited: featureWaitOver)
     }
 
     private var mode: ModeratorView.Mode {
@@ -104,7 +107,7 @@ struct ServerView: View {
         switch mode {
         case .full: fullTabs
         case .focused: focusedTabs
-        case .undecided: ProgressView()
+        case .undecided: ProgressView("Loading Server")
         }
     }
 
@@ -133,7 +136,6 @@ struct ServerView: View {
     /// settings, no audit log.
     private var focusedTabs: some View {
         let shown = ModeratorView.tabs(overview: overview.overview)
-        let landing = ModeratorView.landing(overview: overview.overview)
         return TabView(selection: selection) {
             if shown.contains(.tickets) {
                 TicketListView(model: tickets)
@@ -147,7 +149,7 @@ struct ServerView: View {
             ModerationTabView(
                 server: summary.id, session: session,
                 showsAppeals: ModeratorView.showsAppeals(overview: overview.overview), showsCommands: false,
-                initialPart: landing == .appeals ? .appeals : .infractions
+                initialPart: ModeratorView.moderationStart(overview: overview.overview) == .appeals ? .appeals : .infractions
             )
                 .tabItem { Label("Moderation", systemImage: "shield") }
                 .badge(openAppeals.count ?? 0)
@@ -225,6 +227,11 @@ struct ServerView: View {
         .task {
             _ = await session.serverFeatures()
             featureCheckDone = true
+        }
+        // An Inbox person waits for that read only a moment; then the app draws as it does without the feature.
+        .task {
+            try? await Task.sleep(for: ModeratorView.featureWait)
+            featureWaitOver = true
         }
         // The focused view has no Modules tab to load the overview, and its tabs and landing depend on it.
         .task(id: mode) {

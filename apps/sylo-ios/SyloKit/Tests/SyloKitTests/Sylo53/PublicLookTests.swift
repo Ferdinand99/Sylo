@@ -31,7 +31,7 @@ let publicLookJSON = #"""
   "sylo": {"accent": {"dark": "#38c8f0", "light": "#076787"}},
   "effective": {
     "accent": {"dark": "#5865f2", "light": "#5865f2"},
-    "accentText": {"dark": "#8b95f6", "light": "#5865f2"},
+    "accentText": {"dark": "#737ef4", "light": "#5865f2"},
     "contrast": {"dark": {"ratio": 3.92, "ok": true}, "light": {"ratio": 4.61, "ok": true}},
     "fallback": [], "note": null,
     "backgroundUrl": "/look/900000000000000201.0123456789abcdef.webp",
@@ -56,7 +56,7 @@ struct PublicLookDecodingTests {
         #expect(look.limits.maxBytes == 2_097_152)
         #expect(look.limits.maxSide == 1920)
         #expect(look.effective.accent?.dark == "#5865f2")
-        #expect(look.effective.accentText?.dark == "#8b95f6")
+        #expect(look.effective.accentText?.dark == "#737ef4")
         #expect(look.effective.fallback.isEmpty)
         #expect(look.effective.note == nil)
         #expect(look.effective.backgroundURL == "/look/900000000000000201.0123456789abcdef.webp")

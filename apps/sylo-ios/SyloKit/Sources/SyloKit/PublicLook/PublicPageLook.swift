@@ -257,8 +257,12 @@ public enum AccentColour {
     public static let card = ThemePair(dark: "#161618", light: "#ffffff")
     /// Sylo's own accent per theme.
     public static let syloAccent = ThemePair(dark: "#38c8f0", light: "#076787")
+    /// The page colour behind the card, per theme.
+    public static let page = ThemePair(dark: "#0b0b0d", light: "#f5f5f7")
     /// The least contrast an accent needs against the card to be used at all (WCAG for interface elements).
     public static let minimumContrast = 3.0
+    /// The least contrast of accent text (WCAG AA).
+    public static let minimumTextContrast = 4.5
 
     /// The colour as `#rrggbb` in lower case, empty for none, or nil when it is not a colour. Accepts `#rgb`,
     /// `#rrggbb` and the same without the `#`.
@@ -317,8 +321,9 @@ public enum AccentColour {
     public static func fallbackThemes(_ accent: String) -> [String] {
         guard !accent.isEmpty, components(accent) != nil else { return [] }
         var themes: [String] = []
-        if ratio(of: accent, dark: true) < minimumContrast { themes.append("dark") }
-        if ratio(of: accent, dark: false) < minimumContrast { themes.append("light") }
+        // The raw ratio decides, as on the server; the rounded one is only for showing.
+        if contrast(accent, card.dark) < minimumContrast { themes.append("dark") }
+        if contrast(accent, card.light) < minimumContrast { themes.append("light") }
         return themes
     }
 
@@ -339,7 +344,48 @@ public enum AccentColour {
     public static func effective(_ accent: String, dark: Bool) -> String {
         let fallback = dark ? syloAccent.dark : syloAccent.light
         guard !accent.isEmpty, components(accent) != nil else { return fallback }
-        return ratio(of: accent, dark: dark) >= minimumContrast ? accent : fallback
+        return contrast(accent, dark ? card.dark : card.light) >= minimumContrast ? accent : fallback
+    }
+
+    /// The colour `t` (0 to 1) of the way from `a` to `b`, both `#rrggbb`.
+    public static func mix(_ a: String, _ b: String, _ t: Double) -> String {
+        guard let x = components(a), let y = components(b) else { return a }
+        func channel(_ from: Int, _ to: Int) -> Int {
+            let value = min(255, max(0, Double(from) + (Double(to) - Double(from)) * t))
+            // Like JavaScript's Math.round: halves go up.
+            return Int((value + 0.5).rounded(.down))
+        }
+        let packed = (channel(x.red, y.red) << 16) | (channel(x.green, y.green) << 8) | channel(x.blue, y.blue)
+        let digits = String(packed, radix: 16)
+        return "#" + String(repeating: "0", count: 6 - digits.count) + digits
+    }
+
+    /// The accent as a text colour in a theme (links, labels): the accent itself when it reaches 4.5:1 against the
+    /// card, the page and both tinted with the accent, else the same hue mixed toward white (dark theme) or black
+    /// (light theme) in small steps until it does. The same steps as the server (`accentText`).
+    public static func accentText(_ accent: String, dark: Bool) -> String {
+        guard components(accent) != nil else { return accent }
+        let card = dark ? Self.card.dark : Self.card.light
+        let page = dark ? Self.page.dark : Self.page.light
+        let backs = [card, page, mix(card, accent, 0.14), mix(page, accent, 0.14)]
+        func reads(_ colour: String) -> Bool { backs.allSatisfy { contrast(colour, $0) >= minimumTextContrast } }
+        if reads(accent) { return accent }
+        let target = dark ? "#ffffff" : "#000000"
+        var t = 0.02
+        while t < 1 {
+            let candidate = mix(accent, target, t)
+            if reads(candidate) { return candidate }
+            t += 0.02
+        }
+        return target
+    }
+
+    /// The text colour really used in a theme: ``accentText(_:dark:)`` where the accent is used, else Sylo's own.
+    public static func effectiveText(_ accent: String, dark: Bool) -> String {
+        let fallback = dark ? syloAccent.dark : syloAccent.light
+        guard !accent.isEmpty, components(accent) != nil else { return fallback }
+        let fits = contrast(accent, dark ? card.dark : card.light) >= minimumContrast
+        return fits ? accentText(accent, dark: dark) : fallback
     }
 }
 

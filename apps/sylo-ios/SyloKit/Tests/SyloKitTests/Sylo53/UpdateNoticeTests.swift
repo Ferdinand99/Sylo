@@ -212,6 +212,8 @@ struct UpdateRunTests {
         for down in [
             NetworkError.offline, .unreachable, .timeout, .notASyloServer, .transport(code: -1),
             .server(status: HTTPStatus(502)), .server(status: 503),
+            // A reverse proxy without an upstream answers a plain-text 404 while Sylo restarts.
+            .notFound(message: nil),
         ] {
             #expect(UpdateModel.syloIsDown(down), "\(down)")
         }
@@ -419,5 +421,171 @@ struct UpdateModelTests {
         #expect(model.progress?.timedOut == true)
         #expect(model.progress?.isDone == true)
         #expect(model.progress?.isSyloDown == true)
+    }
+}
+
+@MainActor
+@Suite("Update notice: the model, round two")
+struct UpdateModelRoundTwoTests {
+    private func makeModel(_ clients: StubClients, giveUpAfter: Duration = .seconds(10)) -> UpdateModel {
+        UpdateModel(
+            session: makeSignedInSession(clients: clients), pollEvery: .milliseconds(1), giveUpAfter: giveUpAfter)
+    }
+
+    private func waitUntilDone(_ model: UpdateModel) async {
+        for _ in 0..<2000 where model.progress?.isDone != true { try? await Task.sleep(for: .milliseconds(2)) }
+    }
+
+    nonisolated private static func available(current: String = "5.2.0", run: WrenRun? = nil) -> UpdateStatus {
+        UpdateStatus(
+            current: current, latest: "5.3.0", isAvailable: true,
+            wren: WrenStatus(target: WrenStatus.Target(name: "sylo"), updateSeen: true, canApprove: true, latestRun: run))
+    }
+
+    @Test("Leaving the screen while Sylo is down and coming back picks the run up again, and it ends on the new version")
+    func resumesAfterLeaving() async {
+        let down = LockedFlag()
+        let reads = Tally()
+        let clients = StubClients { endpoint in
+            switch endpoint {
+            case is Endpoints.LoadUpdate:
+                if down.value { throw NetworkError.unreachable }
+                return Self.available(current: reads.next() == 1 ? "5.2.0" : "5.3.0")
+            case is Endpoints.ApproveUpdate:
+                return UpdateStarted(runID: 6, from: "5.2.0")
+            case is Endpoints.LoadUpdateRun:
+                if down.value { throw NetworkError.unreachable }
+                return UpdateRunAnswer(run: WrenRun(id: 6, status: "succeeded"))
+            default: throw NetworkError.notFound
+            }
+        }
+        let model = makeModel(clients)
+        await model.load()
+        down.value = true
+        #expect(await model.approve())
+        // The person looks away (the screen disappears) while Sylo restarts.
+        model.stop()
+        #expect(!model.isFollowing)
+        #expect(model.progress?.isDone == false)
+        // Back on the screen while Sylo is still down: the read of the notice fails, and the run is followed again.
+        await model.load()
+        #expect(model.errorMessage != nil)
+        #expect(model.isFollowing)
+        #expect(model.progress?.runID == 6)
+        down.value = false
+        await waitUntilDone(model)
+        #expect(model.progress?.newVersion == "5.3.0")
+        #expect(model.progress?.isDone == true)
+        #expect(clients.calls.filter { $0.endpoint is Endpoints.ApproveUpdate }.count == 1)
+    }
+
+    @Test("Following again keeps the last state of the same run")
+    func keepsLastState() async {
+        let clients = StubClients { endpoint in
+            if endpoint is Endpoints.LoadUpdate { return Self.available() }
+            if endpoint is Endpoints.ApproveUpdate { return UpdateStarted(runID: 9, from: "5.2.0") }
+            return UpdateRunAnswer(run: WrenRun(id: 9, status: "running", steps: [WrenRun.Step(step: "snapshot", status: "running")]))
+        }
+        let model = makeModel(clients)
+        await model.load()
+        #expect(await model.approve())
+        for _ in 0..<500 where model.progress?.run == nil { try? await Task.sleep(for: .milliseconds(2)) }
+        model.stop()
+        #expect(model.progress?.run?.status == "running")
+        model.follow(runID: 9, from: "5.2.0")
+        #expect(model.progress?.run?.status == "running")
+        model.stop()
+    }
+
+    @Test("A row that only shows the status never follows a run")
+    func rowDoesNotFollow() async {
+        let clients = StubClients { endpoint in
+            if endpoint is Endpoints.LoadUpdate { return Self.available(run: WrenRun(id: 3, status: "running")) }
+            return UpdateRunAnswer(run: WrenRun(id: 3, status: "running"))
+        }
+        let model = makeModel(clients)
+        await model.load(followsRun: false)
+        #expect(model.status?.wren?.latestRun?.id == 3)
+        #expect(!model.isFollowing)
+        #expect(model.progress == nil)
+        #expect(!clients.calls.contains { $0.endpoint is Endpoints.LoadUpdateRun })
+        // The screen itself follows.
+        await model.load()
+        #expect(model.isFollowing)
+        model.stop()
+    }
+
+    @Test("After Sylo is back the version is read once, not on every poll until the run ends")
+    func versionReadOnce() async {
+        let runReads = Tally()
+        let statusReads = Tally()
+        let clients = StubClients { endpoint in
+            switch endpoint {
+            case is Endpoints.LoadUpdate:
+                // 1: the model's own read, 2: Sylo is back (still the old version), 3: the run has ended.
+                return Self.available(current: statusReads.next() < 3 ? "5.2.0" : "5.3.0")
+            case is Endpoints.ApproveUpdate: return UpdateStarted(runID: 4, from: "5.2.0")
+            case is Endpoints.LoadUpdateRun:
+                switch runReads.next() {
+                case 1: throw NetworkError.unreachable
+                case 2, 3, 4, 5, 6: return UpdateRunAnswer(run: WrenRun(id: 4, status: "running"))
+                default: return UpdateRunAnswer(run: WrenRun(id: 4, status: "succeeded"))
+                }
+            default: throw NetworkError.notFound
+            }
+        }
+        let model = makeModel(clients)
+        await model.load()
+        #expect(await model.approve())
+        await waitUntilDone(model)
+        #expect(model.progress?.newVersion == "5.3.0")
+        #expect(runReads.value >= 7)
+        #expect(clients.calls.filter { $0.endpoint is Endpoints.LoadUpdate }.count == 3)
+    }
+
+    @Test("An operator who is no longer one, or a run that is not there, ends the asking with the reason")
+    func permanentErrors() async {
+        for failure in [NetworkError.forbidden, .notFound(message: "Wise Wren does not know this target.")] {
+            let clients = StubClients { endpoint in
+                switch endpoint {
+                case is Endpoints.LoadUpdate: return Self.available()
+                case is Endpoints.ApproveUpdate: return UpdateStarted(runID: 8, from: "5.2.0")
+                case is Endpoints.LoadUpdateRun: throw failure
+                default: throw NetworkError.notFound
+                }
+            }
+            let model = makeModel(clients)
+            await model.load()
+            #expect(await model.approve())
+            await waitUntilDone(model)
+            #expect(model.progress?.isDone == true)
+            #expect(model.progress?.problem != nil)
+            #expect(model.progress?.timedOut == false)
+            #expect(UpdateModel.isPermanent(failure))
+        }
+        #expect(!UpdateModel.isPermanent(.notFound(message: nil)))
+        #expect(!UpdateModel.isPermanent(.unreachable))
+        #expect(!UpdateModel.isPermanent(.server(status: HTTPStatus(502, message: "Wise Wren had an error."))))
+    }
+
+    @Test("A plain-text 404 from a proxy during the restart reads as Sylo restarting, with no error shown")
+    func proxy404() async {
+        let runReads = Tally()
+        let clients = StubClients { endpoint in
+            switch endpoint {
+            case is Endpoints.LoadUpdate: return Self.available(current: runReads.value >= 3 ? "5.3.0" : "5.2.0")
+            case is Endpoints.ApproveUpdate: return UpdateStarted(runID: 2, from: "5.2.0")
+            case is Endpoints.LoadUpdateRun:
+                if runReads.next() <= 2 { throw NetworkError.notFound(message: nil) }
+                return UpdateRunAnswer(run: WrenRun(id: 2, status: "succeeded"))
+            default: throw NetworkError.notFound
+            }
+        }
+        let model = makeModel(clients)
+        await model.load()
+        #expect(await model.approve())
+        await waitUntilDone(model)
+        #expect(model.progress?.problem == nil)
+        #expect(model.progress?.newVersion == "5.3.0")
     }
 }

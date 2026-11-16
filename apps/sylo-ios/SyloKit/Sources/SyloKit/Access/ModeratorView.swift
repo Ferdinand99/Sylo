@@ -45,6 +45,19 @@ public enum ModeratorView {
         }
     }
 
+    /// How long an Inbox person waits for the server's features before the app draws as it would without them.
+    public static let featureWait: Duration = .seconds(3)
+
+    /// Whether the server announces ``ServerFeature/moderatorView``; nil only while that is really not known. An
+    /// Inbox person on a server that does not announce it (Sylo 5.2, self-hosted) never waits: the sign-in's own
+    /// read of the server already says so (`serverInfoKnown`), a finished read of the features says so
+    /// (`featuresRead`, whether it worked or not), and after ``featureWait`` the app stops waiting.
+    public static func supports(hasFeature: Bool, featuresRead: Bool, serverInfoKnown: Bool, waited: Bool) -> Bool? {
+        if hasFeature { return true }
+        if featuresRead || serverInfoKnown || waited { return false }
+        return nil
+    }
+
     /// Whether the person may switch between the focused and the full app (an Inbox person on a server that
     /// has the focused view): the switch is shown only then.
     public static func canChoose(access: DashboardAccess?, supports: Bool?) -> Bool {
@@ -124,6 +137,18 @@ public enum ModeratorView {
             return .applications
         }
         return .moderationHub
+    }
+
+    /// Which part of the Moderation tab opens first in the focused view.
+    public enum ModerationStart: Hashable, Sendable {
+        case infractions
+        case appeals
+    }
+
+    /// The Moderation tab opens on Appeals when that is where the server lands (Tickets off, Appeals on). The
+    /// view applies it again when the overview arrives, so it holds also when the first draw had no overview.
+    public static func moderationStart(overview: ServerOverview?) -> ModerationStart {
+        landing(overview: overview) == .appeals ? .appeals : .infractions
     }
 
     /// The pages the search offers in the focused view (not the settings, the audit log or the insights).

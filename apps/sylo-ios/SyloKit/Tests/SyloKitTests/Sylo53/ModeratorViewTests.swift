@@ -177,3 +177,98 @@ struct ModeratorViewContentTests {
         #expect(items.contains { $0.id == "module:applications" })
     }
 }
+
+@Suite("Moderator view: round two")
+struct ModeratorViewRoundTwoTests {
+    @Test("An Inbox person waits only while nothing says whether the server has the feature")
+    func supportsTable() {
+        // The feature is announced: true, whatever else is known.
+        #expect(ModeratorView.supports(hasFeature: true, featuresRead: false, serverInfoKnown: false, waited: false) == true)
+        // Nothing is known yet: wait.
+        #expect(ModeratorView.supports(hasFeature: false, featuresRead: false, serverInfoKnown: false, waited: false) == nil)
+        // A 5.2 server whose info the sign-in read already: no spinner at all.
+        #expect(ModeratorView.supports(hasFeature: false, featuresRead: false, serverInfoKnown: true, waited: false) == false)
+        // The read of the features finished (it worked, or it failed): decided.
+        #expect(ModeratorView.supports(hasFeature: false, featuresRead: true, serverInfoKnown: false, waited: false) == false)
+        // The short wait is over: the app draws as it does without the feature.
+        #expect(ModeratorView.supports(hasFeature: false, featuresRead: false, serverInfoKnown: false, waited: true) == false)
+    }
+
+    @Test("The wait is short, and an Inbox person on a server without the feature gets the full app at once")
+    func boundedWait() {
+        #expect(ModeratorView.featureWait <= .seconds(5))
+        let known52 = ModeratorView.supports(hasFeature: false, featuresRead: false, serverInfoKnown: true, waited: false)
+        #expect(ModeratorView.mode(access: .inbox, supports: known52, showEverything: false) == .full)
+        let waiting = ModeratorView.supports(hasFeature: false, featuresRead: false, serverInfoKnown: false, waited: false)
+        #expect(ModeratorView.mode(access: .inbox, supports: waiting, showEverything: false) == .undecided)
+        let expired = ModeratorView.supports(hasFeature: false, featuresRead: false, serverInfoKnown: false, waited: true)
+        #expect(ModeratorView.mode(access: .inbox, supports: expired, showEverything: false) == .full)
+        // Nobody below Inbox ever waits.
+        #expect(ModeratorView.mode(access: .edit, supports: waiting, showEverything: false) == .full)
+    }
+
+    @Test("The Moderation tab opens on Appeals when that is where the server lands, and on Infractions otherwise")
+    func moderationStart() {
+        func cards(tickets: Bool, appeals: Bool) -> ServerOverview {
+            func card(_ id: String, _ on: Bool) -> OverviewCard {
+                OverviewCard(kind: .module, id: id, name: id, hasToggle: true, isEnabled: on, status: on ? .on : .off)
+            }
+            return ServerOverview(
+                server: OverviewServer(id: "1", name: "HQ"),
+                groups: [OverviewGroup(title: "G", cards: [card("tickets", tickets), card("appeals", appeals)])])
+        }
+        // Before the overview is known the server lands on tickets, so Infractions.
+        #expect(ModeratorView.moderationStart(overview: nil) == .infractions)
+        #expect(ModeratorView.moderationStart(overview: cards(tickets: true, appeals: true)) == .infractions)
+        #expect(ModeratorView.moderationStart(overview: cards(tickets: false, appeals: true)) == .appeals)
+        // Appeals off as well: the hub, on Infractions.
+        #expect(ModeratorView.moderationStart(overview: cards(tickets: false, appeals: false)) == .infractions)
+        // The start changes when the overview arrives: that change is what the Moderation tab applies again.
+        #expect(
+            ModeratorView.moderationStart(overview: nil) != ModeratorView.moderationStart(overview: cards(tickets: false, appeals: true)))
+        // Appeals as a landing only lands on the Moderation tab, which is where the start applies.
+        #expect(ModeratorView.landing(overview: cards(tickets: false, appeals: true)).tab == .moderation)
+    }
+}
+
+@Suite("Public pages: round two")
+struct AccentColourRoundTwoTests {
+    @Test("The raw ratio decides, as on the server: 2.995:1 falls back although it shows as 3:1")
+    func rawRatio() {
+        // #959595 on the white card is 2.9953:1, which rounds to 3.00 for display.
+        #expect(AccentColour.ratio(of: "#959595", dark: false) == 3.0)
+        #expect(AccentColour.fallbackThemes("#959595") == ["light"])
+        #expect(AccentColour.effective("#959595", dark: false) == AccentColour.syloAccent.light)
+        #expect(AccentColour.fallbackNote("#959595")?.contains("the light theme") == true)
+        // The dark card is fine with it.
+        #expect(AccentColour.effective("#959595", dark: true) == "#959595")
+    }
+
+    @Test("Mixing two colours rounds halves up, like the server")
+    func mix() {
+        #expect(AccentColour.mix("#000000", "#ffffff", 0.5) == "#808080")
+        #expect(AccentColour.mix("#000000", "#ffffff", 0) == "#000000")
+        #expect(AccentColour.mix("#102030", "#ffffff", 1) == "#ffffff")
+        #expect(AccentColour.mix("nope", "#ffffff", 0.5) == "nope")
+    }
+
+    @Test("Text in the accent is the accent lightened or darkened until it reads, as on the pages")
+    func accentText() {
+        // Values worked out with the server's algorithm (src/lib/publicLook.js accentText).
+        #expect(AccentColour.accentText("#5865f2", dark: true) == "#737ef4")
+        #expect(AccentColour.accentText("#5865f2", dark: false) == "#4c57d0")
+        #expect(AccentColour.accentText("#ff0000", dark: true) == "#ff3333")
+        #expect(AccentColour.accentText("#ff0000", dark: false) == "#c20000")
+        // An accent that already reads stays as it is.
+        #expect(AccentColour.accentText("#00aa00", dark: true) == "#00aa00")
+        #expect(AccentColour.accentText("#00aa00", dark: false) == "#007700")
+    }
+
+    @Test("The text colour really used is Sylo's own where the accent is not used")
+    func effectiveText() {
+        #expect(AccentColour.effectiveText("", dark: true) == AccentColour.syloAccent.dark)
+        #expect(AccentColour.effectiveText("#ffff00", dark: false) == AccentColour.syloAccent.light)
+        #expect(AccentColour.effectiveText("#5865f2", dark: true) == "#737ef4")
+        #expect(AccentColour.effectiveText("not a colour", dark: true) == AccentColour.syloAccent.dark)
+    }
+}
