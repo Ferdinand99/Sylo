@@ -46,6 +46,10 @@ const splashLimit = rateLimit({
   keyFn: (req) => `look-splash|${req.params?.guildId ?? ''}|${clientKey(req)}`,
 });
 
+// Saving the invite background can start a download too, so it counts against the same limit as the check button.
+const saveLimit = (req, res, next) =>
+  req.body?.background === 'discord-splash' ? splashLimit(req, res, next) : next();
+
 const send = async (res, req) => res.json(await lookView(req.guild, req.guild.id));
 
 router.get(
@@ -55,6 +59,7 @@ router.get(
 
 router.post(
   '/public-page-look',
+  saveLimit,
   asyncHandler(async (req, res) => {
     const guildId = req.guild.id;
     const accent = normaliseAccent(req.body?.accent);
@@ -73,7 +78,9 @@ router.post(
           'This server has no invite background. Set one in the server settings, or choose another.'
         );
       }
-      const out = await refreshSplash(req.guild, { force: true });
+      // Not forced: a copy that is current costs nothing, and a download that failed lately is not tried again
+      // for a while. Only the check button (below) skips that wait.
+      const out = await refreshSplash(req.guild);
       if (out.status === 'failed' || out.status === 'none') {
         return fail(
           res,

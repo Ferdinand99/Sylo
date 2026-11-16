@@ -476,3 +476,20 @@ test('the "Powered by Sylo" line is the same muted frame link on every page, wha
   const css = await (await get('/public.css')).text();
   assert.match(css, /body \.lb-foot a,\s*body \.auth-foot a \{\s*color: var\(--text-muted\);/);
 });
+
+test('saving the invite background keeps the retry gate and the check limit, so a save loop cannot start downloads', async () => {
+  cdnBody = await pic(100, 100, 'webp');
+  app.guild.splash = 'loop';
+  cdnStatus = 500;
+  const statuses = [];
+  for (let i = 0; i < 9; i++)
+    statuses.push((await save({ accent: '', background: 'discord-splash' })).status);
+  // The first save tried a download and failed; the saves right behind it stopped at the 15-minute gate
+  // (no new download), and past six a minute the limit answers before anything runs.
+  assert.equal(statuses[0], 502);
+  assert.equal(cdnHits, 1, `one download, not one per save: ${statuses}`);
+  assert.ok(statuses.includes(429), `the limit answers a save loop: ${statuses}`);
+  assert.equal((await getPublicLook(GID)).background, 'none');
+  // A save that does not touch the splash is not counted against that limit.
+  assert.equal((await save({ accent: '#5865f2', background: 'none' })).status, 200);
+});
