@@ -34,6 +34,7 @@ import {
   recordFeedSuccess,
   pruneFeedHealth,
   liveDue,
+  liveNotFoundFor,
   recordLiveFailure,
   recordLiveSuccess,
   pruneLiveHealth,
@@ -42,6 +43,8 @@ import {
 const FEED = 'https://www.youtube.com/feeds/videos.xml?channel_id=';
 const COLOR = 0xff0000;
 const POLL_MS = 3 * 60_000;
+/** A live page that has answered 404 this long without a break is gone for good: the stream is over. */
+const LIVE_GIVE_UP_MS = 6 * 60 * 60_000;
 const UA = 'Mozilla/5.0 (compatible; Sylo-Discord-Bot/1.0; +https://github.com/Ferdinand99/Sylo)';
 
 // feed.js's grab() defaults to a 300 KB scan cap, sized for RSS/Atom feed
@@ -394,6 +397,19 @@ async function pollFeed(guildId, alert, now) {
   return true;
 }
 
+/** The stream is over: forget it and settle its "is live" post the way the alert is set up to. */
+async function endLivePost(guildId, alert, c) {
+  const post = await livePost(guildId, c);
+  await markNotLive(guildId, c);
+  await settleEndedPost({
+    guildId,
+    onEnd: alert.onEnd,
+    post,
+    name: alert.name || 'A channel',
+    url: post?.videoId ? `https://www.youtube.com/watch?v=${post.videoId}` : undefined,
+  });
+}
+
 /** @param {number} [now]  for tests: the clock the feed backoff reads */
 export async function runAlert(guildId, alert, now = Date.now()) {
   const c = alert.ytChannelId;
@@ -405,6 +421,12 @@ export async function runAlert(guildId, alert, now = Date.now()) {
     // The live branch marks the stream as seen, which would make an alert whose feed was never read
     // look seeded: the first good feed poll would then announce every old upload. Wait for the seed.
     if (!feedRead && !(await hasSeenAny(guildId, c))) return;
+    // A page that cannot be read leaves a running live post alone (below), but not for ever: once it
+    // has answered 404 without a break for hours, the channel is gone and the stream with it. Checked
+    // before the backoff gate, so every server that watches the channel ends its own post.
+    if (liveNotFoundFor(c, now, LIVE_GIVE_UP_MS) && (await liveVideoId(guildId, c))) {
+      await endLivePost(guildId, alert, c);
+    }
     if (!liveDue(c, now)) return;
     const state = await checkLive(c);
     if (state.live === null) {
@@ -420,6 +442,9 @@ export async function runAlert(guildId, alert, now = Date.now()) {
     recordLiveSuccess(c);
     const known = await liveVideoId(guildId, c);
     if (state.live && state.videoId !== known) {
+      // A new stream replaces a known one (it was restarted while the page could not be read): the
+      // earlier post is over and is settled once the new one is out.
+      const earlier = known ? await livePost(guildId, c) : null;
       const name = alert.name || 'A channel';
       const url = `https://www.youtube.com/watch?v=${state.videoId}`;
       const posted = await postToChannel(
@@ -441,17 +466,18 @@ export async function runAlert(guildId, alert, now = Date.now()) {
       if (posted) {
         await markVideoSeen(guildId, c, state.videoId); // don't also fire a "new video" for the same stream
         await markLive(guildId, c, state.videoId, posted);
+        if (earlier) {
+          await settleEndedPost({
+            guildId,
+            onEnd: alert.onEnd,
+            post: earlier,
+            name,
+            url: earlier.videoId ? `https://www.youtube.com/watch?v=${earlier.videoId}` : undefined,
+          });
+        }
       }
     } else if (!state.live && known) {
-      const post = await livePost(guildId, c);
-      await markNotLive(guildId, c);
-      await settleEndedPost({
-        guildId,
-        onEnd: alert.onEnd,
-        post,
-        name: alert.name || 'A channel',
-        url: post?.videoId ? `https://www.youtube.com/watch?v=${post.videoId}` : undefined,
-      });
+      await endLivePost(guildId, alert, c);
     }
   }
 }
