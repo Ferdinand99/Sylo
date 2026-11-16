@@ -590,3 +590,47 @@ textarea:focus {
     transform: none;
   }
 }
+
+/* The look of a server's own public pages (src/lib/publicLook.js). The server's style sheet sets only custom
+   properties: --accent and --on-accent (already read by the rules above) and --look-image. Everything below is
+   Sylo's: the dim overlay, the semi-opaque panel the page sits on, the readability of the footer. The classes are
+   on <body>: has-look (the server chose something) and has-look-image (it chose a background picture). */
+:root {
+  --look-dim: rgba(0, 0, 0, 0.58);
+  --look-panel: 90%;
+}
+:root[data-theme='light'] {
+  --look-dim: rgba(0, 0, 0, 0.42);
+}
+body.has-look-image {
+  background-color: var(--bg-main);
+  background-image: linear-gradient(var(--look-dim), var(--look-dim)), var(--look-image);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+body.has-look-image main {
+  position: relative;
+  margin-top: 24px;
+  margin-bottom: 24px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg-main) var(--look-panel), transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+body.has-look-image .auth-wrap {
+  min-height: 0;
+}
+@media (prefers-reduced-transparency: reduce) {
+  body.has-look-image main {
+    background: var(--bg-main);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+/* An accent is only held to 3:1 against the card, so links are underlined whenever a server chose a look. */
+body.has-look main a:not(.btn) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

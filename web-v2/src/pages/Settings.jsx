@@ -16,6 +16,7 @@ import ChipPicker from '../components/ChipPicker.jsx';
 import { notify } from '../notify.js';
 import Reveal from '../components/Reveal.jsx';
 import ConfigImport from '../components/ConfigImport.jsx';
+import PublicPagesSettings from '../components/PublicPagesSettings.jsx';
 import { useCanSetUp } from '../setupAccess.js';
 import { AccessLock, useAccess } from '../access.jsx';
 
@@ -283,6 +284,9 @@ export default function Settings() {
           </div>
         </form>
       </AccessLock>
+
+      {/* The server's own accent colour and background on its public member pages (Edit access only). */}
+      <PublicPagesSettings guildId={guildId} />
 
       <div className="v2-group v2-section-gap">
         <h2 className="v2-group-title">Server data</h2>

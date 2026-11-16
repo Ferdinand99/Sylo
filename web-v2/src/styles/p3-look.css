@@ -1,0 +1,162 @@
+/* The look of a server's public pages inside the dashboard (the application form, the web shop) and the
+   "Powered by Sylo" line. The server's style sheet (/look/...) sets only custom properties: --accent and
+   --on-accent (the dashboard already reads them) and --look-image. Everything here is Sylo's: the dim overlay, the
+   panel the page sits on, the primary button taking the accent. public.css has the same for the EJS pages. */
+:root {
+  --look-dim: rgba(0, 0, 0, 0.58);
+  --look-panel: 90%;
+}
+:root[data-theme='light'] {
+  --look-dim: rgba(0, 0, 0, 0.42);
+}
+
+.v2-powered {
+  padding: 4px 16px 24px;
+  text-align: center;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.v2-powered a {
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.v2-powered a:hover {
+  color: var(--text);
+}
+
+/* A server that chose an accent: the primary button of its pages takes it. */
+body.has-look .v2-public .v2-btn-primary {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* A server that chose a background picture: the picture under a dim overlay, and the page on a semi-opaque panel. */
+body.has-look-image {
+  background-color: var(--bg-main);
+  background-image: linear-gradient(var(--look-dim), var(--look-dim)), var(--look-image);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+body.has-look-image .v2-public-page {
+  margin-top: 16px;
+  margin-bottom: 16px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg-main) var(--look-panel), transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+body.has-look-image .v2-powered {
+  padding-top: 0;
+}
+body.has-look-image .v2-powered a {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-main) 88%, transparent);
+}
+@media (prefers-reduced-transparency: reduce) {
+  body.has-look-image .v2-public-page,
+  body.has-look-image .v2-powered a {
+    background: var(--bg-main);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* Server settings → Public pages: the preview of the application form page. */
+.v2-look-preview-title {
+  margin: 18px 0 8px;
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+.v2-look-preview {
+  border-radius: var(--radius);
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-main);
+  background-size: cover;
+  background-position: center;
+  padding: 14px;
+}
+.v2-look-preview-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 28rem;
+  margin: 0 auto;
+}
+.v2-look-preview.has-image .v2-look-preview-panel {
+  padding: 10px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg-main) var(--look-panel), transparent);
+}
+.v2-look-preview-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+}
+.v2-look-preview-eyebrow,
+.v2-look-preview-text,
+.v2-look-preview-heading,
+.v2-look-preview-foot {
+  margin: 0;
+}
+.v2-look-preview-eyebrow {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.v2-look-preview-heading {
+  font-size: var(--fs-lg);
+  font-weight: 700;
+}
+.v2-look-preview-text {
+  font-size: var(--fs-sm);
+}
+.v2-look-preview-link {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.v2-look-preview-field {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.v2-look-preview-btn {
+  align-self: flex-start;
+  padding: 6px 16px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.v2-look-preview-foot {
+  text-align: center;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.v2-look-ratio {
+  white-space: nowrap;
+}
+@media (prefers-reduced-transparency: reduce) {
+  .v2-look-preview.has-image .v2-look-preview-panel,
+  .v2-look-preview-card {
+    background: var(--bg-surface);
+  }
+}
+
+/* An accent is only held to 3:1 against the card, so links are underlined whenever a server chose a look. */
+body.has-look .v2-public-page a:not(.v2-btn-primary):not(.v2-btn-ghost) {
+  text-decoration: underline;
+}

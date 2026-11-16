@@ -312,6 +312,8 @@ export const mobileApiRouter = Router();
 // sign-in is on and both Discord and Fluxer logins are set up. `access-levels`: View / Inbox / Edit
 // dashboard access, with `access` on each GET /api/v2/guilds entry and GET/POST
 // /api/v2/guilds/:id/access. `message-move`: a posted message moves to its new channel on publish.
+// `public-page-look`: GET/POST /api/v2/guilds/:id/public-page-look (the server's accent colour and background
+// on its public member pages), its picture upload and the invite-background check.
 const FEATURES = Object.freeze([
   'app-login',
   'live-access',
@@ -328,6 +330,7 @@ const FEATURES = Object.freeze([
   'duplicate',
   'message-templates',
   'message-move',
+  'public-page-look',
 ]);
 
 // Public and ahead of the open-mode guard: the app calls it before anyone signs in, and an open-mode

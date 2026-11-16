@@ -69,6 +69,7 @@ import setupRouter from './v2Setup.js';
 import applyMemberRouter from './v2Apply.js';
 import economyRouter from './v2Economy.js';
 import shopRouter from './v2Shop.js';
+import publicLookRouter from './v2PublicLook.js';
 import shopMemberRouter from './v2ShopMember.js';
 import { cancelIntroductionSessions } from '../../modules/introductions.js';
 import { cancelApplicationSessions } from '../../modules/applications.js';
@@ -549,6 +550,8 @@ router.use('/guilds/:guildId', introRouter);
 router.use('/guilds/:guildId', economyRouter);
 // Economy shop: items, a member's inventory, the activity log (v2Shop.js).
 router.use('/guilds/:guildId', shopRouter);
+// The server's own look on the public member pages: accent colour and background (v2PublicLook.js).
+router.use('/guilds/:guildId', publicLookRouter);
 // Applications: settings, forms, the panel, submissions, export (v2Applications.js).
 router.use('/guilds/:guildId', applicationsRouter);
 // Setup wizard: the proposal for the server and applying it (v2Setup.js).

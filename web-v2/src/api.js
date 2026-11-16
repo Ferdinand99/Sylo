@@ -213,6 +213,18 @@ export const getShopActivity = (guildId, { userId = '', itemId = '', page = 1 } 
   apiFetch(
     `${shopBase(guildId)}/shop/activity?userId=${encodeURIComponent(userId)}&itemId=${encodeURIComponent(itemId)}&page=${Number(page) || 1}`
   );
+// The server's own look on its public pages (Server settings → Public pages): the accent colour, the
+// background, the uploaded picture (a multipart upload, the field "file") and the invite-background check.
+const lookBase = (guildId) => `/api/v2/guilds/${gid(guildId)}/public-page-look`;
+export const getPublicLook = (guildId) => apiFetch(lookBase(guildId));
+export const savePublicLook = (guildId, body) => postJson(lookBase(guildId), body);
+export const uploadPublicLookImage = (guildId, file) => {
+  const body = new FormData();
+  body.append('file', file);
+  return apiFetch(`${lookBase(guildId)}/image`, { method: 'POST', body });
+};
+export const deletePublicLookImage = (guildId) => postJson(`${lookBase(guildId)}/image/delete`, {});
+export const refreshPublicLookSplash = (guildId) => postJson(`${lookBase(guildId)}/splash/refresh`, {});
 // The member-facing web shop (/v2/shop/<server>).
 export const getWebShop = (guildId) => apiFetch(`/api/v2/shop/${gid(guildId)}`);
 export const buyWebShopItem = (guildId, itemId, price, version) =>

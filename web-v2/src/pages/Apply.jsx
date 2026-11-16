@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { ApiError, getWebApply, submitWebApply, withdrawWebApply } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
+import { useServerLook } from '../publicLook.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import ApplicationQuestion from '../components/ApplicationQuestion.jsx';
 import Time from '../components/Time.jsx';
@@ -33,6 +34,8 @@ function Nothing() {
 export default function Apply() {
   const { guildId, formId } = useParams();
   const { data, error, setData } = useApiData(() => getWebApply(guildId, formId), [guildId, formId]);
+  // The server's own accent colour and background, when it chose any (see publicLook.js).
+  useServerLook(data?.look);
   const [answers, setAnswers] = useState(null);
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(false);
