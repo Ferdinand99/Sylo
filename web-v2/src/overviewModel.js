@@ -318,7 +318,15 @@ export function focusedLanding(guildId, data) {
 }
 
 // The pages of the focused view; a server switch keeps the page only when the focused view lists it.
-const FOCUSED_SUBPATHS = ['/tickets', '/appeals', '/applications', '/m/applications', '/m/suggestions', '/moderation', '/member-data'];
+const FOCUSED_SUBPATHS = [
+  '/tickets',
+  '/appeals',
+  '/applications',
+  '/m/applications',
+  '/m/suggestions',
+  '/moderation',
+  '/member-data',
+];
 
 /**
  * The page to open in another server when switching from a server page: the same page, except in a

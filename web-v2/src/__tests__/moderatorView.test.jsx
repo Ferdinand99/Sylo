@@ -55,14 +55,7 @@ const overviewOf = (off = []) => ({
 });
 const overview = overviewOf();
 
-const MOD_TOOLS = [
-  'Tickets',
-  'Appeals',
-  'Applications',
-  'Suggestions',
-  'Moderation hub',
-  'Member data',
-];
+const MOD_TOOLS = ['Tickets', 'Appeals', 'Applications', 'Suggestions', 'Moderation hub', 'Member data'];
 const SETUP_PAGES = [
   'Overview',
   'Audit log',
@@ -291,7 +284,9 @@ describe('landing, flash and server switching', () => {
 
   it('opens the overview at once for Edit when the list gives the level, before the access call answers', async () => {
     api.getGuildAccess.mockReturnValue(new Promise(() => {}));
-    api.getGuilds.mockResolvedValue([{ id: G, name: 'Home', icon: null, platform: 'discord', access: 'edit' }]);
+    api.getGuilds.mockResolvedValue([
+      { id: G, name: 'Home', icon: null, platform: 'discord', access: 'edit' },
+    ]);
     await open();
     expect(screen.getByText('overview page')).toBeTruthy();
     expect(hasLink('Server settings')).toBe(true);
@@ -358,7 +353,9 @@ describe('the models of the focused view', () => {
     // The full view still lists them all, so an admin can find where to switch them on.
     expect(navModel({ guildId: G, data: d, operator: false }).inbox).toHaveLength(4);
     // A card the overview does not list counts as on.
-    expect(navModel({ guildId: G, data: { groups: [] }, operator: false, focused: true }).inbox).toHaveLength(4);
+    expect(navModel({ guildId: G, data: { groups: [] }, operator: false, focused: true }).inbox).toHaveLength(
+      4
+    );
   });
 
   it('picks the landing from the modules that are on', () => {

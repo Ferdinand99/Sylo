@@ -62,7 +62,9 @@ export function AccessProvider({ guildId, hint, children }) {
   // Without a server there is nothing to wait for.
   const ready = !guildId || known;
   return (
-    <AccessContext.Provider value={{ level, guildId, reload, ready, hintLevel, showEverything, setShowEverything }}>
+    <AccessContext.Provider
+      value={{ level, guildId, reload, ready, hintLevel, showEverything, setShowEverything }}
+    >
       {children}
     </AccessContext.Provider>
   );
