@@ -304,6 +304,10 @@ struct SettingsView: View {
                     Label(Self.title(feature), systemImage: Self.symbol(feature))
                 }
             }
+            // The update notice exists on a Sylo that announces `update-notice` (5.3 and later).
+            if serverInfo?.supports(.updateNotice) == true || session.has(.updateNotice) {
+                UpdatesRow(account: account, session: session)
+            }
         } header: {
             Text("Operator")
         } footer: {

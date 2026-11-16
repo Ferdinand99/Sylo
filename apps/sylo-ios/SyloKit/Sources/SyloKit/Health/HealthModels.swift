@@ -32,10 +32,16 @@ public struct HealthReport: Decodable, Sendable, Equatable {
         public let backupsKept: Int?
         /// Where off-site copies go ("WebDAV"), or nil when there are none.
         public let offsite: String?
+        /// Rights of the Postgres role Sylo connects as that are more than it needs ("SUPERUSER", ...); empty when
+        /// the role is fine or the database is SQLite. nil when the server did not send the list (Sylo 5.2 and
+        /// older), which is also how the app tells that a restore must not be sent a ``RestoreConfirmation``.
+        public let roleRisks: [String]?
+        /// The docs on setting up a role with few rights, when the server sent them.
+        public let roleDocsURL: URL?
 
         public init(
             size: String? = nil, wal: String? = nil, isPostgres: Bool = false, backupIntervalHours: Double? = nil,
-            backupsKept: Int? = nil, offsite: String? = nil
+            backupsKept: Int? = nil, offsite: String? = nil, roleRisks: [String]? = nil, roleDocsURL: URL? = nil
         ) {
             self.size = size
             self.wal = wal
@@ -43,9 +49,13 @@ public struct HealthReport: Decodable, Sendable, Equatable {
             self.backupIntervalHours = backupIntervalHours
             self.backupsKept = backupsKept
             self.offsite = offsite
+            self.roleRisks = roleRisks
+            self.roleDocsURL = roleDocsURL
         }
 
-        private enum CodingKeys: String, CodingKey { case size, wal, postgres, intervalHours, retention, offsite }
+        private enum CodingKeys: String, CodingKey {
+            case size, wal, postgres, intervalHours, retention, offsite, roleRisks, roleDocsUrl
+        }
 
         public init(from decoder: any Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -55,6 +65,9 @@ public struct HealthReport: Decodable, Sendable, Equatable {
             backupIntervalHours = try c.decodeIfPresent(Double.self, forKey: .intervalHours)
             backupsKept = try c.decodeIfPresent(Int.self, forKey: .retention)
             offsite = try c.decodeIfPresent(String.self, forKey: .offsite)
+            // `try?`: a list of an odd shape reads as not sent.
+            roleRisks = (try? c.decodeIfPresent([String].self, forKey: .roleRisks)) ?? nil
+            roleDocsURL = ServerMarkdown.openable((try? c.decodeURLIfPresent(forKey: .roleDocsUrl)) ?? nil)
         }
     }
 

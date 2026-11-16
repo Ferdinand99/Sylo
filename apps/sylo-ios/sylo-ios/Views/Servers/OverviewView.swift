@@ -13,6 +13,9 @@ struct OverviewView: View {
     let wizard: SetupWizardModel
     /// Moves the server screen to a tab (the Needs attention rows for tickets and appeals).
     let openTab: (ServerView.ServerTab) -> Void
+    /// For an Inbox-level person on a Sylo 5.3 server, who chose to see everything: setting it to false goes back
+    /// to the focused moderator view. nil for everyone else, who has no such choice.
+    var moderatorSwitch: Binding<Bool>?
 
     @Environment(AppSession.self) private var session
     @Environment(\.dashboardAccess) private var access
@@ -61,6 +64,17 @@ struct OverviewView: View {
                 }
                 Section {
                     OverviewHeader(summary: summary, overview: overview)
+                }
+                if let moderatorSwitch, !isSelecting, !isSearching {
+                    Section {
+                        Button {
+                            moderatorSwitch.wrappedValue = false
+                        } label: {
+                            Label("Show Only Moderation Tools", systemImage: "tray.full")
+                        }
+                    } footer: {
+                        Text("You have Inbox access. The moderation tools alone are easier to work in; the modules below are switched off for your level.")
+                    }
                 }
                 if !isSelecting, !isSearching {
                     attentionSection(overview)

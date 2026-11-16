@@ -47,6 +47,27 @@ Settings and only for operator accounts: Health with the database backups
 Personalizer, the stats cache and the roadmap admin. See
 [Health and the dev log (operators)](#health-and-the-dev-log-operators).
 
+The app follows the Sylo 5.3 additions where the server announces them (each is
+hidden on an older Sylo, and the app never sends a key the server did not send):
+
+- `moderator-view`: a person whose level in a server is Inbox gets the focused
+  moderator view, as in the dashboard: the server opens on its first inbox that is
+  switched on, and the tabs are Tickets, Tools (applications, suggestions and
+  member data) and Moderation (infractions and appeals, no commands). No modules,
+  settings, audit log, insights or leaderboard. "Show everything" brings back the
+  full, still locked, app on that device. View keeps the full read-only app and
+  Edit is unchanged. Operator screens live in Settings and are not affected.
+- `public-page-look`: Server settings, then Public Pages (Edit only), for the
+  accent colour (with the contrast note of the server) and the background (none,
+  a picture from the photo library, or the invite background), with a preview.
+- `update-notice` (operators): Settings, then Operator, then Updates shows a newer
+  release with its notes and the command to copy and, when the instance runs Wise
+  Wren, Update now with the progress of the run while Sylo restarts.
+- Restoring an uploaded Postgres dump: Health, then Backups. A server whose health
+  report has `db.roleRisks` (5.3) is sent `confirm` and, for a dump that was
+  uploaded, `acknowledgeSql: true`, after the app explains that the SQL runs with
+  the rights of the database role. An older server is sent no body.
+
 What stays on the web is only what is not an administrator's job: the public
 pages (the web shop, the application forms, event and quote pages) that members
 open in a browser. The app can copy or open the address of a public page; it

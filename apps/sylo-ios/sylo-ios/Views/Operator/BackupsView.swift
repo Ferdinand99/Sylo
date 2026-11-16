@@ -93,6 +93,13 @@ struct BackupsView: View {
                     }
                     if let kept = database.backupsKept { LabeledContent("Kept", value: kept.formatted()) }
                     LabeledContent("Off-site copies", value: database.offsite ?? "None")
+                    // Sylo 5.3: the role Sylo connects as has rights a restore of an uploaded dump would use.
+                    if database.isPostgres, let sentence = UploadedDumpNotice.roleSentence(database.roleRisks) {
+                        StatusMessage(sentence, kind: .error)
+                        if let docs = database.roleDocsURL {
+                            Link("How to set up a role with few rights", destination: docs)
+                        }
+                    }
                 }
             }
             Section {
@@ -186,7 +193,11 @@ struct BackupsView: View {
         } header: {
             Text("Import")
         } footer: {
-            Text("Importing stores the file as a snapshot (up to 128 MB); you then restore it. Restoring replaces the live database and restarts the bot, with a prerestore snapshot taken first.")
+            if model.report?.database?.isPostgres == true {
+                Text("Importing stores the file as a snapshot (up to 128 MB); you then restore it. Restoring replaces the live database and restarts the bot, with a prerestore snapshot taken first. A Postgres dump holds SQL, and restoring it runs that SQL with the rights of Sylo's database role, so import only files you made or trust.")
+            } else {
+                Text("Importing stores the file as a snapshot (up to 128 MB); you then restore it. Restoring replaces the live database and restarts the bot, with a prerestore snapshot taken first.")
+            }
         }
     }
 
@@ -259,6 +270,74 @@ private struct BackupRow: View {
     }
 }
 
+/// The restore of an uploaded Postgres dump (Sylo 5.3): the SQL in the file runs with the rights of the database role
+/// Sylo connects as, so the person says they made the file or trust it, and types the snapshot's name, before the
+/// server is asked. The server refuses the restore without `acknowledgeSql`.
+private struct RestoreDumpSheet: View {
+    let backup: HealthReport.Backup
+    let database: HealthReport.Database?
+    let model: BackupsModel
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var understood = false
+    @State private var typed = ""
+
+    private var confirmation: OperatorConfirmation { .restore(backup: backup.name) }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Label {
+                        Text(verbatim: UploadedDumpNotice.title)
+                            .font(.headline)
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .symbolRenderingMode(.multicolor)
+                    }
+                    Text(verbatim: UploadedDumpNotice.message)
+                    if let sentence = UploadedDumpNotice.roleSentence(database?.roleRisks) {
+                        Text(verbatim: sentence)
+                            .foregroundStyle(.orange)
+                    }
+                    if let docs = database?.roleDocsURL {
+                        Link("How to set up a role with few rights", destination: docs)
+                    }
+                }
+                Section {
+                    Toggle(UploadedDumpNotice.acknowledgement, isOn: $understood)
+                }
+                Section {
+                    Text(verbatim: confirmation.message)
+                        .font(.footnote)
+                    TextField(backup.name, text: $typed)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(.body.monospaced())
+                } header: {
+                    Text("Type the name to confirm")
+                } footer: {
+                    Text("Type \(backup.name) to confirm.")
+                }
+                Section {
+                    Button("Restore and Restart", role: .destructive) {
+                        dismiss()
+                        Task { await model.restore(backup.name, typed: typed, acknowledgedSql: understood) }
+                    }
+                    .disabled(!understood || !confirmation.accepts(typed))
+                }
+            }
+            .navigationTitle("Restore Uploaded Dump")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+    }
+}
+
 /// What the screen shows from the moment the server takes a restore until Sylo answers again.
 private struct RestoringView: View {
     let name: String
@@ -290,7 +369,13 @@ private struct BackupDetailView: View {
     /// The downloaded file while Quick Look shows it.
     @State private var previewed: DownloadedFile?
     @State private var isConfirmingRestore = false
+    @State private var isShowingDumpWarning = false
     @State private var isConfirmingDelete = false
+
+    /// What a restore of this snapshot asks (an uploaded Postgres dump needs its own warning first).
+    private var restorePlan: RestorePlan {
+        RestorePlan.make(name: backup.name, database: model.report?.database)
+    }
 
     init(backup: HealthReport.Backup, model: BackupsModel, session: AppSession) {
         self.backup = backup
@@ -314,10 +399,21 @@ private struct BackupDetailView: View {
             }
             downloadSection
             Section {
-                Button("Restore\u{2026}", role: .destructive) { isConfirmingRestore = true }
-                    .disabled(model.isWorking)
+                Button("Restore\u{2026}", role: .destructive) {
+                    if restorePlan.isUploadedSqlDump {
+                        isShowingDumpWarning = true
+                    } else {
+                        isConfirmingRestore = true
+                    }
+                }
+                .disabled(model.isWorking)
             } footer: {
-                Text("Restoring replaces the live database with this backup and restarts the bot. It changes the data of every server at once.")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Restoring replaces the live database with this backup and restarts the bot. It changes the data of every server at once.")
+                    if restorePlan.isUploadedSqlDump {
+                        Text(verbatim: UploadedDumpNotice.title + ". " + UploadedDumpNotice.message)
+                    }
+                }
             }
             Section {
                 Button("Delete Backup\u{2026}", role: .destructive) { isConfirmingDelete = true }
@@ -329,6 +425,9 @@ private struct BackupDetailView: View {
         .onAppear { model.actionError = nil }
         .typedConfirmation(.restore(backup: backup.name), isPresented: $isConfirmingRestore) { typed in
             Task { await model.restore(backup.name, typed: typed) }
+        }
+        .sheet(isPresented: $isShowingDumpWarning) {
+            RestoreDumpSheet(backup: backup, database: model.report?.database, model: model)
         }
         .typedConfirmation(.deleteBackup(name: backup.name), isPresented: $isConfirmingDelete) { typed in
             Task {
