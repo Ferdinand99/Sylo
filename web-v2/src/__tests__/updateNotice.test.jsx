@@ -64,7 +64,7 @@ const status = (over = {}) => ({
 const wrenState = (over = {}) => ({
   configured: true,
   error: null,
-  target: { name: 'sylo', server: 'LANBox', status: 'update', mode: 'approve' },
+  target: { name: 'sylo', server: 'docker-1', status: 'update', mode: 'approve', latestVersion: '5.3.0' },
   updateSeen: true,
   canApprove: true,
   whyNot: null,
@@ -197,7 +197,7 @@ describe('UpdateNotice', () => {
       run: { id: 12, status: 'queued', finished: false, ok: false, steps: [] },
     });
     render(<UpdateNotice />);
-    expect(await screen.findByText(/Wise Wren sees an update for sylo/)).toBeTruthy();
+    expect(await screen.findByText('Wise Wren sees 5.3.0 for "sylo" on docker-1.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Update now' }));
     await waitFor(() => expect(api.approveUpdate).toHaveBeenCalledTimes(1));
     expect(confirmDialog).toHaveBeenCalledTimes(1);
@@ -224,6 +224,38 @@ describe('UpdateNotice', () => {
     const button = await screen.findByRole('button', { name: 'Update now' });
     expect(button.disabled).toBe(true);
     expect(screen.getByText(/only notifies/)).toBeTruthy();
+  });
+
+  it('lets the long explanations wrap, so the variable names are readable in full', async () => {
+    const whyNot =
+      'Update now needs a dashboard login. Set up a login, or set WISE_WREN_ALLOW_OPEN_MODE=true if you accept it.';
+    api.getUpdate.mockResolvedValue(status({ wren: wrenState({ canApprove: false, whyNot }) }));
+    const first = render(<UpdateNotice />);
+    const hint = await screen.findByText(/WISE_WREN_ALLOW_OPEN_MODE=true/);
+    expect(hint.classList.contains('is-wrap')).toBe(true);
+    first.unmount();
+    resetUpdateStatusCache();
+    api.getUpdate.mockResolvedValue(status());
+    render(<UpdateNotice />);
+    const tip = await screen.findByText(/Set WISE_WREN_URL, WISE_WREN_TOKEN/);
+    expect(tip.closest('p').classList.contains('is-wrap')).toBe(true);
+  });
+
+  it('tells the operator what to check when Wise Wren is not reachable, and offers Try again', async () => {
+    api.getUpdate.mockResolvedValue(
+      status({
+        wren: wrenState({
+          target: null,
+          canApprove: false,
+          error: { code: 'wren_unreachable', message: 'Wise Wren is not reachable.' },
+        }),
+      })
+    );
+    render(<UpdateNotice />);
+    expect(await screen.findByText('Wise Wren is not reachable.')).toBeTruthy();
+    expect(screen.getByText(/Check WISE_WREN_URL and that Wise Wren is running/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(api.getUpdate).toHaveBeenLastCalledWith({ refresh: true }));
   });
 
   it('shows what the server says when the approval fails', async () => {
@@ -328,6 +360,7 @@ describe('UpdateBadge', () => {
     const pill = await screen.findByText('Update available');
     expect(pill.getAttribute('href')).toBe('/health#update');
     expect(pill.getAttribute('title')).toBe('Sylo 5.3.0 is available');
+    expect(pill.getAttribute('aria-label')).toBe('Sylo 5.3.0 is available. Open Health');
   });
 
   it('asks nothing and shows nothing for someone who is not an operator', async () => {

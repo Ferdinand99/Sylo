@@ -9,6 +9,12 @@
 }
 .v2-update-badge:hover {
   filter: brightness(1.1);
+  text-decoration: underline;
+}
+/* An arrow marks it as a link, unlike the static status pills. */
+.v2-update-badge::after {
+  content: '\2192';
+  font-weight: 600;
 }
 /* Below the drawer breakpoint the top bar is tight: the pill keeps to a short label. */
 @media (max-width: 600px) {
@@ -18,6 +24,30 @@
 }
 
 /* ---- Health page ----------------------------------------------------------------------------------- */
+/* Everything in the section is read in full: `.v2-row-main p` otherwise cuts a paragraph to one line with
+   an ellipsis, which hid the environment variable names in the Wise Wren tip and the open-mode reason. */
+#update .v2-row-main p,
+#update .v2-callout p {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+/* The main message first: the headline is the section's lead line, not muted row text. */
+#update .v2-upd-headline {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  line-height: 1.4;
+}
+/* "Check again" stays at the top of the row when the notes are open. */
+#update .v2-row-actions {
+  align-self: flex-start;
+}
+.v2-upd-retry {
+  margin-top: 8px;
+}
 .v2-upd-notes {
   margin-top: 10px;
 }

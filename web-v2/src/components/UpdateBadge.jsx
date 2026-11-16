@@ -29,6 +29,7 @@ export default function UpdateBadge() {
       className="v2-status-pill is-warning v2-update-badge"
       to="/health#update"
       title={`Sylo ${latest} is available`}
+      aria-label={`Sylo ${latest} is available. Open Health`}
     >
       Update available
     </Link>

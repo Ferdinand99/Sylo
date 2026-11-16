@@ -68,6 +68,17 @@ function ReleaseNotes({ notes, notesText }) {
   );
 }
 
+// What Wise Wren says about its target, with the version it sees and where the target runs.
+function wrenSummary(wren) {
+  const t = wren.target;
+  if (!t) return 'Wise Wren is connected. Its token cannot read the target, so the check above decides.';
+  const where = t.server ? ` on ${t.server}` : '';
+  if (!wren.updateSeen) return `Wise Wren does not see an update for "${t.name}"${where} yet.`;
+  return t.latestVersion
+    ? `Wise Wren sees ${t.latestVersion} for "${t.name}"${where}.`
+    : `Wise Wren sees an update for "${t.name}"${where}.`;
+}
+
 /**
  * Follows the Wise Wren run Sylo asked for. Sylo restarts in the middle of it: the polls then fail, and the
  * view keeps asking until Sylo answers again. It is done when Wise Wren says so, or when Sylo comes back
@@ -277,17 +288,14 @@ export default function UpdateNotice() {
       <div className="v2-list">
         <div className="v2-row v2-row-stack">
           <div className="v2-row-main">
-            <p className="is-wrap">
-              <strong>{headline}</strong>
-              {d.available && d.releaseUrl ? (
-                <>
-                  {' '}
-                  <a href={d.releaseUrl} target="_blank" rel="noopener noreferrer">
-                    Release on GitHub
-                  </a>
-                </>
-              ) : null}
-            </p>
+            <h3 className="v2-upd-headline">{headline}</h3>
+            {d.available && d.releaseUrl ? (
+              <p className="is-wrap">
+                <a href={d.releaseUrl} target="_blank" rel="noopener noreferrer">
+                  Release on GitHub
+                </a>
+              </p>
+            ) : null}
             {d.available ? <ReleaseNotes notes={d.notes} notesText={d.notesText} /> : null}
             {d.available ? (
               <div className="v2-upd-command">
@@ -320,18 +328,22 @@ export default function UpdateNotice() {
               {run ? (
                 <UpdateProgress id={run.id} from={run.from} onClose={closeRun} />
               ) : wren.error ? (
-                <p className="v2-row-warn">{wren.error.message}</p>
+                <>
+                  <p className="v2-row-warn is-wrap">{wren.error.message}</p>
+                  <p className="v2-field-hint is-wrap">
+                    Check WISE_WREN_URL and that Wise Wren is running, then try again.
+                  </p>
+                  <div className="v2-upd-retry">
+                    <button type="button" className="v2-btn-ghost" onClick={recheck} disabled={busy}>
+                      Try again
+                    </button>
+                  </div>
+                </>
               ) : (
                 <>
-                  <p className="is-wrap">
-                    {wren.target
-                      ? wren.updateSeen
-                        ? `Wise Wren sees an update for ${wren.target.name}.`
-                        : `Wise Wren does not see an update for ${wren.target.name} yet.`
-                      : 'Wise Wren is connected. Its token cannot read the target, so the check above decides.'}
-                  </p>
+                  <p className="is-wrap">{wrenSummary(wren)}</p>
                   {wren.whyNot && (d.available || wren.updateSeen) ? (
-                    <p className="v2-field-hint">{wren.whyNot}</p>
+                    <p className="v2-field-hint is-wrap">{wren.whyNot}</p>
                   ) : null}
                 </>
               )}
@@ -354,7 +366,7 @@ export default function UpdateNotice() {
           <div className="v2-row v2-row-stack">
             <div className="v2-row-main">
               <Callout tone="info" title="Update from here">
-                <p>
+                <p className="is-wrap">
                   <a href={WREN_URL} target="_blank" rel="noopener noreferrer">
                     Wise Wren
                   </a>{' '}
