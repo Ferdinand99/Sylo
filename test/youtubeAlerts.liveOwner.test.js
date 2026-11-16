@@ -46,13 +46,24 @@ const details = ({
 
 const canonical = (id) => `<link rel="canonical" href="https://www.youtube.com/watch?v=${id}">`;
 
-/** A watch page with no player response: only ytInitialData says which video it is. */
+/**
+ * A watch page with no player videoDetails (LOGIN_REQUIRED). The real page still carries two other
+ * "videoDetails" objects: the microformat's { externalVideoId } and the player overlay's, and only
+ * ytInitialData says which video it is.
+ */
 const loginRequiredPage = ({ seed = 1, owner = OWN, videoId = OWN_VIDEO } = {}) =>
-  `<html><script>var ytInitialPlayerResponse = {"playabilityStatus":{"status":"LOGIN_REQUIRED"}};</script>` +
+  `<html><script>var ytInitialPlayerResponse = {"playabilityStatus":{"status":"LOGIN_REQUIRED"},` +
+  `"microformat":{"playerMicroformatRenderer":{"title":{"simpleText":"x"},"videoDetails":{"externalVideoId":"${videoId}"}}}};</script>` +
   `<script>var ytInitialData = {"contents":{"secondaryResults":[${recommendations(seed)}]},` +
   `"currentVideoEndpoint":{"clickTrackingParams":"x","commandMetadata":{"webCommandMetadata":{"url":"/watch?v=${videoId}"}},` +
   `"watchEndpoint":{"videoId":"${videoId}","nofollow":true}},` +
+  `"playerOverlays":{"playerOverlayRenderer":{"videoDetails":{"playerOverlayVideoDetailsRenderer":{"title":{"simpleText":"x"},"subtitle":{"runs":[{"text":"y"}]}}}}},` +
   `"videoOwnerRenderer":{"title":{"runs":[{"text":"Me"}]},"navigationEndpoint":{"browseEndpoint":{"browseId":"${owner}"}}}};</script></html>`;
+
+/** The same stream, answered with its player response. */
+const okPage = ({ seed = 1 } = {}) =>
+  `<html>${canonical(OWN_VIDEO)}<script>${recommendations(seed)}</script>` +
+  `<script>var ytInitialPlayerResponse = {"playabilityStatus":{"status":"OK"},${details()}};</script></html>`;
 
 function withPage(page, fn) {
   const realFetch = globalThis.fetch;
@@ -100,7 +111,7 @@ test('the current video belongs to another channel: not live', async () => {
   const viaDetails = `<html>${canonical('otherstream')}<script>${details({ videoId: 'otherstream', channelId: OTHER })}</script></html>`;
   assert.deepEqual(await check(viaDetails), { live: false });
   assert.deepEqual(await check(loginRequiredPage({ owner: OTHER, videoId: 'otherstream' })), { live: false });
-  const viaMicroformat = `<html>${canonical('otherstream')}"isLive":true"externalChannelId":"${OTHER}"</html>`;
+  const viaMicroformat = `<html>${canonical('otherstream')}"isLive":true"pageOwnerDetails":{"name":"x","externalChannelId":"${OTHER}"}</html>`;
   assert.deepEqual(await check(viaMicroformat), { live: false });
 });
 
@@ -131,8 +142,26 @@ test('a page with only recommendations (a channel that is not live) is not live'
 
 test('a channel id past the old 300 KB scan cap is still found', async () => {
   const pad = 'x'.repeat(350_000);
-  const page = `<html>"isLive":true${pad}${canonical(OWN_VIDEO)}"externalChannelId":"${OWN}"</html>`;
+  const page = `<html>"isLive":true${pad}${canonical(OWN_VIDEO)}"pageOwnerDetails":{"name":"x","externalChannelId":"${OWN}"}</html>`;
   assert.deepEqual(await check(page), { live: true, videoId: OWN_VIDEO, title: 'Live now' });
+});
+
+test('an earlier videoDetails of another shape (microformat) does not hide the player one', async () => {
+  const page = `<html>"videoDetails":{"externalVideoId":"${OWN_VIDEO}"}<script>${recommendations(9)}${details()}</script></html>`;
+  assert.deepEqual(await check(page), { live: true, videoId: OWN_VIDEO, title: 'My stream' });
+});
+
+test('the current video endpoint is read as an object: a watchEndpoint after it is not its video', async () => {
+  const page =
+    `<html><script>${recommendations(11)}"currentVideoEndpoint":{"browseEndpoint":{"browseId":"${OWN}"}},` +
+    `"watchEndpoint":{"videoId":"r11x0000000"},"videoOwnerRenderer":{"navigationEndpoint":{"browseEndpoint":{"browseId":"${OWN}"}}}` +
+    `"isLive":true</script></html>`;
+  assert.deepEqual(await check(page), { live: false });
+});
+
+test('an externalChannelId outside pageOwnerDetails is not the owner', async () => {
+  const page = `<html>${canonical(OWN_VIDEO)}"isLive":true<script>{"externalChannelId":"${OWN}"}</script></html>`;
+  assert.deepEqual(await check(page), { live: null, reason: 'owner unknown' });
 });
 
 // --- through runAlert ---------------------------------------------------
@@ -205,4 +234,16 @@ test("runAlert: another channel's stream on the page posts nothing", async () =>
   );
   assert.equal(sends.length, 0);
   assert.equal(await liveVideoId(GUILD_ID, OWN), null);
+});
+
+test('runAlert: a page that alternates between OK and LOGIN_REQUIRED neither ends nor reposts the running post', async () => {
+  let n = 0;
+  await withPage(
+    () => (n++ % 2 === 0 ? okPage({ seed: 30 + n }) : loginRequiredPage({ seed: 30 + n })),
+    async () => {
+      for (let i = 0; i < 6; i += 1) await runAlert(GUILD_ID, ALERT);
+    }
+  );
+  assert.equal(sends.length, 1, 'one post, no end message, no repost');
+  assert.equal(await liveVideoId(GUILD_ID, OWN), OWN_VIDEO);
 });

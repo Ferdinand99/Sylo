@@ -34,7 +34,7 @@ const VIDEO_FEED_XML = (videoId) =>
       <published>2024-06-01T00:00:00+00:00</published></entry></feed>`;
 
 const LIVE_HTML = (videoId, channel = YT_CHANNEL) =>
-  `<html>"isLive":true"externalChannelId":"${channel}"<link rel="canonical" href="https://www.youtube.com/watch?v=${videoId}"></html>`;
+  `<html>"isLive":true"pageOwnerDetails":{"name":"x","externalChannelId":"${channel}"}<link rel="canonical" href="https://www.youtube.com/watch?v=${videoId}"></html>`;
 
 test('runAlert (onVideo): a failed send leaves the video unseen so it retries next poll', async () => {
   const videoId = 'failvideo01';
