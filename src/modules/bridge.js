@@ -23,6 +23,7 @@
 //   - each server is isolated: queues, links and failures are per link, never shared between servers
 import { ChannelType } from 'discord.js';
 import { on } from './dispatch.js';
+import { every } from './schedule.js';
 import { getGuildModule, isModuleEnabled } from '../db/modules.js';
 import { recordAudit } from '../db/audit.js';
 import { onBeforePurge } from '../db/purge.js';
@@ -164,6 +165,48 @@ const wasDeleted = (key, messageId) =>
   Date.now() - (deletedSoon.get(`${key}|${messageId}`) ?? 0) < TOMBSTONE_MS;
 sweepMap(deletedSoon, (at, now) => now - at > TOMBSTONE_MS);
 
+// The bridge is for the owners of the two servers only (the routes check who is calling). The owner of each
+// server is recorded when the link is made and when a new owner confirms it; if the platform reports another
+// owner later, the link pauses until that owner presses Resume.
+const ownerOf = (key) => String(guildByKey(key)?.ownerId ?? '');
+
+/** The side whose server has another owner than the one recorded, or null. An unknown owner is not a change. */
+function ownerChangedSide(link) {
+  for (const s of ['a', 'b']) {
+    const recorded = s === 'a' ? link.ownerA : link.ownerB;
+    const now = ownerOf(guildOf(link, s));
+    if (recorded && now && recorded !== now) return s;
+  }
+  return null;
+}
+
+/** Pause a running link because the owner of `side`'s server changed, and say so on both sides. */
+async function pauseForOwner(link, side) {
+  if (link.status !== 'active') return;
+  await store.setLinkStatus(link.id, { status: 'paused', pausedSide: side, reason: 'owner-changed' });
+  dropBridgeCache();
+  queue.clear(laneKey(link, 'a'));
+  queue.clear(laneKey(link, 'b'));
+  log.info('bridge', `link ${link.id} paused: the owner of a server changed`);
+  for (const s of ['a', 'b']) {
+    await recordAudit(guildOf(link, s), {
+      actor: 'Sylo',
+      action: 'bridge:pause',
+      detail:
+        `the bridge of #${channelName(guildOf(link, s), channelOf(link, s))} paused: the owner of ${serverName(guildOf(link, side))} changed`.slice(
+          0,
+          500
+        ),
+      change: null,
+    });
+    await say(
+      guildOf(link, s),
+      channelOf(link, s),
+      `🌉 **Bridge paused:** the owner of ${serverLabel(guildOf(link, side))} changed. Nothing is shared until the new owner confirms it.`
+    );
+  }
+}
+
 /** Cached lookups of "which link is this channel in", dropped whenever a link changes. */
 const cache = new Map();
 export const dropBridgeCache = () => cache.clear();
@@ -203,6 +246,8 @@ const REASONS = {
   unreachable: 'Messages could not be delivered several times in a row.',
   'channel-deleted': 'A bridged channel was deleted.',
   'channel-missing': 'Sylo cannot see one of the bridged channels.',
+  'owner-changed':
+    'The owner of one of the servers changed. The bridge is paused until the new owner confirms it: as the owner, open the Bridge page and press Resume.',
   'age-restriction':
     'One channel changed its age restriction, so the two no longer match. An age-restricted channel can only be bridged with an age-restricted one.',
 };
@@ -310,6 +355,7 @@ export async function requestLink({ guildKey, channelId, options, actor }) {
     channelId,
     options: normaliseOptions(options),
     requestedBy: actor,
+    guildOwner: ownerOf(guildKey),
   });
   await recordAudit(guildKey, {
     actor,
@@ -350,6 +396,10 @@ export async function acceptLink({ guildKey, channelId, code, options, actor }) 
   const request = await store.peekCode(code);
   if (!request) throw new BridgeError(INVALID_CODE, 404);
   if (request.guildId === guildKey) throw new BridgeError('That request was made in this server.', 409);
+  const ownerA = ownerOf(request.guildId);
+  if (request.guildOwner && ownerA && request.guildOwner !== ownerA) {
+    throw new BridgeError('The server that made this request has a new owner. Ask for a new code.', 409);
+  }
   if (platformOf(request.guildId) === platformOf(guildKey)) {
     throw new BridgeError(
       'A bridge joins a Discord channel to a Fluxer channel, not two on the same platform.'
@@ -411,6 +461,8 @@ export async function acceptLink({ guildKey, channelId, code, options, actor }) 
     hookB,
     requestedBy: claimed.requestedBy,
     acceptedBy: actor,
+    ownerA,
+    ownerB: ownerOf(guildKey),
   });
   if (!id) {
     await dropMade();
@@ -496,6 +548,9 @@ export async function resumeLink({ guildKey, id, actor }) {
   if (link.status === 'paused' && link.pausedSide !== side) {
     throw new BridgeError('The other server paused this bridge, so only they can resume it.', 403);
   }
+  // The one pressing Resume is the owner of this server (the route checks): this is the confirmation a new owner gives.
+  await store.setLinkOwner(link.id, side, ownerOf(guildKey));
+  link[side === 'a' ? 'ownerA' : 'ownerB'] = ownerOf(guildKey);
   requireBothPlatforms();
   await requireModule(link.guildA);
   await requireModule(link.guildB);
@@ -522,6 +577,23 @@ export async function resumeLink({ guildKey, id, actor }) {
     }
   }
   failures.delete(link.id);
+  // The other server's owner may have changed too: it has to confirm as well before anything is shared.
+  const stillChanged = ownerChangedSide(link);
+  if (stillChanged) {
+    await store.setLinkStatus(link.id, {
+      status: 'paused',
+      pausedSide: stillChanged,
+      reason: 'owner-changed',
+    });
+    dropBridgeCache();
+    await recordAudit(guildKey, {
+      actor,
+      action: 'bridge:resume',
+      detail: `confirmed #${channelName(guildKey, channelOf(link, side))}; waiting for the other server's new owner`,
+      change: null,
+    });
+    return { active: false };
+  }
   await store.setLinkStatus(link.id, { status: 'active' });
   dropBridgeCache();
   await recordAudit(guildKey, {
@@ -532,6 +604,7 @@ export async function resumeLink({ guildKey, id, actor }) {
   });
   await say(link.guildA, link.channelA, onNotice(link.guildA, link.guildB, link.channelB));
   await say(link.guildB, link.channelB, onNotice(link.guildB, link.guildA, link.channelA));
+  return { active: true };
 }
 
 /** Unlink: either side may, at any time. The webhooks are deleted and the message map with the link. */
@@ -806,6 +879,15 @@ async function buildCopy(message, link, side, { guildKey }) {
   const plan = planAttachments(attachments, { upload: options.uploadFiles });
   const files = [];
   const links = [...plan.links];
+  // The files are held in memory until the copy is sent (and its retries are over), so the process-wide budget
+  // is held that long too: `release` gives it back, once.
+  const held = [];
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    for (const n of held) releaseDownload(n);
+  };
   for (const a of plan.upload) {
     // No room in the process-wide budget: a link, never a wait.
     if (!reserveDownload(a.size)) {
@@ -816,11 +898,11 @@ async function buildCopy(message, link, side, { guildKey }) {
       const res = await download(a.url, FILE_BYTES_LIMIT);
       if (!res.ok || !res.body?.length) throw new Error(`HTTP ${res.status}`);
       files.push({ name: a.name, data: res.body });
+      held.push(a.size);
     } catch (err) {
+      releaseDownload(a.size);
       log.debug('bridge', `file left as a link (${err?.message ?? err})`);
       links.push(a);
-    } finally {
-      releaseDownload(a.size);
     }
   }
 
@@ -836,8 +918,12 @@ async function buildCopy(message, link, side, { guildKey }) {
   );
 
   const content = joinParts([head, body, tail]);
-  if (!content && !embeds.length && !files.length) return null;
+  if (!content && !embeds.length && !files.length) {
+    release();
+    return null;
+  }
   return {
+    release,
     content,
     head,
     body,
@@ -908,14 +994,19 @@ async function removeCopy(link, target, copyId, copyHookId) {
       await transport.remove(dstKey, hook, copyId);
       return true;
     } catch (err) {
-      if (classifyError(err, 'delete').kind === 'message-gone') return true;
+      const kind = classifyError(err, 'delete').kind;
+      if (kind === 'message-gone') return true;
+      // A temporary error: the delete job is tried again (the queue backs off), the map entry stays.
+      if (kind === 'rate' || kind === 'transient') throw err;
     }
   }
   try {
     await transport.botDelete(dstKey, channelOf(link, target), copyId);
     return true;
   } catch (err) {
-    if (classifyError(err, 'delete').kind === 'message-gone') return true;
+    const kind = classifyError(err, 'delete').kind;
+    if (kind === 'message-gone') return true;
+    if (kind === 'rate' || kind === 'transient') throw err;
     log.debug('bridge', `a copy could not be removed (link ${link.id}): ${err?.message ?? err}`);
     return false;
   }
@@ -932,6 +1023,11 @@ async function allowed(message, link, side, key) {
     if (!optionsOf(link, side).bots) return false;
     // A bot that already carries a platform tag in its name is a bridge's relay account.
     if (SUFFIX.test(String(message.author.username ?? ''))) return false;
+  }
+  const changed = ownerChangedSide(link);
+  if (changed) {
+    await pauseForOwner(link, changed);
+    return false;
   }
   const theirKey = guildOf(link, other(side));
   if (!(await isModuleEnabled(theirKey, 'bridge'))) return false;
@@ -976,10 +1072,6 @@ export async function handleMessage(message, _config, key) {
     const { value: copyId, hook } = await withHook(current, target, (h) => sendCopy(dstKey, h, payload));
     if (failures.has(current.id)) failures.delete(current.id);
     // Deleted while it was being sent (moderation can be quicker than the relay): take the copy down again.
-    if (wasDeleted(key, message.id)) {
-      await removeCopy(current, target, copyId, hook.id);
-      return copyId;
-    }
     try {
       await store.saveMapping(current.id, side, {
         sourceId: message.id,
@@ -991,10 +1083,20 @@ export async function handleMessage(message, _config, key) {
     } catch (err) {
       log.warn('bridge', `could not remember a copy: ${err?.message ?? err}`);
     }
+    if (wasDeleted(key, message.id)) {
+      // Deleted while it was being sent: take the copy down again. If that cannot be done right now, the delete
+      // job (which keeps trying, and keeps the map entry) does it.
+      const gone = await removeCopy(current, target, copyId, hook.id).catch(() => false);
+      if (gone) await store.deleteMapping(current.id, side, message.id).catch(() => {});
+      else await deleteCopies(current, side, [message.id]);
+    }
     return copyId;
   };
   track(
-    queue.enqueue(laneKey(link, target), job, { op: 'send' }).catch((err) => noteFailure(link, target, err))
+    queue
+      .enqueue(laneKey(link, target), job, { op: 'send' })
+      .catch((err) => noteFailure(link, target, err))
+      .finally(() => built?.release?.())
   );
 }
 
@@ -1033,6 +1135,12 @@ export async function handleUpdate({ new: updated }, _config, key) {
     if (hash === map.contentHash) return null;
     const content = joinParts([map.extra?.head, body, map.extra?.tail]);
     const hook = hookOf(current, target);
+    // A token that cannot be read any more (the session secret changed): make the webhook again for what comes
+    // next. The copy was posted by the old one and cannot be edited, which is not a failure of the link.
+    if (hook.id && !hook.token) {
+      await recreateHook(current, target);
+      return null;
+    }
     // The copy can only be edited by the webhook that posted it; if that one was replaced, leave it as it was.
     if (!hook.id || (map.copyHookId && map.copyHookId !== hook.id)) return null;
     await transport.edit(dstKey, hook, map.counterpartId, { content: content || ZWSP, embeds });
@@ -1060,9 +1168,12 @@ async function deleteCopies(link, side, ids) {
     for (const id of ids) {
       const map = await store.mappingOf(current.id, side, id);
       if (!map) continue;
-      // Someone removed a copy: forget it, and leave the original alone.
-      if (map.isOriginal) await removeCopy(current, target, map.counterpartId, map.copyHookId);
-      await store.deleteMapping(current.id, side, id);
+      // Someone removed a copy: forget it, and leave the original alone. The map entry stays until the copy
+      // is really gone, so a delete that failed for good can still be tried again later.
+      const gone = map.isOriginal
+        ? await removeCopy(current, target, map.counterpartId, map.copyHookId)
+        : true;
+      if (gone) await store.deleteMapping(current.id, side, id);
     }
     return ids.length;
   };
@@ -1103,6 +1214,11 @@ export async function handleJoin(member, _config, key) {
     const options = optionsOf(link, side);
     if (!options.joinMessages) continue;
     if (member.user?.bot && !options.bots) continue;
+    const changed = ownerChangedSide(link);
+    if (changed) {
+      await pauseForOwner(link, changed);
+      continue;
+    }
     const target = other(side);
     const dstKey = guildOf(link, target);
     if (!(await isModuleEnabled(dstKey, 'bridge'))) continue;
@@ -1134,8 +1250,44 @@ export async function handleJoin(member, _config, key) {
 /** `channelDelete`: a bridged channel that is gone stops its link. */
 export async function handleChannelDelete(channel, _config, key) {
   const found = await findLink(key, channel.id);
-  if (found) await failLink(found.link.id, 'channel-deleted');
+  if (!found) return;
+  const { link } = found;
+  if (link.status === 'active') {
+    await failLink(link.id, 'channel-deleted');
+    return;
+  }
+  // Paused or already stopped: it stays as it is, but Health must say the channel is gone (resume would refuse).
+  await store.setLinkStatus(link.id, {
+    status: link.status,
+    pausedSide: link.pausedSide,
+    reason: 'channel-deleted',
+    failures: link.failureCount,
+  });
+  dropBridgeCache();
+  await recordAudit(key, {
+    actor: 'Sylo',
+    action: 'bridge:stopped',
+    detail: `a bridged channel was deleted while the bridge of #${channel.name ?? 'it'} was not running`,
+    change: null,
+  });
 }
+
+/**
+ * Check the owners of every running link (a change of owner pauses it). Messages check as they come; this
+ * covers a quiet link, so a new owner is asked to confirm without waiting for traffic.
+ */
+export async function sweepOwners() {
+  let paused = 0;
+  for (const link of await store.activeLinks()) {
+    const changed = ownerChangedSide(link);
+    if (changed) {
+      await pauseForOwner(link, changed);
+      paused += 1;
+    }
+  }
+  return paused;
+}
+every('bridge', 5 * 60_000, () => sweepOwners());
 
 on('bridge', 'messageCreateAny', handleMessage);
 on('bridge', 'messageUpdate', handleUpdate);
@@ -1167,6 +1319,8 @@ export function linkView(link, key) {
     pausedByMe: link.status === 'paused' && link.pausedSide === side,
     pausedByThem: link.status === 'paused' && link.pausedSide === theirs,
     problem: link.status === 'failed' ? { code: link.failReason, text: reasonText(link.failReason) } : null,
+    // Why a paused link is paused beyond "a server paused it": its owner changed, or its channel is gone.
+    pauseNote: link.status === 'paused' && link.failReason ? reasonText(link.failReason) : null,
     mine: { channelId: channelOf(link, side), ...endView(key, channelOf(link, side)) },
     theirs: endView(guildOf(link, theirs), channelOf(link, theirs)),
     options: optionsOf(link, side),
@@ -1214,7 +1368,7 @@ export async function bridgeOverview(key) {
  */
 export async function bridgeProblems(key) {
   return (await store.linksOfGuild(key))
-    .filter((l) => l.status === 'failed')
+    .filter((l) => l.status === 'failed' || (l.status === 'paused' && l.failReason))
     .map((l) => {
       const side = sideOf(l, key);
       return {

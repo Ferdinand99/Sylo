@@ -46,6 +46,8 @@ registerPostgresBootstrap(`
     hook_b_token      TEXT NOT NULL DEFAULT '',
     requested_by_name TEXT NOT NULL DEFAULT '',
     accepted_by_name  TEXT NOT NULL DEFAULT '',
+    owner_a           TEXT NOT NULL DEFAULT '',
+    owner_b           TEXT NOT NULL DEFAULT '',
     created_at        BIGINT NOT NULL,
     updated_at        BIGINT NOT NULL
   );
@@ -59,6 +61,7 @@ registerPostgresBootstrap(`
     code_hash         TEXT NOT NULL,
     options           TEXT NOT NULL DEFAULT '{}',
     requested_by_name TEXT NOT NULL DEFAULT '',
+    guild_owner       TEXT NOT NULL DEFAULT '',
     expires_at        BIGINT NOT NULL,
     created_at        BIGINT NOT NULL
   );
@@ -86,9 +89,9 @@ const s = {
   insertLink: prepare(
     `INSERT INTO bridge_links
        (guild_a, channel_a, guild_b, channel_b, status, options_a, options_b, hook_a_id, hook_a_token,
-        hook_b_id, hook_b_token, requested_by_name, accepted_by_name, created_at, updated_at)
+        hook_b_id, hook_b_token, requested_by_name, accepted_by_name, owner_a, owner_b, created_at, updated_at)
      VALUES (@guildA, @channelA, @guildB, @channelB, 'active', @optionsA, @optionsB, @hookAId, @hookAToken,
-        @hookBId, @hookBToken, @requestedBy, @acceptedBy, @now, @now)`,
+        @hookBId, @hookBToken, @requestedBy, @acceptedBy, @ownerA, @ownerB, @now, @now)`,
     { returningId: true }
   ),
   link: prepare('SELECT * FROM bridge_links WHERE id = ?'),
@@ -105,6 +108,10 @@ const s = {
   ),
   setOptionsA: prepare('UPDATE bridge_links SET options_a = @options, updated_at = @now WHERE id = @id'),
   setOptionsB: prepare('UPDATE bridge_links SET options_b = @options, updated_at = @now WHERE id = @id'),
+  setOwnerA: prepare('UPDATE bridge_links SET owner_a = @owner, updated_at = @now WHERE id = @id'),
+  setOwnerB: prepare('UPDATE bridge_links SET owner_b = @owner, updated_at = @now WHERE id = @id'),
+  resealA: prepare('UPDATE bridge_links SET hook_a_token = @token WHERE id = @id AND hook_a_token = @plain'),
+  resealB: prepare('UPDATE bridge_links SET hook_b_token = @token WHERE id = @id AND hook_b_token = @plain'),
   setHookA: prepare(
     'UPDATE bridge_links SET hook_a_id = @id2, hook_a_token = @token, updated_at = @now WHERE id = @id'
   ),
@@ -113,12 +120,13 @@ const s = {
   ),
   delLink: prepare('DELETE FROM bridge_links WHERE id = ?'),
   delLinkMessages: prepare('DELETE FROM bridge_messages WHERE link_id = ?'),
+  activeLinks: prepare("SELECT * FROM bridge_links WHERE status = 'active'"),
   linkIdsOfGuild: prepare('SELECT id FROM bridge_links WHERE guild_a = ? OR guild_b = ?'),
   delLinksOfGuild: prepare('DELETE FROM bridge_links WHERE guild_a = ? OR guild_b = ?'),
 
   insertCode: prepare(
-    `INSERT INTO bridge_codes (guild_id, channel_id, code_hash, options, requested_by_name, expires_at, created_at)
-     VALUES (@guildId, @channelId, @hash, @options, @requestedBy, @expiresAt, @now)`,
+    `INSERT INTO bridge_codes (guild_id, channel_id, code_hash, options, requested_by_name, guild_owner, expires_at, created_at)
+     VALUES (@guildId, @channelId, @hash, @options, @requestedBy, @guildOwner, @expiresAt, @now)`,
     { returningId: true }
   ),
   codeByHash: prepare('SELECT * FROM bridge_codes WHERE code_hash = ? AND expires_at > ?'),
@@ -154,8 +162,10 @@ const s = {
 
 // --- links -----------------------------------------------------------------------------------------
 
-// A webhook token is a bearer credential for the channel, so it is sealed in the table. A value stored
-// before sealing (it has no v1. prefix) is read as it is.
+// A webhook token is a bearer credential for the channel, so it is sealed in the table. A plain value (no
+// v1. prefix) is sealed in place the first time its row is read (readLink below), and until then read as it
+// is. No release ever wrote plain tokens, so this only covers development and test databases.
+// TODO(5.4): drop the plain branch of openToken and the resealing, so a plain value can never persist.
 const TOKEN_PURPOSE = 'bridge-webhook';
 const sealToken = (token) => (token ? seal(config.sessionSecret, TOKEN_PURPOSE, token) : '');
 const openToken = (stored) => {
@@ -193,9 +203,29 @@ export function linkFrom(row) {
     hookBToken: openToken(row.hook_b_token),
     requestedBy: row.requested_by_name || '',
     acceptedBy: row.accepted_by_name || '',
+    // The platform user id of each server's owner when the link was made (or last confirmed). The bridge is
+    // for the server owners only, so a change of owner pauses the link until the new owner confirms.
+    ownerA: row.owner_a || '',
+    ownerB: row.owner_b || '',
     createdAt: Number(row.created_at),
     updatedAt: Number(row.updated_at),
   };
+}
+
+/** A link from its row, sealing a plain webhook token in place on the way (see openToken). */
+async function readLink(row) {
+  if (!row) return null;
+  for (const side of ['a', 'b']) {
+    const stored = row[`hook_${side}_token`];
+    if (stored && !isSealed(stored)) {
+      await (side === 'a' ? s.resealA : s.resealB).run({
+        id: row.id,
+        token: sealToken(stored),
+        plain: stored,
+      });
+    }
+  }
+  return linkFrom(row);
 }
 
 /**
@@ -203,7 +233,7 @@ export function linkFrom(row) {
  * decide, so two requests that race cannot both win).
  * @param {{ guildA: string, channelA: string, guildB: string, channelB: string, optionsA?: object,
  *   optionsB?: object, hookA?: { id: string, token: string }, hookB?: { id: string, token: string },
- *   requestedBy?: string, acceptedBy?: string }} link
+ *   requestedBy?: string, acceptedBy?: string, ownerA?: string, ownerB?: string }} link
  */
 export async function createLink(link) {
   try {
@@ -220,6 +250,8 @@ export async function createLink(link) {
       hookBToken: sealToken(link.hookB?.token),
       requestedBy: String(link.requestedBy ?? '').slice(0, 100),
       acceptedBy: String(link.acceptedBy ?? '').slice(0, 100),
+      ownerA: String(link.ownerA ?? ''),
+      ownerB: String(link.ownerB ?? ''),
       now: Date.now(),
     });
     return Number(res.lastInsertRowid);
@@ -229,8 +261,11 @@ export async function createLink(link) {
   }
 }
 
-export const getLink = async (id) => linkFrom(await s.link.get(Number(id)));
-export const linksOfGuild = async (key) => (await s.linksOfGuild.all(key, key)).map(linkFrom);
+export const getLink = async (id) => readLink(await s.link.get(Number(id)));
+export const linksOfGuild = async (key) =>
+  Promise.all((await s.linksOfGuild.all(key, key)).map((row) => readLink(row)));
+/** Every running link (the owner sweep). */
+export const activeLinks = async () => Promise.all((await s.activeLinks.all()).map((row) => readLink(row)));
 export const linkCount = async (key) => Number((await s.countLinks.get(key, key)).n);
 
 /**
@@ -239,16 +274,16 @@ export const linkCount = async (key) => Number((await s.countLinks.get(key, key)
  */
 export async function linkForChannel(guildKey, channelId) {
   const a = await s.linkByChannelA.get(guildKey, channelId);
-  if (a) return { link: linkFrom(a), side: 'a' };
+  if (a) return { link: await readLink(a), side: 'a' };
   const b = await s.linkByChannelB.get(guildKey, channelId);
-  if (b) return { link: linkFrom(b), side: 'b' };
+  if (b) return { link: await readLink(b), side: 'b' };
   return null;
 }
 
 /** The link that owns a webhook id (one of Sylo's bridge webhooks), or null. */
 export async function linkForHook(hookId) {
   if (!hookId) return null;
-  return linkFrom(await s.linkByHook.get({ id: String(hookId) }));
+  return readLink(await s.linkByHook.get({ id: String(hookId) }));
 }
 
 export const STATUSES = Object.freeze(['active', 'paused', 'failed']);
@@ -269,6 +304,14 @@ export const setLinkOptions = (id, side, options) =>
   (side === 'a' ? s.setOptionsA : s.setOptionsB).run({
     id: Number(id),
     options: JSON.stringify(options ?? {}),
+    now: Date.now(),
+  });
+
+/** Record who owns a server now (the new owner confirmed the bridge). */
+export const setLinkOwner = (id, side, owner) =>
+  (side === 'a' ? s.setOwnerA : s.setOwnerB).run({
+    id: Number(id),
+    owner: String(owner ?? ''),
     now: Date.now(),
   });
 
@@ -343,6 +386,7 @@ export async function createCode({
   channelId,
   options = {},
   requestedBy = '',
+  guildOwner = '',
   ttlMs = CODE_TTL_MS,
 }) {
   const now = Date.now();
@@ -353,6 +397,7 @@ export async function createCode({
     hash: hashOf(code),
     options: JSON.stringify(options),
     requestedBy: String(requestedBy).slice(0, 100),
+    guildOwner: String(guildOwner ?? ''),
     expiresAt: now + ttlMs,
     now,
   });
@@ -373,6 +418,7 @@ export async function claimCode(text, now = Date.now()) {
     channelId: row.channel_id,
     options: parseJson(row.options),
     requestedBy: row.requested_by_name,
+    guildOwner: row.guild_owner || '',
     expiresAt: Number(row.expires_at),
   };
 }
@@ -462,6 +508,7 @@ export async function peekCode(text, now = Date.now()) {
     channelId: row.channel_id,
     options: parseJson(row.options),
     requestedBy: row.requested_by_name,
+    guildOwner: row.guild_owner || '',
     expiresAt: Number(row.expires_at),
   };
 }

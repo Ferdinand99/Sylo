@@ -42,6 +42,7 @@ const overview = (over = {}) => ({
   platform: 'discord',
   bothPlatforms: true,
   enabled: true,
+  owner: true,
   limits: { links: 10, requests: 5 },
   links: [],
   requests: [],
@@ -86,6 +87,37 @@ describe('Bridge page', () => {
     renderAtGuild(<Bridge />, GUILD);
     expect(await screen.findByText(/Turn the module on above/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Link the channels' }).disabled).toBe(true);
+  });
+
+  it('is read-only for everyone but the server owner, with a note that says so', async () => {
+    api.getBridge.mockResolvedValue(
+      overview({
+        owner: false,
+        links: [link({ pauseNote: 'The owner of one of the servers changed.' })],
+        requests: [
+          {
+            id: 3,
+            channelId: MAIN,
+            channel: 'general',
+            expiresAt: Date.now() + 900_000,
+            requestedBy: 'Alice',
+          },
+        ],
+      })
+    );
+    renderAtGuild(<Bridge />, GUILD);
+    expect(await screen.findByText(/Only the server owner can ask for a link/)).toBeTruthy();
+    expect(screen.getByText(/#general ↔ #chat/)).toBeTruthy();
+    expect(screen.getByText('The owner of one of the servers changed.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Pause' }).disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: 'More actions for #general' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'More actions for the request of #general' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Get a code' }).disabled).toBe(true);
+    expect(screen.getByRole('button', { name: 'Link the channels' }).disabled).toBe(true);
+    expect(
+      screen.getByLabelText('Share messages from bots', { selector: '#opt-7-bots' }).matches(':disabled')
+    ).toBe(true);
+    expect(screen.getByLabelText('Code').closest('fieldset').disabled).toBe(true);
   });
 
   it('lists a link with the other side, its status, and what each side shares', async () => {

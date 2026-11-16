@@ -10,7 +10,6 @@ import {
 } from '../api.js';
 import { notify } from '../notify.js';
 import { useApiData } from '../useApiData.js';
-import { AccessLock } from '../access.jsx';
 import LoadError from '../components/LoadError.jsx';
 import HowItWorks from '../components/HowItWorks.jsx';
 import CopyButton from '../components/CopyButton.jsx';
@@ -115,6 +114,8 @@ export default function Bridge() {
   const other = data.platform === 'fluxer' ? 'Discord' : 'Fluxer';
   const here = PLATFORM[data.platform];
   const ready = data.bothPlatforms && data.enabled;
+  // Only the owner of the server can change a bridge; everyone with View access reads the status.
+  const owner = data.owner === true;
 
   async function run(fn, done) {
     setBusy(true);
@@ -186,9 +187,9 @@ export default function Bridge() {
       </p>
       <HowItWorks>
         <p>
-          Both servers agree. One asks for a link and gets a code that works for 15 minutes; someone with Edit
-          access in the other server uses it and picks a channel. Sylo has to be in both servers. Either side
-          can unlink at any time.
+          Both servers agree. One asks for a link and gets a code that works for 15 minutes; the owner of the
+          other server uses it and picks a channel. Sylo has to be in both servers. Either side can unlink at
+          any time.
         </p>
         <p>
           What crosses: messages, replies (as a short quote), files up to 8 MB (otherwise a link), custom
@@ -244,6 +245,7 @@ export default function Bridge() {
                     />
                   </p>
                   {link.problem ? <p className="v2-note v2-row-warn">{link.problem.text}</p> : null}
+                  {link.pauseNote ? <p className="v2-note v2-row-warn">{link.pauseNote}</p> : null}
                   {link.pausedByThem ? (
                     <p className="v2-note">
                       {link.theirs.server} paused this bridge. Only they can resume it.
@@ -251,14 +253,14 @@ export default function Bridge() {
                   ) : null}
                   <details className="v2-bridge-details">
                     <summary>What this server shares</summary>
-                    <AccessLock need="edit">
+                    <fieldset className="v2-access-lock" disabled={!owner}>
                       <OptionSwitches
                         idPrefix={`opt-${link.id}`}
                         options={link.options}
                         disabled={busy}
                         onChange={(patch) => onOption(link, patch)}
                       />
-                    </AccessLock>
+                    </fieldset>
                     <p className="v2-field-hint">
                       The other server decides for itself what it shares. Bot messages:{' '}
                       {link.theirOptions.bots ? 'shared' : 'not shared'}. Who joins:{' '}
@@ -272,18 +274,22 @@ export default function Bridge() {
                     link.status === 'active'
                       ? {
                           label: 'Pause',
-                          disabled: busy,
+                          disabled: busy || !owner,
                           onClick: () => run(() => bridgeLinkAction(guildId, link.id, 'pause')),
                         }
                       : canResume
                         ? {
                             label: 'Resume',
-                            disabled: busy,
+                            disabled: busy || !owner,
                             onClick: () => run(() => bridgeLinkAction(guildId, link.id, 'resume')),
                           }
                         : null
                   }
-                  items={[{ label: 'Unlink', danger: true, disabled: busy, onClick: () => onUnlink(link) }]}
+                  items={
+                    owner
+                      ? [{ label: 'Unlink', danger: true, disabled: busy, onClick: () => onUnlink(link) }]
+                      : []
+                  }
                 />
               </div>
             );
@@ -305,14 +311,18 @@ export default function Bridge() {
                 </div>
                 <RowActions
                   menuLabel={`More actions for the request of #${r.channel}`}
-                  items={[
-                    {
-                      label: 'Cancel request',
-                      danger: true,
-                      disabled: busy,
-                      onClick: () => onCancelRequest(r),
-                    },
-                  ]}
+                  items={
+                    owner
+                      ? [
+                          {
+                            label: 'Cancel request',
+                            danger: true,
+                            disabled: busy,
+                            onClick: () => onCancelRequest(r),
+                          },
+                        ]
+                      : []
+                  }
                 />
               </div>
             ))}
@@ -320,12 +330,18 @@ export default function Bridge() {
         </div>
       ) : null}
 
-      <AccessLock need="edit" note>
+      {!owner ? (
+        <p className="v2-note v2-access-note">
+          Only the server owner can ask for a link, use a code, change what this server shares, or pause,
+          resume and unlink a bridge. You can see the status here.
+        </p>
+      ) : null}
+      <fieldset className="v2-access-lock" disabled={!owner}>
         <div className="v2-group v2-section-gap">
           <h2 className="v2-group-title">Ask the other server</h2>
           <p className="v2-field-hint">
-            Pick the channel here that should be bridged. You get a one-time code to give to someone with Edit
-            access in the {other} server.
+            Pick the channel here that should be bridged. You get a one-time code to give to the owner of the{' '}
+            {other} server.
           </p>
           <form onSubmit={onAsk} className="v2-bridge-form">
             <div className="v2-field">
@@ -404,7 +420,7 @@ export default function Bridge() {
             </button>
           </form>
         </div>
-      </AccessLock>
+      </fieldset>
     </>
   );
 }

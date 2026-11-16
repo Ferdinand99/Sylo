@@ -1624,6 +1624,8 @@ export const MIGRATIONS = [
         hook_b_token      TEXT NOT NULL DEFAULT '',
         requested_by_name TEXT NOT NULL DEFAULT '',
         accepted_by_name  TEXT NOT NULL DEFAULT '',
+        owner_a           TEXT NOT NULL DEFAULT '',
+        owner_b           TEXT NOT NULL DEFAULT '',
         created_at        INTEGER NOT NULL,
         updated_at        INTEGER NOT NULL
       );
@@ -1637,6 +1639,7 @@ export const MIGRATIONS = [
         code_hash         TEXT NOT NULL,
         options           TEXT NOT NULL DEFAULT '{}',
         requested_by_name TEXT NOT NULL DEFAULT '',
+        guild_owner       TEXT NOT NULL DEFAULT '',
         expires_at        INTEGER NOT NULL,
         created_at        INTEGER NOT NULL
       );

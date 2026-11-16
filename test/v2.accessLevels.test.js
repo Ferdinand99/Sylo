@@ -145,8 +145,6 @@ const WRITES = [
   ['/modules/afk', { enabled: true }, 200],
   ['/settings', { botMasterRoleIds: [MASTER], modlogChannelId: '' }, 200],
   ['/modules/afk/config', {}, 200],
-  ['/modules/bridge/links/999999/pause', {}, 404],
-  ['/modules/bridge/links/999999/options', { options: { bots: true } }, 404],
   ['/moderation/warnings/clear', { userId: '810000000000000001' }, 404],
   ['/access', { viewRoleIds: [VIEW, OTHER_ROLE] }, 200],
   ['/setup/apply', { items: [] }, 400],

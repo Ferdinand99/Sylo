@@ -49,7 +49,7 @@ function makeGuild(client, { id, name }) {
     id,
     name,
     client,
-    ownerId: 'owner',
+    ownerId: `owner-of-${id}`, // each server has its own owner (a platform user id)
     nsfw: false, // the server's own age restriction (Fluxer)
     channels: { cache: new Map() },
     emojis: { cache: new Map() },

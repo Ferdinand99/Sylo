@@ -23,7 +23,7 @@ const store = await import('../src/db/bridge.js');
 const { listAudit } = await import('../src/db/audit.js');
 const { purgeGuild } = await import('../src/db/purge.js');
 const { ROUTE_ACCESS } = await import('../src/web/lib/routeAccess.js');
-const { dropBridgeCache } = await import('../src/modules/bridge.js');
+const { dropBridgeCache, sweepOwners } = await import('../src/modules/bridge.js');
 const { useFakes } = await import('./helpers/fakeBridge.js');
 
 const F_KEY = `fluxer:${F_GUILD}`;
@@ -65,6 +65,8 @@ beforeEach(async () => {
   fGuild.nsfw = false;
   dGuild.members.cache.clear();
   fGuild.members.cache.clear();
+  for (const guild of [dGuild, fGuild, runtime.clients.discord.guilds.cache.get(OTHER_D_GUILD)])
+    guild.ownerId = 'x';
   addChannel(dGuild, CH.d1, 'discord-main');
   addChannel(dGuild, CH.d2, 'discord-two');
   addChannel(dGuild, CH.dNsfw, 'discord-nsfw', true);
@@ -91,6 +93,11 @@ async function person(platform, { guilds, hidden = [], member = true } = {}) {
   if (guilds) profiles[platform].guilds = guilds;
   const b = ownBrowser();
   await signIn(b, platform);
+  // The platform reports the person as the owner of every server the profile lists as theirs.
+  const client = platform === 'discord' ? runtime.clients.discord : runtime.clients.fluxer;
+  for (const g of profiles[platform].guilds) {
+    if (g.owner === true) client.guilds.cache.get(g.id).ownerId = profiles[platform].id;
+  }
   // The person's member in the server (the channel rights are read from it); `hidden` channels they cannot see.
   if (member) {
     const id = profiles[platform].id;
@@ -447,4 +454,80 @@ test('a Fluxer channel in an age-restricted category or server is refused for an
     200,
     'clear: it links'
   );
+});
+
+const ALL_POSTS = (key) =>
+  [
+    ['/request', { channelId: CH.d1 }],
+    ['/accept', { code: 'ABCD-EFGH-JKMN', channelId: CH.d1 }],
+    ['/requests/1/cancel', {}],
+    ['/links/1/options', { options: { bots: true } }],
+    ['/links/1/pause', {}],
+    ['/links/1/resume', {}],
+    ['/links/1/unlink', {}],
+  ].map(([path, body]) => [`${base(key)}${path}`, body]);
+
+test('an Administrator who is not the owner cannot do anything to a bridge, but can see its status', async () => {
+  // a real link, made by the owners
+  const d = await dAdmin();
+  const f = await fAdmin();
+  const { code } = await json(await d.post(`${base(D_GUILD)}/request`, { channelId: CH.d1 }));
+  await f.post(`${base(F_KEY)}/accept`, { code, channelId: CH.f1 });
+  const id = (await store.linksOfGuild(D_GUILD))[0].id;
+  const before = await store.getLink(id);
+
+  const admin = await person('discord', { guilds: [{ id: D_GUILD, owner: false, permissions: '8' }] });
+  const read = await admin.get(`${base(D_GUILD)}/config`);
+  assert.equal(read.status, 200, 'Administrator reads the status (View)');
+  const seen = await json(read);
+  assert.equal(seen.owner, false);
+  assert.equal(seen.links.length, 1);
+  for (const [path, body] of ALL_POSTS(D_GUILD)) {
+    const res = await admin.post(path.replace('/links/1/', `/links/${id}/`), body);
+    assert.equal(res.status, 403, path);
+    assert.match((await json(res)).error, /Only the server owner/, path);
+  }
+  assert.deepEqual(await store.getLink(id), before, 'nothing changed');
+  assert.equal((await store.pendingCodes(D_GUILD)).length, 0);
+
+  // the same on the Fluxer side
+  const fAdminOnly = await person('fluxer', { guilds: [{ id: F_GUILD, owner: false, permissions: '8' }] });
+  for (const [path, body] of ALL_POSTS(F_KEY)) {
+    const res = await fAdminOnly.post(path.replace('/links/1/', `/links/${id}/`), body);
+    assert.equal(res.status, 403, path);
+    assert.match((await json(res)).error, /Only the server owner/, path);
+  }
+  assert.equal((await store.getLink(id)).status, 'active');
+
+  // the owner of the server reads `owner: true` and can act
+  assert.equal((await json(await d.get(`${base(D_GUILD)}/config`))).owner, true);
+  assert.equal((await d.post(`${base(D_GUILD)}/links/${id}/pause`)).status, 200);
+});
+
+test('a transfer of ownership pauses the link, and only the new owner can resume it', async () => {
+  const d = await dAdmin();
+  const f = await fAdmin();
+  const { code } = await json(await d.post(`${base(D_GUILD)}/request`, { channelId: CH.d1 }));
+  await f.post(`${base(F_KEY)}/accept`, { code, channelId: CH.f1 });
+  const id = (await store.linksOfGuild(D_GUILD))[0].id;
+
+  dGuild.ownerId = 'transfer-target'; // the Discord server is handed to someone else
+  assert.equal(await sweepOwners(), 1);
+  const paused = await store.getLink(id);
+  assert.deepEqual([paused.status, paused.pausedSide, paused.failReason], ['paused', 'a', 'owner-changed']);
+
+  // the previous owner is no longer the owner: refused. The Fluxer owner cannot resume Discord's confirmation.
+  assert.equal((await d.post(`${base(D_GUILD)}/links/${id}/resume`)).status, 403);
+  const blocked = await f.post(`${base(F_KEY)}/links/${id}/resume`);
+  assert.equal(blocked.status, 403);
+  assert.match((await json(blocked)).error, /only they can resume/);
+  const view = (await json(await f.get(`${base(F_KEY)}/config`))).links[0];
+  assert.deepEqual([view.status, view.pausedByThem], ['paused', true]);
+  assert.match(view.pauseNote, /owner of one of the servers changed/);
+
+  const newOwner = await person('discord'); // becomes the owner the platform reports
+  const confirmed = await newOwner.post(`${base(D_GUILD)}/links/${id}/resume`);
+  assert.equal(confirmed.status, 200);
+  const row = await store.getLink(id);
+  assert.deepEqual([row.status, row.ownerA], ['active', dGuild.ownerId]);
 });

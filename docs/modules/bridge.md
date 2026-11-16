@@ -10,14 +10,28 @@ Sylo is) and that is a member of both servers.
 **Dashboard:** `/v2/guilds/<id>/m/bridge` - the linked channels, a form to ask for a link, a form to use a
 code, what this server shares, and pause, resume and unlink.
 
+## Who can use it: the server owner
+
+**Only the owner of a server can use the bridge** (the Discord server owner, the Fluxer server owner), on
+both sides. Administrators, people with **Edit** access to the dashboard and the bot-master roles cannot ask
+for a link, use a code, change what a server shares, or pause, resume or unlink a bridge. People with **View**
+access see the status of the links on the page, read-only. Ownership is checked again on every action, from
+the owner the platform reports for the server.
+
+Sylo records who owns each server when the link is made. **If the owner of either server changes, the link
+pauses** (on both sides, with a notice and an audit entry) **until the new owner confirms it**: the new
+owner opens the Bridge page and presses **Resume**. If both servers changed owner, both owners have to confirm.
+A code that was made by a previous owner is refused. Messages check this as they come, and a check every five
+minutes covers a quiet link.
+
 ## Linking: both servers agree
 
 A link is never made from one side alone.
 
-1. In the first server, someone with **Edit** access opens the Bridge page, picks a channel and presses
+1. In the first server, the owner opens the Bridge page, picks a channel and presses
    **Get a code**. The code (`XXXX-XXXX-XXXX`) works once and for **15 minutes**. Sylo stores only a hash of
    it, so it is shown this one time.
-2. They give the code to someone with **Edit** access in the other server. That person opens the Bridge
+2. They give the code to the owner of the other server. That owner opens the Bridge
    page there, pastes the code, picks the channel that should join it and presses **Link the channels**.
 3. Sylo makes a webhook in each channel and posts a notice in both: "Bridge on. Messages in this channel are
    shared with #chat in Fluxer Home on Fluxer ...".
@@ -26,7 +40,7 @@ A link joins a Discord channel to a Fluxer channel, never two on the same platfo
 at a time, and a server has at most 10 links and 5 waiting requests. The Bridge module must be on in both
 servers. Wrong codes are rate limited, and a few wrong ones in a row lock the attempts for a while.
 
-**Either side can unlink at any time** (Edit access). Both webhooks are deleted, the message map goes, and
+**Either side can unlink at any time** (the owner). Both webhooks are deleted, the message map goes, and
 both channels are told. If Sylo is removed from a server, the server on the other end loses its webhook and
 is told too.
 
@@ -75,23 +89,27 @@ stopped itself (see below) can be resumed by either server once the cause is fix
   problem with the reason, and it is not retried until someone presses **Resume**.
 - **Webhooks are Sylo's.** Sylo makes and manages the webhook of each channel and makes a new one if it is
   deleted. Its token is stored sealed (AES-256-GCM, keyed from the session secret) and never sent to the
-  browser. If the session secret changes, the tokens cannot be read and Sylo makes new webhooks.
+  browser. If the session secret changes, the tokens cannot be read and Sylo makes new webhooks (also when it
+  only wanted to edit a copy). A plain-text token from a development database is sealed the first time its link
+  is read; accepting plain text at all is removed in a later version.
 - **You can only bridge what you can see.** The person who asks for a link, and the one who uses a code, must
-  be able to view, read and send in their channel themselves; Edit access to the dashboard alone is not enough.
+  be able to view, read and send in their channel themselves (an owner normally can).
 - **Deletes always follow.** A copy is removed even if the link is paused or stopped, when the delete comes
   before the copy was posted, after a webhook was replaced (Sylo then deletes it as the bot, which needs Manage
   Messages), and for a purge of many messages. After an unlink the message map is gone, so copies already
   posted stay and a later delete of the original no longer reaches them.
-- **File downloads share one budget** (4 at a time and 32 MB in flight for the whole Sylo): a file that does not
-  fit crosses as a link.
+- **File downloads share one budget** (4 files held at a time and 32 MB for the whole Sylo): a file is held from
+  its download until its copy is sent, and a file that does not fit crosses as a link.
+- **A delete that hits a temporary error is tried again** (with growing pauses), and the message map entry stays
+  until the copy is really gone.
 
 ## Needs
 
 - **Manage Webhooks**, View Channel and Send Messages in each bridged channel (the Health page checks them).
 - The **Message Content** intent (`INTENT_MESSAGE_CONTENT`, on by default).
-- Edit access to the dashboard in the server that makes the request and in the server that uses the code.
+- Being the owner of the server that makes the request and of the server that uses the code.
 
 ## API
 
 The Sylo app can read and change a bridge through `/api/v2` (`bridge` in the app's feature list). A GET at
-View level, everything else at Edit level. See [mobile-app.md](../mobile-app.md).
+View level, everything else for the server owner only (Edit access is not enough). See [mobile-app.md](../mobile-app.md).

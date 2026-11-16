@@ -10,6 +10,7 @@ import { accessRouter } from '../middleware/access.js';
 import { currentUser, userIdForGuild } from '../middleware/auth.js';
 import { clientKey, platformActionLimit, rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
+import { GuildOwnerError, isGuildOwner, requireGuildOwner } from '../lib/guildOwner.js';
 import { sweepMap } from '../../lib/sweepMap.js';
 import {
   BridgeError,
@@ -35,13 +36,20 @@ const linkId = (req) => {
   return n;
 };
 
-/** Run a handler; a refusal of the bridge becomes its own status and message instead of a server error. */
+/**
+ * Run a changing handler. Every change to a bridge is the SERVER OWNER's alone (the owner the platform reports
+ * for this server, worked out again on every call): Edit access, Administrator and the bot-master roles do
+ * not reach it. View access reads the page (the GET below). A refusal becomes its own status and message.
+ */
 const guarded = (fn) =>
   asyncHandler(async (req, res) => {
     try {
+      requireGuildOwner(req, req.guild.id);
       await fn(req, res);
     } catch (err) {
-      if (err instanceof BridgeError) return res.status(err.status).json({ error: err.message });
+      if (err instanceof BridgeError || err instanceof GuildOwnerError) {
+        return res.status(err.status).json({ error: err.message });
+      }
       throw err;
     }
   });
@@ -70,7 +78,12 @@ const noteWrong = (req) => {
   wrong.set(id, { n: (hit && Date.now() - hit.at < WRONG_WINDOW_MS ? hit.n : 0) + 1, at: Date.now() });
 };
 
-const overview = (req) => bridgeOverview(req.guild.id);
+// `owner`: may this person change the bridge? The page shows the status to everyone with View access and
+// enables the controls only for the owner.
+const overview = async (req) => ({
+  ...(await bridgeOverview(req.guild.id)),
+  owner: isGuildOwner(req, req.guild.id),
+});
 
 // The person must be able to view, read and send in the channel themselves (Edit access alone is not enough:
 // a bot-master may not see every channel, and the bridge would carry it to a server they run).

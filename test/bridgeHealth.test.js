@@ -7,7 +7,17 @@ import { setGuildModule } from '../src/db/modules.js';
 import { purgeGuild } from '../src/db/purge.js';
 import { buildHealthReport } from '../src/web/lib/permissionHealth.js';
 import { keyedGuild } from '../src/platform/platformOf.js';
-import { acceptLink, failLink, requestLink, useBridgeParts, dropBridgeCache } from '../src/modules/bridge.js';
+import {
+  acceptLink,
+  dropBridgeCache,
+  failLink,
+  handleChannelDelete,
+  pauseLink,
+  requestLink,
+  resumeLink,
+  sweepOwners,
+  useBridgeParts,
+} from '../src/modules/bridge.js';
 import { D, F, installPlatforms, removePlatforms, useFakes } from './helpers/fakeBridge.js';
 
 let p;
@@ -70,4 +80,23 @@ test('a server with the module off is not checked', async () => {
     modules: [{ id: 'bridge', enabled: false, config: {} }],
   });
   assert.deepEqual(report.checks, []);
+});
+
+test('a paused link whose owner changed, or whose channel was deleted, is a problem too', async () => {
+  const dCh = p.channel(p.dGuild, { name: 'discord-chat' });
+  const fCh = p.channel(p.fGuild, { name: 'fluxer-chat' });
+  const made = await requestLink({ guildKey: D, channelId: dCh.id, actor: 'A' });
+  const link = await acceptLink({ guildKey: F, channelId: fCh.id, code: made.code, actor: 'B' });
+  p.fGuild.ownerId = 'new owner';
+  await sweepOwners();
+  const { checks } = await forBridge(keyedGuild(p.dGuild));
+  const owner = checks.find((c) => c.code === 'bridge-stopped');
+  assert.ok(owner, 'listed although it is paused, not stopped');
+  assert.match(owner.message, /owner of one of the servers changed/);
+
+  await resumeLink({ guildKey: F, id: link.id, actor: 'B' });
+  await pauseLink({ guildKey: D, id: link.id, actor: 'A' });
+  await handleChannelDelete(dCh, {}, D);
+  const after = await forBridge(keyedGuild(p.dGuild));
+  assert.match(after.checks.find((c) => c.code === 'bridge-stopped').message, /channel was deleted/);
 });

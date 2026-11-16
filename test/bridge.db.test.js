@@ -90,6 +90,8 @@ test('migration 83 creates the three tables, the unique channel indexes and the 
     'hook_b_token',
     'requested_by_name',
     'accepted_by_name',
+    'owner_a',
+    'owner_b',
     'created_at',
     'updated_at',
   ]);
@@ -100,6 +102,7 @@ test('migration 83 creates the three tables, the unique channel indexes and the 
     'code_hash',
     'options',
     'requested_by_name',
+    'guild_owner',
     'expires_at',
     'created_at',
   ]);
@@ -406,6 +409,11 @@ test('a webhook token is stored sealed and read back whole; a legacy plain value
     'legacy-plain-token',
     'a value from before sealing reads as it is'
   );
+  assert.ok(
+    db.prepare('SELECT hook_a_token FROM bridge_links WHERE id = ?').get(id).hook_a_token.startsWith('v1.'),
+    'and is sealed in place by that first read'
+  );
+  assert.equal((await getLink(id)).hookAToken, 'legacy-plain-token', 'and still reads whole once sealed');
   db.prepare('UPDATE bridge_links SET hook_a_token = ? WHERE id = ?').run(
     seal('some other secret', 'bridge-webhook', 'x'),
     id
@@ -428,4 +436,35 @@ test('the shared seal helper keeps the Pigeon credential format (v1.iv.tag.data)
   assert.equal(open('secret', 'bridge-webhook', sealed), null);
   assert.equal(open('secret', 'pigeon-credential', `${sealed}x`), null);
   assert.equal(open('secret', 'pigeon-credential', 'v1.a.b'), null);
+});
+
+test('plain tokens are sealed on first read through every way a link is read', async () => {
+  const id = await createLink(link());
+  const plain = (column, value) =>
+    db.prepare(`UPDATE bridge_links SET ${column} = ? WHERE id = ?`).run(value, id);
+  const stored = (column) => db.prepare(`SELECT ${column} AS v FROM bridge_links WHERE id = ?`).get(id).v;
+  plain('hook_a_token', 'plain-a');
+  plain('hook_b_token', 'plain-b');
+  const [found] = await linksOfGuild(D);
+  assert.deepEqual([found.hookAToken, found.hookBToken], ['plain-a', 'plain-b']);
+  assert.ok(stored('hook_a_token').startsWith('v1.') && stored('hook_b_token').startsWith('v1.'));
+  plain('hook_a_token', 'plain-again');
+  assert.equal((await linkForChannel(D, CH.d1)).link.hookAToken, 'plain-again');
+  assert.ok(stored('hook_a_token').startsWith('v1.'));
+  plain('hook_b_token', 'plain-hook');
+  assert.equal((await linkForHook('hook-b')).hookBToken, 'plain-hook');
+  assert.ok(stored('hook_b_token').startsWith('v1.'));
+});
+
+test('the owners of both servers are recorded with the link, and a code remembers who asked', async () => {
+  const { setLinkOwner } = await import('../src/db/bridge.js');
+  const id = await createLink(link({ ownerA: 'owner-1', ownerB: 'owner-2' }));
+  let row = await getLink(id);
+  assert.deepEqual([row.ownerA, row.ownerB], ['owner-1', 'owner-2']);
+  await setLinkOwner(id, 'b', 'owner-3');
+  row = await getLink(id);
+  assert.deepEqual([row.ownerA, row.ownerB], ['owner-1', 'owner-3']);
+  const made = await createCode({ guildId: D, channelId: CH.d2, guildOwner: 'owner-1' });
+  assert.equal((await peekCode(made.code)).guildOwner, 'owner-1');
+  assert.equal((await claimCode(made.code)).guildOwner, 'owner-1');
 });

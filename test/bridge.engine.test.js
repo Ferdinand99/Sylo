@@ -28,6 +28,7 @@ import {
   handleJoin,
   handleMessage,
   handleUpdate,
+  sweepOwners,
   linkView,
   pauseLink,
   requestLink,
@@ -1570,4 +1571,263 @@ test('a platform that refuses a message gets a plain name, then the text without
   assert.equal(last.content, 'text survives');
   assert.equal(last.embeds, undefined);
   assert.equal(last.files, undefined);
+});
+
+// --- round 3: server owners only, and the smaller notes ---------------------------------------------------
+
+test('the owner of each server is recorded with the link', async () => {
+  const { link } = await bridged();
+  const row = await store.getLink(link.id);
+  assert.deepEqual([row.ownerA, row.ownerB], [p.dGuild.ownerId, p.fGuild.ownerId]);
+});
+
+test('a change of owner pauses the link on the next message, until the new owner confirms it', async () => {
+  const { dCh, fCh, link } = await bridged();
+  await relay(fromD(dCh, { content: 'before' }), D);
+  assert.equal(fakes.transport.sends.length, 1);
+
+  p.fGuild.ownerId = 'new-fluxer-owner'; // the Fluxer server is transferred
+  await relay(fromD(dCh, { content: 'after the transfer' }), D);
+  await relay(fromF(fCh, { content: 'and from the new owner side' }), F);
+  assert.equal(fakes.transport.sends.length, 1, 'nothing crossed after the transfer');
+  const row = await store.getLink(link.id);
+  assert.deepEqual([row.status, row.pausedSide, row.failReason], ['paused', 'b', 'owner-changed']);
+  assert.match(say(dCh).at(-1), /Bridge paused:\*\* the owner of Fluxer Home changed/);
+  assert.match(say(fCh).at(-1), /Bridge paused:\*\* the owner of Fluxer Home changed/);
+  assert.ok((await listAudit(D)).some((e) => e.action === 'bridge:pause' && /owner/.test(e.detail)));
+  assert.ok((await listAudit(F)).some((e) => e.action === 'bridge:pause' && /owner/.test(e.detail)));
+  const view = linkView(row, D);
+  assert.deepEqual([view.status, view.pausedByThem], ['paused', true]);
+  assert.match(view.pauseNote, /owner of one of the servers changed/);
+  assert.deepEqual(
+    (await bridgeProblems(F)).map((x) => x.code),
+    ['owner-changed'],
+    'a Health item'
+  );
+
+  await refuses(resumeLink({ guildKey: D, id: link.id, actor: 'A' }), /only they can resume/, 403);
+  const resumed = await resumeLink({ guildKey: F, id: link.id, actor: 'B' });
+  assert.equal(resumed.active, true);
+  const after = await store.getLink(link.id);
+  assert.deepEqual([after.status, after.ownerB], ['active', 'new-fluxer-owner'], 'the new owner is recorded');
+  await relay(fromD(dCh, { content: 'confirmed' }), D);
+  assert.equal(fakes.transport.sends.length, 2);
+});
+
+test('when both servers changed owner, both owners have to confirm', async () => {
+  const { dCh, link } = await bridged();
+  p.dGuild.ownerId = 'new-discord-owner';
+  p.fGuild.ownerId = 'new-fluxer-owner';
+  await relay(fromD(dCh, { content: 'x' }), D);
+  assert.equal((await store.getLink(link.id)).pausedSide, 'a');
+  const first = await resumeLink({ guildKey: D, id: link.id, actor: 'A' });
+  assert.equal(first.active, false);
+  const waiting = await store.getLink(link.id);
+  assert.deepEqual(
+    [waiting.status, waiting.pausedSide],
+    ['paused', 'b'],
+    'now it waits for the Fluxer owner'
+  );
+  await refuses(resumeLink({ guildKey: D, id: link.id, actor: 'A' }), /only they can resume/, 403);
+  assert.equal((await resumeLink({ guildKey: F, id: link.id, actor: 'B' })).active, true);
+  await relay(fromD(dCh, { content: 'both confirmed' }), D);
+  assert.equal(fakes.transport.sends.length, 1);
+});
+
+test('a quiet link is checked too (the sweep), and so is a join notice; an unknown owner is not a change', async () => {
+  const { link } = await bridged({ optionsD: { joinMessages: true } });
+  p.fGuild.ownerId = undefined; // the platform did not tell: not a change
+  assert.equal(await sweepOwners(), 0);
+  p.fGuild.ownerId = 'someone-new';
+  assert.equal(await sweepOwners(), 1, 'paused without any message');
+  assert.equal((await store.getLink(link.id)).failReason, 'owner-changed');
+  assert.equal(await sweepOwners(), 0, 'and only once');
+
+  await resumeLink({ guildKey: F, id: link.id, actor: 'B' });
+  p.dGuild.ownerId = 'discord-owner-2';
+  await handleJoin({ displayName: 'Zed', user: { bot: false } }, {}, D);
+  await bridgeIdle();
+  assert.equal(fakes.transport.sends.length, 0, 'no join notice for a link that just lost its owner');
+  assert.equal((await store.getLink(link.id)).status, 'paused');
+});
+
+test('a code made by a previous owner is refused', async () => {
+  const dCh = p.channel(p.dGuild, {});
+  const fCh = p.channel(p.fGuild, {});
+  const made = await requestLink({ guildKey: D, channelId: dCh.id, actor: 'A' });
+  p.dGuild.ownerId = 'the-new-owner';
+  await refuses(
+    acceptLink({ guildKey: F, channelId: fCh.id, code: made.code, actor: 'B' }),
+    /has a new owner\. Ask for a new code/,
+    409
+  );
+  assert.equal(fakes.transport.hooks.length, 0);
+  assert.equal((await store.pendingCodes(D)).length, 1, 'nothing was used up');
+});
+
+test('a resume by a stopped link also records the owner who confirms', async () => {
+  const { link } = await bridged();
+  await store.setLinkStatus(link.id, { status: 'failed', reason: 'permissions' });
+  p.dGuild.ownerId = 'discord-owner-2';
+  const out = await resumeLink({ guildKey: D, id: link.id, actor: 'A' });
+  assert.equal(out.active, true);
+  assert.equal((await store.getLink(link.id)).ownerA, 'discord-owner-2');
+});
+
+// temporary errors on a delete
+
+test('a delete that hits a temporary error is tried again, and the map entry stays until the copy is gone', async () => {
+  const { dCh, link } = await bridged();
+  const m = fromD(dCh, { content: 'delete me' });
+  await relay(m, D);
+  fakes.transport.removeFailures.push(apiError(500), apiError(502));
+  await handleDelete({ id: m.id, channelId: dCh.id }, {}, D);
+  await bridgeIdle();
+  assert.equal(fakes.transport.removes.length, 1, 'removed on the third try');
+  assert.deepEqual(fakes.sleeps, [1000, 2000], 'with growing pauses');
+  assert.equal(await store.mappingOf(link.id, 'a', m.id), null, 'the entry went with the copy');
+
+  // it keeps failing: the entry stays, so a later delete can still find the copy
+  const m2 = fromD(dCh, { content: 'stubborn' });
+  await relay(m2, D);
+  for (let i = 0; i < 4; i += 1) fakes.transport.removeFailures.push(apiError(503));
+  await handleDelete({ id: m2.id, channelId: dCh.id }, {}, D);
+  await bridgeIdle();
+  assert.ok(await store.mappingOf(link.id, 'a', m2.id), 'the copy is still known');
+  assert.equal((await store.getLink(link.id)).status, 'active', 'and the link is not stopped for it');
+});
+
+test('a delete that cannot be done for good (no webhook, no Manage Messages) keeps the map entry', async () => {
+  const { dCh, link } = await bridged();
+  const m = fromD(dCh, { content: 'cannot be removed' });
+  await relay(m, D);
+  fakes.transport.removeFailures.push(apiError(404, { code: 10015 }));
+  fakes.transport.botDeleteFailures.push(apiError(403));
+  await handleDelete({ id: m.id, channelId: dCh.id }, {}, D);
+  await bridgeIdle();
+  assert.ok(await store.mappingOf(link.id, 'a', m.id));
+});
+
+// the download budget is held until the send is over
+
+function budgetParts(files, gate) {
+  const sent = [];
+  const transportSend = fakes.transport.send;
+  fakes.transport.send = async (key, hook, payload) => {
+    if (payload.files?.length && gate) await gate.open;
+    sent.push(payload);
+    return transportSend(key, hook, payload);
+  };
+  useBridgeParts({
+    transport: fakes.transport,
+    queue: fakes.queue,
+    budget: { concurrent: 1, bytes: 1024 },
+    download: async (url) => {
+      fakes.downloads.push({ url });
+      return { ok: true, status: 200, body: Buffer.from(files[url] ?? 'x') };
+    },
+  });
+  return sent;
+}
+const pairOfLinks = async (suffix) => {
+  const one = await bridged();
+  const other = p.extra(suffix);
+  const otherF = `fluxer:${other.fGuild.id}`;
+  await setGuildModule(other.dGuild.id, 'bridge', { enabled: true });
+  await setGuildModule(otherF, 'bridge', { enabled: true });
+  const dCh2 = p.channel(other.dGuild, {});
+  const fCh2 = p.channel(other.fGuild, {});
+  const made = await requestLink({ guildKey: other.dGuild.id, channelId: dCh2.id, actor: 'A' });
+  await acceptLink({ guildKey: otherF, channelId: fCh2.id, code: made.code, actor: 'B' });
+  return { one, dCh2, otherKey: other.dGuild.id };
+};
+const file = (name) => ({ attachments: new Map([['a', { name, url: `https://cdn/${name}`, size: 4 }]]) });
+
+test('the download budget stays held while the copy is being sent, not only while the file downloads', async () => {
+  const gate = waitFor();
+  budgetParts({}, gate);
+  const { one, dCh2, otherKey } = await pairOfLinks('96');
+  await handleMessage(fromD(one.dCh, file('first.png')), {}, D); // downloaded, then the send waits at the gate
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(
+    fakes.downloads.map((d) => d.url),
+    ['https://cdn/first.png']
+  );
+  await handleMessage(fromD(dCh2, file('second.png')), {}, otherKey);
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(
+    fakes.downloads.map((d) => d.url),
+    ['https://cdn/first.png'],
+    'the first file is still held: no room'
+  );
+  assert.equal(fakes.transport.sends.at(-1).payload.content, '📎 second.png: https://cdn/second.png');
+  gate.release();
+  await bridgeIdle();
+  // the copy is out: the budget is free again
+  await relay(fromD(dCh2, file('third.png')), otherKey);
+  assert.equal(fakes.downloads.at(-1).url, 'https://cdn/third.png');
+  assert.equal(fakes.transport.sends.at(-1).payload.files[0].name, 'third.png');
+});
+
+test('the download budget is given back when a send fails for good', async () => {
+  budgetParts({}, null);
+  const { one, dCh2, otherKey } = await pairOfLinks('97');
+  for (let i = 0; i < 4; i += 1) fakes.transport.sendFailures.push(apiError(500));
+  await relay(fromD(one.dCh, file('lost.png')), D); // four tries, then given up
+  assert.equal(fakes.transport.sends.length, 0);
+  await relay(fromD(dCh2, file('next.png')), otherKey);
+  assert.equal(fakes.transport.sends.at(-1).payload.files[0].name, 'next.png', 'the budget was free again');
+});
+
+// an edit with a token that cannot be read
+
+test('an edit with an unreadable webhook token makes a new webhook and does not count as a failed delivery', async () => {
+  const { dCh, link } = await bridged();
+  const m = fromD(dCh, { content: 'first' });
+  await relay(m, D);
+  db.prepare('UPDATE bridge_links SET hook_b_token = ? WHERE id = ?').run(
+    seal('another secret', 'bridge-webhook', 'x'),
+    link.id
+  );
+  dropBridgeCache();
+  const hooks = fakes.transport.hooks.length;
+  for (let i = 0; i < FAIL_THRESHOLD + 2; i += 1) {
+    await handleUpdate({ old: m, new: { ...m, content: `edit ${i}` } }, {}, D);
+    await bridgeIdle();
+  }
+  assert.equal(fakes.transport.hooks.length, hooks + 1, 'one new webhook, once');
+  assert.equal(fakes.transport.edits.length, 0, 'the old copy cannot be edited by the new webhook');
+  assert.equal((await store.getLink(link.id)).status, 'active', 'never stopped for it');
+  await relay(fromD(dCh, { content: 'and new messages cross' }), D);
+  assert.equal(fakes.transport.sends.at(-1).hook.id, (await store.getLink(link.id)).hookBId);
+});
+
+// a deleted channel on a link that is not running
+
+test('a bridged channel deleted while the link is paused is shown as a problem', async () => {
+  const { dCh, link } = await bridged();
+  await pauseLink({ guildKey: D, id: link.id, actor: 'A' });
+  await handleChannelDelete(dCh, {}, D);
+  const row = await store.getLink(link.id);
+  assert.deepEqual([row.status, row.pausedSide, row.failReason], ['paused', 'a', 'channel-deleted']);
+  assert.deepEqual(
+    (await bridgeProblems(D)).map((x) => [x.linkId, x.code]),
+    [[link.id, 'channel-deleted']]
+  );
+  assert.deepEqual(
+    (await bridgeProblems(F)).map((x) => x.code),
+    ['channel-deleted'],
+    'the other server sees it too'
+  );
+  assert.match(linkView(row, D).pauseNote, /channel was deleted/);
+  p.dGuild.channels.cache.delete(dCh.id); // it is gone on the platform
+  await refuses(resumeLink({ guildKey: D, id: link.id, actor: 'A' }), /normal text channel/);
+});
+
+test('a stopped link whose channel is deleted later says so', async () => {
+  const { dCh, link } = await bridged();
+  await failLink(link.id, 'unreachable');
+  await handleChannelDelete(dCh, {}, D);
+  const row = await store.getLink(link.id);
+  assert.deepEqual([row.status, row.failReason], ['failed', 'channel-deleted']);
 });
