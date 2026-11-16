@@ -25,8 +25,15 @@ import { settleEndedPost } from './lib/liveAlerts.js';
 import { normaliseOnEnd } from '../lib/liveValue.js';
 import { parseFeed as parseGenericFeed, grab, decodeEntities } from '../bot/lib/feed.js';
 import { log } from '../lib/log.js';
-import { readTextCapped } from '../lib/safeFetch.js';
+import { readTextCapped, SafeFetchError } from '../lib/safeFetch.js';
 import { every } from './schedule.js';
+import {
+  FeedUnavailableError,
+  feedDue,
+  recordFeedFailure,
+  recordFeedSuccess,
+  pruneFeedHealth,
+} from './lib/youtubeFeedHealth.js';
 
 const FEED = 'https://www.youtube.com/feeds/videos.xml?channel_id=';
 const COLOR = 0xff0000;
@@ -185,13 +192,34 @@ export function parseFeed(xml) {
     .filter(Boolean);
 }
 
+/**
+ * Fetch and parse a channel's feed. A failure that is not ours (an HTTP error status, a timeout, a
+ * dropped connection) throws FeedUnavailableError, which the poll counts quietly (see
+ * lib/youtubeFeedHealth.js); anything else, such as a parser bug, throws as it is and is logged.
+ */
 async function fetchFeed(ytChannelId) {
-  const res = await fetch(FEED + ytChannelId, {
-    headers: { 'User-Agent': UA },
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!res.ok) throw new Error(`YT feed ${res.status}`);
-  return parseFeed(await readTextCapped(res, MAX_PAGE_BYTES));
+  let res;
+  try {
+    res = await fetch(FEED + ytChannelId, {
+      headers: { 'User-Agent': UA },
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (err) {
+    const timedOut = err?.name === 'TimeoutError' || err?.name === 'AbortError';
+    throw new FeedUnavailableError(timedOut ? 'timeout' : `network error: ${err?.message ?? err}`);
+  }
+  if (!res.ok) {
+    await res.body?.cancel?.().catch(() => {});
+    throw new FeedUnavailableError(`YT feed ${res.status}`, res.status);
+  }
+  let xml;
+  try {
+    xml = await readTextCapped(res, MAX_PAGE_BYTES);
+  } catch (err) {
+    if (err instanceof SafeFetchError) throw err; // a body past our cap is not a transient failure
+    throw new FeedUnavailableError(`network error: ${err?.message ?? err}`);
+  }
+  return parseFeed(xml);
 }
 
 // --- live check ------------------------------------------------------
@@ -302,10 +330,12 @@ async function tick() {
   if (!allClientsReady()) return;
   await pruneYoutube();
 
+  const watched = new Set();
   for (const guild of allGuilds()) {
     if (!(await isModuleEnabled(guildKey(guild), 'youtube-alerts'))) continue;
     const cfg = normaliseYoutubeConfig((await getGuildModule(guildKey(guild), 'youtube-alerts')).config);
     for (const alert of cfg.alerts) {
+      if (alert.onVideo) watched.add(alert.ytChannelId);
       try {
         await runAlert(guildKey(guild), alert);
       } catch (err) {
@@ -313,26 +343,47 @@ async function tick() {
       }
     }
   }
+  // Only after a whole pass: a channel nobody watches any more must not keep its failure count.
+  pruneFeedHealth(watched);
 }
 
-export async function runAlert(guildId, alert) {
+/**
+ * Poll one channel's feed and announce what is new. A feed that cannot be reached is counted, not
+ * logged (lib/youtubeFeedHealth.js), and polled less often until it answers. Nothing is marked
+ * seen meanwhile, so the poll that gets an answer announces whatever was missed.
+ */
+async function pollFeed(guildId, alert, now) {
   const c = alert.ytChannelId;
-
-  if (alert.onVideo) {
-    const entries = await fetchFeed(c);
-    if (!(await hasSeenAny(guildId, c))) {
-      // First poll for this channel — seed everything without alerting.
-      for (const e of entries) await markVideoSeen(guildId, c, e.videoId);
-    } else {
-      // Alert oldest-first for anything new. Only marked seen once the send
-      // actually succeeds, so a failed delivery (missing permissions, a
-      // deleted channel, a transient API error, …) retries on the next poll
-      // instead of being silently and permanently dropped.
-      for (const e of [...entries].reverse()) {
-        await announceVideo(guildId, alert, e);
-      }
+  if (!feedDue(c, now)) return;
+  let entries;
+  try {
+    entries = await fetchFeed(c);
+  } catch (err) {
+    if (!(err instanceof FeedUnavailableError)) throw err;
+    recordFeedFailure(c, err, POLL_MS, now);
+    return;
+  }
+  recordFeedSuccess(c);
+  if (!(await hasSeenAny(guildId, c))) {
+    // First poll for this channel — seed everything without alerting.
+    for (const e of entries) await markVideoSeen(guildId, c, e.videoId);
+  } else {
+    // Alert oldest-first for anything new. Only marked seen once the send
+    // actually succeeds, so a failed delivery (missing permissions, a
+    // deleted channel, a transient API error, …) retries on the next poll
+    // instead of being silently and permanently dropped.
+    for (const e of [...entries].reverse()) {
+      await announceVideo(guildId, alert, e);
     }
   }
+}
+
+/** @param {number} [now]  for tests: the clock the feed backoff reads */
+export async function runAlert(guildId, alert, now = Date.now()) {
+  const c = alert.ytChannelId;
+
+  // A dead feed does not stop the live check below: that reads another page.
+  if (alert.onVideo) await pollFeed(guildId, alert, now);
 
   if (alert.onLive) {
     const state = await checkLive(c);
