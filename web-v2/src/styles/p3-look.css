@@ -7,7 +7,7 @@
   --look-panel: 90%;
 }
 /* Light theme: the picture is veiled with light, not black, and the panel is all but opaque, so Sylo's own text
-   keeps 4.5:1 whatever the picture is (tested in __tests__/lookPanel.test.js). */
+   keeps 4.5:1 whatever the picture is (tested in test/publicLook.readability.test.js). */
 :root[data-theme='light'] {
   --look-dim: rgba(245, 245, 247, 0.5);
   --look-panel: 99%;

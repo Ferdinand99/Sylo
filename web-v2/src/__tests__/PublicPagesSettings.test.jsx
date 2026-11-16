@@ -1,7 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { configure, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PublicPagesSettings from '../components/PublicPagesSettings.jsx';
 import { AccessProvider } from '../access.jsx';
+
+// the whole suite runs on two busy CPUs in CI: role queries with names are slow in jsdom
+configure({ asyncUtilTimeout: 5000 });
 
 vi.mock('../api.js', () => ({
   ApiError: class ApiError extends Error {},

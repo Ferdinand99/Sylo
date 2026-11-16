@@ -89,14 +89,19 @@ export function mixHex(a, b, t) {
 
 /**
  * The accent as a text colour in a theme: the accent itself when it reaches 4.5:1 against the card, the page and
- * the accent-tinted card (the active pill), else the same hue mixed toward white (dark theme) or black (light
+ * both accent-tinted (the active pill sits on the page or the card), else the same hue mixed toward white (dark theme) or black (light
  * theme) in small steps until it does. Always reaches 4.5:1 on all three, so the server's colour stays
  * recognisable and the text stays readable.
  * @param {string} accent  '#rrggbb'
  * @param {'dark' | 'light'} theme
  */
 export function accentText(accent, theme) {
-  const backs = [CARD[theme], PAGE[theme], mixHex(CARD[theme], accent, 0.14)];
+  const backs = [
+    CARD[theme],
+    PAGE[theme],
+    mixHex(CARD[theme], accent, 0.14),
+    mixHex(PAGE[theme], accent, 0.14),
+  ];
   const ok = (c) => backs.every((b) => contrast(c, b) >= MIN_TEXT_CONTRAST);
   if (ok(accent)) return accent;
   const target = theme === 'dark' ? '#ffffff' : '#000000';

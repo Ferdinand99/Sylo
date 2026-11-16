@@ -59,9 +59,14 @@ export function mixHex(a, b, t) {
   return `#${x.map((c, i) => hex2(c + (y[i] - c) * t)).join('')}`;
 }
 
-/** The accent as a text colour in a theme (the same rule as the server: 4.5:1 on card, page and tinted card). */
+/** The accent as a text colour in a theme (the same rule as the server: 4.5:1 on card, page and both tinted). */
 export function accentText(accent, theme) {
-  const backs = [CARD[theme], PAGE[theme], mixHex(CARD[theme], accent, 0.14)];
+  const backs = [
+    CARD[theme],
+    PAGE[theme],
+    mixHex(CARD[theme], accent, 0.14),
+    mixHex(PAGE[theme], accent, 0.14),
+  ];
   const ok = (c) => backs.every((b) => contrast(c, b) >= MIN_TEXT_CONTRAST);
   if (ok(accent)) return accent;
   const target = theme === 'dark' ? '#ffffff' : '#000000';

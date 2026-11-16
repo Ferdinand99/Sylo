@@ -59,6 +59,8 @@
   --text: #1d1d1f;
   --text-muted: #6e6e73;
   --accent: #076787;
+  /* Declared in both themes: a look that only has a dark block must not leak its text colour into this one. */
+  --accent-text: var(--accent);
   --accent-hover: color-mix(in srgb, var(--accent) 88%, #000);
   --on-accent: #ffffff;
   --success: #1e7f36;
@@ -605,7 +607,7 @@ textarea:focus {
   --look-panel: 90%;
 }
 /* In the light theme the picture is veiled with light, not black, and the panel is all but opaque, so Sylo's own
-   text (muted text included) keeps 4.5:1 whatever the picture is (tested in web-v2/src/__tests__/lookPanel.test.js). */
+   text (muted text included) keeps 4.5:1 whatever the picture is (tested in test/publicLook.readability.test.js). */
 :root[data-theme='light'] {
   --look-dim: rgba(245, 245, 247, 0.5);
   --look-panel: 99%;

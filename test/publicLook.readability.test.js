@@ -29,18 +29,31 @@ for (let r = 0; r <= 255; r += 51)
     for (let b = 0; b <= 255; b += 51) {
       sweep.push(`#${[r, g, b].map((c) => c.toString(16).padStart(2, '0')).join('')}`);
     }
-const edge = ['#5865f2', '#757575', '#787878', '#ffe14d', '#1a2a6c', '#ff0000', '#00ff00', '#0000ff', '#07a'];
+const edge = [
+  '#5865f2',
+  '#757575',
+  '#787878',
+  '#ffe14d',
+  '#1a2a6c',
+  '#ff0000',
+  '#00ff00',
+  '#0000ff',
+  '#07a',
+  '#cc2266',
+];
 const colours = [...new Set([...sweep, ...edge.map(normaliseAccent)])];
 
-test('accent text reaches 4.5:1 on the card, the page and the tinted card in both themes, for every colour', () => {
+test('accent text reaches 4.5:1 on the card, the page and both tinted backgrounds in both themes, for every colour', () => {
   for (const c of colours) {
     for (const theme of ['dark', 'light']) {
       const text = accentText(c, theme);
       const tint = mixHex(CARD[theme], c, 0.14);
+      const pageTint = mixHex(PAGE[theme], c, 0.14); // the active period pill sits on the page or the panel
       for (const [name, back] of [
         ['card', CARD[theme]],
         ['page', PAGE[theme]],
-        ['tint', tint],
+        ['card tint', tint],
+        ['page tint', pageTint],
       ]) {
         assert.ok(
           contrast(text, back) >= 4.5,
@@ -182,3 +195,59 @@ test('the accent is read as text only through --accent-text', () => {
   assert.match(dashCss, /^a \{\s*color: var\(--accent-text, var\(--accent\)\);/m);
   assert.match(publicCss, /\.btn:hover \{\s*background: var\(--accent-hover\);/);
 });
+
+// --- the cascade: a theme where the accent falls back keeps Sylo's own text colour ------------------------------
+
+/**
+ * The custom properties of a theme after the cascade over the given style sheets in order, "var(--x)" resolved:
+ * `:root` counts for both themes, `:root[data-theme='light']` (more specific) only for the light one; at equal
+ * specificity the later sheet wins.
+ */
+function cascade(theme, sheets) {
+  const won = {};
+  for (const css of sheets) {
+    const blocks = [[1, tokens(css, ':root')]];
+    if (theme === 'light') blocks.push([2, tokens(css, ":root[data-theme='light']")]);
+    for (const [spec, map] of blocks) {
+      for (const [name, value] of Object.entries(map)) {
+        if (!won[name] || spec >= won[name].spec) won[name] = { spec, value };
+      }
+    }
+  }
+  const resolve = (name, depth = 0) => {
+    const raw = won[name]?.value;
+    if (raw == null || depth > 8) return raw;
+    const ref = /^var\((--[a-z0-9-]+)\)$/.exec(raw);
+    return ref ? resolve(ref[1], depth + 1) : raw;
+  };
+  return (name) => resolve(name);
+}
+
+const SYLO = { dark: '#38c8f0', light: '#076787' };
+const surfaces = {
+  'the server-rendered pages': [publicCss],
+  'the dashboard pages': [dashCss, read('web-v2/src/dashux.css')],
+};
+
+for (const [where, sheets] of Object.entries(surfaces)) {
+  for (const accent of ['#ffe14d', '#00ff00', '#1a2a6c', '#5865f2']) {
+    for (const theme of ['dark', 'light']) {
+      test(`${where}: ${accent} in the ${theme} theme resolves its text colour like the rule says`, () => {
+        const look = lookCss({ accent, imageUrl: null });
+        const get = cascade(theme, [...sheets, look]);
+        const used = accentCheck(accent)[theme].ok;
+        const accentTextHere = get('--accent-text');
+        if (used) {
+          assert.equal(get('--accent'), accent);
+          assert.equal(accentTextHere, accentText(accent, theme));
+        } else {
+          // the accent falls back here: Sylo's own colour, for the fill AND for text and hover
+          assert.equal(get('--accent'), SYLO[theme]);
+          assert.equal(accentTextHere, SYLO[theme], `${accent} leaked into ${theme} as text`);
+        }
+        assert.ok(contrast(accentTextHere, CARD[theme]) >= 4.5, `${accent} ${theme} link on the card`);
+        assert.ok(contrast(accentTextHere, PAGE[theme]) >= 4.5, `${accent} ${theme} link on the page`);
+      });
+    }
+  }
+}
