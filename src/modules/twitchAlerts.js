@@ -17,6 +17,7 @@ import { settleEndedPost } from './lib/liveAlerts.js';
 import { normaliseOnEnd } from '../lib/liveValue.js';
 import { log } from '../lib/log.js';
 import { every } from './schedule.js';
+import { createQuarantine, fetchIsolated, rejectedWarning } from './lib/batchIsolation.js';
 
 const HELIX = 'https://api.twitch.tv/helix';
 const TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
@@ -92,29 +93,47 @@ async function helix(path, params) {
     token = { value: null, expiresAt: 0 }; // force refresh next call
     throw new Error('Twitch 401');
   }
-  if (!res.ok) throw new Error(`Twitch ${path} ${res.status}`);
+  if (!res.ok) throw Object.assign(new Error(`Twitch ${path} ${res.status}`), { status: res.status });
   return (await res.json()).data ?? [];
 }
 
-/** Live streams for a set of logins, keyed by lowercased login. */
-export async function fetchLiveStreams(logins) {
+/**
+ * Logins the Helix API rejected (a 4xx for a request holding only that login), left out of the
+ * shared poll with a growing backoff so one saved value cannot stop alerts for every server.
+ */
+export const rejectedLogins = createQuarantine();
+
+/**
+ * Live streams for a set of logins, keyed by lowercased login. A login that Helix rejects is
+ * isolated (see fetchIsolated) and left out. `report({ rejected, unresolved, inconclusive, skipped })` is called once with
+ * the logins rejected now and every login this poll knows nothing about.
+ */
+export async function fetchLiveStreams(logins, { report, groupOf } = {}) {
   const out = new Map();
-  for (let i = 0; i < logins.length; i += 100) {
-    const batch = logins.slice(i, i + 100);
-    for (const s of await helix('/streams', { user_login: batch })) {
-      out.set(s.user_login.toLowerCase(), s);
-    }
-  }
+  const { results, rejected, unresolved, inconclusive, skipped } = await fetchIsolated(
+    logins,
+    100,
+    (batch) => helix('/streams', { user_login: batch }),
+    { quarantine: rejectedLogins, groupOf }
+  );
+  report?.({ rejected, unresolved, inconclusive, skipped });
+  for (const s of results) out.set(s.user_login.toLowerCase(), s);
   return out;
 }
 
-/** User records (for avatar / display name), keyed by lowercased login. */
+/**
+ * User records (for avatar / display name), keyed by lowercased login. They only decorate the
+ * announcement, so a failure here (or a rejected login) leaves them out instead of failing the poll.
+ */
 export async function fetchUsers(logins) {
   const out = new Map();
-  for (let i = 0; i < logins.length; i += 100) {
-    for (const u of await helix('/users', { login: logins.slice(i, i + 100) })) {
-      out.set(u.login.toLowerCase(), u);
-    }
+  try {
+    const { results } = await fetchIsolated(logins, 100, (batch) => helix('/users', { login: batch }), {
+      quarantine: createQuarantine(),
+    });
+    for (const u of results) out.set(u.login.toLowerCase(), u);
+  } catch (err) {
+    log.debug('twitch-alerts', 'user lookup failed:', err.message);
   }
   return out;
 }
@@ -166,7 +185,8 @@ export function buildPayload(stream, user, alert) {
 
 // --- poll loop -------------------------------------------------------
 
-async function tick() {
+/** One poll; exported for tests. */
+export async function tick() {
   if (!allClientsReady() || !config.twitchEnabled) return;
 
   // Gather every alert across enabled guilds.
@@ -179,10 +199,39 @@ async function tick() {
   if (!jobs.length) return;
 
   const logins = [...new Set(jobs.map((j) => j.alert.login))];
+  // The server that saved each login (the lowest id, if several did): rejected values are batched
+  // by it, see lib/batchIsolation.js.
+  const savedBy = new Map();
+  for (const j of jobs)
+    if (!savedBy.has(j.alert.login) || j.guildId < savedBy.get(j.alert.login))
+      savedBy.set(j.alert.login, j.guildId);
+  rejectedLogins.prune(new Set(logins));
   let streams;
   let users;
+  let unresolved = new Set();
   try {
-    streams = await fetchLiveStreams(logins);
+    streams = await fetchLiveStreams(logins, {
+      groupOf: (login) => savedBy.get(login) ?? null,
+      report: ({ rejected, unresolved: left, inconclusive, skipped }) => {
+        unresolved = left;
+        if (skipped > 0) {
+          log.warn(
+            'twitch-alerts',
+            `${skipped} saved logins could not be checked this poll: the platform refuses requests that hold some of them and the search ran out of requests. They are checked again at the next poll, apart from the others.`
+          );
+        }
+        if (inconclusive) {
+          log.warn(
+            'twitch-alerts',
+            'Every request of this poll was refused and no earlier accepted value is known to check against, so nothing was quarantined.'
+          );
+        }
+        const warning = rejectedWarning('Twitch logins', rejected, (login) => [
+          ...new Set(jobs.filter((j) => j.alert.login === login).map((j) => j.guildId)),
+        ]);
+        if (warning) log.warn('twitch-alerts', warning);
+      },
+    });
     users = await fetchUsers([...streams.keys()]);
   } catch (err) {
     log.error('twitch-alerts', 'poll failed:', err.message);
@@ -190,6 +239,9 @@ async function tick() {
   }
 
   for (const { guildId, alert } of jobs) {
+    // Not looked up this poll (rejected by Twitch, waiting out a backoff, or over the request
+    // budget): neither live nor offline as far as we know, so leave its state alone.
+    if (unresolved.has(alert.login)) continue;
     const stream = streams.get(alert.login);
     if (!stream) {
       const post = await announcedPost(guildId, alert.login);

@@ -617,6 +617,9 @@ its account is an operator.
   is stored as a snapshot only.
   The import is sent as raw `application/octet-stream` (a JSON body is cut at
   256 kB) of up to 128 MB, read from the file as it goes.
+  A client detects that the server asks for the restore confirmation (`confirm` and
+  `acknowledgeSql`) by `db.roleRisks` being an array in the health report from
+  `GET /api/v2/health` (5.3 and later); an older server does not send it.
 - **Bot Personalizer**: the bot's name and pictures, its presence, and the
   announcement everyone sees.
 - **Stats cache**: the game-stats lookups every server shares (read only).
@@ -638,7 +641,7 @@ its account is an operator.
 | `POST /api/v2/health/dev-log-error-test` | Operators only | Logs a real error to test the pipeline; `{ ok }` |
 | `POST /api/v2/health/backups` | Operators only | Takes a backup; `{ name }` |
 | `GET /api/v2/health/backups/:name` | Operators only | The backup file, as a download |
-| `POST /api/v2/health/backups/:name/delete`, `/restore` | Operators only | `{ ok }` (a restore then restarts the bot) |
+| `POST /api/v2/health/backups/:name/delete`, `/restore` | Operators only | `{ ok }` (a restore then restarts the bot). `/restore` takes an optional `{ confirm: <name> }`, which must match when sent. An uploaded (`sylo-imported-*`) dump on Postgres needs `{ confirm: <name>, acknowledgeSql: true }` (its SQL runs with the rights of the database role), else 400 |
 | `POST /api/v2/health/backups/import` | Operators only | A raw body (`application/octet-stream`, up to 128 MB); `{ name }` |
 | `GET /api/v2/personalizer`, `/personalizer/presence` | Operators only | The bot; the presence and its choices |
 | `POST /api/v2/personalizer/identity`, `/presence`, `/announcement`, `/announcement/clear` | Operators only | Bot-wide settings |
