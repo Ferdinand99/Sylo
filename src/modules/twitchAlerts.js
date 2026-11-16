@@ -17,6 +17,7 @@ import { settleEndedPost } from './lib/liveAlerts.js';
 import { normaliseOnEnd } from '../lib/liveValue.js';
 import { log } from '../lib/log.js';
 import { every } from './schedule.js';
+import { createPollHealth, httpError, withRetry } from './lib/pollErrors.js';
 
 const HELIX = 'https://api.twitch.tv/helix';
 const TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
@@ -73,27 +74,30 @@ async function appToken() {
     grant_type: 'client_credentials',
   });
   const res = await fetch(TOKEN_URL, { method: 'POST', body, signal: AbortSignal.timeout(10_000) });
-  if (!res.ok) throw new Error(`Twitch token ${res.status}`);
+  if (!res.ok) throw httpError('Twitch token', res);
   const json = await res.json();
   token = { value: json.access_token, expiresAt: Date.now() + (json.expires_in ?? 3600) * 1000 };
   return token.value;
 }
 
-async function helix(path, params) {
+/** One Helix request; a network error, 5xx or 429 is retried once (see lib/pollErrors.js). */
+function helix(path, params) {
   const url = new URL(HELIX + path);
   for (const [k, vals] of Object.entries(params)) {
     for (const v of [].concat(vals)) url.searchParams.append(k, v);
   }
-  const res = await fetch(url, {
-    headers: { 'Client-Id': config.twitchClientId, Authorization: `Bearer ${await appToken()}` },
-    signal: AbortSignal.timeout(10_000),
+  return withRetry(async () => {
+    const res = await fetch(url, {
+      headers: { 'Client-Id': config.twitchClientId, Authorization: `Bearer ${await appToken()}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.status === 401) {
+      token = { value: null, expiresAt: 0 }; // force refresh next call
+      throw httpError('Twitch', res);
+    }
+    if (!res.ok) throw httpError(`Twitch ${path}`, res);
+    return (await res.json()).data ?? [];
   });
-  if (res.status === 401) {
-    token = { value: null, expiresAt: 0 }; // force refresh next call
-    throw new Error('Twitch 401');
-  }
-  if (!res.ok) throw new Error(`Twitch ${path} ${res.status}`);
-  return (await res.json()).data ?? [];
 }
 
 /** Live streams for a set of logins, keyed by lowercased login. */
@@ -166,7 +170,11 @@ export function buildPayload(stream, user, alert) {
 
 // --- poll loop -------------------------------------------------------
 
-async function tick() {
+/** Consecutive failed polls: logged once after a few in a row, see lib/pollErrors.js. */
+export const pollHealth = createPollHealth('twitch-alerts');
+
+/** One poll; exported for tests. */
+export async function tick() {
   if (!allClientsReady() || !config.twitchEnabled) return;
 
   // Gather every alert across enabled guilds.
@@ -185,9 +193,10 @@ async function tick() {
     streams = await fetchLiveStreams(logins);
     users = await fetchUsers([...streams.keys()]);
   } catch (err) {
-    log.error('twitch-alerts', 'poll failed:', err.message);
+    pollHealth.failed(err);
     return;
   }
+  pollHealth.ok();
 
   for (const { guildId, alert } of jobs) {
     const stream = streams.get(alert.login);

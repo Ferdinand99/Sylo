@@ -17,6 +17,7 @@ import { settleEndedPost } from './lib/liveAlerts.js';
 import { encodeLiveValue, decodeLiveValue, normaliseOnEnd } from '../lib/liveValue.js';
 import { log } from '../lib/log.js';
 import { every } from './schedule.js';
+import { createPollHealth, httpError, withRetry } from './lib/pollErrors.js';
 
 const API = 'https://api.kick.com/public/v1';
 const TOKEN_URL = 'https://id.kick.com/oauth/token';
@@ -77,28 +78,31 @@ async function appToken() {
     client_secret: config.kickClientSecret,
   });
   const res = await fetch(TOKEN_URL, { method: 'POST', body, signal: AbortSignal.timeout(10_000) });
-  if (!res.ok) throw new Error(`Kick token ${res.status}`);
+  if (!res.ok) throw httpError('Kick token', res);
   const json = await res.json();
   token = { value: json.access_token, expiresAt: Date.now() + (json.expires_in ?? 3600) * 1000 };
   return token.value;
 }
 
-async function getChannels(slugs) {
+/** One channels request; a network error, 5xx or 429 is retried once (see lib/pollErrors.js). */
+function getChannels(slugs) {
   const url = new URL(`${API}/channels`);
   for (const s of slugs) url.searchParams.append('slug', s);
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${await appToken()}`,
-      'Content-Type': 'application/json',
-    },
-    signal: AbortSignal.timeout(10_000),
+  return withRetry(async () => {
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${await appToken()}`,
+        'Content-Type': 'application/json',
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.status === 401) {
+      token = { value: null, expiresAt: 0 }; // force a refresh next call
+      throw httpError('Kick', res);
+    }
+    if (!res.ok) throw httpError('Kick /channels', res);
+    return (await res.json()).data ?? [];
   });
-  if (res.status === 401) {
-    token = { value: null, expiresAt: 0 }; // force a refresh next call
-    throw new Error('Kick 401');
-  }
-  if (!res.ok) throw new Error(`Kick /channels ${res.status}`);
-  return (await res.json()).data ?? [];
 }
 
 /**
@@ -166,7 +170,11 @@ export function buildPayload(channel, alert) {
 
 // --- poll loop -------------------------------------------------------
 
-async function tick() {
+/** Consecutive failed polls: logged once after a few in a row, see lib/pollErrors.js. */
+export const pollHealth = createPollHealth('kick-alerts');
+
+/** One poll; exported for tests. */
+export async function tick() {
   if (!allClientsReady() || !config.kickEnabled) return;
 
   const jobs = [];
@@ -182,9 +190,10 @@ async function tick() {
   try {
     live = await fetchLiveChannels(slugs);
   } catch (err) {
-    log.error('kick-alerts', 'poll failed:', err.message);
+    pollHealth.failed(err);
     return;
   }
+  pollHealth.ok();
 
   for (const { guildId, alert } of jobs) {
     const channel = live.get(alert.slug);
