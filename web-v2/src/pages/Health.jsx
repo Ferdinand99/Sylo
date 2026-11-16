@@ -83,18 +83,34 @@ export const isImportedBackup = (name) => /^sylo-imported-/.test(name);
  * Said before an uploaded Postgres dump is restored: the SQL in the file is run by the database
  * with the rights of the role Sylo connects as.
  */
-function UploadedSqlWarning({ risks = [], docsUrl }) {
+function UploadedSqlWarning({ risks = [] }) {
   return (
-    <p>
-      <strong>This file was uploaded.</strong> A Postgres dump holds SQL, and restoring it runs that SQL with
-      the rights of the database role Sylo connects as
-      {risks.length ? <> (this role has {risks.join(', ')})</> : null}. Restore only a file you made or trust.{' '}
-      {docsUrl ? (
-        <a href={docsUrl} target="_blank" rel="noreferrer">
-          Use a role with few rights
-        </a>
+    <Callout tone="warning" title="This file was uploaded" className="v2-restore-warning">
+      <p>
+        A Postgres dump holds SQL. Restoring it runs that SQL with the rights of the database role Sylo
+        connects as. Restore only a file you made or trust.
+      </p>
+      {risks.length ? (
+        <>
+          <p>{roleSentence(risks)}</p>
+          <RoleDetails risks={risks} />
+        </>
       ) : null}
-    </p>
+    </Callout>
+  );
+}
+
+/** The short version of what is wrong with the role: a superuser says it all, the rest is listed. */
+const roleSentence = (risks) =>
+  risks.includes('SUPERUSER') ? 'This role is a superuser.' : 'This role has more rights than it needs.';
+
+/** The full list of the role's extra rights, folded away. */
+function RoleDetails({ risks }) {
+  return (
+    <details className="v2-role-details">
+      <summary>Details</summary>
+      <p>Rights: {risks.join(', ')}</p>
+    </details>
   );
 }
 
@@ -201,9 +217,7 @@ export default function Health() {
             All current data is replaced with <strong className="v2-break">{name}</strong> and the bot
             restarts. A <code>prerestore</code> snapshot is taken first.
           </p>
-          {d.db.postgres && isImportedBackup(name) ? (
-            <UploadedSqlWarning risks={d.db.roleRisks} docsUrl={d.db.roleDocsUrl} />
-          ) : null}
+          {d.db.postgres && isImportedBackup(name) ? <UploadedSqlWarning risks={d.db.roleRisks} /> : null}
         </>
       ),
       confirmLabel: 'Restore and restart',
@@ -437,6 +451,29 @@ export default function Health() {
 
       <div className="v2-group">
         <h2 className="v2-group-title">Database &amp; backups</h2>
+        {/* First in the section: it is about the database itself, and a restore below runs with this role. */}
+        {d.db.postgres && d.db.roleRisks?.length ? (
+          <Callout
+            tone="warning"
+            title="The database role has more rights than Sylo needs"
+            className="v2-role-warning"
+          >
+            <p>
+              {d.db.roleRisks.includes('SUPERUSER')
+                ? 'The role Sylo connects as is a superuser.'
+                : 'The role Sylo connects as has rights Sylo does not need.'}{' '}
+              A restored dump runs its SQL with those rights.
+            </p>
+            <RoleDetails risks={d.db.roleRisks} />
+            {d.db.roleDocsUrl ? (
+              <p>
+                <a href={d.db.roleDocsUrl} target="_blank" rel="noreferrer">
+                  How to set up a role with few rights
+                </a>
+              </p>
+            ) : null}
+          </Callout>
+        ) : null}
         <p className="v2-note">
           Database <strong>{d.db.size}</strong>
           {d.db.wal !== null ? ` (WAL ${d.db.wal})` : ''}.{' '}
@@ -476,19 +513,6 @@ export default function Health() {
             {fileName ? null : <span className="v2-field-hint">Choose a file first.</span>}
           </form>
         </div>
-        {d.db.postgres && d.db.roleRisks?.length ? (
-          <Callout tone="warning" title="The database role has more rights than Sylo needs">
-            <p>
-              The role Sylo connects as has {d.db.roleRisks.join(', ')}. A restored dump runs its SQL with
-              those rights.{' '}
-              {d.db.roleDocsUrl ? (
-                <a href={d.db.roleDocsUrl} target="_blank" rel="noreferrer">
-                  How to set up a role with few rights
-                </a>
-              ) : null}
-            </p>
-          </Callout>
-        ) : null}
         <p className="v2-field-hint v2-backup-help">
           Importing stores the file as a snapshot; you then Restore it. Restoring replaces the live database
           and restarts the bot (a <code>prerestore</code> snapshot is taken first).

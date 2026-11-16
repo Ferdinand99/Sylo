@@ -117,8 +117,23 @@ describe('Health: restoring an uploaded Postgres dump', () => {
     const { container } = dialogBody(0);
     expect(container.textContent).toMatch(/This file was uploaded/);
     expect(container.textContent).toMatch(/runs that SQL with the rights of the database role/);
-    expect(container.textContent).toMatch(/SUPERUSER/);
-    expect(container.querySelector('a')?.getAttribute('href')).toMatch(/least-privilege-database-role/);
+    // short and plain; the full list of rights is folded away, and the way out is not offered in the dialog
+    expect(container.textContent).toMatch(/This role is a superuser\./);
+    expect(container.querySelector('details')?.textContent).toMatch(/SUPERUSER/);
+    expect(container.querySelector('a')).toBeNull();
+  });
+
+  it('shows the uploaded-file warning as a warning callout, not as plain text', async () => {
+    getHealth.mockResolvedValue(pgHealth({ roleRisks: ['CREATEDB', 'CREATEROLE'] }));
+    render(<Health />);
+    await screen.findByText('sylo-imported-20261116.dump');
+    fireEvent.click(restoreButtons()[0]);
+    await waitFor(() => expect(confirmDialog).toHaveBeenCalledTimes(1));
+    const { container } = dialogBody(0);
+    const callout = container.querySelector('.v2-callout.is-warning');
+    expect(callout?.textContent).toMatch(/This file was uploaded/);
+    expect(callout?.textContent).toMatch(/This role has more rights than it needs\./);
+    expect(callout?.textContent).toMatch(/Rights: CREATEDB, CREATEROLE/);
   });
 
   it.each([
@@ -151,7 +166,16 @@ describe('Health: restoring an uploaded Postgres dump', () => {
   it('shows a note on the page when the role is stronger than needed, and not otherwise', async () => {
     getHealth.mockResolvedValue(pgHealth({ roleRisks: ['SUPERUSER', 'CREATEDB'] }));
     const first = render(<Health />);
-    expect(await screen.findByText(/more rights than Sylo needs/i)).toBeTruthy();
+    const title = await screen.findByText(/more rights than Sylo needs/i);
+    // a warning callout, the first thing in its section (before the database summary and the buttons)
+    const callout = title.closest('.v2-callout');
+    expect(callout?.classList.contains('is-warning')).toBe(true);
+    const section = callout.parentElement;
+    expect(section.querySelector('h2').textContent).toMatch(/Database/);
+    expect(section.children[1]).toBe(callout);
+    expect(callout.textContent).toMatch(/The role Sylo connects as is a superuser\./);
+    expect(callout.querySelector('details')?.textContent).toMatch(/Rights: SUPERUSER, CREATEDB/);
+    expect(callout.querySelector('a')?.getAttribute('href')).toMatch(/least-privilege-database-role/);
     first.unmount();
 
     getHealth.mockResolvedValue(pgHealth());
