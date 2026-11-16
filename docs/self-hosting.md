@@ -179,7 +179,7 @@ and suggestions, and reading the rest) or **View** (the pages and settings, read
 only, without what the inboxes contain). A person with Inbox access gets a focused
 dashboard: the server opens on the first inbox that is switched on, and the sidebar lists only the moderation
 tools (the inboxes that are switched on: Tickets, Appeals, Applications,
-Suggestions; and the Moderation hub and Member data); a "Show everything" link at the foot of the sidebar brings back the full, still
+Suggestions; and the Moderation hub and Member data); a "Show everything" switch at the top of the sidebar brings back the full, still
 locked, navigation and is remembered in that browser. View and Edit see the full
 dashboard. Only the owner or someone with Manage
 Server can change the Edit roles; anyone with Edit can change the Inbox and View

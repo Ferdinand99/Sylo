@@ -8,7 +8,7 @@ import LoadError from '../components/LoadError.jsx';
 import Meta from '../components/Meta.jsx';
 import { formatCount } from '../util.js';
 import Time from '../components/Time.jsx';
-import { AccessLock, NeedsInbox } from '../access.jsx';
+import { AccessLock, NeedsInbox, useAccess } from '../access.jsx';
 
 const STATUS_LABEL = { open: 'Open', accepted: 'Accepted', denied: 'Denied' };
 
@@ -100,6 +100,8 @@ function AppealCard({ appeal, onDecide }) {
 export default function AppealsReview() {
   const { guildId } = useParams();
   const { data, error, setData } = useApiData(() => getAppealsReview(guildId), [guildId]);
+  // The settings page needs Edit access: an Inbox person is not sent to a page they cannot open.
+  const canEdit = useAccess().can('edit');
 
   if (error) return <LoadError error={error} what="the appeals" />;
   if (!data) return <p className="v2-state">Loading…</p>;
@@ -140,16 +142,24 @@ export default function AppealsReview() {
     <>
       <div className="v2-page-head">
         <h1 className="v2-section-title">Appeals</h1>
-        <Link className="v2-row-arrow" to={`/guilds/${guildId}/m/appeals`}>
-          Appeal settings →
-        </Link>
+        {canEdit ? (
+          <Link className="v2-row-arrow" to={`/guilds/${guildId}/m/appeals`}>
+            Appeal settings →
+          </Link>
+        ) : null}
       </div>
       {data.contentHidden ? <NeedsInbox what="appeals" list /> : null}
       {!data.moduleEnabled || !data.configured ? (
         <p className="v2-note">
           {!data.moduleEnabled ? 'The Appeals module is off. ' : ''}
           {!data.configured ? 'No appeal questions are set up yet. ' : ''}
-          Set it up under <Link to={`/guilds/${guildId}/m/appeals`}>Appeal settings</Link>.
+          {canEdit ? (
+            <>
+              Set it up under <Link to={`/guilds/${guildId}/m/appeals`}>Appeal settings</Link>.
+            </>
+          ) : (
+            'Ask a server admin to set it up.'
+          )}
         </p>
       ) : null}
 

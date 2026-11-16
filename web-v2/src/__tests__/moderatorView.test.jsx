@@ -164,6 +164,19 @@ describe('the focused moderator view', () => {
     expect(localStorage.getItem('sylo:v2:showEverything')).toBeNull();
   });
 
+  it('puts the switch first in the menu, in the focused view and in the full one', async () => {
+    setLevel('inbox');
+    await open();
+    const nav = screen.getByRole('navigation', { name: 'Dashboard' });
+    const firstInteractive = () => nav.querySelector('button, a[href]');
+    expect(firstInteractive().textContent).toBe('Show everything');
+    await act(async () => {
+      fireEvent.click(within(nav).getByRole('button', { name: 'Show everything' }));
+    });
+    expect(firstInteractive().textContent).toBe('Show only moderation');
+    expect(within(nav).getByText('Everything is shown')).toBeTruthy();
+  });
+
   it('still switches when the browser has no usable storage', async () => {
     setLevel('inbox');
     const blocked = () => {
