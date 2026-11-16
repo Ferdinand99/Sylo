@@ -128,3 +128,21 @@ test('at most MAX_CONCURRENT_DOWNLOADS run at once across servers', async () => 
   assert.equal(results.filter(Boolean).length, MAX_CONCURRENT_DOWNLOADS);
   assert.ok(await loadImage(url('after'), 'guild-x'), 'the slots are free again');
 });
+
+test('entry-count pressure takes from the server with the most entries, not the most bytes', async () => {
+  const HALF_MB = Buffer.concat([PNG_HEAD, Buffer.alloc(500 * 1024)]);
+  fetcher((link) => reply(link.includes('real') ? HALF_MB : SMALL));
+  // Four servers fill their entry share with tiny images: the 64 entries of the whole cache.
+  for (const owner of ['a', 'b', 'c', 'd']) {
+    for (let n = 0; n < MAX_OWNER_ENTRIES; n += 1) await loadImage(url(`tiny-${owner}${n}`), owner);
+  }
+  assert.equal(_imageCacheSize().entries, MAX_ENTRIES);
+  // A real server then loads its icon and its event image.
+  await loadImage(url('real-icon'), 'guild-b');
+  await loadImage(url('real-image'), 'guild-b');
+  const before = calls.length;
+  assert.ok(await loadImage(url('real-icon'), 'guild-b'));
+  assert.ok(await loadImage(url('real-image'), 'guild-b'));
+  assert.equal(calls.length, before, 'both images of the real server stayed cached');
+  assert.ok(_imageCacheSize().entries <= MAX_ENTRIES);
+});

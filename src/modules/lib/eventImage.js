@@ -145,8 +145,13 @@ function remember(url, entry) {
     if (victim === undefined) break;
     evict(victim);
   }
-  // Then the whole memory: the biggest holder gives up its oldest entry first.
+  // Then the whole memory: the holder with the most of whatever limit was hit gives up its oldest
+  // entry first. Too many entries: the one with the most entries (tiny images and remembered
+  // failures count there). Too many bytes: the one with the most bytes. Ranking by bytes when it
+  // is the entry limit that was hit would let tiny entries push out the one real image of another
+  // server.
   while (cache.size > MAX_ENTRIES || cachedBytes > MAX_TOTAL_BYTES) {
+    const byEntries = cache.size > MAX_ENTRIES;
     const held = new Map();
     for (const e of cache.values()) {
       const h = held.get(e.owner) ?? { bytes: 0, entries: 0 };
@@ -154,7 +159,9 @@ function remember(url, entry) {
       h.entries += 1;
       held.set(e.owner, h);
     }
-    const order = [...held].sort((x, y) => y[1].bytes - x[1].bytes || y[1].entries - x[1].entries);
+    const key = byEntries ? 'entries' : 'bytes';
+    const other = byEntries ? 'bytes' : 'entries';
+    const order = [...held].sort((x, y) => y[1][key] - x[1][key] || y[1][other] - x[1][other]);
     const victim = order.map(([owner]) => oldestOf(owner, url)).find((k) => k !== undefined);
     if (victim === undefined) break;
     evict(victim);
