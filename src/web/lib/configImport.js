@@ -446,6 +446,8 @@ const SKIPPED = {
     'Custom commands are registered with the platform one by one, so they are in the file but not imported; build them in the module.',
   reminders: 'Reminders are in the file but not imported yet; create them in the module.',
   'youtube-alerts': 'YouTube channels are looked up when you add them; add them in the module.',
+  bridge:
+    'A bridge joins two servers and needs both to agree with a code, so it cannot be imported; set it up in the module.',
   insights: 'Server insights has nothing to configure.',
   'game-stats': 'Game stats has nothing to configure.',
   'channel-cleanup':

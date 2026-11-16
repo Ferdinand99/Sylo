@@ -394,6 +394,17 @@ export const MODULES = [
     beta: true,
   },
   {
+    id: 'bridge',
+    name: 'Bridge',
+    description:
+      'Share one conversation between a Discord channel and a Fluxer channel. Both servers agree to a link with a one-time code, and either can unlink at any time.',
+    icon: '🌉',
+    requiredIntents: ['MessageContent'],
+    defaultEnabled: false,
+    configurable: true,
+    beta: true,
+  },
+  {
     id: 'economy',
     name: 'Economy',
     description:

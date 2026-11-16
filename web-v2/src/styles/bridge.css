@@ -1,0 +1,45 @@
+/* The Bridge page (moduleForms/Bridge.jsx): the switches of one side, the one-time code and the forms. */
+.v2-bridge-options {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0;
+}
+.v2-bridge-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.v2-bridge-option > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.v2-bridge-option label {
+  font-weight: 500;
+}
+.v2-bridge-details {
+  margin-top: 8px;
+}
+.v2-bridge-details > summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+.v2-bridge-form {
+  display: grid;
+  gap: 12px;
+  max-width: 480px;
+}
+.v2-bridge-code {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md, 10px);
+  background: color-mix(in srgb, var(--success) 8%, transparent);
+}
+.v2-bridge-code-text {
+  font-size: 1.25rem;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
