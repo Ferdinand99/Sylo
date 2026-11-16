@@ -368,3 +368,37 @@ test('only the three routes on the one target are ever called', async () => {
     assert.equal(r.headers.authorization, `Bearer ${FAKE_TOKEN}`);
   }
 });
+
+test('an oversized answer is cut off while it streams, not buffered whole', async () => {
+  let pulled = 0;
+  const chunk = new TextEncoder().encode('x'.repeat(300_000));
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins
+  const body = new ReadableStream({
+    pull(controller) {
+      pulled++;
+      if (pulled > 50) return controller.close();
+      controller.enqueue(chunk);
+    },
+  });
+  const c = createWrenClient(settings, { fetchImpl: async () => new Response(body, { status: 200 }) });
+  const err = await failure(c.target());
+  assert.equal(err.kind, 'invalid');
+  assert.ok(pulled < 10, `read ${pulled} chunks of 50`);
+});
+
+test('an answer that declares more than the cap is refused before it is read', async () => {
+  let pulled = 0;
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins
+  const body = new ReadableStream({
+    pull(controller) {
+      pulled++;
+      controller.enqueue(new TextEncoder().encode('{}'));
+    },
+  });
+  const c = createWrenClient(settings, {
+    fetchImpl: async () => new Response(body, { status: 200, headers: { 'content-length': '5000000' } }),
+  });
+  const err = await failure(c.target());
+  assert.equal(err.kind, 'invalid');
+  assert.ok(pulled <= 1, `pulled ${pulled} chunks`);
+});

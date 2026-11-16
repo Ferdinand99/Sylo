@@ -67,7 +67,7 @@ export function compareVersions(a, b) {
 }
 
 /** The body as text, read as it streams and cut off with an error once it passes `max` characters. */
-async function readCapped(res, max) {
+export async function readCapped(res, max) {
   if (!res.body?.getReader) {
     const text = await res.text();
     if (text.length > max) throw new Error('the answer is too large');

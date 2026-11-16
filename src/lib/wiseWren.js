@@ -12,6 +12,7 @@
 // requests. It is not in any error, log line or answer this file produces, and nothing here follows
 // a redirect (a redirect to another host must not receive it).
 import { BlockList, isIP } from 'node:net';
+import { readCapped } from './updateCheck.js';
 
 // Addresses an `http://` Wise Wren may live on: this machine and the local network (as the Wren agent's
 // own rule for its server address).
@@ -216,6 +217,8 @@ export function shapeTarget(t) {
 
 // A read is quick or it is broken; an approval may take Wren a moment longer.
 export const READ_TIMEOUT_MS = 4000;
+// The most of an answer Sylo reads from Wise Wren (characters).
+const MAX_BODY_CHARS = 1_000_000;
 export const APPROVE_TIMEOUT_MS = 10_000;
 
 /**
@@ -257,8 +260,14 @@ export function createWrenClient(
     }
     let data;
     try {
-      const text = await res.text();
-      data = text.length <= 1_000_000 && text ? JSON.parse(text) : null;
+      // Read as it streams and cut off at the cap: a hostile or spoofed answer must not be buffered whole.
+      const declared = Number(res.headers.get('content-length'));
+      if (Number.isFinite(declared) && declared > MAX_BODY_CHARS) {
+        await res.body?.cancel?.().catch(() => {});
+        throw new Error('the answer is too large');
+      }
+      const text = await readCapped(res, MAX_BODY_CHARS);
+      data = text ? JSON.parse(text) : null;
     } catch {
       data = null;
     }
