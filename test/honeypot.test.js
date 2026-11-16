@@ -11,7 +11,7 @@ import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { dispatch } from '../src/modules/dispatch.js';
 import { setGuildModule, getGuildModule } from '../src/db/modules.js';
-import { ensureHoneypotMessages } from '../src/modules/honeypot.js'; // also registers the messageCreate/reactionAdd handlers
+import { ensureHoneypotMessages, resetBaitPermWarnings } from '../src/modules/honeypot.js'; // also registers the messageCreate/reactionAdd handlers
 
 const G = '900000000000000777';
 const CHANNEL_ID = '100000000000000111';
@@ -282,23 +282,27 @@ test('a bait message in another channel is left alone by a channel-trap catch', 
 });
 
 test('a channel-trap catch without Read Message History keeps the count and logs the existing warning', async () => {
+  resetBaitPermWarnings();
   await saveConfig({ channels: [row()], messages: [bait()] });
   const { guild, channel, editCalls } = fakeEnv();
   channel.permissionsFor = () => ({ has: () => false });
-  const logged = mock.method(console, 'error', () => {});
+  // Text logging writes through console.error, JSON logging through process.stderr.
+  const lines = [];
+  const textLog = mock.method(console, 'error', (line) => lines.push(String(line)));
+  const jsonLog = mock.method(process.stderr, 'write', (chunk) => {
+    lines.push(String(chunk));
+    return true;
+  });
   try {
     await postTrapMessage(guild);
   } finally {
-    logged.mock.restore();
+    textLog.mock.restore();
+    jsonLog.mock.restore();
   }
 
   assert.equal((await getGuildModule(G, 'honeypot')).config.channels[0].triggerCount, 1);
   assert.equal(editCalls.length, 0);
-  assert.ok(
-    logged.mock.calls.some((c) =>
-      /missing permissions .* to update the live catch count/.test(String(c.arguments[0]))
-    )
-  );
+  assert.ok(lines.some((l) => /missing permissions .* to update the live catch count/.test(l)));
 });
 
 test('concurrent channel and reaction catches in one channel lose no counts', async () => {
@@ -316,7 +320,8 @@ test('concurrent channel and reaction catches in one channel lose no counts', as
   const saved = (await getGuildModule(G, 'honeypot')).config;
   assert.equal(saved.channels[0].triggerCount, 3);
   assert.equal(saved.messages[0].triggerCount, 2);
-  assert.equal(editCalls.length, 5);
+  // Refreshes of the same message are coalesced, so there are between 1 and 5 edits.
+  assert.ok(editCalls.length >= 1 && editCalls.length <= 5);
   assert.equal(catches(editCalls.at(-1)), 'Kicks: 5', 'the last edit shows the full total');
 });
 
@@ -329,4 +334,95 @@ test('ensureHoneypotMessages renders the combined count', async () => {
 
   assert.equal(editCalls.length, 1);
   assert.equal(catches(editCalls[0]), 'Kicks: 6');
+});
+
+test('an action with no catches is left out of the embed', async () => {
+  await saveConfig({
+    channels: [row({ action: 'ban', triggerCount: 0 })],
+    messages: [bait({ action: 'kick', triggerCount: 2 })],
+  });
+  const { message, editCalls } = fakeEnv();
+
+  await react(message);
+
+  assert.equal(catches(editCalls[0]), 'Kicks: 3');
+});
+
+test('a trap with no catches at all shows the bait row action with 0', async () => {
+  const cfg = {
+    channels: [row({ action: 'ban', triggerCount: 0 })],
+    messages: [bait({ action: 'kick', triggerCount: 0 })],
+  };
+  await saveConfig(cfg);
+  const { guild, editCalls } = fakeEnv();
+
+  await ensureHoneypotMessages(guild, cfg);
+
+  assert.equal(catches(editCalls[0]), 'Kicks: 0');
+});
+
+test('ensureHoneypotMessages posts a gone bait message again with the combined count', async () => {
+  const cfg = { channels: [row({ triggerCount: 4 })], messages: [bait({ triggerCount: 2 })] };
+  await saveConfig(cfg);
+  const { guild, channel, editCalls } = fakeEnv();
+  const sent = [];
+  channel.messages.fetch = async () => {
+    throw Object.assign(new Error('Unknown Message'), { status: 404, code: 10008 });
+  };
+  channel.send = async (payload) => {
+    sent.push(payload);
+    return { id: '200000000000000999' };
+  };
+
+  await ensureHoneypotMessages(guild, cfg);
+
+  assert.equal(editCalls.length, 0);
+  assert.equal(sent.length, 1);
+  assert.equal(catches(sent[0]), 'Kicks: 6');
+  assert.equal((await getGuildModule(G, 'honeypot')).config.messages[0].messageId, '200000000000000999');
+});
+
+test('a channel-trap catch where the bait row has no message yet counts and touches nothing', async () => {
+  await saveConfig({ channels: [row()], messages: [row({ bait: 'not posted yet' })] });
+  const { guild, channel, editCalls } = fakeEnv();
+  let fetches = 0;
+  channel.messages.fetch = async () => {
+    fetches++;
+    return null;
+  };
+
+  await postTrapMessage(guild);
+
+  assert.equal((await getGuildModule(G, 'honeypot')).config.channels[0].triggerCount, 1);
+  assert.equal(editCalls.length, 0);
+  assert.equal(fetches, 0);
+});
+
+test('the missing-permission warning is logged once per channel, not on every catch', async () => {
+  resetBaitPermWarnings();
+  await saveConfig({ channels: [row()], messages: [bait()] });
+  const { guild, channel, editCalls } = fakeEnv();
+  channel.permissionsFor = () => ({ has: () => false });
+  // Text logging writes through console.error, JSON logging through process.stderr.
+  const lines = [];
+  const textLog = mock.method(console, 'error', (line) => lines.push(String(line)));
+  const jsonLog = mock.method(process.stderr, 'write', (chunk) => {
+    lines.push(String(chunk));
+    return true;
+  });
+  try {
+    await postTrapMessage(guild);
+    await postTrapMessage(guild);
+    await postTrapMessage(guild);
+  } finally {
+    textLog.mock.restore();
+    jsonLog.mock.restore();
+  }
+
+  assert.equal((await getGuildModule(G, 'honeypot')).config.channels[0].triggerCount, 3);
+  assert.equal(editCalls.length, 0);
+  assert.equal(
+    lines.filter((l) => /missing permissions .* to update the live catch count/.test(l)).length,
+    1
+  );
 });
