@@ -94,7 +94,7 @@ struct PublicLookDecodingTests {
     func fallback() throws {
         let look = try decode(
             PublicPageLook.self,
-            #"{"accent":"#ffff00","background":"none","effective":{"accent":{"dark":"#ffff00","light":"#076787"},"fallback":["light"],"note":"This colour is too hard to read on the card in the light theme, so public pages use Sylo's own colour there. Pick a darker or lighter shade."}}"#)
+            ##"{"accent":"#ffff00","background":"none","effective":{"accent":{"dark":"#ffff00","light":"#076787"},"fallback":["light"],"note":"This colour is too hard to read on the card in the light theme, so public pages use Sylo's own colour there. Pick a darker or lighter shade."}}"##)
         #expect(look.effective.fallback == ["light"])
         #expect(look.effective.note?.hasPrefix("This colour is too hard to read") == true)
         #expect(look.effective.accent?.light == "#076787")
