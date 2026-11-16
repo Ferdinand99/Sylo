@@ -15,6 +15,11 @@ import {
   MEMBER_PROBES_PER_USER_PER_MINUTE,
   LOOKUP_REUSE_MS,
   NOT_MEMBER_TTL_MS,
+  LONG_MEMORY_TTL_MS,
+  OPEN_PROBES_PER_DM,
+  OPEN_PROBES_PER_USER_PER_MINUTE,
+  SHARED_OPEN_LIMIT,
+  STARTER_PROBES,
 } from '../src/modules/tickets.js';
 import { register } from '../src/bot/events/dmTickets.js';
 import { routeComponent } from '../src/bot/lib/components.js';
@@ -106,7 +111,10 @@ test('incomplete caches: fetches are capped per DM and per user, remembered, and
   assert.equal(third.incomplete, true);
 
   t.mock.timers.tick(61_000);
-  for (let n = 0; n < 6 && (await lookupTicketGuilds(SENDER, client)).incomplete; n++) {
+  // Two messages a minute, as a member who retries would send them.
+  for (let n = 0; n < 6; n++) {
+    await lookupTicketGuilds(SENDER, client);
+    if (!(await lookupTicketGuilds(SENDER, client)).incomplete) break;
     t.mock.timers.tick(61_000);
   }
   assert.equal(fetches.length, 40, 'each server was fetched exactly once');
@@ -395,4 +403,141 @@ test('the DM handler asks the sender to try again when the lookup was cut short,
   await settle();
   assert.equal(replies.length, 2);
   assert.match(replies[1], /not set up/, 'all servers checked by the second DM: a definite answer');
+});
+
+// --- round 3: left servers, fairness, how long "not a member" is remembered ---------------------
+
+test('a member with open tickets in servers they left costs at most one fetch per server per 10 minutes', async (t) => {
+  _resetTicketLookup();
+  t.mock.timers.enable({ apis: ['Date'], now: 20_000_000 });
+  const user = { id: '750000000000000001' };
+  const fetches = [];
+  const guilds = [];
+  for (let i = 0; i < 20; i++) {
+    const g = await ticketGuild(fetches); // the member left: every fetch says unknown member
+    await createTicket(g.id, user.id);
+    guilds.push(g);
+  }
+  const client = clientOf(guilds);
+  // A DM every 11 seconds for 9 minutes.
+  for (let n = 0; n < 49; n++) {
+    await lookupTicketGuilds(user, client);
+    t.mock.timers.tick(11_000);
+  }
+  assert.ok(fetches.length <= 20, `${fetches.length} fetches for 20 servers in 9 minutes`);
+  assert.equal(new Set(fetches.map((f) => f.guild)).size, fetches.length, 'no server asked twice');
+  const settled = await lookupTicketGuilds(user, client);
+  assert.deepEqual([settled.openGuilds.length, settled.openComplete], [0, true]);
+  // After the memory runs out each server is asked again, still within the caps per DM and minute.
+  t.mock.timers.tick(11 * 60_000);
+  fetches.length = 0;
+  const after = await lookupTicketGuilds(user, client);
+  assert.ok(fetches.length <= 5, 'at most 5 open-ticket fetches in one DM');
+  assert.equal(after.openComplete, false, 'not all checked yet: the DM handler asks again');
+});
+
+test('the open ticket checks have a cap per DM and a small allowance per user and minute', async (t) => {
+  _resetTicketLookup();
+  t.mock.timers.enable({ apis: ['Date'], now: 21_000_000 });
+  const user = { id: '750000000000000002' };
+  const fetches = [];
+  const guilds = [];
+  for (let i = 0; i < 30; i++) {
+    const g = await ticketGuild(fetches, { members: [user.id] });
+    await createTicket(g.id, user.id);
+    guilds.push(g);
+  }
+  const client = clientOf(guilds);
+  const first = await lookupTicketGuilds(user, client);
+  assert.equal(fetches.length, OPEN_PROBES_PER_DM);
+  assert.equal(first.openComplete, false);
+  await lookupTicketGuilds(user, client);
+  await lookupTicketGuilds(user, client);
+  assert.equal(fetches.length, OPEN_PROBES_PER_USER_PER_MINUTE, 'the user allowance for open tickets');
+  // It does not touch the user budget for new-ticket lookups, nor the shared one.
+  const extra = await ticketGuild(fetches);
+  const before = fetches.length;
+  await lookupTicketGuilds(user, clientOf([extra]));
+  assert.equal(fetches.length, before + 1, 'a new-ticket lookup is not blocked by the open ticket allowance');
+});
+
+test('a repeated menu pick for a server the member left costs one fetch', async (t) => {
+  _resetTicketLookup();
+  t.mock.timers.enable({ apis: ['Date'], now: 22_000_000 });
+  const user = { id: '750000000000000003' };
+  const fetches = [];
+  const left = await ticketGuild(fetches);
+  for (let n = 0; n < 30; n++) assert.equal(await canOpenTicketIn(user, left), false);
+  assert.equal(fetches.length, 1);
+});
+
+test('the shared budget keeps a share for users who have used little of it', async (t) => {
+  _resetTicketLookup();
+  t.mock.timers.enable({ apis: ['Date'], now: 23_000_000 });
+  const fetches = [];
+  const guilds = [];
+  for (let i = 0; i < 60; i++) guilds.push(await ticketGuild(fetches));
+  const client = clientOf(guilds);
+  // Eight busy accounts use their whole minute each.
+  for (let u = 0; u < 8; u++) {
+    const busy = { id: `76000000000000000${u}` };
+    for (let n = 0; n < 3; n++) await lookupTicketGuilds(busy, client);
+  }
+  assert.ok(
+    fetches.length <= SHARED_OPEN_LIMIT + STARTER_PROBES * 2,
+    `the busy ones stopped at ${fetches.length}`
+  );
+  assert.ok(
+    fetches.length < 8 * MEMBER_PROBES_PER_USER_PER_MINUTE,
+    'not all of their allowance went through'
+  );
+  const fresh = { id: '770000000000000000' };
+  const r = await lookupTicketGuilds(fresh, client);
+  assert.equal(
+    fetches.filter((f) => f.id === fresh.id).length,
+    STARTER_PROBES,
+    'a new user still gets a start'
+  );
+  assert.equal(r.incomplete, true);
+});
+
+test('"not a member" is remembered shortly, a refused lookup for long, and a join clears it', async (t) => {
+  _resetTicketLookup();
+  t.mock.timers.enable({ apis: ['Date'], now: 24_000_000 });
+  const user = { id: '750000000000000004' };
+  const fetches = [];
+  const plain = await ticketGuild(fetches);
+  const refusing = await ticketGuild(fetches, { refuse: true });
+  const client = clientOf([plain, refusing]);
+  await lookupTicketGuilds(user, client);
+  assert.equal(fetches.length, 2);
+
+  t.mock.timers.tick(NOT_MEMBER_TTL_MS + 1000);
+  await lookupTicketGuilds(user, client);
+  assert.deepEqual(
+    fetches.slice(2).map((f) => f.guild),
+    [plain.id],
+    'the plain one is asked again, the refusing one is not yet'
+  );
+
+  t.mock.timers.tick(LONG_MEMORY_TTL_MS);
+  await lookupTicketGuilds(user, client);
+  assert.ok(
+    fetches.slice(3).some((f) => f.guild === refusing.id),
+    'the refusal expires too'
+  );
+
+  // A join event clears the memory at once.
+  fetches.length = 0;
+  await lookupTicketGuilds(user, client);
+  assert.equal(fetches.length, 0, 'remembered');
+  const events = new EventEmitter();
+  register(events);
+  events.emit('guildMemberAdd', { id: user.id, guild: plain });
+  t.mock.timers.tick(LOOKUP_REUSE_MS + 1);
+  await lookupTicketGuilds(user, client);
+  assert.deepEqual(
+    fetches.map((f) => f.guild),
+    [plain.id]
+  );
 });

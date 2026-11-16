@@ -5,7 +5,7 @@
 import { guildKey, guildByKey, platformOfClient } from '../../platform/platformOf.js';
 import { config } from '../../config.js';
 import { Events, StringSelectMenuBuilder, ActionRowBuilder } from 'discord.js';
-import { lookupTicketGuilds, canOpenTicketIn, ingestUserDM } from '../../modules/tickets.js';
+import { lookupTicketGuilds, canOpenTicketIn, forgetNotMember, ingestUserDM } from '../../modules/tickets.js';
 import { registerComponent } from '../lib/components.js';
 import { handleQuestionnaireMessage, looksLikeQuestionnairePrompt } from '../lib/dmQuestionnaire.js';
 import { lateAnswerWindowMs } from '../../modules/applications.js';
@@ -159,6 +159,10 @@ registerComponent('tickets', SELECT_ID, handleSelect);
 
 /** @param {import('discord.js').Client} client */
 export function register(client, { isCommand = () => false } = {}) {
+  // A person who joins a server is no longer "not a member" there (Discord, with the intent on).
+  client.on(Events.GuildMemberAdd, (member) => {
+    if (member?.guild) forgetNotMember(member.id, guildKey(member.guild));
+  });
   client.on(Events.MessageCreate, async (message) => {
     try {
       if (message.guild || message.author?.bot) return;
