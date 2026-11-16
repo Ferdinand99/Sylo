@@ -118,3 +118,17 @@ test('buildPayload: plainText mode sends no embed and always includes the url', 
   const p2 = buildPayload(CHANNEL, { message: '{name} live now', plainText: true });
   assert.match(p2.content, /^xqc live now\nhttps:\/\/kick\.com\/xqc$/);
 });
+
+test('buildPayload: never links to stream.url, always the channel page', () => {
+  const ingest = 'rtmps://ingest.example/app';
+  const ch = { ...CHANNEL, slug: 'XQC', stream: { ...CHANNEL.stream, url: ingest } };
+  const embed = buildPayload(ch, { roleId: '', message: '' });
+  assert.equal(embed.embeds[0].data.url, 'https://kick.com/xqc');
+  assert.equal(embed.embeds[0].data.author.url, 'https://kick.com/xqc');
+  assert.ok(!JSON.stringify(embed).includes(ingest));
+  const plain = buildPayload(ch, { message: '{name} live {url}', plainText: true });
+  assert.equal(plain.content, 'XQC live https://kick.com/xqc');
+  const plain2 = buildPayload(ch, { message: '', plainText: true });
+  assert.equal(plain2.content, '🟢 XQC is live on Kick! ranked — https://kick.com/xqc');
+  assert.ok(!plain2.content.includes(ingest));
+});

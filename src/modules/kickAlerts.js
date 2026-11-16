@@ -150,7 +150,8 @@ export function streamKey(channel) {
 
 export function buildPayload(channel, alert) {
   const slug = String(channel.slug).toLowerCase();
-  const url = channel.stream?.url || `https://kick.com/${slug}`;
+  // Always the public channel page: Kick's stream.url is the ingest address, not a watch link.
+  const url = `https://kick.com/${slug}`;
   const name = channel.slug;
   const title = channel.stream_title || 'Live now';
   const game = channel.category?.name || 'something';
