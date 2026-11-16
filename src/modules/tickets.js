@@ -9,6 +9,7 @@ import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { notifyTicketActivity } from '../lib/push.js';
 import { sweepMap } from '../lib/sweepMap.js';
 import {
+  getOpenTicket,
   openTicketGuildKeys,
   openOrCreateTicket,
   getTicket,
@@ -289,7 +290,10 @@ async function probeMember(guild, userId, { ttl = NOT_MEMBER_TTL_MS } = {}) {
   checkedAt.set(`${userId}|${guildKey(guild)}`, Date.now());
   try {
     // A platform may answer "no such member" with null instead of an error.
-    if (await guild.members.fetch(userId)) return true;
+    if (await guild.members.fetch(userId)) {
+      notMember.delete(`${userId}|${guildKey(guild)}`); // they are a member after all
+      return true;
+    }
     remember(ttl);
     return false;
   } catch (err) {
@@ -317,6 +321,7 @@ async function findTicketGuilds(user, client) {
   // 1. Open tickets, from the database: complete, and kept across restarts.
   let openComplete = true;
   let openRemembered = false;
+  const rememberedGuilds = [];
   let openProbes = 0;
   const handled = new Set();
   for (const key of await openTicketGuildKeys(user.id)) {
@@ -329,6 +334,7 @@ async function findTicketGuilds(user, client) {
       if ((notMember.get(`${user.id}|${key}`) ?? 0) > Date.now()) {
         isMember = false; // left, or refused: remembered
         openRemembered = true; // not a fresh answer: the member may have come back
+        rememberedGuilds.push(guild);
       } else if (
         openProbes >= OPEN_PROBES_PER_DM ||
         !takeWindow(openWindows, user.id, OPEN_PROBES_PER_USER_PER_MINUTE)
@@ -386,18 +392,18 @@ async function findTicketGuilds(user, client) {
   if (found.length) {
     foundBefore.set(user.id, { guilds: new Set(found.map(guildKey)), at: Date.now() });
   }
-  return { guilds: found, openGuilds, openComplete, openRemembered, incomplete };
+  return { guilds: found, openGuilds, openComplete, openRemembered, rememberedGuilds, incomplete };
 }
 
 /**
  * Where can this sender open or continue a ticket? `guilds`: servers with tickets on that the user
  * is a member of; `openGuilds`: those where the user has an open ticket, and `openComplete`: that
  * list is certain; `openRemembered`: an open ticket server was skipped on the strength of an
- * earlier answer ("left"), not a fresh one; `incomplete`: some servers could not be checked yet (the caps), so `guilds` may
+ * earlier answer ("left"), not a fresh one, and `rememberedGuilds` are those servers; `incomplete`: some servers could not be checked yet (the caps), so `guilds` may
  * be missing some. Pass the client the DM arrived on to look only at that platform's servers.
  * A complete answer for one user is reused for a few seconds, so a burst of DMs does the work
  * once; an incomplete one is not reused, so a retry makes progress.
- * @returns {Promise<{ guilds: import('discord.js').Guild[], openGuilds: import('discord.js').Guild[], openComplete: boolean, openRemembered: boolean, incomplete: boolean }>}
+ * @returns {Promise<{ guilds: import('discord.js').Guild[], openGuilds: import('discord.js').Guild[], openComplete: boolean, openRemembered: boolean, rememberedGuilds: import('discord.js').Guild[], incomplete: boolean }>}
  */
 export function lookupTicketGuilds(user, client) {
   const key = `${client ? platformOfClient(client) : 'all'}|${user.id}`;
@@ -434,7 +440,11 @@ export async function canOpenTicketIn(user, guild) {
   // A server the member left (or that refuses lookups) stays refused for a while, and a pick costs
   // at most one fetch from the user's own small allowance: clicking the menu again and again is
   // bounded.
-  if ((notMember.get(`${user.id}|${guildKey(guild)}`) ?? 0) > Date.now()) return false;
+  // The one exception is a server where the member has an open ticket: it was offered in the menu
+  // because they may have come back, and the pick asks Discord once to find out.
+  if ((notMember.get(`${user.id}|${guildKey(guild)}`) ?? 0) > Date.now()) {
+    if (!(await getOpenTicket(guildKey(guild), user.id))) return false;
+  }
   if (!takeWindow(openWindows, user.id, OPEN_PROBES_PER_USER_PER_MINUTE)) return false;
   return (await probeMember(guild, user.id)) === true;
 }

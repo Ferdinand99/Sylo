@@ -576,4 +576,26 @@ test('an open ticket server remembered as "left" does not decide an automatic ne
   assert.equal(await getOpenTicket(y2.id, user2.id), undefined, 'nothing opened in the other server');
   assert.equal(replies.length, before + 1);
   assert.ok(replies.at(-1).components, 'the member gets the picker');
+  const options = replies.at(-1).components[0].components[0].options.map((o) => o.data.value);
+  assert.deepEqual(options.sort(), [x2.id, y2.id].sort(), 'the remembered server is an option too');
+
+  // Picking it: the member came back, so asking Discord once finds them there.
+  runtime.client = clientOf([x2, y2]);
+  t.after(() => {
+    runtime.client = null;
+  });
+  x2.members.fetch = async (id) => ({ id });
+  const sent = [];
+  await routeComponent({
+    customId: 'ticket-guild',
+    values: [x2.id],
+    user: { ...user2, tag: 'tester#0002', send: async () => {} },
+    client: runtime.client,
+    isRepliable: () => true,
+    update: async (x) => sent.push(x),
+    reply: async (x) => sent.push(x),
+  });
+  assert.match(sent.at(-1).content, /Opened ticket/);
+  const ticket = await getOpenTicket(x2.id, user2.id);
+  assert.equal((await ticketMessages(ticket.id)).length, 1, 'the message went to the open ticket');
 });

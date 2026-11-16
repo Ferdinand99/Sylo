@@ -69,10 +69,8 @@ async function handleDM(message) {
   if (!payload.content && payload.attachments.length === 0) return;
 
   // Only the servers on the platform this DM arrived on: a user id means nothing on the other one.
-  const { guilds, openGuilds, openComplete, openRemembered, incomplete } = await lookupTicketGuilds(
-    message.author,
-    message.client
-  );
+  const { guilds, openGuilds, openComplete, openRemembered, rememberedGuilds, incomplete } =
+    await lookupTicketGuilds(message.author, message.client);
 
   // The open tickets come from the database, so they are certain. A follow-up goes to the one
   // server where the member has an open ticket, however much of the rest could be checked.
@@ -110,7 +108,8 @@ async function handleDM(message) {
     .setCustomId(SELECT_ID)
     .setPlaceholder('Which server is this about?')
     .addOptions(
-      (openGuilds.length ? openGuilds : guilds)
+      // A server skipped from memory ("left") is offered too: the member may have come back to it.
+      [...new Set([...(openGuilds.length ? openGuilds : guilds), ...rememberedGuilds])]
         .slice(0, 25)
         .map((g) => ({ label: g.name.slice(0, 100), value: guildKey(g) }))
     );
