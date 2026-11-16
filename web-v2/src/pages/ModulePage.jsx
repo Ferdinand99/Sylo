@@ -22,7 +22,7 @@ const INBOX_PATH = { tickets: '/tickets', appeals: '/appeals' };
 // A module's settings need Edit access (access.jsx), so below it the whole form is disabled. Not for
 // pages with tabs or a search a reader still uses: there the save bar, the switches, the row actions
 // and the queue's own buttons (Applications, Suggestions: Inbox) check the level themselves.
-const NOT_LOCKED_AS_A_WHOLE = new Set(['applications', 'suggestions', 'economy', 'quote-board']);
+const NOT_LOCKED_AS_A_WHOLE = new Set(['applications', 'suggestions', 'economy', 'quote-board', 'bridge']);
 
 // The module's on/off state with a switch, so a module can be turned on from
 // its own settings page. Reads and patches the same shared overview state the

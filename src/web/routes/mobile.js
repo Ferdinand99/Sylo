@@ -312,6 +312,8 @@ export const mobileApiRouter = Router();
 // sign-in is on and both Discord and Fluxer logins are set up. `access-levels`: View / Inbox / Edit
 // dashboard access, with `access` on each GET /api/v2/guilds entry and GET/POST
 // /api/v2/guilds/:id/access. `message-move`: a posted message moves to its new channel on publish.
+// `bridge`: the Bridge module (GET /api/v2/guilds/:id/modules/bridge/config and the request, accept, options,
+// pause, resume and unlink calls under /modules/bridge/), which joins a Discord and a Fluxer channel.
 const FEATURES = Object.freeze([
   'app-login',
   'live-access',
@@ -328,6 +330,7 @@ const FEATURES = Object.freeze([
   'duplicate',
   'message-templates',
   'message-move',
+  'bridge',
 ]);
 
 // Public and ahead of the open-mode guard: the app calls it before anyone signs in, and an open-mode
