@@ -21,6 +21,7 @@ import { openSuggestionCount, suggestionCount } from '../../db/suggestions.js';
 import { nextTempRoleExpiry, tempRoleCount } from '../../db/tempRoles.js';
 import { quoteCount } from '../../db/quotes.js';
 import { introductionCount } from '../../db/introductions.js';
+import { linksOfGuild } from '../../db/bridge.js';
 import { formCount, pendingCount } from '../../db/applications.js';
 import { recentLookups } from '../../db/cache.js';
 import { dailySeries } from '../../db/insights.js';
@@ -84,6 +85,7 @@ const LAYOUT = [
       'autoresponder',
       'auto-react',
       'auto-threads',
+      'bridge',
       'afk',
       'server-stats',
       'insights',
@@ -326,6 +328,14 @@ async function moduleLines(id, guild, cfg) {
     case 'sticky': {
       const n = Array.isArray(cfg.stickies) ? cfg.stickies.length : 0;
       return [n ? on('Active sticky messages', String(n)) : off('Active sticky messages', 'none')];
+    }
+    case 'bridge': {
+      const links = await linksOfGuild(guild.id);
+      const stopped = links.filter((l) => l.status === 'failed').length;
+      return [
+        links.length ? on('Bridged channels', String(links.length)) : off('Bridged channels', 'none'),
+        stopped ? off('Stopped', String(stopped)) : neutral('Stopped', '0'),
+      ];
     }
     case 'quote-board': {
       const saved = await quoteCount(guild.id);
