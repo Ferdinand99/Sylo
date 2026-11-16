@@ -1,5 +1,14 @@
 # Changelog
 
+## [5.2.1](https://github.com/Ferdinand99/Sylo/compare/v5.2.0...v5.2.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* **honeypot:** count every catch in the bait embed's channel ([#372](https://github.com/Ferdinand99/Sylo/issues/372)) ([b54fe45](https://github.com/Ferdinand99/Sylo/commit/b54fe4554c0b96bd503183b1726c49ac616aa4ad))
+* **live-alerts:** retry a failed Twitch/Kick poll once and log a run of failures once ([#374](https://github.com/Ferdinand99/Sylo/issues/374)) ([51538e1](https://github.com/Ferdinand99/Sylo/commit/51538e16c965046b739482693ddab54986147060))
+* **youtube-alerts:** treat feed 404 and 5xx as transient instead of logging an error per poll ([#370](https://github.com/Ferdinand99/Sylo/issues/370)) ([8a19af7](https://github.com/Ferdinand99/Sylo/commit/8a19af7a7a5a137c974b33fdd9e5062fe48d3f54))
+
 ## [5.2.0](https://github.com/Ferdinand99/Sylo/compare/v5.1.2...v5.2.0) (2026-11-15)
 
 
