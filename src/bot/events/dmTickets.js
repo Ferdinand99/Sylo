@@ -2,7 +2,7 @@
 // a DM questionnaire (bot/lib/dmQuestionnaire.js), which takes their DMs first. When the
 // user shares several ticket-enabled servers and has no open ticket, the bot
 // asks which server with a select menu.
-import { guildKey, guildByKey, platformOfClient } from '../../platform/platformOf.js';
+import { guildKey, guildByKey, platformOfClient, platformOfGuild } from '../../platform/platformOf.js';
 import { config } from '../../config.js';
 import { Events, StringSelectMenuBuilder, ActionRowBuilder } from 'discord.js';
 import { lookupTicketGuilds, canOpenTicketIn, forgetNotMember, ingestUserDM } from '../../modules/tickets.js';
@@ -131,8 +131,11 @@ async function handleSelect(interaction) {
       .catch(() => {});
     return;
   }
-  // Still one the member may open a ticket in (a member there, tickets on): the menu could be old.
-  const guild = picked && (await canOpenTicketIn(interaction.user, picked)) ? picked : null;
+  // Only a server on the platform this menu was shown on: a user id means nothing on the other one (the menu
+  // only offers those, so this guards against a value that was not from it). Then still one the member may
+  // open a ticket in (a member there, tickets on): the menu could be old.
+  const samePlatform = picked && platformOfGuild(picked) === platformOfClient(interaction.client);
+  const guild = samePlatform && (await canOpenTicketIn(interaction.user, picked)) ? picked : null;
   if (!guild) {
     // The message stays stashed and the menu stays up, so the member can pick again.
     await interaction

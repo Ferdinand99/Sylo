@@ -599,3 +599,60 @@ test('an open ticket server remembered as "left" does not decide an automatic ne
   const ticket = await getOpenTicket(x2.id, user2.id);
   assert.equal((await ticketMessages(ticket.id)).length, 1, 'the message went to the open ticket');
 });
+
+test('a menu pick of a server on the other platform is refused, and nothing is opened there', async (t) => {
+  _resetTicketLookup();
+  t.mock.timers.enable({ apis: ['Date'], now: 30_000_000 });
+  const user = { id: '760000000000000001' };
+  const fetches = [];
+  const a = await ticketGuild(fetches, { cached: [user.id] });
+  const b = await ticketGuild(fetches, { cached: [user.id] });
+  // A Fluxer server where the same id is a member and tickets are on: the pick would pass every other check.
+  const fluxerClient = {};
+  const raw = String(nextId++);
+  const foreign = {
+    id: raw,
+    name: 'Fluxer server',
+    client: fluxerClient,
+    memberCount: 5000,
+    channels: { cache: new Map(), fetch: async () => null },
+    members: {
+      cache: new Map([[user.id, { id: user.id, partial: false }]]),
+      fetch: async () => ({ id: user.id }),
+    },
+  };
+  fluxerClient.guilds = { cache: new Map([[raw, foreign]]) };
+  await setGuildModule(`fluxer:${raw}`, 'tickets', { enabled: true });
+  runtime.client = clientOf([a, b]);
+  runtime.clients.fluxer = fluxerClient;
+  t.after(() => {
+    runtime.client = null;
+    runtime.clients.fluxer = null;
+  });
+  const replies = [];
+  const client = new EventEmitter();
+  register(client);
+  client.emit('messageCreate', dmFrom(user, [a, b], replies));
+  await settle();
+  assert.ok(replies[0].components, 'the picker');
+
+  const sent = [];
+  const pick = (value, from) => ({
+    customId: 'ticket-guild',
+    values: [value],
+    user: { ...user, tag: 'tester#0003', send: async () => {} },
+    client: from,
+    isRepliable: () => true,
+    update: async (x) => sent.push(['update', x]),
+    reply: async (x) => sent.push(['reply', x]),
+  });
+  // The DM came in on Discord: the Fluxer server's key is not one it may pick.
+  await routeComponent(pick(`fluxer:${raw}`, runtime.client));
+  assert.equal(sent.at(-1)[0], 'reply');
+  assert.match(sent.at(-1)[1].content, /could not confirm/);
+  assert.equal(await getOpenTicket(`fluxer:${raw}`, user.id), undefined, 'nothing opened there');
+  // The message was kept: a server on the DM's own platform still works.
+  await routeComponent(pick(a.id, runtime.client));
+  assert.equal(sent.at(-1)[0], 'update');
+  assert.match(sent.at(-1)[1].content, /Opened ticket/);
+});
