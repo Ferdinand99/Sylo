@@ -23,3 +23,10 @@ Announce a YouTube channel's new uploads, and when it goes live.
 
 - Find the `UC…` id via the channel's *About → Share → Copy channel ID*.
 - Uploads and live states are de-duplicated so each posts once.
+- YouTube's feed now and then answers 404 or a server error for a channel that exists. Sylo
+  treats that as temporary: it keeps count, polls that channel less often (up to every 30
+  minutes) until the feed answers again, and then announces any upload it missed. The
+  operator's log gets one warning after 6 failed polls in a row and one line when the feed is
+  back. If the feed answers 404 without a break for 24 hours, the module shows a warning in the
+  server's health check ("YouTube can't find the feed for ..."): check that the channel still
+  exists, or update its id.
