@@ -317,7 +317,7 @@ in there:
 | `login` | Whether sign-in is available (false in open mode) |
 | `loginProviders` | The configured logins, for example `["discord", "fluxer"]`; empty when `login` is false |
 | `platforms` | The platforms the bot runs on, for example `["discord"]` |
-| `features` | What this version's app API supports, so the app can hide what an older Sylo lacks. Today: `app-login`, `live-access`, `changelog`, `collectibles`, `welcome-trigger`, `member-search`, `access-levels`, `health`, `app-connect`, `setup-wizard`, `config-history`, `inbox-search`, `config-import`, `duplicate`, `message-templates` and `message-move`, plus `push` and `push-pigeon` when this instance can send notifications. See the list below |
+| `features` | What this version's app API supports, so the app can hide what an older Sylo lacks. Today: `app-login`, `live-access`, `changelog`, `collectibles`, `welcome-trigger`, `member-search`, `access-levels`, `health`, `app-connect`, `setup-wizard`, `config-history`, `inbox-search`, `config-import`, `duplicate`, `message-templates`, `message-move` and `mirror`, plus `push` and `push-pigeon` when this instance can send notifications. See the list below |
 
 The feature strings:
 
@@ -338,6 +338,7 @@ The feature strings:
 - `duplicate`: the `duplicate` routes for reminders, embed messages, reaction-role sets, custom commands and shop items.
 - `message-templates`: the built-in message templates and the raw message JSON import and export.
 - `message-move`: when the channel of a posted **embed message**, the **Welcome channel** message or a **role panel** changes and is published, the server posts a fresh message in the new channel, stores it and then deletes the old one, so the app must not unpublish first. Other bot posts (verification, honeypot traps, applications and so on) are not covered. A publish that loses a race with another publish of the same embed message answers `409` with the current record.
+- `mirror`: the [Mirror to Fluxer](mirror.md) routes under `/api/v2/guilds/:id/mirror`: `GET` the state (the pair, its progress and the Fluxer servers the person manages), `GET …/preview` (the dry run) and `GET …/report`, and `POST …/request`, `…/accept`, `…/options`, `…/start`, `…/pause`, `…/resume`, `…/stop` and `…/remove`. Reading needs View; changing anything needs Edit on the server the call is made on.
 - `app-connect`: [adding the other login](#adding-the-other-login). Only where sign-in is on and both Discord and Fluxer logins are set up.
 - `push`, `push-pigeon`: this instance can send notifications to signed-in apps.
 

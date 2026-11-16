@@ -328,6 +328,7 @@ const FEATURES = Object.freeze([
   'duplicate',
   'message-templates',
   'message-move',
+  'mirror',
 ]);
 
 // Public and ahead of the open-mode guard: the app calls it before anyone signs in, and an open-mode

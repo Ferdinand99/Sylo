@@ -1,0 +1,351 @@
+// JSON API for the "Mirror to Fluxer" page: copy a Discord server's structure to a Fluxer server and keep it
+// in step (src/mirror/).
+//
+// Mounted at /guilds/:guildId in v2Api.js behind the access guard, so req.guild is set and the caller has a
+// dashboard level in THIS server. The levels are in src/web/lib/routeAccess.js: seeing the page and its
+// preview and report needs View; asking, agreeing, starting, pausing and stopping need Edit.
+//
+// The page is used on both servers of a pair. On the Discord server (the source) the admin asks for a mirror,
+// looks at the preview and starts the copy. On the Fluxer server (the target) someone with Edit there agrees
+// with the code the request showed, and may pause or stop the mirror at any time. Every call looks only at
+// the pair this server is part of, so a code, a pair id or a server id of another server reaches nothing.
+import { config } from '../../config.js';
+import { splitPlatformGuildId, makePlatformGuildId } from '../../lib/platformId.js';
+import { PAIR_STATUS, pairsOfGuild, updatePair } from '../../db/mirror.js';
+import { recordAudit } from '../../db/audit.js';
+import { accessRouter, accountGuildAccess, requestCan } from '../middleware/access.js';
+import { adminGuildIds, currentUser } from '../middleware/auth.js';
+import { platformActionKey, rateLimit } from '../middleware/rateLimit.js';
+import { asyncHandler } from '../lib/asyncHandler.js';
+import { guildByKey, platformOfGuild } from '../../platform/platformOf.js';
+import { mirror } from '../../mirror/index.js';
+import { ConsentError, acceptMirror, requestMirror } from '../../mirror/consent.js';
+import { MirrorError } from '../../mirror/errors.js';
+import { DEFAULT_OPTIONS, FLUXER_LIMITS, normaliseOptions } from '../../mirror/spec.js';
+import { invalidateHealth } from '../../lib/healthCache.js';
+
+const router = accessRouter('/guilds/:guildId', { mergeParams: true });
+
+const actor = (req) => (currentUser(req)?.open ? 'Dashboard' : `${currentUser(req).name} (dashboard)`);
+const fail = (res, message, status = 400, extra = {}) =>
+  res.status(status).json({ error: message, ...extra });
+
+// Asking and agreeing change who may write to a server: a few tries in ten minutes per server and person.
+const askLimit = rateLimit({
+  windowMs: 10 * 60_000,
+  max: 12,
+  message: 'Too many mirror requests just now. Wait a few minutes and try again.',
+  keyFn: (req) => `mirror-ask|${platformActionKey(req)}`,
+});
+// The preview reads both servers whole.
+const previewLimit = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  message: 'The preview was asked for too often. Wait a minute.',
+  keyFn: (req) => `mirror-preview|${platformActionKey(req)}`,
+});
+// Starting a copy queues work on another platform.
+const startLimit = rateLimit({
+  windowMs: 10 * 60_000,
+  max: 4,
+  message: 'The copy was started several times just now. Wait a few minutes.',
+  keyFn: (req) => `mirror-start|${platformActionKey(req)}`,
+});
+const controlLimit = rateLimit({
+  windowMs: 60_000,
+  max: 20,
+  keyFn: (req) => `mirror-control|${platformActionKey(req)}`,
+});
+
+/** The pair this server is part of, with which side it is, or null. */
+async function pairOf(req) {
+  const key = req.guild.id;
+  const pair = (await pairsOfGuild(key))[0] ?? null;
+  if (!pair) return null;
+  return { pair, side: pair.sourceGuild === key ? 'source' : 'target' };
+}
+
+/** Does the signed-in person hold Edit on another server (live, through their own login there)? */
+async function holdsEditOn(req, key) {
+  if (!config.authEnabled) return true;
+  if (!req.account) return false;
+  const level = await accountGuildAccess(req.account, key, { live: true, write: true });
+  return level === 'edit';
+}
+
+/** What the page needs to know about a pair, for the side that is looking. Never a code, a hash or a secret. */
+function pairView(pair, side) {
+  const otherKey = side === 'source' ? pair.targetGuild : pair.sourceGuild;
+  const other = guildByKey(otherKey);
+  // The Discord side learns the Fluxer server's name only once someone there has agreed.
+  const showName = side === 'target' || Boolean(pair.targetConsentBy);
+  return {
+    id: pair.id,
+    side,
+    status: pair.status,
+    resumeStatus: pair.resumeStatus,
+    options: normaliseOptions(pair.options),
+    otherId: otherKey,
+    otherName: showName ? (other?.name ?? null) : null,
+    otherPresent: Boolean(other),
+    requestedBy: pair.requestedBy,
+    consent: {
+      source: pair.sourceConsentBy ? { by: pair.sourceConsentBy, at: pair.sourceConsentAt } : null,
+      target: pair.targetConsentBy ? { by: pair.targetConsentBy, at: pair.targetConsentAt } : null,
+    },
+    codeExpiresAt: pair.status === PAIR_STATUS.PENDING ? pair.codeExpiresAt : 0,
+    lastError: pair.lastError,
+    copiedAt: pair.copiedAt,
+    copyRun: pair.copyRun,
+    createdAt: pair.createdAt,
+  };
+}
+
+async function stateOf(req) {
+  const platform = platformOfGuild(req.guild);
+  const found = await pairOf(req);
+  const candidates =
+    platform === 'discord' && requestCan(req, 'edit')
+      ? [...adminGuildIds(req)]
+          .filter((k) => splitPlatformGuildId(k)?.platform === 'fluxer')
+          .map((k) => ({ id: k, name: guildByKey(k)?.name ?? k }))
+      : [];
+  return {
+    platform,
+    canMirror: platform === 'discord',
+    fluxerConnected: config.fluxerEnabled,
+    pair: found ? pairView(found.pair, found.side) : null,
+    progress: found ? await mirror.progress(found.pair) : null,
+    candidates,
+    defaults: DEFAULT_OPTIONS,
+    limits: { emoji: FLUXER_LIMITS.emoji, stickers: FLUXER_LIMITS.stickers },
+  };
+}
+
+router.get(
+  '/mirror',
+  asyncHandler(async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json(await stateOf(req));
+  })
+);
+
+/** A raw Fluxer id, or "fluxer:<id>", as a key. Null when it is neither. */
+function fluxerKeyOf(raw) {
+  const text = String(raw ?? '').trim();
+  const key = /^\d{17,20}$/.test(text) ? makePlatformGuildId('fluxer', text) : text;
+  return splitPlatformGuildId(key)?.platform === 'fluxer' ? key : null;
+}
+
+const consentStatus = (err) =>
+  ({ 'no-request': 404, expired: 410, 'wrong-code': 403, cancelled: 403, 'no-consent': 409 })[err.code] ??
+  409;
+
+// Ask for a mirror: the Discord server is the source. When the same person holds Edit on the Fluxer server
+// too, both sides agree at once; otherwise the answer carries a one-time code to give to someone there.
+router.post(
+  '/mirror/request',
+  askLimit,
+  asyncHandler(async (req, res) => {
+    if (platformOfGuild(req.guild) !== 'discord') {
+      return fail(res, 'Only a Discord server can be mirrored. Ask for the mirror on the Discord server.');
+    }
+    const targetKey = fluxerKeyOf(req.body?.targetGuildId);
+    if (!targetKey) return fail(res, 'Enter the id of the Fluxer server.');
+    if (!guildByKey(targetKey)) {
+      return fail(
+        res,
+        'Sylo is not in that Fluxer server. Invite Sylo there with the Administrator permission first.',
+        404
+      );
+    }
+    try {
+      const targetEdit = await holdsEditOn(req, targetKey);
+      const { pair, code } = await requestMirror({
+        sourceGuild: req.guild.id,
+        targetGuild: targetKey,
+        actor: actor(req),
+        targetEdit,
+        options: req.body?.options,
+      });
+      await recordAudit(req.guild.id, {
+        actor: actor(req),
+        action: 'mirror:request',
+        detail: targetEdit
+          ? 'asked for a mirror to a Fluxer server (agreed on both sides)'
+          : 'asked for a mirror to a Fluxer server',
+      });
+      if (targetEdit) {
+        await recordAudit(targetKey, {
+          actor: actor(req),
+          action: 'mirror:agree',
+          detail: 'agreed to be the mirror target',
+        });
+      }
+      invalidateHealth(req.guild.id);
+      res.json({ ...(await stateOf(req)), code, agreed: Boolean(pair.targetConsentBy) });
+    } catch (err) {
+      if (err instanceof ConsentError) return fail(res, err.message, 409, { code: err.code });
+      throw err;
+    }
+  })
+);
+
+// The Fluxer side agrees with the code.
+router.post(
+  '/mirror/accept',
+  askLimit,
+  asyncHandler(async (req, res) => {
+    if (platformOfGuild(req.guild) !== 'fluxer') {
+      return fail(res, 'The code is entered on the Fluxer server that is asked to be the mirror.');
+    }
+    try {
+      await acceptMirror({ targetGuild: req.guild.id, code: req.body?.code, actor: actor(req) });
+    } catch (err) {
+      if (err instanceof ConsentError) return fail(res, err.message, consentStatus(err), { code: err.code });
+      throw err;
+    }
+    const found = await pairOf(req);
+    await recordAudit(req.guild.id, {
+      actor: actor(req),
+      action: 'mirror:agree',
+      detail: 'agreed to be the mirror target',
+    });
+    if (found) {
+      await recordAudit(found.pair.sourceGuild, {
+        actor: actor(req),
+        action: 'mirror:agree',
+        detail: 'the Fluxer server agreed to the mirror',
+      });
+      invalidateHealth(found.pair.sourceGuild);
+    }
+    invalidateHealth(req.guild.id);
+    res.json(await stateOf(req));
+  })
+);
+
+/** The pair of this (source) server, or an answer that says why not. */
+async function sourcePair(req, res, { needConsent = false } = {}) {
+  const found = await pairOf(req);
+  if (!found || found.side !== 'source') {
+    fail(res, 'This server has no mirror to a Fluxer server. Ask for one first.', 404);
+    return null;
+  }
+  if (needConsent && !(found.pair.sourceConsentBy && found.pair.targetConsentBy)) {
+    fail(res, 'Both servers have to agree first.', 409, { code: 'no-consent' });
+    return null;
+  }
+  return found.pair;
+}
+
+router.post(
+  '/mirror/options',
+  controlLimit,
+  asyncHandler(async (req, res) => {
+    const pair = await sourcePair(req, res);
+    if (!pair) return;
+    const options = normaliseOptions({ ...pair.options, ...req.body });
+    await updatePair(pair.id, { options });
+    await recordAudit(req.guild.id, {
+      actor: actor(req),
+      action: 'mirror:options',
+      detail: 'mirror options changed',
+    });
+    res.json(await stateOf(req));
+  })
+);
+
+// The dry run: what a copy would do now, and everything that cannot be carried over. Creates nothing.
+router.get(
+  '/mirror/preview',
+  previewLimit,
+  asyncHandler(async (req, res) => {
+    const pair = await sourcePair(req, res, { needConsent: true });
+    if (!pair) return;
+    const preview = await mirror.previewPair(pair);
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      ok: preview.ok,
+      blockers: preview.blockers,
+      warnings: preview.warnings,
+      summary: preview.summary,
+      notes: preview.notes,
+      target: preview.target,
+      steps: preview.steps.map((s) => ({
+        key: s.key,
+        kind: s.kind,
+        name: s.name,
+        op: s.op,
+        reason: s.reason ?? null,
+        notes: (s.notes ?? []).length,
+      })),
+    });
+  })
+);
+
+// What became of the latest copy, step by step.
+router.get(
+  '/mirror/report',
+  asyncHandler(async (req, res) => {
+    const pair = await sourcePair(req, res);
+    if (!pair) return;
+    res.set('Cache-Control', 'no-store');
+    res.json(await mirror.report(pair));
+  })
+);
+
+router.post(
+  '/mirror/start',
+  startLimit,
+  asyncHandler(async (req, res) => {
+    const pair = await sourcePair(req, res, { needConsent: true });
+    if (!pair) return;
+    if (req.body?.confirm !== true) return fail(res, 'Confirm the copy first.', 400);
+    try {
+      await mirror.startCopy(pair.id);
+    } catch (err) {
+      if (err instanceof ConsentError) return fail(res, err.message, 409, { code: err.code });
+      if (err instanceof MirrorError) return fail(res, err.message, 409);
+      throw err;
+    }
+    await recordAudit(req.guild.id, {
+      actor: actor(req),
+      action: 'mirror:start',
+      detail: 'started copying to the Fluxer server',
+    });
+    await recordAudit(pair.targetGuild, {
+      actor: actor(req),
+      action: 'mirror:start',
+      detail: 'a copy from the Discord server started',
+    });
+    res.json(await stateOf(req));
+  })
+);
+
+/** Pause, resume, stop and remove work from either server of the pair: either side may end it at any time. */
+function control(name, run, detail) {
+  router.post(
+    `/mirror/${name}`,
+    controlLimit,
+    asyncHandler(async (req, res) => {
+      const found = await pairOf(req);
+      if (!found) return fail(res, 'This server has no mirror.', 404);
+      try {
+        await run(found.pair);
+      } catch (err) {
+        if (err instanceof MirrorError || err instanceof ConsentError) return fail(res, err.message, 409);
+        throw err;
+      }
+      for (const key of [found.pair.sourceGuild, found.pair.targetGuild]) {
+        await recordAudit(key, { actor: actor(req), action: `mirror:${name}`, detail });
+      }
+      res.json(await stateOf(req));
+    })
+  );
+}
+control('pause', (pair) => mirror.pause(pair.id), 'mirror paused');
+control('resume', (pair) => mirror.resume(pair.id), 'mirror resumed');
+control('stop', (pair) => mirror.stopPair(pair.id), 'mirror stopped');
+control('remove', (pair) => mirror.removePair(pair.id), 'mirror removed');
+
+export default router;

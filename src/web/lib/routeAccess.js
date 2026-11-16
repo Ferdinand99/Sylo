@@ -314,6 +314,20 @@ export const ROUTE_ACCESS = Object.freeze({
   'GET /guilds/:guildId/setup/suggest': 'view',
   'POST /guilds/:guildId/setup/apply': 'edit',
 
+  // v2Mirror.js: the page and its preview and report are for looking; asking, agreeing, starting, pausing and
+  // stopping change what Sylo does to another server. They need Edit on the server the call is made on.
+  'GET /guilds/:guildId/mirror': 'view',
+  'GET /guilds/:guildId/mirror/preview': 'view',
+  'GET /guilds/:guildId/mirror/report': 'view',
+  'POST /guilds/:guildId/mirror/request': 'edit',
+  'POST /guilds/:guildId/mirror/accept': 'edit',
+  'POST /guilds/:guildId/mirror/options': 'edit',
+  'POST /guilds/:guildId/mirror/start': 'edit',
+  'POST /guilds/:guildId/mirror/pause': 'edit',
+  'POST /guilds/:guildId/mirror/resume': 'edit',
+  'POST /guilds/:guildId/mirror/stop': 'edit',
+  'POST /guilds/:guildId/mirror/remove': 'edit',
+
   // v2Health.js (the re-check with ?refresh=1 has its own per-server limit)
   'GET /guilds/:guildId/health': 'view',
 });

@@ -478,6 +478,24 @@ export const duplicateShopItem = (guildId, id) => duplicate(guildId, `modules/ec
 // The setup wizard: what Sylo proposes for this server, and applying the ticked items.
 export const getSetupSuggestion = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/setup/suggest`);
 export const applySetup = (guildId, body) => postJson(`/api/v2/guilds/${gid(guildId)}/setup/apply`, body);
+// Mirror to Fluxer (src/mirror/): the state of this server's mirror, the dry run and the report, and the
+// actions: ask, agree with the code, change options, start the copy, pause, resume, stop and remove.
+export const getMirror = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/mirror`);
+export const getMirrorPreview = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/mirror/preview`);
+export const getMirrorReport = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/mirror/report`);
+export const requestMirror = (guildId, targetGuildId, options) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/mirror/request`, {
+    targetGuildId,
+    ...(options ? { options } : {}),
+  });
+export const acceptMirror = (guildId, code) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/mirror/accept`, { code });
+export const setMirrorOptions = (guildId, options) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/mirror/options`, options);
+export const startMirror = (guildId) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/mirror/start`, { confirm: true });
+export const mirrorAction = (guildId, action) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/mirror/${action}`, {});
 export const getMemberData = (guildId, user) =>
   apiFetch(`/api/v2/guilds/${gid(guildId)}/member-data?user=${encodeURIComponent(user ?? '')}`);
 export const forgetMemberData = (guildId, userId, reason) =>
