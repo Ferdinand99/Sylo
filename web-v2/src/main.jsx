@@ -22,6 +22,7 @@ import './styles/setup-wizard.css';
 import './styles/access.css';
 import './styles/history.css';
 import './styles/health.css';
+import './styles/p2.css';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

@@ -57,6 +57,7 @@ import guildDataRouter from './v2GuildData.js';
 import configImportRouter from './v2ConfigImport.js';
 import duplicateRouter from './v2Duplicate.js';
 import healthRouter, { dropHealthOnWrite } from './v2Health.js';
+import updateRouter from './v2Update.js';
 import { moduleIcon } from '../lib/moduleIcons.js';
 import eventsRouter from './v2Events.js';
 import suggestionsRouter from './v2Suggestions.js';
@@ -507,6 +508,8 @@ function loadGuildJson(req, res, next) {
 // sits before the access guard below and does its own access check (v2ShopMember.js).
 // Every /guilds/:guildId route after the guard needs the level src/web/lib/routeAccess.js gives it
 // (view, inbox or edit; edit when it gives none), checked by the access router (access.js).
+// The operators' update notice and Wise Wren's "Update now" (v2Update.js): operator routes, not per server.
+router.use(updateRouter);
 router.use('/shop/:guildId', shopMemberRouter);
 // The web form of an application (/apply/<server>/<form>): the same kind of page, the same access rule.
 router.use('/apply/:guildId', applyMemberRouter);
