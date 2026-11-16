@@ -6,15 +6,21 @@
 //    429 (honouring Retry-After). 4xx answers other than 429 are not retried: they mean the
 //    request or a value in it is wrong, and asking again gives the same answer.
 //  - createPollHealth() counts consecutive failed polls. One line (warn) after POLL_WARN_AFTER
-//    failures in a row, one when polling works again, nothing in between. Errors that are not
-//    network or HTTP problems (a TypeError in our own code, a 4xx that needs a fix such as bad
-//    credentials) are still logged as errors every time.
+//    failures in a row, one when polling works again, and a "still failing" reminder once an hour
+//    while it lasts. Errors that are not network or HTTP problems (a TypeError in our own code, a
+//    4xx that needs a fix such as bad credentials) are logged as errors the first time and when
+//    the message changes, then once an hour ("still failing after N polls"): every error line
+//    also feeds /health, the error counter and the error reports, so one bad secret must not
+//    write 1440 of them a day.
 // "fetch failed", Node's generic network error, hides the reason in `err.cause`; describeError()
 // puts its code (ECONNRESET, UND_ERR_CONNECT_TIMEOUT, ...) in the text.
 import { log } from '../../lib/log.js';
 
 /** Failed polls in a row before one warning is logged. */
 export const POLL_WARN_AFTER = 3;
+
+/** How often a failure that goes on is logged again. */
+export const STILL_FAILING_MS = 60 * 60_000;
 
 /** Retry settings. An object so a test can shorten the wait; do not change it elsewhere. */
 export const pollRetry = {
@@ -37,6 +43,15 @@ const NETWORK_CODES = new Set([
   'EHOSTUNREACH',
   'EHOSTDOWN',
   'ERR_SSL_WRONG_VERSION_NUMBER',
+  // undici: connection and timeout problems only. The others (UND_ERR_INVALID_ARG, ...) are
+  // faults in how we call it and must stay errors.
+  'UND_ERR_SOCKET',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_BODY_TIMEOUT',
+  'UND_ERR_CLOSED',
+  'UND_ERR_ABORTED',
+  'UND_ERR_REQ_RETRY',
 ]);
 
 /** The error, its causes, and the members of an AggregateError (a dual-stack connect failure). */
@@ -70,7 +85,7 @@ export function isNetworkError(err) {
   return chain(err).some(
     (e) =>
       isTimeoutName(e) ||
-      (typeof e.code === 'string' && (NETWORK_CODES.has(e.code) || e.code.startsWith('UND_ERR_'))) ||
+      (typeof e.code === 'string' && NETWORK_CODES.has(e.code)) ||
       (e instanceof TypeError && (e.message === 'fetch failed' || e.message === 'terminated'))
   );
 }
@@ -93,9 +108,12 @@ function retryAfterMs(res) {
     const date = Date.parse(header);
     if (Number.isFinite(date)) return Math.max(0, date - Date.now());
   }
-  // Twitch states when its rate limit resets, in epoch seconds.
-  const reset = Number(res.headers?.get?.('ratelimit-reset'));
-  if (Number.isFinite(reset) && reset > 0) return Math.max(0, reset * 1000 - Date.now());
+  // Twitch states when its rate limit resets, in epoch seconds. That says nothing about an
+  // outage, so it is only read for a 429.
+  if (res.status === 429) {
+    const reset = Number(res.headers?.get?.('ratelimit-reset'));
+    if (Number.isFinite(reset) && reset > 0) return Math.max(0, reset * 1000 - Date.now());
+  }
   return null;
 }
 
@@ -113,13 +131,28 @@ export function httpError(label, res) {
   return err;
 }
 
-/** Run `fn`; if it fails with a transient error, wait a moment and run it once more. */
+/**
+ * The error for a non-OK answer of the token endpoint. Its status is kept only when it is
+ * transient (`httpStatus` always holds it): a refused token is a fault of the request, never of
+ * one stored value, so batchIsolation's "rejected value" statuses (400, 404, 422) must not see it.
+ */
+export function tokenError(label, res) {
+  const err = httpError(label, res);
+  err.httpStatus = res.status;
+  if (!isTransientStatus(res.status)) delete err.status;
+  return err;
+}
+
+/**
+ * Run `fn`; if it fails with a transient error, wait a moment and run it once more. An error with
+ * `retryNow` (a 401 whose token was just cleared) is retried at once.
+ */
 export async function withRetry(fn) {
   try {
     return await fn();
   } catch (err) {
-    if (!isTransient(err)) throw err;
-    const wait = err.retryAfterMs ?? pollRetry.delayMs;
+    if (!isTransient(err) && !err?.retryNow) throw err;
+    const wait = err.retryNow ? 0 : (err.retryAfterMs ?? pollRetry.delayMs);
     if (wait > pollRetry.maxWaitMs) throw err;
     await pollRetry.sleep(wait);
     return await fn();
@@ -138,39 +171,63 @@ export function describeError(err) {
 /**
  * Counts consecutive failed polls of one platform.
  * @param {string} scope  the log scope, e.g. 'twitch-alerts'
+ * @param {{ warnAfter?: number, repeatMs?: number, now?: () => number }} [o]
  */
-export function createPollHealth(scope, { warnAfter = POLL_WARN_AFTER } = {}) {
-  let failures = 0;
+export function createPollHealth(
+  scope,
+  { warnAfter = POLL_WARN_AFTER, repeatMs = STILL_FAILING_MS, now = () => Date.now() } = {}
+) {
+  let failures = 0; // transient failures in a row
   let warned = false;
+  let warnedAt = 0;
+  /** The error that is not transient and goes on: its text, polls it failed, when it was last logged. */
+  let fault = null;
+  const reset = () => {
+    failures = 0;
+    warned = false;
+    fault = null;
+  };
   return {
-    /** Failed polls in a row. */
+    /** Transient failed polls in a row. */
     get failures() {
       return failures;
     },
-    /** A poll failed with `err`. Logs now, or only after `warnAfter` in a row, see the file head. */
+    /** A poll failed with `err`. Logs now, later or not at all, see the file head. */
     failed(err) {
       if (!isTransient(err)) {
-        log.error(scope, 'poll failed:', describeError(err));
+        const text = describeError(err);
+        if (!fault || fault.text !== text) {
+          fault = { text, polls: 1, loggedAt: now() };
+          log.error(scope, 'poll failed:', err); // the Error itself: its stack reaches the logs
+          return;
+        }
+        fault.polls += 1;
+        if (now() - fault.loggedAt >= repeatMs) {
+          fault.loggedAt = now();
+          log.error(scope, `poll still failing after ${fault.polls} polls: ${text}`);
+        }
         return;
       }
       failures += 1;
       if (failures === warnAfter) {
         warned = true;
+        warnedAt = now();
         log.warn(
           scope,
           `poll failed ${failures} times in a row (${describeError(err)}); new streams may be announced late until it works again`
         );
+      } else if (warned && now() - warnedAt >= repeatMs) {
+        warnedAt = now();
+        log.warn(scope, `poll still failing after ${failures} polls (${describeError(err)})`);
       }
     },
     /** A poll worked. */
     ok() {
-      if (warned) log.warn(scope, `polling works again after ${failures} failed polls`);
-      failures = 0;
-      warned = false;
+      if (warned || fault) {
+        log.warn(scope, `polling works again after ${failures + (fault?.polls ?? 0)} failed polls`);
+      }
+      reset();
     },
-    reset() {
-      failures = 0;
-      warned = false;
-    },
+    reset,
   };
 }
