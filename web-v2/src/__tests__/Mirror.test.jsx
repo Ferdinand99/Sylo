@@ -45,6 +45,8 @@ const pair = (over = {}) => ({
   requestedBy: 'Anna (dashboard)',
   consent: { source: { by: 'Anna', at: 1 }, target: { by: 'Bo', at: 2 } },
   codeExpiresAt: 0,
+  pauseKind: '',
+  pausedBy: '',
   lastError: '',
   copiedAt: 0,
   copyRun: 0,
@@ -53,6 +55,7 @@ const pair = (over = {}) => ({
 const state = (over = {}) => ({
   platform: 'discord',
   canMirror: true,
+  isOwner: true,
   fluxerConnected: true,
   pair: null,
   progress: null,
@@ -172,7 +175,7 @@ describe('Mirror: the Discord server', () => {
     expect(await screen.findByText(/Fluxer refused Sylo: Missing Permissions/)).toBeTruthy();
     expect(screen.getByText('4 of 10 steps done, 1 failed')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
-    await waitFor(() => expect(api.mirrorAction).toHaveBeenCalledWith(GUILD, 'resume'));
+    await waitFor(() => expect(api.mirrorAction).toHaveBeenCalledWith(GUILD, 'resume', {}));
   });
 
   it('stops the mirror only after a confirmation', async () => {
@@ -254,5 +257,111 @@ describe('Mirror: the Fluxer server', () => {
     expect(await screen.findByRole('button', { name: 'Resume' })).toBeTruthy();
     const heading = screen.getByRole('heading', { level: 2 });
     expect(within(heading).getByText('Paused')).toBeTruthy();
+  });
+});
+
+describe('Mirror: only the owner, and the pauses', () => {
+  it('lets people without ownership look, but not change anything', async () => {
+    api.getMirror.mockResolvedValue(state({ isOwner: false, candidates: [] }));
+    renderAtGuild(<Mirror />, GUILD);
+    expect(await screen.findByText(/Only the server owner can do this/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Ask for the mirror' }).matches(':disabled')).toBe(true);
+    expect(screen.getByLabelText('Fluxer server').matches(':disabled')).toBe(true);
+  });
+
+  it('shows the status and the stop button as locked for a non-owner on a running mirror', async () => {
+    api.getMirror.mockResolvedValue(
+      state({
+        isOwner: false,
+        pair: pair({ status: 'live', copyRun: 1 }),
+        progress: progress({ total: 2, done: 2, waiting: 0, percent: 100 }),
+      })
+    );
+    renderAtGuild(<Mirror />, GUILD);
+    const stop = await screen.findByRole('button', { name: 'Stop' });
+    expect(stop.matches(':disabled')).toBe(true);
+    expect(screen.getByText('Mirroring')).toBeTruthy();
+  });
+
+  it('asks the owner to confirm a burst of deletions before they are applied', async () => {
+    api.getMirror.mockResolvedValue(
+      state({
+        pair: pair({
+          status: 'paused',
+          pauseKind: 'deletes',
+          pausedBy: 'system',
+          copyRun: 1,
+          lastError: '6 things were deleted on Discord within 10 minutes.',
+        }),
+        progress: progress({ total: 2, done: 2, waiting: 0, percent: 100 }),
+      })
+    );
+    api.mirrorAction.mockResolvedValue(state({ pair: pair({ status: 'live', copyRun: 1 }) }));
+    confirmDialog.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    renderAtGuild(<Mirror />, GUILD);
+    const apply = await screen.findByRole('button', { name: 'Apply the deletions' });
+    fireEvent.click(apply);
+    await waitFor(() => expect(confirmDialog).toHaveBeenCalledTimes(1));
+    expect(api.mirrorAction).not.toHaveBeenCalled();
+    fireEvent.click(apply);
+    await waitFor(() => expect(api.mirrorAction).toHaveBeenCalledWith(GUILD, 'resume', { confirm: true }));
+  });
+
+  it('asks a new owner to confirm the mirror after a server changed hands', async () => {
+    api.getMirror.mockResolvedValue(
+      state({
+        pair: pair({
+          status: 'paused',
+          pauseKind: 'ownership',
+          pausedBy: 'system',
+          copyRun: 1,
+          lastError: 'The owner of the Fluxer server is not the person who agreed to the mirror.',
+        }),
+        progress: progress({ total: 2, done: 2, waiting: 0, percent: 100 }),
+      })
+    );
+    renderAtGuild(<Mirror />, GUILD);
+    expect(await screen.findByRole('button', { name: 'Confirm the mirror as the owner' })).toBeTruthy();
+  });
+
+  it('does not let the other side resume a mirror the first owner paused', async () => {
+    api.getMirror.mockResolvedValue(
+      fluxerState(
+        pair({
+          side: 'target',
+          status: 'paused',
+          pauseKind: 'owner',
+          pausedBy: 'source',
+          otherName: 'Home Discord',
+          otherId: GUILD,
+        })
+      )
+    );
+    renderAtGuild(<Mirror />, FLUXER);
+    const resume = await screen.findByRole('button', { name: 'Resume' });
+    expect(resume.disabled).toBe(true);
+    expect(screen.getByText(/paused this mirror, so only that owner can resume it/)).toBeTruthy();
+  });
+
+  it('lists what was removed on Discord and kept, locked, on Fluxer', async () => {
+    api.getMirror.mockResolvedValue(
+      state({
+        pair: pair({ status: 'live', copyRun: 1 }),
+        progress: {
+          ...progress({ total: 2, done: 2, waiting: 0, percent: 100 }),
+          removed: [{ kind: 'channel', label: 'old-chat', at: 1 }],
+        },
+      })
+    );
+    renderAtGuild(<Mirror />, GUILD);
+    expect(await screen.findByText('Removed on Discord (1)')).toBeTruthy();
+    expect(screen.getByText('channel: old-chat')).toBeTruthy();
+  });
+
+  it('warns about deleting before the option is turned on', async () => {
+    api.getMirror.mockResolvedValue(state({ pair: pair() }));
+    renderAtGuild(<Mirror />, GUILD);
+    expect(await screen.findByText(/it is deleted on Fluxer too, with all its messages/)).toBeTruthy();
+    expect(screen.getByText('Delete on Fluxer what is deleted on Discord')).toBeTruthy();
   });
 });

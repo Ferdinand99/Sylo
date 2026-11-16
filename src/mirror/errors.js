@@ -26,6 +26,20 @@ const NETWORK_CODES = new Set([
 const LIMIT_TEXT =
   /maximum number|limit (has been )?reached|too many (emoji|sticker|role|channel)|no (more )?slots|max(imum)? .*(emoji|sticker|role|channel)/i;
 
+// Fluxer's own codes for "you have reached a limit".
+const LIMIT_CODES = new Set(['MAX_EMOJIS', 'MAX_STICKERS', 'MAX_GUILD_ROLES', 'MAX_GUILD_CHANNELS']);
+
+/**
+ * Is this error a real "no such thing" answer? Only a 404 (or the SDK's own *_NOT_FOUND code for one) is. A timeout, a
+ * 429, a 5xx or a cache miss is not: reading them as "gone" would make a second copy of something that is still there.
+ */
+export function isNotFound(err) {
+  if (!err) return false;
+  const status = Number(err.statusCode ?? err.status ?? err.cause?.statusCode ?? 0);
+  if (status === 404) return true;
+  return /^(ROLE|CHANNEL|EMOJI|STICKER)_NOT_FOUND$/.test(String(err.code ?? ''));
+}
+
 /**
  * @param {any} err
  * @returns {{ kind: ErrorKind, retryAfterMs?: number, message: string }}
@@ -43,8 +57,9 @@ export function classifyError(err) {
     };
   }
   if (status === 401 || status === 403) return { kind: 'permission', message };
-  if (status === 404) return { kind: 'gone', message };
+  if (isNotFound(err)) return { kind: 'gone', message };
   if (status >= 500) return { kind: 'transient', message };
+  if (LIMIT_CODES.has(String(err?.code ?? '').toUpperCase())) return { kind: 'limit', message };
   if (status >= 400) return { kind: LIMIT_TEXT.test(message) ? 'limit' : 'item', message };
   if (
     NETWORK_CODES.has(err?.code) ||
@@ -64,5 +79,18 @@ export class MirrorError extends Error {
     super(message);
     this.name = 'MirrorError';
     this.kind = kind;
+  }
+}
+
+/**
+ * Raised by a job that must not go on until a person has done something (move Sylo's role up on Fluxer): the
+ * engine puts the job back, pauses the mirror with this message, and waits for a resume.
+ */
+export class MirrorPause extends MirrorError {
+  /** @param {string} pauseKind what the pause is about (shown to the person, and kept on the pair) */
+  constructor(message, pauseKind) {
+    super(message, 'item');
+    this.name = 'MirrorPause';
+    this.pauseKind = pauseKind;
   }
 }

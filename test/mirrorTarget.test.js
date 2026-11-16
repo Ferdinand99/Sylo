@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createFluxerTarget, toDataUri } from '../src/mirror/target.js';
-import { classifyError } from '../src/mirror/errors.js';
+import { classifyError, isNotFound } from '../src/mirror/errors.js';
 import { snapshotFluxerGuild } from '../src/mirror/snapshot.js';
 
 function sdkGuild({ perms = [], admin = false, top = 7 } = {}) {
@@ -51,7 +51,10 @@ function sdkGuild({ perms = [], admin = false, top = 7 } = {}) {
     setChannelPositions: async (u) => log.push(['setChannelPositions', u]),
     edit: async (b) => log.push(['guild.edit', b]),
     fetchRole: async () => {
-      throw new Error('Unknown Role');
+      throw Object.assign(new Error('Unknown Role'), { statusCode: 404 });
+    },
+    fetchEmoji: async () => {
+      throw Object.assign(new Error('Unknown Emoji'), { code: 'EMOJI_NOT_FOUND' });
     },
   };
   return { guild, log };
@@ -220,4 +223,76 @@ test('errors are told apart by what to do about them', () => {
   assert.equal(kind(Object.assign(new Error('x'), { cause: { code: 'UND_ERR_SOCKET' } })), 'transient');
   assert.equal(kind(new Error('fetch failed')), 'transient');
   assert.equal(kind(new Error('a bug')), 'item');
+});
+
+test('only a real not-found answer is "gone": a failed look-up is thrown, so nothing is made twice', async () => {
+  const { guild } = sdkGuild();
+  const target = createFluxerTarget(guild);
+  const down = Object.assign(new Error('unavailable'), { statusCode: 503 });
+  guild.fetchRole = async () => {
+    throw down;
+  };
+  guild.client.channels.fetch = async () => {
+    throw Object.assign(new Error('slow down'), { statusCode: 429, retryAfter: 1 });
+  };
+  guild.fetchEmoji = async () => {
+    throw Object.assign(new Error('fetch failed'), { code: 'ECONNRESET' });
+  };
+  await assert.rejects(target.editRole('810000000000000099', { permissions: '1' }), (e) => e === down);
+  await assert.rejects(target.deleteRole('810000000000000099'), (e) => e === down);
+  await assert.rejects(
+    target.editChannel('820000000000000099', { name: 'x', type: 0 }),
+    (e) => e.statusCode === 429
+  );
+  await assert.rejects(
+    target.deleteChannel('820000000000000099'),
+    (e) => classifyError(e).kind === 'rate-limit'
+  );
+  await assert.rejects(
+    target.editEmoji('830000000000000099', { name: 'x' }),
+    (e) => classifyError(e).kind === 'transient'
+  );
+});
+
+test('a look-up with nothing to look up with is an error, not "gone"', async () => {
+  const { guild } = sdkGuild();
+  delete guild.fetchRole;
+  const target = createFluxerTarget(guild);
+  await assert.rejects(
+    target.editRole('810000000000000099', { permissions: '1' }),
+    (e) => classifyError(e).kind === 'item'
+  );
+});
+
+test('a role whose second call fails is reported with its id, so it can be tracked', async () => {
+  const { guild } = sdkGuild();
+  const real = guild.createRole;
+  guild.createRole = async (body) => {
+    const role = await real(body);
+    role.edit = async () => {
+      throw Object.assign(new Error('unavailable'), { statusCode: 503 });
+    };
+    return role;
+  };
+  const target = createFluxerTarget(guild);
+  await assert.rejects(
+    target.createRole({ name: 'Mod', color: 0, hoist: true, mentionable: false, permissions: '0' }),
+    (e) => e.createdId === '810000000000000001' && classifyError(e).kind === 'transient'
+  );
+});
+
+test("the SDK's own codes: not-found codes are gone, Fluxer's limit codes are limits", () => {
+  const kind = (err) => classifyError(err).kind;
+  for (const code of ['ROLE_NOT_FOUND', 'CHANNEL_NOT_FOUND', 'EMOJI_NOT_FOUND', 'STICKER_NOT_FOUND']) {
+    assert.equal(kind(Object.assign(new Error('x'), { code })), 'gone', code);
+  }
+  for (const code of ['MAX_EMOJIS', 'MAX_STICKERS', 'MAX_GUILD_ROLES', 'MAX_GUILD_CHANNELS']) {
+    assert.equal(kind(Object.assign(new Error('refused'), { code, statusCode: 400 })), 'limit', code);
+  }
+  assert.equal(
+    kind(Object.assign(new Error('x'), { statusCode: 429, code: 'ROLE_NOT_FOUND' })),
+    'rate-limit'
+  );
+  assert.equal(isNotFound(Object.assign(new Error('x'), { cause: { statusCode: 404 } })), true);
+  assert.equal(isNotFound(Object.assign(new Error('x'), { statusCode: 503 })), false);
 });

@@ -1,7 +1,7 @@
 // Discord permissions -> Fluxer permissions, bit by bit.
 //
 // Fluxer's permission flags were laid out like Discord's, so most bits are the same number. A few Discord
-// permissions have no Fluxer counterpart (application commands, threads, events, soundboard, polls ...):
+// permissions have no Fluxer counterpart (application commands, events, soundboard, polls ...):
 // those bits are dropped, and the report says which ones were dropped where. Two Fluxer permissions have no
 // Discord counterpart (UpdateRtcRegion, ViewChannelMembers): a mirror never touches them, so a role or a
 // channel that already holds them on the Fluxer side keeps them (see keepFluxerOnly).
@@ -50,11 +50,11 @@ export const PERMISSION_TABLE = Object.freeze(
     [31, 'UseApplicationCommands', null, 'Use Application Commands'],
     [32, 'RequestToSpeak', null, 'Request to Speak'],
     [33, 'ManageEvents', null, 'Manage Events'],
-    [34, 'ManageThreads', null, 'Manage Threads'],
-    [35, 'CreatePublicThreads', null, 'Create Public Threads'],
-    [36, 'CreatePrivateThreads', null, 'Create Private Threads'],
+    [34, 'ManageThreads', 'ManageThreads', 'Manage Threads'],
+    [35, 'CreatePublicThreads', 'CreatePublicThreads', 'Create Public Threads'],
+    [36, 'CreatePrivateThreads', 'CreatePrivateThreads', 'Create Private Threads'],
     [37, 'UseExternalStickers', 'UseExternalStickers', 'Use External Stickers'],
-    [38, 'SendMessagesInThreads', null, 'Send Messages in Threads'],
+    [38, 'SendMessagesInThreads', 'SendMessagesInThreads', 'Send Messages in Threads'],
     [39, 'UseEmbeddedActivities', null, 'Use Activities'],
     [40, 'ModerateMembers', 'ModerateMembers', 'Timeout Members'],
     [41, 'ViewCreatorMonetizationAnalytics', null, 'View Creator Analytics'],
@@ -103,6 +103,11 @@ const FLUXER_BIT = Object.freeze({
   ManageRoles: 28,
   ManageWebhooks: 29,
   ManageExpressions: 30,
+  // Fluxer's thread permissions (packages/constants ThreadPermissionUtils); the SDK's flag table does not list them yet.
+  ManageThreads: 34,
+  CreatePublicThreads: 35,
+  CreatePrivateThreads: 36,
+  SendMessagesInThreads: 38,
   UseExternalStickers: 37,
   ModerateMembers: 40,
   CreateExpressions: 43,
@@ -112,10 +117,53 @@ const FLUXER_BIT = Object.freeze({
   ViewChannelMembers: 54,
 });
 
+/**
+ * Permissions that make a role a privilege rather than a label (the same list the dashboard's role-grant guard uses,
+ * src/web/middleware/roleGrants.js): handing one out, or giving it to everyone, needs more than a mirror may decide.
+ */
+export const ELEVATED_NAMES = Object.freeze([
+  'Administrator',
+  'ManageGuild',
+  'ManageRoles',
+  'ManageChannels',
+  'ManageWebhooks',
+  'ManageMessages',
+  'ManageNicknames',
+  'ManageThreads',
+  'ManageEvents',
+  'ManageGuildExpressions',
+  'KickMembers',
+  'BanMembers',
+  'ModerateMembers',
+  'MentionEveryone',
+  'MoveMembers',
+  'MuteMembers',
+  'DeafenMembers',
+  'ViewAuditLog',
+]);
+
+/** The Discord bits of ELEVATED_NAMES, and the Fluxer bits they become. */
+export const ELEVATED_DISCORD_MASK = PERMISSION_TABLE.filter((r) =>
+  ELEVATED_NAMES.includes(r.discord)
+).reduce((acc, r) => acc | (1n << BigInt(r.bit)), 0n);
+export const ELEVATED_FLUXER_MASK = mapPermissionsRaw(ELEVATED_DISCORD_MASK);
+
+/** Does a Discord permission bitfield hold any elevated permission? */
+export const isElevated = (discordBits) => (BigInt(discordBits ?? 0) & ELEVATED_DISCORD_MASK) !== 0n;
+
 /** Fluxer permissions Discord does not have: the mirror leaves these as they are on the Fluxer side. */
 export const FLUXER_ONLY_BITS = (1n << 53n) | (1n << 54n);
 
 const rowsByBit = new Map(PERMISSION_TABLE.map((r) => [r.bit, r]));
+
+function mapPermissionsRaw(discordBits) {
+  let bits = 0n;
+  for (const row of PERMISSION_TABLE) {
+    if (row.fluxer !== null && (discordBits >> BigInt(row.bit)) & 1n)
+      bits |= 1n << BigInt(FLUXER_BIT[row.fluxer]);
+  }
+  return bits;
+}
 
 /** The Fluxer bit number for a Fluxer permission name of the table (for the tests). */
 export const fluxerBitOf = (name) => FLUXER_BIT[name];

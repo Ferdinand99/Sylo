@@ -6,151 +6,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as db from '../src/db/mirror.js';
 import { getGuildModule, setGuildModule } from '../src/db/modules.js';
-import { requestMirror } from '../src/mirror/consent.js';
 import { createEngine } from '../src/mirror/engine.js';
 import { linkMirroredChannels } from '../src/mirror/bridgeLink.js';
-import {
-  BIT,
-  dChannel,
-  dRole,
-  engineFor,
-  fakeClock,
-  fakeDiscord,
-  fakeFluxer,
-} from './helpers/mirrorFakes.js';
-
-let n = 0;
-const ids = () => {
-  n += 1;
-  const tag = String(n).padStart(3, '0');
-  return {
-    src: `93000000000000${tag}`,
-    dst: `83000000000000${tag}`,
-    cat: `73100000000000${tag}`,
-    rules: `73200000000000${tag}`,
-    chat: `73300000000000${tag}`,
-    cat2: `73400000000000${tag}`,
-    voice: `73500000000000${tag}`,
-    member: `73600000000000${tag}`,
-    mod: `73700000000000${tag}`,
-    bot: `73800000000000${tag}`,
-    emoji1: `73900000000000${tag}`,
-    emoji2: `74000000000000${tag}`,
-    emoji3: `74100000000000${tag}`,
-    sticker1: `74200000000000${tag}`,
-    sticker2: `74300000000000${tag}`,
-  };
-};
-
-/** A Discord server worth copying, a Fluxer server, an engine, and a pair that both sides agreed to. */
-async function scenario({
-  fluxerOpts = {},
-  discordOpts = {},
-  options,
-  engineOpts = {},
-  withExpressions = true,
-} = {}) {
-  const k = ids();
-  const discord = fakeDiscord({
-    id: k.src,
-    name: 'Source',
-    roles: [
-      dRole({
-        id: k.member,
-        name: 'Member',
-        rawPosition: 1,
-        permissions: BIT.ViewChannel | BIT.SendMessages | BIT.ManageEvents,
-        color: 255,
-        hoist: true,
-      }),
-      dRole({ id: k.mod, name: 'Mod', rawPosition: 2, permissions: BIT.ManageMessages, mentionable: true }),
-      dRole({ id: k.bot, name: 'A bot', rawPosition: 3, managed: true }),
-    ],
-    channels: [
-      dChannel({ id: k.cat, name: 'Info', type: 4, rawPosition: 0 }),
-      dChannel({
-        id: k.rules,
-        name: 'rules',
-        type: 0,
-        parentId: k.cat,
-        rawPosition: 1,
-        topic: 'Read these',
-        overwrites: [
-          { id: k.src, type: 0, deny: BIT.SendMessages },
-          { id: k.member, type: 0, allow: BIT.ViewChannel },
-        ],
-      }),
-      dChannel({ id: k.chat, name: 'chat', type: 0, rawPosition: 2, rateLimitPerUser: 5 }),
-      dChannel({ id: k.cat2, name: 'Voice', type: 4, rawPosition: 3 }),
-      dChannel({ id: k.voice, name: 'Lounge', type: 2, parentId: k.cat2, rawPosition: 4, userLimit: 4 }),
-    ],
-    emojis: withExpressions
-      ? [
-          {
-            id: k.emoji1,
-            name: 'party',
-            animated: false,
-            managed: false,
-            imageURL: () => 'https://cdn.test/e1.png',
-          },
-          {
-            id: k.emoji2,
-            name: 'wave',
-            animated: true,
-            managed: false,
-            imageURL: () => 'https://cdn.test/e2.gif',
-          },
-        ]
-      : [],
-    stickers: withExpressions
-      ? [
-          {
-            id: k.sticker1,
-            name: 'hello',
-            description: 'Hi',
-            tags: 'hi,wave',
-            format: 1,
-            url: 'https://cdn.test/s1.png',
-          },
-          {
-            id: k.sticker2,
-            name: 'anim',
-            description: '',
-            tags: '',
-            format: 3,
-            url: 'https://cdn.test/s2.json',
-          },
-        ]
-      : [],
-    ...discordOpts,
-  });
-  discord._icon = 'https://cdn.test/icon.png';
-  const fluxer = fakeFluxer({ id: k.dst, ...fluxerOpts });
-  const clock = fakeClock();
-  const { engine, fetched } = engineFor({ discord, fluxer, clock, ...engineOpts });
-  const { pair } = await requestMirror({
-    sourceGuild: k.src,
-    targetGuild: `fluxer:${k.dst}`,
-    actor: 'Anna',
-    targetEdit: true,
-    options,
-    now: clock.now,
-  });
-  return { k, discord, fluxer, clock, engine, fetched, pair };
-}
-
-/** Work the queue until the copy is over (moving the clock past any wait). */
-async function drain(s, { rounds = 60 } = {}) {
-  for (let i = 0; i < rounds; i += 1) {
-    await s.engine.runPair(s.pair.id);
-    const now = await db.getPair(s.pair.id);
-    if (!['copying'].includes(now.status)) return now;
-    s.clock.now += 5000;
-  }
-  throw new Error('the copy did not finish');
-}
-
-const names = (calls) => calls.map((c) => c.spec?.name ?? c.name);
+import { dChannel, engineFor } from './helpers/mirrorFakes.js';
+import { drain, names, scenario } from './helpers/mirrorScenario.js';
 
 test('the dry run creates nothing and lists everything with what cannot be carried over', async () => {
   const s = await scenario();
@@ -284,7 +143,7 @@ test('a copy sends what the server has: ids remapped, @everyone adopted, setting
   assert.equal(there.config.joinMessage, `Hi, read <#${await map('channel', s.k.rules)}>`);
   assert.equal(there.config.autoRole, await map('role', s.k.member));
   assert.equal(there.config.panelMessageId, '', 'the id of a message that is not copied is cleared');
-  assert.equal(there.config.userId, '123456789012345678');
+  assert.equal(there.config.userId, '', 'the id of a person means nothing on Fluxer');
   assert.deepEqual(
     (await getGuildModule(`fluxer:${s.k.dst}`, 'logging')).config,
     { channel: '1' },
@@ -385,7 +244,7 @@ test('a job that was running when the process died adopts what it made, and neve
 });
 
 test('changes on Discord follow: rename, create, delete, reorder; a burst of events is one job', async () => {
-  const s = await scenario();
+  const s = await scenario({ options: { mirrorDeletes: true } });
   await s.engine.startCopy(s.pair.id);
   assert.equal((await drain(s)).status, 'live');
   s.fluxer.calls.length = 0;
@@ -465,7 +324,11 @@ test('changes on Discord follow: rename, create, delete, reorder; a burst of eve
 test('Sylo never deletes a Fluxer item it did not create', async () => {
   const foreign = { id: '760000000000000001', name: 'general', type: 0, parentId: null };
   const mine = { id: '760000000000000002', name: 'rules', type: 0, parentId: null };
-  const s = await scenario({ fluxerOpts: { existingChannels: [foreign, mine] }, withExpressions: false });
+  const s = await scenario({
+    fluxerOpts: { existingChannels: [foreign, mine] },
+    withExpressions: false,
+    options: { mirrorDeletes: true },
+  });
   await s.engine.startCopy(s.pair.id);
   assert.equal((await drain(s)).status, 'live');
   assert.ok(s.fluxer.guild.channels.has(foreign.id), 'a channel that was already there stays');
@@ -478,10 +341,14 @@ test('Sylo never deletes a Fluxer item it did not create', async () => {
 
   const note = (change) => s.engine.noteSourceChange(s.k.src, change);
   // Deleting things on Discord that Sylo never copied does nothing on Fluxer.
-  assert.equal(await note({ kind: 'channel', op: 'delete', id: '760000000000000099' }), false);
+  assert.equal(
+    await note({ kind: 'channel', op: 'delete', id: '760000000000000099' }),
+    true,
+    'queued; the job finds no copy'
+  );
   assert.equal(
     await note({ kind: 'role', op: 'delete', id: s.k.bot }),
-    false,
+    true,
     'a role that was skipped has no copy'
   );
   // An item the id map holds as not owned is forgotten, never deleted.
@@ -770,7 +637,7 @@ test('an emoji over the size limit is skipped with a note', async () => {
   const report = await s.engine.report(end);
   const note = report.notes.find((x) => x.code === 'emoji-too-large');
   assert.ok(note);
-  assert.match(note.message, /256 KB/);
+  assert.match(note.message, /512 KB/);
   assert.equal(s.fluxer.ops('createEmoji').length, 1);
 });
 

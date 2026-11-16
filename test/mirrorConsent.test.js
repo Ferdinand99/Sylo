@@ -23,7 +23,15 @@ const F2 = 'fluxer:820000000000000002';
 const T0 = 1_800_000_000_000;
 
 const ask = (over = {}) =>
-  requestMirror({ sourceGuild: D1, targetGuild: F1, actor: 'Anna', targetEdit: false, now: T0, ...over });
+  requestMirror({
+    sourceGuild: D1,
+    targetGuild: F1,
+    actor: 'Anna',
+    sourceUser: 'dc-owner',
+    targetOwner: false,
+    now: T0,
+    ...over,
+  });
 const rejects = (promise, code) =>
   assert.rejects(promise, (err) => err instanceof ConsentError && err.code === code, `expected ${code}`);
 
@@ -50,10 +58,16 @@ test('someone with Edit on the other server agrees with the code; the code works
     targetGuild: F1,
     code: code.toLowerCase().replace('-', ' '),
     actor: 'Bo',
+    userId: 'fx-owner',
     now: T0 + 1000,
   });
   assert.equal(pair.status, 'ready');
   assert.equal(pair.targetConsentBy, 'Bo');
+  assert.deepEqual(
+    [pair.sourceConsentUser, pair.targetConsentUser],
+    ['dc-owner', 'fx-owner'],
+    'the owners are recorded'
+  );
   assert.equal(pair.codeHash, '');
   assert.equal((await requirePairConsent(pair.id)).id, pair.id);
   await rejects(acceptMirror({ targetGuild: F1, code, actor: 'Cy', now: T0 + 2000 }), 'no-request');
@@ -61,7 +75,8 @@ test('someone with Edit on the other server agrees with the code; the code works
 
 test('the same person with Edit on both servers agrees on both sides at once, with no code', async () => {
   await db.deletePair((await db.getPairBySource(D1)).id);
-  const { pair, code } = await ask({ targetEdit: true });
+  const { pair, code } = await ask({ targetOwner: true, targetUser: 'fx-owner' });
+  assert.deepEqual([pair.sourceConsentUser, pair.targetConsentUser], ['dc-owner', 'fx-owner']);
   assert.equal(code, null);
   assert.equal(pair.status, 'ready');
   assert.deepEqual([pair.sourceConsentBy, pair.targetConsentBy], ['Anna', 'Anna']);
@@ -105,15 +120,15 @@ test('a server cannot be mirrored onto itself, and a target belongs to one sourc
 });
 
 test('a source that already copies cannot ask again; a pair that has not copied can be replaced', async () => {
-  const first = await ask({ targetEdit: true });
-  const replaced = await ask({ targetGuild: F2, targetEdit: true });
+  const first = await ask({ targetOwner: true });
+  const replaced = await ask({ targetGuild: F2, targetOwner: true });
   assert.equal(replaced.pair.targetGuild, F2, 'a request that has not copied is replaced');
   assert.equal(await db.getPair(first.pair.id), null);
   await db.updatePair(replaced.pair.id, { status: 'live' });
   await rejects(ask({ targetGuild: F1 }), 'already-mirrored');
   await rejects(ask({ targetGuild: F2 }), 'already-mirrored');
   await db.updatePair(replaced.pair.id, { status: 'stopped' });
-  const again = await ask({ targetGuild: F2, targetEdit: true });
+  const again = await ask({ targetGuild: F2, targetOwner: true });
   assert.equal(
     again.pair.id,
     replaced.pair.id,
@@ -122,7 +137,24 @@ test('a source that already copies cannot ask again; a pair that has not copied 
   assert.equal(again.pair.status, 'ready');
 });
 
+test('the code works for 15 minutes', () => {
+  assert.equal(CODE_TTL_MS, 15 * 60_000);
+});
+
+test('a stopped mirror that made something keeps its target: another server cannot take it over', async () => {
+  const first = await ask({ targetOwner: true });
+  await db.putMapping({ pairId: first.pair.id, kind: 'channel', sourceId: '1', targetId: 't1', owned: true });
+  await db.updatePair(first.pair.id, { status: 'stopped' });
+  await rejects(ask({ sourceGuild: D2, targetOwner: true }), 'target-busy');
+  assert.ok(await db.getPair(first.pair.id), 'the pair and its id map are kept');
+  await db.deleteMapping(first.pair.id, 'channel', '1');
+  const later = await ask({ sourceGuild: D2, targetOwner: true });
+  assert.equal(later.pair.sourceGuild, D2, 'a stopped mirror that made nothing can be replaced');
+  await db.deletePair(later.pair.id);
+});
+
 test('the consent check can be replaced (the bridge can plug its link codes in)', async () => {
+  await ask({ targetOwner: true });
   const pair = await db.getPairBySource(D1);
   assert.equal((await requirePairConsent(pair.id)).id, pair.id);
   const previous = setConsentProvider({

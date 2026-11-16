@@ -17,7 +17,73 @@ import {
   specHash,
 } from './spec.js';
 import { DISCORD_CHANNEL } from './snapshot.js';
-import { keepFluxerOnly } from './permissions.js';
+import { isElevated, keepFluxerOnly } from './permissions.js';
+import { moduleGrantSites } from '../web/middleware/roleGrants.js';
+
+/**
+ * Modules whose settings are never copied: the ones that hold the operator's own keys (ownerOnly), and the bridge,
+ * which has link state of its own. Every other module of the registry is copied; a test fails when a new module
+ * is neither, so each new module is decided on purpose.
+ */
+export const NOT_COPIED_MODULES = Object.freeze(['apple-connect', 'bridge']);
+
+/**
+ * The settings of one module as they go to Fluxer, with the same checks the dashboard makes when someone saves them:
+ * a role that gives powerful permissions is not handed out by the copied settings (autoroles, reaction roles, level
+ * rewards, the verified or birthday role, command actions), and a giveaway that pings @here or @everyone is copied
+ * at the lowest level. Anything dropped is a note, so the preview and the report say so.
+ * @param {{ id: string, name: string, enabled: boolean, config: object }} mod
+ * @param {{ copiedRoles: Set<string>, skippedRoles: Set<string>, copiedChannels: Set<string>, skippedChannels: Set<string> }} sets
+ * @param {any} source  the Discord server snapshot
+ */
+export function buildModuleSpec(mod, sets, source) {
+  const notes = [];
+  const ref = { kind: 'module', id: mod.id, name: mod.name };
+  const grants = new Set(
+    moduleGrantSites(mod.id, mod.config ?? {})
+      .map((g) => g.roleId)
+      .filter(Boolean)
+  );
+  const elevated = new Set();
+  for (const id of grants) {
+    const role = source.roles.find((r) => r.id === id);
+    if (role && isElevated(role.permissions)) elevated.add(id);
+  }
+  for (const id of elevated) {
+    const role = source.roles.find((r) => r.id === id);
+    notes.push({
+      code: 'module-grant-dropped',
+      scope: 'module',
+      ref,
+      message: `${mod.name}: the role ${role.name} gives powerful permissions, so the copied settings do not hand it out. Set it up on the Fluxer server yourself if you want it.`,
+    });
+  }
+  const out = placeholderConfig(mod.config ?? {}, {
+    channels: sets.copiedChannels,
+    roles: new Set([...sets.copiedRoles].filter((id) => !elevated.has(id))),
+    skippedChannels: sets.skippedChannels,
+    skippedRoles: new Set([...sets.skippedRoles, ...elevated]),
+  });
+  const config = out.config;
+  if (mod.id === 'giveaways' && (config.ping === 'here' || config.ping === 'everyone')) {
+    config.ping = 'none';
+    notes.push({
+      code: 'module-ping-lowered',
+      scope: 'module',
+      ref,
+      message: `${mod.name}: pinging @here or @everyone is not copied; it is off on the Fluxer server.`,
+    });
+  }
+  if (out.dropped || out.cleared) {
+    notes.push({
+      code: 'module-ids-dropped',
+      scope: 'module',
+      ref,
+      message: `${mod.name}: ${out.dropped} channel or role setting(s) point at something that is not copied and ${out.cleared} other id(s) (messages, members) are cleared; set them again on the Fluxer server.`,
+    });
+  }
+  return { spec: { enabled: mod.enabled, config }, notes, remapped: out.remapped };
+}
 
 /** The kinds of step, in the order the copy runs them. */
 export const STEP_KINDS = Object.freeze([
@@ -273,7 +339,7 @@ export function buildPlan({
   // 5. Sylo's own settings
   if (options.modules && modules) {
     for (const mod of modules.source) {
-      if (mod.ownerOnly) continue;
+      if (mod.ownerOnly || NOT_COPIED_MODULES.includes(mod.id)) continue;
       // Only a module somebody set up: switched on or off against its default, or with settings saved.
       const hasSettings =
         mod.enabled !== Boolean(mod.defaultEnabled) || Object.keys(mod.config ?? {}).length > 0;
@@ -292,23 +358,12 @@ export function buildPlan({
         });
         continue;
       }
-      const { config, remapped, dropped, cleared } = placeholderConfig(mod.config ?? {}, {
-        channels: copiedChannels,
-        roles: copiedRoles,
-        skippedChannels,
-        skippedRoles,
-      });
-      const spec = { enabled: mod.enabled, config };
+      const { spec, notes, remapped } = buildModuleSpec(
+        mod,
+        { copiedRoles, skippedRoles, copiedChannels, skippedChannels },
+        source
+      );
       const hash = specHash(spec);
-      const notes = [];
-      if (dropped || cleared) {
-        notes.push({
-          code: 'module-ids-dropped',
-          scope: 'module',
-          ref: { kind: 'module', id: mod.id, name: mod.name },
-          message: `${mod.name}: ${dropped} channel or role setting(s) point at something that is not copied and ${cleared} message id(s) are cleared; set them again on the Fluxer server.`,
-        });
-      }
       push({
         key: `module:${mod.id}`,
         kind: 'module',

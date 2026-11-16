@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   acceptMirror,
@@ -11,7 +11,6 @@ import {
   startMirror,
 } from '../api.js';
 import { useApiData } from '../useApiData.js';
-import { AccessLock, useAccess } from '../access.jsx';
 import { notify } from '../notify.js';
 import LoadError from '../components/LoadError.jsx';
 import Reveal from '../components/Reveal.jsx';
@@ -22,8 +21,10 @@ import Time from '../components/Time.jsx';
 import CopyButton from '../components/CopyButton.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import {
+  OPTION_HINTS,
   OPTION_ROWS,
   STEPS,
+  canResume,
   codeLeft,
   groupNotes,
   isBusy,
@@ -35,6 +36,26 @@ import {
 } from '../mirrorModel.js';
 
 const POLL_MS = 3000;
+
+// Only the owner of a server can change anything about its mirror; everyone with access can look.
+const OwnerContext = createContext(true);
+
+/** Disables every control inside unless the signed-in person owns this server, and says why. */
+function OwnerOnly({ note = false, children }) {
+  const isOwner = useContext(OwnerContext);
+  return (
+    <>
+      {!isOwner && note ? (
+        <p className="v2-note v2-access-note">
+          Only the server owner can do this. You can look at everything here, but not change it.
+        </p>
+      ) : null}
+      <fieldset className="v2-access-lock" disabled={!isOwner}>
+        {children}
+      </fieldset>
+    </>
+  );
+}
 
 // Copy a Discord server's structure to a Fluxer server, and keep it in step (src/mirror/). The same page serves
 // both servers of a pair: the Discord server asks, previews and copies; the Fluxer server agrees with the code and
@@ -74,16 +95,18 @@ export default function Mirror() {
   return (
     <Reveal>
       <h1 className="v2-section-title">Mirror to Fluxer</h1>
-      {data.platform === 'discord' ? (
-        <SourceView
-          guildId={guildId}
-          state={data}
-          onState={onState}
-          code={code.guildId === guildId ? code.text : null}
-        />
-      ) : (
-        <TargetView guildId={guildId} state={data} onState={onState} />
-      )}
+      <OwnerContext.Provider value={data.isOwner !== false}>
+        {data.platform === 'discord' ? (
+          <SourceView
+            guildId={guildId}
+            state={data}
+            onState={onState}
+            code={code.guildId === guildId ? code.text : null}
+          />
+        ) : (
+          <TargetView guildId={guildId} state={data} onState={onState} />
+        )}
+      </OwnerContext.Provider>
     </Reveal>
   );
 }
@@ -152,10 +175,85 @@ const Limits = ({ limits }) => (
     <li>
       <strong>One way:</strong> Discord is the source. Changes you make to mirrored channels on Fluxer are
       overwritten the next time that item changes on Discord. Sylo never deletes anything on Fluxer that it
-      did not create itself.
+      did not create itself, and by default does not delete there when you delete on Discord: the copy is
+      locked and marked as removed. Changing a mirrored category also changes the channels on Fluxer that are
+      synced with it.
     </li>
   </ul>
 );
+
+/**
+ * Why a mirror is paused, and what resuming it takes: a burst of deletes needs the owner's confirmation (the deletes
+ * that waited are then applied), a server that changed hands needs its new owner to confirm, and a mirror one side's
+ * owner paused can be resumed only from that side.
+ */
+function PauseBlock({ guildId, pair, onState }) {
+  const { working, act } = useAct(onState);
+  if (pair.status !== 'paused') return null;
+  const mine = canResume(pair);
+  const kind = pair.pauseKind;
+  const label =
+    kind === 'deletes'
+      ? 'Apply the deletions'
+      : kind === 'ownership'
+        ? 'Confirm the mirror as the owner'
+        : 'Resume';
+  const body = kind === 'deletes' ? { confirm: true } : {};
+  async function go() {
+    if (kind === 'deletes') {
+      const ok = await confirmDialog({
+        title: 'Apply the deletions on Fluxer?',
+        body: 'Many things were deleted on Discord in a short time. If you go on, Sylo applies them on Fluxer: a channel or role is locked there, or deleted with its messages if you turned on deleting. Stop the mirror instead if this was a mistake.',
+        confirmLabel: 'Apply the deletions',
+        tone: 'danger',
+      });
+      if (!ok) return;
+    }
+    await act(() => mirrorAction(guildId, 'resume', body), 'The mirror goes on.');
+  }
+  return (
+    <>
+      <Callout tone="warning" title="The mirror is paused">
+        {pair.lastError || 'It was paused.'}
+      </Callout>
+      <OwnerOnly>
+        <div className="v2-setup-actions">
+          <button type="button" className="v2-btn-primary" disabled={working || !mine} onClick={go}>
+            {label}
+          </button>
+        </div>
+      </OwnerOnly>
+      {!mine ? (
+        <p className="v2-field-hint">
+          The owner of the {pair.pausedBy === 'source' ? 'Discord' : 'Fluxer'} server paused this mirror, so
+          only that owner can resume it.
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+/** Copies left on Fluxer whose Discord original was deleted: locked, not deleted, for the Fluxer owner to look at. */
+function RemovedList({ progress }) {
+  const removed = progress?.removed ?? [];
+  if (!removed.length) return null;
+  return (
+    <div className="v2-mirror-removed">
+      <h3 className="v2-mirror-subtitle">Removed on Discord ({removed.length})</h3>
+      <p className="v2-field-hint">
+        These were deleted on Discord. Their copies on Fluxer were locked, not deleted, so their messages are
+        kept. Delete them on Fluxer if you do not need them.
+      </p>
+      <ul>
+        {removed.map((r, i) => (
+          <li key={`${r.kind}-${r.label}-${i}`}>
+            {r.kind}: {r.label}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------------------------------
 // The Discord server
@@ -167,7 +265,8 @@ function SourceView({ guildId, state, onState, code }) {
     <>
       <p className="v2-field-hint">
         Mirror this server to a Fluxer server: Sylo creates the same categories, channels, roles and emoji
-        there and keeps them in step when you change them here.
+        there and keeps them in step when you change them here. Only the owner of this server, and the owner
+        of the Fluxer server, can set up and run a mirror.
       </p>
       <Stepper step={step} />
       {!pair ? <AskStep guildId={guildId} state={state} onState={onState} /> : null}
@@ -204,7 +303,7 @@ function AskStep({ guildId, state, onState }) {
         <li>Enter the id of that Fluxer server below.</li>
       </ol>
       <Limits limits={state.limits} />
-      <AccessLock need="edit" note>
+      <OwnerOnly note>
         <Field
           label="Fluxer server"
           hint={
@@ -239,7 +338,7 @@ function AskStep({ guildId, state, onState }) {
             Ask for the mirror
           </button>
         </div>
-      </AccessLock>
+      </OwnerOnly>
     </section>
   );
 }
@@ -253,8 +352,8 @@ function AgreeStep({ guildId, pair, onState, code }) {
         Waiting for the Fluxer server
       </h2>
       <p>
-        Nothing is created until someone with Edit access on the Fluxer server has agreed. Ask them to open
-        Sylo's dashboard for that server, go to <strong>Mirror to Fluxer</strong> and enter the code.
+        Nothing is created until the owner of the Fluxer server has agreed. Ask them to open Sylo's dashboard
+        for that server, go to <strong>Mirror to Fluxer</strong> and enter the code.
       </p>
       {code ? (
         <p className="v2-mirror-code">
@@ -267,10 +366,10 @@ function AgreeStep({ guildId, pair, onState, code }) {
       )}
       <p className="v2-field-hint">
         {left ? `The code works for another ${left}.` : 'The code has expired.'} Asking again gives a new one.
-        If you have Edit access on the Fluxer server yourself, sign in with Fluxer too (Account) and ask
-        again: both sides agree at once.
+        If you own the Fluxer server yourself, sign in with Fluxer too (Account) and ask again: both sides
+        agree at once.
       </p>
-      <AccessLock need="edit">
+      <OwnerOnly>
         <div className="v2-setup-actions">
           <button
             type="button"
@@ -289,7 +388,7 @@ function AgreeStep({ guildId, pair, onState, code }) {
             Cancel the request
           </button>
         </div>
-      </AccessLock>
+      </OwnerOnly>
     </section>
   );
 }
@@ -305,8 +404,12 @@ function OptionsForm({ guildId, pair, onState, only }) {
             checked={pair.options[key]}
             labelledBy={`mirror-opt-${key}`}
             disabled={working}
+            need="view"
             onChange={(on) => act(() => setMirrorOptions(guildId, { [key]: on }))}
           />
+          {OPTION_HINTS[key] ? (
+            <p className="v2-field-hint v2-mirror-option-hint">{OPTION_HINTS[key]}</p>
+          ) : null}
         </div>
       ))}
     </div>
@@ -354,14 +457,14 @@ function PreviewStep({ guildId, state, onState }) {
         Both servers agreed. The preview shows what the copy would do and what cannot be carried over. It
         creates nothing.
       </p>
-      <AccessLock need="edit">
+      <OwnerOnly>
         <OptionsForm guildId={guildId} pair={pair} onState={onState} />
-      </AccessLock>
+      </OwnerOnly>
       <div className="v2-setup-actions">
         <button type="button" className="v2-btn-primary" onClick={look} disabled={loading}>
           {preview ? 'Look again' : 'Show the preview'}
         </button>
-        <AccessLock need="edit">
+        <OwnerOnly>
           <button
             type="button"
             className="v2-btn-ghost"
@@ -370,7 +473,7 @@ function PreviewStep({ guildId, state, onState }) {
           >
             Cancel the mirror
           </button>
-        </AccessLock>
+        </OwnerOnly>
       </div>
       {problem ? <p className="v2-note v2-break">{problem}</p> : null}
       {loading ? <p className="v2-state">Reading both servers…</p> : null}
@@ -425,7 +528,7 @@ function PreviewResult({ preview, onStart, working }) {
           ))}
         </ul>
       </details>
-      <AccessLock need="edit" note>
+      <OwnerOnly note>
         <div className="v2-setup-actions">
           <button
             type="button"
@@ -436,7 +539,7 @@ function PreviewResult({ preview, onStart, working }) {
             Copy to {preview.target?.name ?? 'Fluxer'}
           </button>
         </div>
-      </AccessLock>
+      </OwnerOnly>
     </div>
   );
 }
@@ -446,7 +549,6 @@ function RunningStep({ guildId, state, onState }) {
   const { working, act } = useAct(onState);
   const [reported, setReported] = useState(null);
   const [again, setAgain] = useState(null);
-  const { can } = useAccess();
 
   // A finished or running copy changes the report: an older one is not shown.
   const reportKey = `${pair.copyRun}:${pair.status}`;
@@ -465,11 +567,7 @@ function RunningStep({ guildId, state, onState }) {
       <h2 id="mirror-status" className="v2-group-title">
         {pair.otherName ?? 'Fluxer server'} <StatusPill status={pair.status} />
       </h2>
-      {pair.status === 'paused' && pair.lastError ? (
-        <Callout tone="warning" title="The mirror is paused">
-          {pair.lastError}
-        </Callout>
-      ) : null}
+      <PauseBlock guildId={guildId} pair={pair} onState={onState} />
       {pair.status === 'stopped' ? (
         <p className="v2-field-hint">
           The mirror was stopped. What Sylo made on Fluxer is still there. To mirror again, ask for a new
@@ -494,7 +592,7 @@ function RunningStep({ guildId, state, onState }) {
           ) : null}
         </p>
       ) : null}
-      <AccessLock need="edit">
+      <OwnerOnly>
         <div className="v2-setup-actions">
           {running ? (
             <button
@@ -504,16 +602,6 @@ function RunningStep({ guildId, state, onState }) {
               onClick={() => act(() => mirrorAction(guildId, 'pause'), 'The mirror is paused.')}
             >
               Pause
-            </button>
-          ) : null}
-          {pair.status === 'paused' ? (
-            <button
-              type="button"
-              className="v2-btn-primary"
-              disabled={working}
-              onClick={() => act(() => mirrorAction(guildId, 'resume'), 'The mirror goes on.')}
-            >
-              Resume
             </button>
           ) : null}
           {['live', 'done'].includes(pair.status) ? (
@@ -549,19 +637,13 @@ function RunningStep({ guildId, state, onState }) {
             </button>
           )}
         </div>
-      </AccessLock>
-      {again ? (
-        <AgainPanel
-          guildId={guildId}
-          onState={onState}
-          onClose={() => setAgain(null)}
-          canStart={can('edit')}
-        />
-      ) : null}
+      </OwnerOnly>
+      {again ? <AgainPanel guildId={guildId} onState={onState} onClose={() => setAgain(null)} /> : null}
+      <RemovedList progress={progress} />
       <h3 className="v2-mirror-subtitle">What is mirrored</h3>
-      <AccessLock need="edit">
+      <OwnerOnly>
         <OptionsForm guildId={guildId} pair={pair} onState={onState} only={['continuous']} />
-      </AccessLock>
+      </OwnerOnly>
       <p className="v2-field-hint">
         Changes on Fluxer to mirrored channels and roles are overwritten the next time that item changes on
         Discord. Sylo never deletes something on Fluxer that it did not create.
@@ -687,7 +769,7 @@ function TargetView({ guildId, state, onState }) {
             emoji here, and keep them in step with Discord. Nothing is deleted. If you agree, enter the code
             they gave you.
           </p>
-          <AccessLock need="edit" note>
+          <OwnerOnly note>
             <Field label="Code" hint="Like K7QW-H2NP. It works once, for an hour.">
               <input
                 value={code}
@@ -715,22 +797,21 @@ function TargetView({ guildId, state, onState }) {
                 Decline
               </button>
             </div>
-          </AccessLock>
+          </OwnerOnly>
         </>
       ) : (
         <>
           <p className="v2-field-hint">
             The Discord server is the source: what changes there is applied here. Changes made here to
             mirrored channels and roles are overwritten the next time that item changes on Discord. Sylo never
-            deletes something here that it did not create. Anyone with Edit access can pause or stop the
+            deletes something here that it did not create, and by default does not delete here when something
+            is deleted on Discord: the copy is locked and marked as removed. Changing a mirrored category also
+            changes the channels here that are synced with it. Only the server owner can pause or stop the
             mirror.
           </p>
-          {pair.status === 'paused' && pair.lastError ? (
-            <Callout tone="warning" title="The mirror is paused">
-              {pair.lastError}
-            </Callout>
-          ) : null}
-          <AccessLock need="edit" note>
+          <PauseBlock guildId={guildId} pair={pair} onState={onState} />
+          <RemovedList progress={state.progress} />
+          <OwnerOnly note>
             <div className="v2-setup-actions">
               {['copying', 'live'].includes(pair.status) ? (
                 <button
@@ -740,16 +821,6 @@ function TargetView({ guildId, state, onState }) {
                   onClick={() => act(() => mirrorAction(guildId, 'pause'), 'The mirror is paused.')}
                 >
                   Pause
-                </button>
-              ) : null}
-              {pair.status === 'paused' ? (
-                <button
-                  type="button"
-                  className="v2-btn-primary"
-                  disabled={working}
-                  onClick={() => act(() => mirrorAction(guildId, 'resume'), 'The mirror goes on.')}
-                >
-                  Resume
                 </button>
               ) : null}
               {pair.status !== 'stopped' ? (
@@ -771,7 +842,7 @@ function TargetView({ guildId, state, onState }) {
                 </button>
               ) : null}
             </div>
-          </AccessLock>
+          </OwnerOnly>
         </>
       )}
     </section>

@@ -1,6 +1,6 @@
 // The Mirror to Fluxer routes through the real app with both logins: asking, agreeing with the code, the
-// preview, the copy and the controls; who may do what on which server; and that a code, a pair or a server id of
-// another server reaches nothing.
+// preview, the copy and the controls; that only a server's owner can do any of it (not an Administrator, not an
+// Edit holder); and that a code, a pair or a server id of another server reaches nothing.
 import './helpers/trustLoopbackProxy.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -22,6 +22,7 @@ const db = await import('../src/db/mirror.js');
 const { listAudit } = await import('../src/db/audit.js');
 
 const F_KEY = `fluxer:${F_GUILD}`;
+const dGuild = runtime.clients.discord.guilds.cache.get(D_GUILD);
 const fGuild = runtime.clients.fluxer.guilds.cache.get(F_GUILD);
 
 let people = 0;
@@ -35,34 +36,50 @@ function own() {
   };
 }
 
-/** Sign in with Discord, Fluxer or both; every request is JSON with the CSRF token. */
-async function person({ discord = false, fluxer = false } = {}) {
+/**
+ * Sign in with Discord, Fluxer or both; every request is JSON with the CSRF token. `admin` signs in with
+ * Administrator on the Discord server instead of owning it. The server's owner is set by the test (`owners`).
+ */
+async function person({ discord = false, fluxer = false, admin = false } = {}) {
   setProfiles();
-  // The person owns the fake Fluxer server, so the live check of their right there passes.
-  fGuild.ownerId = profiles.fluxer.id;
+  if (admin) profiles.discord.guilds = [{ id: D_GUILD, owner: false, permissions: '8' }];
+  const ids = { discord: profiles.discord.id, fluxer: profiles.fluxer.id };
   const b = own();
   if (discord) await signIn(b, 'discord');
   if (fluxer) await signIn(b, 'fluxer', { connect: discord });
   const token = (await (await b.get('/api/v2/csrf')).json()).token;
   const headers = { accept: 'application/json', 'content-type': 'application/json', 'x-csrf-token': token };
   return {
+    ids,
     get: (path) => b.get(`/api/v2${path}`, { headers: { accept: 'application/json' } }),
     post: (path, body = {}) =>
       b.get(`/api/v2${path}`, { method: 'POST', headers, body: JSON.stringify(body) }),
   };
 }
 
+/** Make these people the owners of the two fake servers. */
+const owners = ({ discord, fluxer }) => {
+  dGuild.ownerId = discord ?? 'nobody-discord';
+  fGuild.ownerId = fluxer ?? 'nobody-fluxer';
+};
+
 const reset = async () => {
   for (const key of [D_GUILD, OTHER_D_GUILD, F_KEY])
     for (const p of await db.pairsOfGuild(key)) await db.deletePair(p.id);
 };
 
-test('a Discord admin asks: the Fluxer side must still agree, and the answer carries a one-time code', async () => {
+test('the owner of the Discord server asks; the owner of the Fluxer server agrees with the one-time code; then the whole flow', async () => {
   await reset();
   const anna = await person({ discord: true });
+  const bo = await person({ fluxer: true });
+  owners({ discord: anna.ids.discord, fluxer: bo.ids.fluxer });
+
   const empty = await (await anna.get(`/guilds/${D_GUILD}/mirror`)).json();
-  assert.deepEqual([empty.platform, empty.canMirror, empty.pair], ['discord', true, null]);
-  assert.equal(empty.candidates.length, 0, 'this person manages no Fluxer server');
+  assert.deepEqual(
+    [empty.platform, empty.canMirror, empty.pair, empty.isOwner],
+    ['discord', true, null, true]
+  );
+  assert.equal(empty.candidates.length, 0, 'this person owns no Fluxer server');
 
   const res = await anna.post(`/guilds/${D_GUILD}/mirror/request`, { targetGuildId: F_GUILD });
   assert.equal(res.status, 200);
@@ -70,23 +87,23 @@ test('a Discord admin asks: the Fluxer side must still agree, and the answer car
   assert.match(body.code, /^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
   assert.equal(body.agreed, false);
   assert.equal(body.pair.status, 'pending');
-  assert.equal(body.pair.otherName, null, 'the Fluxer name is not shown before someone there agrees');
+  assert.equal(body.pair.otherName, null, 'the Fluxer name is not shown before its owner agrees');
   assert.ok(!JSON.stringify(body).includes('codeHash'));
   assert.ok(
     !JSON.stringify(await (await anna.get(`/guilds/${D_GUILD}/mirror`)).json()).includes(body.code),
     'the code is shown once'
   );
+  const pending = await db.getPairBySource(D_GUILD);
+  assert.deepEqual([pending.sourceConsentUser, pending.targetConsentUser], [anna.ids.discord, '']);
 
   // Nothing can be previewed or started until both agree.
   assert.equal((await anna.get(`/guilds/${D_GUILD}/mirror/preview`)).status, 409);
   assert.equal((await anna.post(`/guilds/${D_GUILD}/mirror/start`, { confirm: true })).status, 409);
-  assert.equal((await db.getPairBySource(D_GUILD)).status, 'pending');
 
-  // Someone with Edit on the Fluxer server enters the code there.
-  const bo = await person({ fluxer: true });
   const seen = await (await bo.get(`/guilds/${F_KEY}/mirror`)).json();
   assert.deepEqual([seen.platform, seen.pair.side, seen.pair.status], ['fluxer', 'target', 'pending']);
-  assert.equal(seen.pair.otherName, 'D-main', 'they see who asks');
+  assert.equal(seen.pair.otherName, 'D-main', 'they see which server asks');
+  assert.equal(seen.pair.requestedBy, '', "the other server's dashboard user is not named to them");
   assert.equal((await bo.post(`/guilds/${F_KEY}/mirror/accept`, { code: 'AAAA-AAAA' })).status, 403);
   assert.equal(
     (await anna.post(`/guilds/${D_GUILD}/mirror/accept`, { code: body.code })).status,
@@ -96,7 +113,11 @@ test('a Discord admin asks: the Fluxer side must still agree, and the answer car
   const ok = await bo.post(`/guilds/${F_KEY}/mirror/accept`, { code: body.code });
   assert.equal(ok.status, 200);
   assert.equal((await ok.json()).pair.status, 'ready');
-  assert.equal((await db.getPairBySource(D_GUILD)).targetConsentBy.length > 0, true);
+  assert.equal(
+    (await db.getPairBySource(D_GUILD)).targetConsentUser,
+    bo.ids.fluxer,
+    'the Fluxer owner is recorded'
+  );
   assert.equal(
     (await bo.post(`/guilds/${F_KEY}/mirror/accept`, { code: body.code })).status,
     404,
@@ -104,28 +125,9 @@ test('a Discord admin asks: the Fluxer side must still agree, and the answer car
   );
   const audit = (await listAudit(D_GUILD, 20)).map((e) => e.action);
   assert.ok(audit.includes('mirror:request') && audit.includes('mirror:agree'));
-});
 
-test('the same person with Edit on both servers agrees on both sides at once', async () => {
-  await reset();
-  const both = await person({ discord: true, fluxer: true });
-  const state = await (await both.get(`/guilds/${D_GUILD}/mirror`)).json();
-  assert.deepEqual(
-    state.candidates.map((c) => c.id),
-    [F_KEY],
-    'the Fluxer servers this person manages are offered'
-  );
-  const res = await both.post(`/guilds/${D_GUILD}/mirror/request`, { targetGuildId: F_KEY });
-  const body = await res.json();
-  assert.equal(body.code, null);
-  assert.equal(body.agreed, true);
-  assert.equal(body.pair.status, 'ready');
-  assert.equal(body.pair.otherName, 'F-main');
-});
-
-test('the preview reads, the copy needs a confirmation, and a started copy shows progress and a report', async () => {
-  const both = await person({ discord: true, fluxer: true });
-  const preview = await (await both.get(`/guilds/${D_GUILD}/mirror/preview`)).json();
+  // The preview reads, the copy needs a confirmation, and a started copy shows progress and a report.
+  const preview = await (await anna.get(`/guilds/${D_GUILD}/mirror/preview`)).json();
   assert.equal(preview.ok, true);
   assert.deepEqual(
     preview.steps.map((s) => s.kind),
@@ -133,42 +135,35 @@ test('the preview reads, the copy needs a confirmation, and a started copy shows
   );
   assert.equal(preview.target.name, 'F-main');
   assert.ok(!('spec' in preview.steps[0]), 'the preview names steps; it does not hand out whole specs');
-  assert.equal((await db.getPairBySource(D_GUILD)).status, 'ready', 'a preview changes nothing');
-
-  assert.equal((await both.post(`/guilds/${D_GUILD}/mirror/start`, {})).status, 400);
-  assert.equal((await both.post(`/guilds/${D_GUILD}/mirror/start`, { confirm: 'yes' })).status, 400);
-  const started = await both.post(`/guilds/${D_GUILD}/mirror/start`, { confirm: true });
+  assert.equal((await anna.post(`/guilds/${D_GUILD}/mirror/start`, {})).status, 400);
+  assert.equal((await anna.post(`/guilds/${D_GUILD}/mirror/start`, { confirm: 'yes' })).status, 400);
+  const started = await anna.post(`/guilds/${D_GUILD}/mirror/start`, { confirm: true });
   assert.equal(started.status, 200);
   const state = await started.json();
   assert.equal(state.pair.status, 'copying');
   assert.equal(state.progress.total, 2);
-  assert.equal(state.progress.waiting, 2);
-  const report = await (await both.get(`/guilds/${D_GUILD}/mirror/report`)).json();
+  const report = await (await anna.get(`/guilds/${D_GUILD}/mirror/report`)).json();
   assert.deepEqual(
     report.items.map((i) => i.kind),
     ['guild', 'bridge']
   );
-  // The options can still be changed; unknown keys are ignored.
-  const opts = await both.post(`/guilds/${D_GUILD}/mirror/options`, {
+  const opts = await anna.post(`/guilds/${D_GUILD}/mirror/options`, {
     continuous: false,
-    roles: false,
+    mirrorDeletes: true,
     bogus: 1,
   });
-  assert.equal((await opts.json()).pair.options.continuous, false);
-});
+  const optionsNow = (await opts.json()).pair.options;
+  assert.deepEqual([optionsNow.continuous, optionsNow.mirrorDeletes], [false, true]);
+  assert.equal(optionsNow.bogus, undefined);
 
-test('either side can pause, resume and stop; stopping clears the agreement', async () => {
-  const bo = await person({ fluxer: true });
-  const anna = await person({ discord: true });
-  assert.equal(
-    (await bo.post(`/guilds/${F_KEY}/mirror/resume`)).status,
-    409,
-    'only a paused mirror can be resumed'
-  );
+  // Either owner can pause; only the owner that paused can resume it.
+  assert.equal((await bo.post(`/guilds/${F_KEY}/mirror/resume`)).status, 409, 'only a paused mirror resumes');
   const paused = await bo.post(`/guilds/${F_KEY}/mirror/pause`);
-  assert.equal(paused.status, 200);
-  assert.equal((await paused.json()).pair.status, 'paused');
-  assert.equal((await anna.post(`/guilds/${D_GUILD}/mirror/resume`)).status, 200);
+  assert.equal((await paused.json()).pair.pausedBy, 'target');
+  const refused = await anna.post(`/guilds/${D_GUILD}/mirror/resume`);
+  assert.equal(refused.status, 409);
+  assert.match((await refused.json()).error, /only that owner can resume/);
+  assert.equal((await bo.post(`/guilds/${F_KEY}/mirror/resume`)).status, 200);
   assert.equal((await db.getPairBySource(D_GUILD)).status, 'copying');
   assert.equal(
     (await bo.post(`/guilds/${F_KEY}/mirror/remove`)).status,
@@ -178,20 +173,119 @@ test('either side can pause, resume and stop; stopping clears the agreement', as
   const stopped = await bo.post(`/guilds/${F_KEY}/mirror/stop`);
   assert.equal((await stopped.json()).pair.status, 'stopped');
   const pair = await db.getPairBySource(D_GUILD);
-  assert.deepEqual([pair.sourceConsentBy, pair.targetConsentBy], ['', '']);
-  assert.equal(
-    (await anna.post(`/guilds/${D_GUILD}/mirror/start`, { confirm: true })).status,
-    409,
-    'asking again is needed'
+  assert.deepEqual(
+    [pair.sourceConsentBy, pair.targetConsentBy, pair.sourceConsentUser, pair.targetConsentUser],
+    ['', '', '', ''],
+    'stopping clears the agreement'
   );
   assert.equal((await anna.post(`/guilds/${D_GUILD}/mirror/remove`)).status, 200);
   assert.equal(await db.getPairBySource(D_GUILD), null);
 });
 
+test('the same person who owns both servers agrees on both sides at once', async () => {
+  await reset();
+  const both = await person({ discord: true, fluxer: true });
+  owners({ discord: both.ids.discord, fluxer: both.ids.fluxer });
+  const state = await (await both.get(`/guilds/${D_GUILD}/mirror`)).json();
+  assert.deepEqual(
+    state.candidates.map((c) => c.id),
+    [F_KEY],
+    'the Fluxer servers this person owns are offered'
+  );
+  const res = await both.post(`/guilds/${D_GUILD}/mirror/request`, { targetGuildId: F_KEY });
+  const body = await res.json();
+  assert.equal(body.code, null);
+  assert.equal(body.agreed, true);
+  assert.equal(body.pair.status, 'ready');
+  assert.equal(body.pair.otherName, 'F-main');
+  const pair = await db.getPairBySource(D_GUILD);
+  assert.deepEqual([pair.sourceConsentUser, pair.targetConsentUser], [both.ids.discord, both.ids.fluxer]);
+});
+
+test('an owner of one server who is only an Administrator of the other is not enough', async () => {
+  await reset();
+  const mixed = await person({ discord: true, fluxer: true });
+  owners({ discord: mixed.ids.discord, fluxer: 'someone-else' }); // owns Discord, is not the Fluxer owner
+  const state = await (await mixed.get(`/guilds/${D_GUILD}/mirror`)).json();
+  assert.deepEqual(state.candidates, [], 'a Fluxer server they do not own is not offered');
+  const res = await mixed.post(`/guilds/${D_GUILD}/mirror/request`, { targetGuildId: F_KEY });
+  const body = await res.json();
+  assert.equal(res.status, 200);
+  assert.equal(body.agreed, false, 'no automatic agreement for a server they do not own');
+  assert.ok(body.code, 'the Fluxer owner has to agree with the code');
+  assert.equal((await mixed.post(`/guilds/${F_KEY}/mirror/accept`, { code: body.code })).status, 403);
+  assert.equal((await db.getPairBySource(D_GUILD)).status, 'pending');
+});
+
+test('an Administrator who is not the owner can look, but cannot ask, agree, change, start, pause, resume, stop or remove', async () => {
+  await reset();
+  const owner = await person({ discord: true, fluxer: true });
+  owners({ discord: owner.ids.discord, fluxer: owner.ids.fluxer });
+  await owner.post(`/guilds/${D_GUILD}/mirror/request`, { targetGuildId: F_KEY });
+  await owner.post(`/guilds/${D_GUILD}/mirror/start`, { confirm: true });
+
+  const admin = await person({ discord: true, admin: true });
+  const sees = await admin.get(`/guilds/${D_GUILD}/mirror`);
+  assert.equal(sees.status, 200, 'they have the dashboard access, so they can look');
+  const seen = await sees.json();
+  assert.equal(seen.isOwner, false);
+  assert.equal(seen.pair.status, 'copying', 'the status is readable');
+  assert.equal((await admin.get(`/guilds/${D_GUILD}/mirror/preview`)).status, 200);
+  assert.equal((await admin.get(`/guilds/${D_GUILD}/mirror/report`)).status, 200);
+  for (const [path, body] of [
+    ['request', { targetGuildId: F_KEY }],
+    ['options', { continuous: false }],
+    ['start', { confirm: true }],
+    ['pause', {}],
+    ['resume', {}],
+    ['stop', {}],
+    ['remove', {}],
+  ]) {
+    const res = await admin.post(`/guilds/${D_GUILD}/mirror/${path}`, body);
+    assert.equal(res.status, 403, path);
+    assert.match((await res.json()).error, /Only the server owner can/, path);
+  }
+  const pair = await db.getPairBySource(D_GUILD);
+  assert.equal(pair.status, 'copying', 'nothing changed');
+  assert.equal(pair.options.continuous, true);
+  // The owner of the Discord server cannot act on the Fluxer side either, and a stranger gets nothing there.
+  assert.equal((await owner.post(`/guilds/${F_KEY}/mirror/pause`)).status, 200, 'the owner of both can');
+  const other = await person({ fluxer: true });
+  assert.equal((await other.post(`/guilds/${F_KEY}/mirror/stop`)).status, 403);
+  assert.equal((await db.getPairBySource(D_GUILD)).status, 'paused');
+});
+
+test('a server that changes hands pauses the mirror until its new owner confirms', async () => {
+  await reset();
+  const first = await person({ discord: true, fluxer: true });
+  owners({ discord: first.ids.discord, fluxer: first.ids.fluxer });
+  await first.post(`/guilds/${D_GUILD}/mirror/request`, { targetGuildId: F_KEY });
+  await first.post(`/guilds/${D_GUILD}/mirror/start`, { confirm: true });
+  const pair = await db.getPairBySource(D_GUILD);
+
+  // The Fluxer server is handed to someone else: the engine pauses at the next piece of work.
+  const next = await person({ fluxer: true });
+  fGuild.ownerId = next.ids.fluxer;
+  const { mirror } = await import('../src/mirror/index.js');
+  await mirror.runPair(pair.id);
+  const paused = await db.getPair(pair.id);
+  assert.deepEqual([paused.status, paused.pauseKind], ['paused', 'ownership']);
+
+  // The old owner cannot resume it; the new one confirms and the mirror goes on.
+  assert.equal((await first.post(`/guilds/${F_KEY}/mirror/resume`)).status, 403);
+  const resumed = await next.post(`/guilds/${F_KEY}/mirror/resume`);
+  assert.equal(resumed.status, 200);
+  const after = await db.getPair(pair.id);
+  assert.equal(after.status, 'copying');
+  assert.equal(after.targetConsentUser, next.ids.fluxer);
+});
+
 test('another server cannot be reached: not by its id, not by a pair, not by a code', async () => {
   await reset();
-  const anna = await person({ discord: true }); // Edit on D_GUILD only
-  // The admin of D_GUILD has no right in OTHER_D_GUILD or in the Fluxer server.
+  const anna = await person({ discord: true });
+  const bo = await person({ fluxer: true });
+  owners({ discord: anna.ids.discord, fluxer: bo.ids.fluxer });
+  // The owner of D_GUILD has no right in OTHER_D_GUILD or in the Fluxer server.
   for (const [path, body] of [
     [`/guilds/${OTHER_D_GUILD}/mirror/request`, { targetGuildId: F_GUILD }],
     [`/guilds/${OTHER_D_GUILD}/mirror/options`, {}],
@@ -213,21 +307,18 @@ test('another server cannot be reached: not by its id, not by a pair, not by a c
   const { code } = await (
     await anna.post(`/guilds/${D_GUILD}/mirror/request`, { targetGuildId: F_GUILD })
   ).json();
-  // The admin of the Fluxer server tries the code on the wrong server and the Discord server.
-  const bo = await person({ fluxer: true });
   assert.equal(
     (await bo.post(`/guilds/${D_GUILD}/mirror/accept`, { code })).status,
     403,
-    'no right on the Discord server'
+    'the Fluxer owner has no right on the Discord server'
   );
-  // Someone with Edit on another Fluxer server holds a code for this one: it finds nothing there.
+  // A code for another server finds nothing here.
   await db.deletePair((await db.getPairBySource(D_GUILD)).id);
   const other = await db.createPair({
     sourceGuild: OTHER_D_GUILD,
     targetGuild: 'fluxer:900000000000000299',
     status: 'pending',
   });
-  assert.ok(other);
   assert.equal(
     (await bo.post(`/guilds/${F_KEY}/mirror/accept`, { code })).status,
     404,
@@ -239,6 +330,7 @@ test('another server cannot be reached: not by its id, not by a pair, not by a c
 test('asking is checked: a Fluxer server cannot ask, the target must be a Fluxer server Sylo is in', async () => {
   await reset();
   const both = await person({ discord: true, fluxer: true });
+  owners({ discord: both.ids.discord, fluxer: both.ids.fluxer });
   assert.equal((await both.post(`/guilds/${F_KEY}/mirror/request`, { targetGuildId: D_GUILD })).status, 400);
   assert.equal(
     (await both.post(`/guilds/${D_GUILD}/mirror/request`, { targetGuildId: D_GUILD })).status,
@@ -270,6 +362,7 @@ test('signed out and without a CSRF token, nothing works', async () => {
     )
   );
   const anna = await person({ discord: true });
+  owners({ discord: anna.ids.discord });
   const noToken = await own().get(`/api/v2/guilds/${D_GUILD}/mirror/request`, {
     method: 'POST',
     headers: { accept: 'application/json', 'content-type': 'application/json' },

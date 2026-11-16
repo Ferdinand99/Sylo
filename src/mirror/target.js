@@ -7,6 +7,7 @@
 // `me` is the Fluxer server's own Sylo member: the engine checks its permissions before anything is created
 // and clamps role positions under Sylo's own highest role.
 import { FLUXER_LIMITS } from './spec.js';
+import { isNotFound } from './errors.js';
 
 const get = (collection, id) => collection?.get?.(id) ?? collection?.cache?.get?.(id) ?? null;
 const list = (collection) => [...(collection?.values?.() ?? collection?.cache?.values?.() ?? [])];
@@ -41,12 +42,29 @@ export function createFluxerTarget(guild) {
     ...(spec.permissionOverwrites ? { permissionOverwrites: overwrites(spec) } : {}),
   });
 
-  const channelOf = async (id) => {
-    const cached = get(guild.channels, id);
+  // The cached item, else a look-up on Fluxer. Only a real "not found" answer is null (and so "gone"): a failed
+  // look-up (a timeout, a 429, a 5xx) is thrown, so the engine retries it instead of making a second copy.
+  const find = async (cached, lookup, what) => {
     if (cached) return cached;
-    const fetched = await guild.client?.channels?.fetch?.(id).catch(() => null);
-    return fetched ?? null;
+    if (typeof lookup !== 'function') throw new Error(`The ${what} could not be looked up.`);
+    try {
+      return (await lookup()) ?? null;
+    } catch (err) {
+      if (isNotFound(err)) return null;
+      throw err;
+    }
   };
+  const channelOf = (id) =>
+    find(
+      get(guild.channels, id),
+      guild.client?.channels?.fetch && (() => guild.client.channels.fetch(id)),
+      'channel'
+    );
+  const roleOf = (id) => find(get(guild.roles, id), guild.fetchRole && (() => guild.fetchRole(id)), 'role');
+  const emojiOf = (id) =>
+    find(get(guild.emojis, id), guild.fetchEmoji && (() => guild.fetchEmoji(id)), 'emoji');
+  const stickerOf = (id) =>
+    find(get(guild.stickers, id), guild.fetchSticker && (() => guild.fetchSticker(id)), 'sticker');
 
   const gone = () => Object.assign(new Error('Unknown channel or role'), { statusCode: 404 });
 
@@ -102,13 +120,20 @@ export function createFluxerTarget(guild) {
         permissions: bits(spec.permissions),
         color: spec.color,
       });
-      // Hoisting and mentionability cannot be set when a role is made.
-      if (spec.hoist || spec.mentionable)
-        await role.edit({ hoist: spec.hoist, mentionable: spec.mentionable });
+      // Hoisting and mentionability cannot be set when a role is made. If this second call fails the role exists:
+      // the error carries its id, so the engine tracks it and the retry updates it instead of making another.
+      if (spec.hoist || spec.mentionable) {
+        try {
+          await role.edit({ hoist: spec.hoist, mentionable: spec.mentionable });
+        } catch (err) {
+          err.createdId = String(role.id);
+          throw err;
+        }
+      }
       return String(role.id);
     },
     async editRole(id, spec) {
-      const role = get(guild.roles, id) ?? (await guild.fetchRole?.(id).catch(() => null));
+      const role = await roleOf(id);
       if (!role) throw gone();
       const body = { permissions: bits(spec.permissions) };
       if (spec.name !== undefined)
@@ -121,7 +146,7 @@ export function createFluxerTarget(guild) {
       await role.edit(body);
     },
     async deleteRole(id) {
-      const role = get(guild.roles, id) ?? (await guild.fetchRole?.(id).catch(() => null));
+      const role = await roleOf(id);
       if (!role) throw gone();
       await role.delete('Mirrored from the Discord server');
     },
@@ -156,12 +181,12 @@ export function createFluxerTarget(guild) {
       return String((await guild.createEmoji({ name, image: toDataUri(image) })).id);
     },
     async editEmoji(id, { name }) {
-      const emoji = get(guild.emojis, id) ?? (await guild.fetchEmoji?.(id).catch(() => null));
+      const emoji = await emojiOf(id);
       if (!emoji) throw gone();
       await emoji.edit({ name });
     },
     async deleteEmoji(id) {
-      const emoji = get(guild.emojis, id) ?? (await guild.fetchEmoji?.(id).catch(() => null));
+      const emoji = await emojiOf(id);
       if (!emoji) throw gone();
       await emoji.delete('Mirrored from the Discord server');
     },
@@ -169,12 +194,12 @@ export function createFluxerTarget(guild) {
       return String((await guild.createSticker({ name, description, tags, image: toDataUri(image) })).id);
     },
     async editSticker(id, { name, description, tags }) {
-      const sticker = get(guild.stickers, id) ?? (await guild.fetchSticker?.(id).catch(() => null));
+      const sticker = await stickerOf(id);
       if (!sticker) throw gone();
       await sticker.edit({ name, description, tags });
     },
     async deleteSticker(id) {
-      const sticker = get(guild.stickers, id) ?? (await guild.fetchSticker?.(id).catch(() => null));
+      const sticker = await stickerOf(id);
       if (!sticker) throw gone();
       await sticker.delete('Mirrored from the Discord server');
     },

@@ -106,7 +106,18 @@ export const OPTION_ROWS = [
   ['stickers', 'Stickers'],
   ['modules', "Sylo's own settings (welcome, tickets, moderation and the rest)"],
   ['continuous', 'Keep the Fluxer server in step afterwards'],
+  ['mirrorDeletes', 'Delete on Fluxer what is deleted on Discord'],
 ];
+
+/** What sits under an option row, when it needs a word of warning. */
+export const OPTION_HINTS = {
+  mirrorDeletes:
+    'Off (the default): a channel or role deleted on Discord stays on Fluxer, locked and marked as removed, and its messages are kept. On: it is deleted on Fluxer too, with all its messages. Only what Sylo made is ever deleted.',
+};
+
+/** May this side resume a paused mirror? Only the side whose owner paused it can; a pause Sylo made is open to both. */
+export const canResume = (pair) =>
+  !pair.pausedBy || pair.pausedBy === 'system' || pair.pausedBy === pair.side;
 
 /** Time left of a code, as "42 minutes", or null once it has run out. */
 export function codeLeft(expiresAt, now = Date.now()) {

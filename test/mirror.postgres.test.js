@@ -98,6 +98,50 @@ test(
       assert.equal(await db.openSyncCount(pair.id), 0);
     });
 
+    await t.test('removed marks, mapping counts, the burst count and the first claim time', async () => {
+      const pair = await db.getPairBySource(A);
+      await db.putMapping({
+        pairId: pair.id,
+        kind: 'channel',
+        sourceId: '7',
+        targetId: 't7',
+        label: 'general',
+      });
+      await db.markRemoved(pair.id, 'channel', '7', 5000);
+      const removed = await db.listRemoved(pair.id);
+      assert.deepEqual(
+        removed.map((m) => [m.label, m.removedAt]),
+        [['general', 5000]]
+      );
+      assert.equal(typeof removed[0].removedAt, 'number');
+      assert.ok((await db.countMappings(pair.id)) >= 1);
+      await db.enqueueJob({
+        pairId: pair.id,
+        phase: 'sync',
+        op: 'delete',
+        kind: 'channel',
+        sourceId: 'z',
+        stepKey: 'delete:z',
+        now: 9000,
+      });
+      assert.equal(await db.countRecentDeletes(pair.id, 8000), 1);
+      assert.equal(typeof (await db.countRecentDeletes(pair.id, 0)), 'number');
+      const job = await db.nextDueJob(pair.id, 9000);
+      await db.claimJob(job.id, 9500);
+      await db.retryJob(job.id, 1, 9600, 'x', 9550, { maybeDone: true });
+      await db.claimJob(job.id, 9700);
+      const again = await db.getJob(job.id);
+      assert.deepEqual([again.firstClaimAt, again.recovering], [9500, true]);
+      assert.equal(typeof again.firstClaimAt, 'number');
+      await db.finishJob(job.id, 'done');
+      const next = await db.updatePair(pair.id, {
+        pauseKind: 'deletes',
+        pausedBy: 'system',
+        sourceConsentUser: 'u1',
+      });
+      assert.deepEqual([next.pauseKind, next.pausedBy, next.sourceConsentUser], ['deletes', 'system', 'u1']);
+    });
+
     await t.test('purging a server removes its pair, map and queue', async () => {
       const pair = await db.getPairBySource(A);
       await db.putMapping({ pairId: pair.id, kind: 'role', sourceId: '2', targetId: 't2' });

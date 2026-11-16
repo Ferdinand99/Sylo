@@ -4,6 +4,7 @@ import './helpers/tmpDb.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as db from '../src/db/mirror.js';
+import { MIGRATIONS, db as sqlite } from '../src/db/index.js';
 import { purgeGuild } from '../src/db/purge.js';
 
 const A = '910000000000000001';
@@ -168,4 +169,85 @@ test('purging a server removes every pair it is in, with the map and the queue',
   await purgeGuild(C);
   assert.equal(await db.getPair(other.id), null);
   assert.equal(await db.openSyncCount(other.id), 0);
+});
+
+test('the id map notes what was removed on Discord, and what a pair has made', async () => {
+  const pair = await db.createPair({
+    sourceGuild: '910000000000000010',
+    targetGuild: 'fluxer:810000000000000010',
+  });
+  await db.putMapping({ pairId: pair.id, kind: 'channel', sourceId: '1', targetId: 't1', label: 'general' });
+  await db.putMapping({ pairId: pair.id, kind: 'role', sourceId: '2', targetId: 't2', label: 'Mod' });
+  assert.equal((await db.getMapping(pair.id, 'channel', '1')).label, 'general');
+  assert.equal(await db.countMappings(pair.id), 2);
+  assert.deepEqual(await db.listRemoved(pair.id), []);
+  await db.markRemoved(pair.id, 'channel', '1', 5000);
+  const removed = await db.listRemoved(pair.id);
+  assert.deepEqual(
+    removed.map((m) => [m.kind, m.label, m.removedAt]),
+    [['channel', 'general', 5000]]
+  );
+  // Syncing the same item again clears the mark.
+  await db.putMapping({ pairId: pair.id, kind: 'channel', sourceId: '1', targetId: 't1', label: 'general' });
+  assert.deepEqual(await db.listRemoved(pair.id), []);
+  await db.deletePair(pair.id);
+});
+
+test('the burst brake counts the delete jobs a pair queued in a window', async () => {
+  const pair = await db.createPair({
+    sourceGuild: '910000000000000011',
+    targetGuild: 'fluxer:810000000000000011',
+  });
+  const queue = (op, id, now) =>
+    db.enqueueJob({
+      pairId: pair.id,
+      phase: 'sync',
+      op,
+      kind: 'channel',
+      sourceId: id,
+      stepKey: `${op}:${id}`,
+      now,
+    });
+  await queue('delete', 'a', 1000);
+  await queue('delete', 'b', 2000);
+  await queue('sync', 'c', 2000);
+  await queue('delete', 'a', 3000); // the same item again while waiting: still one job
+  assert.equal(await db.countRecentDeletes(pair.id, 0), 2);
+  assert.equal(await db.countRecentDeletes(pair.id, 1500), 1);
+  await db.deletePair(pair.id);
+});
+
+test('a job remembers when it was first taken, and a retry after a timeout is marked as maybe done', async () => {
+  const pair = await db.createPair({
+    sourceGuild: '910000000000000012',
+    targetGuild: 'fluxer:810000000000000012',
+  });
+  await db.enqueueJob({
+    pairId: pair.id,
+    phase: 'sync',
+    op: 'sync',
+    kind: 'role',
+    sourceId: '1',
+    stepKey: 'k',
+    now: 100,
+  });
+  const job = await db.nextDueJob(pair.id, 100);
+  assert.equal(job.firstClaimAt, 0);
+  await db.claimJob(job.id, 500);
+  await db.retryJob(job.id, 1, 600, 'timed out', 550, { maybeDone: true });
+  await db.claimJob(job.id, 700);
+  const again = await db.getJob(job.id);
+  assert.deepEqual([again.firstClaimAt, again.recovering], [500, true], 'the first claim time is kept');
+  await db.deletePair(pair.id);
+});
+
+test('the SQLite migration can run twice without failing (IF NOT EXISTS)', () => {
+  const step = MIGRATIONS[MIGRATIONS.length - 1];
+  assert.doesNotThrow(() => step(sqlite));
+  assert.doesNotThrow(() => step(sqlite));
+  const tables = sqlite
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'mirror_%' ORDER BY name")
+    .all()
+    .map((r) => r.name);
+  assert.deepEqual(tables, ['mirror_ids', 'mirror_jobs', 'mirror_pairs']);
 });

@@ -17,6 +17,7 @@
 //   - The queue is in the database. After a restart the unfinished jobs are still there; a job that was running
 //     when the process stopped is marked "recovering", and before it creates anything it looks for what the
 //     dead run may already have made (and adopts it, never as something Sylo may delete).
+import { config } from '../config.js';
 import * as store from '../db/mirror.js';
 import { getGuildModule, getGuildModules, setGuildModule } from '../db/modules.js';
 import { recordAudit } from '../db/audit.js';
@@ -27,8 +28,9 @@ import { allClientsReady, guildByKey } from '../platform/platformOf.js';
 import { safeFetch } from '../lib/safeFetch.js';
 import { requirePairConsent } from './consent.js';
 import { linkMirroredChannels as defaultLink } from './bridgeLink.js';
-import { MirrorError, classifyError } from './errors.js';
-import { buildPlan, channelOrder, copiedSets } from './plan.js';
+import { MirrorError, MirrorPause, classifyError } from './errors.js';
+import { checkOwnership } from './ownership.js';
+import { NOT_COPIED_MODULES, buildModuleSpec, buildPlan, channelOrder, copiedSets } from './plan.js';
 import { snapshotDiscordGuild, snapshotFluxerGuild } from './snapshot.js';
 import { createFluxerTarget } from './target.js';
 import {
@@ -39,7 +41,6 @@ import {
   buildRoleSpec,
   buildStickerSpec,
   normaliseOptions,
-  placeholderConfig,
   refsIn,
   resolveSpec,
   roleSkipReason,
@@ -54,6 +55,10 @@ const SOURCE_LIST = { role: 'roles', channel: 'channels', emoji: 'emojis', stick
 const REORDER_DELAY_MS = 3000;
 const PRUNE_EVERY_MS = 60 * 60_000;
 const KEEP_FINISHED_MS = 7 * 86_400_000;
+const ADOPT_SKEW_MS = 5000;
+// Fluxer ids are snowflakes: the time they were made is in the high bits.
+const FLUXER_EPOCH = 1420070400000n;
+const idTime = (id) => Number((BigInt(id) >> 22n) + FLUXER_EPOCH);
 
 const sleepReal = (ms) =>
   new Promise((resolve) => {
@@ -105,6 +110,11 @@ export function createEngine(overrides = {}) {
     fetchImage: fetchImageReal,
     clientsReady: allClientsReady,
     linkMirroredChannels: defaultLink,
+    // Only a server's owner may run a mirror: with sign-in on, the owners who agreed must still own the servers.
+    enforceOwnership: () => config.authEnabled,
+    // More than this many deletes on Discord in this many ms pause the mirror until its owner confirms them.
+    deleteBurst: { max: 5, windowMs: 10 * 60_000 },
+    maxWorkers: 3,
     ...overrides,
   };
 
@@ -190,9 +200,23 @@ export function createEngine(overrides = {}) {
         message: `Sylo needs ${missing.join(', ')} on the Fluxer server. Give Sylo's role Administrator there, or those permissions.`,
       });
     }
+    const owners = checkOwnership(pair, sg, tg, deps.enforceOwnership());
+    if (!owners.ok) blockers.push({ code: 'ownership', message: owners.reason });
     const options = normaliseOptions(pair.options);
     const source = snapshotDiscordGuild(sg);
     const targetSnap = snapshotFluxerGuild(tg);
+    const sets = copiedSets(source, options);
+    if (options.roles && sets.copiedRoles.size > 0) {
+      // Fluxer ranks a new role at the bottom and ties by age, so the order only comes out right when every
+      // mirrored role has its own place under Sylo's role. Otherwise a lower role could outrank a higher one.
+      const top = target.topPosition();
+      if (top === null || top - 1 < sets.copiedRoles.size) {
+        blockers.push({
+          code: 'role-hierarchy',
+          message: `Sylo's role on the Fluxer server is too low to order the ${sets.copiedRoles.size} roles that would be copied: move Sylo's role to the top of the role list there, then look again.`,
+        });
+      }
+    }
     const plan = buildPlan({
       source,
       target: targetSnap,
@@ -201,11 +225,16 @@ export function createEngine(overrides = {}) {
       modules: options.modules ? await loadModules(pair) : undefined,
       limits: target.limits(),
     });
-    const existing = targetSnap.channels.length;
-    if (existing > 0 && pair.copyRun === 0) {
+    const existing = [
+      [targetSnap.channels.length, 'channel(s)'],
+      [targetSnap.roles.filter((r) => !r.isEveryone).length, 'role(s)'],
+      [targetSnap.emojiCount, 'emoji'],
+      [targetSnap.stickerCount, 'sticker(s)'],
+    ].filter(([n]) => n > 0);
+    if (existing.length > 0 && pair.copyRun === 0) {
       warnings.push({
         code: 'target-not-empty',
-        message: `The Fluxer server already has ${existing} channel(s). Sylo leaves them as they are and never deletes anything it did not create.`,
+        message: `The Fluxer server already has ${existing.map(([n, what]) => `${n} ${what}`).join(', ')}. Sylo leaves them as they are and never deletes anything it did not create.`,
       });
     }
     return {
@@ -265,6 +294,7 @@ export function createEngine(overrides = {}) {
         now: deps.now(),
       });
     }
+    await store.pruneMirrorJobs({ pairId: pair.id, keepRun: run - 1 });
     state.delete(pair.id);
     pair = await store.updatePair(
       pair.id,
@@ -306,20 +336,32 @@ export function createEngine(overrides = {}) {
       return false;
     }
     const now = deps.now();
-    let queued = false;
+    let queued;
     if (change.op === 'delete') {
-      // A delete replaces any change still waiting for the same item, and is only needed when Sylo made a copy.
+      // A delete replaces any change still waiting for the same item. It is always queued: the job looks the
+      // copy up when it runs, so a delete that arrives while the copy is still being made is not lost.
       await store.skipWaitingJobs(pair.id, change.kind, change.id, 'sync', 'deleted on Discord', now);
-      if (await store.getMapping(pair.id, change.kind, change.id)) {
-        queued = await store.enqueueJob({
-          pairId: pair.id,
-          phase: 'sync',
-          op: 'delete',
-          kind: change.kind,
-          sourceId: change.id,
-          stepKey: `delete:${change.kind}:${change.id}`,
-          now,
-        });
+      queued = await store.enqueueJob({
+        pairId: pair.id,
+        phase: 'sync',
+        op: 'delete',
+        kind: change.kind,
+        sourceId: change.id,
+        stepKey: `delete:${change.kind}:${change.id}`,
+        now,
+      });
+      // A burst of deletes (a nuke, a mistaken clean-up) must not run on its own: the mirror pauses, the deletes
+      // wait in the queue, and the owner has to confirm them in the dashboard before they are applied.
+      if (queued && pair.status !== PAIR_STATUS.PAUSED) {
+        const { max, windowMs } = deps.deleteBurst;
+        const recent = await store.countRecentDeletes(pair.id, now - windowMs);
+        if (recent > max) {
+          await pausePair(
+            pair,
+            `${recent} things were deleted on Discord within ${Math.round(windowMs / 60_000)} minutes. The mirror is paused so that a mistake or an attack does not spread to Fluxer. The owner has to confirm in the dashboard before these changes are applied.`,
+            { kind: 'deletes' }
+          );
+        }
       }
     } else {
       queued = await store.enqueueJob({
@@ -364,7 +406,7 @@ export function createEngine(overrides = {}) {
       const [kind, id] = ref.split(':');
       if (await store.getMapping(ctx.pair.id, kind, id)) continue;
       if (depth >= 3) continue;
-      if (kind === 'role' && ctx.sets.copiedRoles.has(id)) await syncRole(ctx, id, depth + 1);
+      if (kind === 'role' && ctx.sets.copiedRoles.has(id)) await syncRole(ctx, id);
       if (kind === 'channel' && ctx.sets.copiedChannels.has(id)) await syncChannel(ctx, id, depth + 1);
     }
     const ids = new Map();
@@ -381,7 +423,12 @@ export function createEngine(overrides = {}) {
     );
   }
 
+  /**
+   * Something on Fluxer that an interrupted job may have made just before it stopped: unmapped, matching, and made
+   * since the job first started (Fluxer ids carry their creation time). Anything older is not this job's work.
+   */
   async function adoptable(ctx, kind, match) {
+    const since = (ctx.job?.firstClaimAt || ctx.job?.updatedAt || 0) - ADOPT_SKEW_MS;
     const taken = new Set((await store.listMappings(ctx.pair.id, kind)).map((m) => m.targetId));
     const pool = {
       channel: ctx.target.listChannels(),
@@ -389,7 +436,7 @@ export function createEngine(overrides = {}) {
       emoji: ctx.target.listEmojis(),
       sticker: ctx.target.listStickers(),
     }[kind];
-    return pool.find((x) => !taken.has(x.id) && match(x)) ?? null;
+    return pool.find((x) => !taken.has(x.id) && idTime(x.id) >= since && match(x)) ?? null;
   }
 
   /** @everyone exists on both sides: Sylo adopts it (never owns it) and only sets its permissions. */
@@ -412,7 +459,7 @@ export function createEngine(overrides = {}) {
     return done('@everyone permissions set', { notes, remote: true });
   }
 
-  async function syncRole(ctx, roleId, depth = 0) {
+  async function syncRole(ctx, roleId) {
     const role = findSource(ctx, 'role', roleId);
     if (!role) return skipped('the role is gone on Discord');
     if (role.isEveryone) return syncEveryone(ctx, role);
@@ -428,6 +475,7 @@ export function createEngine(overrides = {}) {
         targetId,
         owned,
         specHash: hash,
+        label: role.name,
         now: deps.now(),
       });
     if (m) {
@@ -441,7 +489,7 @@ export function createEngine(overrides = {}) {
         await store.deleteMapping(ctx.pair.id, 'role', roleId); // deleted on Fluxer: make it again
       }
     }
-    if (ctx.job?.recovering && depth === 0) {
+    if (ctx.job?.recovering) {
       const found = await adoptable(
         ctx,
         'role',
@@ -453,7 +501,25 @@ export function createEngine(overrides = {}) {
         return done('adopted what an interrupted run made', { notes, remote: true });
       }
     }
-    await put(await ctx.target.createRole(spec), true);
+    try {
+      await put(await ctx.target.createRole(spec), true);
+    } catch (err) {
+      // The role was made but a second call failed: track it (with no fingerprint, so the next run updates it)
+      // instead of leaving it untracked and making another.
+      if (err?.createdId) {
+        await store.putMapping({
+          pairId: ctx.pair.id,
+          kind: 'role',
+          sourceId: roleId,
+          targetId: err.createdId,
+          owned: true,
+          specHash: '',
+          label: role.name,
+          now: deps.now(),
+        });
+      }
+      throw err;
+    }
     return done('created', { notes, remote: true });
   }
 
@@ -487,6 +553,7 @@ export function createEngine(overrides = {}) {
         targetId,
         owned,
         specHash: hash,
+        label: ch.name,
         now: deps.now(),
       });
     if (m) {
@@ -499,7 +566,7 @@ export function createEngine(overrides = {}) {
         await store.deleteMapping(ctx.pair.id, 'channel', channelId);
       }
     }
-    if (ctx.job?.recovering && depth === 0) {
+    if (ctx.job?.recovering) {
       const found = await adoptable(
         ctx,
         'channel',
@@ -559,6 +626,7 @@ export function createEngine(overrides = {}) {
         targetId,
         owned,
         specHash: hash,
+        label: item.name,
         now: deps.now(),
       });
     const limits = ctx.target.limits();
@@ -642,22 +710,18 @@ export function createEngine(overrides = {}) {
 
   async function syncModule(ctx, moduleId) {
     const def = getModule(moduleId);
-    if (!def || def.ownerOnly) return skipped('not copied');
+    if (!def || def.ownerOnly || NOT_COPIED_MODULES.includes(moduleId)) return skipped('not copied');
     const source = await getGuildModule(ctx.pair.sourceGuild, moduleId);
     const mapped = await store.getMapping(ctx.pair.id, 'module', moduleId);
     const there = await getGuildModule(ctx.pair.targetGuild, moduleId);
     if (!mapped && Object.keys(there.config ?? {}).length > 0)
       return skipped('already set up on the Fluxer server');
-    const { config, dropped, cleared } = placeholderConfig(source.config ?? {}, {
-      channels: ctx.sets.copiedChannels,
-      roles: ctx.sets.copiedRoles,
-      skippedChannels: ctx.sets.skippedChannels,
-      skippedRoles: ctx.sets.skippedRoles,
-    });
-    const spec = { enabled: source.enabled, config };
-    const hash = specHash(spec);
-    if (mapped && mapped.specHash === hash) return done('unchanged');
-    const { value } = await resolveFor(ctx, spec, 0);
+    // The same checks as saving these settings in the dashboard: a role with powerful permissions is not handed
+    // out by the copy, and a giveaway does not start pinging everyone (module-grant-dropped, module-ping-lowered).
+    const built = buildModuleSpec({ id: moduleId, name: def.name, ...source }, ctx.sets, ctx.source);
+    const hash = specHash(built.spec);
+    if (mapped && mapped.specHash === hash) return done('unchanged', { notes: built.notes });
+    const { value } = await resolveFor(ctx, built.spec, 0);
     await setGuildModule(ctx.pair.targetGuild, moduleId, {
       enabled: Boolean(value.enabled),
       config: value.config ?? {},
@@ -676,16 +740,7 @@ export function createEngine(overrides = {}) {
       specHash: hash,
       now: deps.now(),
     });
-    const notes = [];
-    if (dropped || cleared) {
-      notes.push({
-        code: 'module-ids-dropped',
-        scope: 'module',
-        ref: { kind: 'module', id: moduleId, name: def.name },
-        message: `${def.name}: ${dropped} channel or role setting(s) point at something that is not copied and ${cleared} message id(s) are cleared; set them again on the Fluxer server.`,
-      });
-    }
-    return done('copied', { notes });
+    return done('copied', { notes: built.notes });
   }
 
   async function reorder(ctx, which) {
@@ -697,26 +752,23 @@ export function createEngine(overrides = {}) {
       const hash = specHash(order);
       const m = await store.getMapping(ctx.pair.id, 'order', 'roles');
       if (m && m.specHash === hash) return done('unchanged');
+      // Distinct places, in Discord's order, all under Sylo's role: Fluxer ranks equal positions by age, so a tie
+      // (or squeezing roles together) could put a lower Discord role above a higher one. If they do not fit,
+      // nothing is sent and the mirror pauses until Sylo's role is moved up on Fluxer.
       const top = ctx.target.topPosition();
+      if (top === null || order.length > top - 1) {
+        throw new MirrorPause(
+          `Sylo's role on the Fluxer server is too low to order the ${order.length} mirrored roles as on Discord. Move Sylo's role to the top of the role list there, then resume.`,
+          'hierarchy'
+        );
+      }
       const updates = [];
       for (const [i, id] of order.entries()) {
         const mapping = await store.getMapping(ctx.pair.id, 'role', id);
         if (!mapping) continue;
-        updates.push({
-          id: mapping.targetId,
-          position: top == null ? i + 1 : Math.min(i + 1, Math.max(1, top - 1)),
-        });
+        updates.push({ id: mapping.targetId, position: i + 1 });
       }
       const notes = [];
-      if (top != null && order.length > top - 1) {
-        notes.push({
-          code: 'roles-above-sylo',
-          scope: 'role',
-          ref: { kind: 'role', id: 'order', name: 'Role order' },
-          message:
-            "Sylo's role on the Fluxer server is too low to order every role as on Discord. Move Sylo's role higher there.",
-        });
-      }
       if (updates.length > 1) await ctx.target.setRolePositions(updates);
       await store.putMapping({
         pairId: ctx.pair.id,
@@ -777,9 +829,52 @@ export function createEngine(overrides = {}) {
     return done('deleted', { remote: true });
   }
 
+  /**
+   * The default for something deleted on Discord: the Fluxer copy stays, locked, and is marked "removed on Discord" so
+   * the Fluxer server's owner can look at it and delete it. A channel is hidden from @everyone and made read-only (its
+   * messages are not lost: deleting a Fluxer channel deletes its messages too); a role loses its permissions; an
+   * emoji or sticker is only marked. Only what Sylo made is touched.
+   */
+  async function lockCopy(ctx, kind, sourceId) {
+    const m = await store.getMapping(ctx.pair.id, kind, sourceId);
+    if (!m) return skipped('Sylo has no copy of it');
+    if (!m.owned) {
+      await store.deleteMapping(ctx.pair.id, kind, sourceId);
+      return skipped('Sylo did not create it on Fluxer, so it is left alone');
+    }
+    if (m.removedAt) return skipped('already marked as removed');
+    let remote = false;
+    if (kind === 'channel') {
+      // View Channel, Send Messages, Add Reactions and Connect, denied to @everyone; every other overwrite goes.
+      const deny = String((1n << 10n) | (1n << 11n) | (1n << 6n) | (1n << 20n));
+      await ctx.target.editChannel(m.targetId, {
+        name: m.label || undefined,
+        permissionOverwrites: [{ id: ctx.target.id, type: 0, allow: '0', deny }],
+      });
+      remote = true;
+    } else if (kind === 'role') {
+      await ctx.target.editRole(m.targetId, {
+        name: m.label || undefined,
+        color: 0,
+        hoist: false,
+        mentionable: false,
+        permissions: '0',
+      });
+      remote = true;
+    }
+    await store.markRemoved(ctx.pair.id, kind, sourceId, deps.now());
+    return done(remote ? 'locked on Fluxer, marked as removed on Discord' : 'marked as removed on Discord', {
+      remote,
+    });
+  }
+
   async function perform(ctx, job) {
     if (job.payload?.skip) return skipped(String(job.payload.skip), { notes: job.payload.notes ?? [] });
-    if (job.op === 'delete') return deleteCopy(ctx, job.kind, job.sourceId);
+    if (job.op === 'delete') {
+      return ctx.options.mirrorDeletes
+        ? deleteCopy(ctx, job.kind, job.sourceId)
+        : lockCopy(ctx, job.kind, job.sourceId);
+    }
     if (job.op === 'reorder') return reorder(ctx, job.kind);
     if (job.op === 'link') {
       const res = await deps.linkMirroredChannels(ctx.pair.id);
@@ -806,13 +901,19 @@ export function createEngine(overrides = {}) {
 
   // --- the worker --------------------------------------------------------------------------------------
 
-  async function pausePair(pair, message) {
+  /**
+   * Pause a pair with the reason. `kind` says what resuming has to deal with ('failure', 'deletes', 'ownership',
+   * 'hierarchy', 'owner'); `by` is who paused it ('system', 'source' or 'target'): only that side can resume it.
+   */
+  async function pausePair(pair, message, { kind = 'failure', by = 'system' } = {}) {
     const next = await store.updatePair(
       pair.id,
       {
         status: PAIR_STATUS.PAUSED,
         resumeStatus: pair.status === PAIR_STATUS.PAUSED ? pair.resumeStatus : pair.status,
-        lastError: String(message).slice(0, 300),
+        lastError: String(message).slice(0, 500),
+        pauseKind: kind,
+        pausedBy: by,
       },
       deps.now()
     );
@@ -837,6 +938,11 @@ export function createEngine(overrides = {}) {
     } catch (err) {
       const c = classifyError(err);
       const now = deps.now();
+      if (err instanceof MirrorPause) {
+        await store.retryJob(job.id, job.attempts, now, err.message, now);
+        pair = await pausePair(pair, err.message, { kind: err.pauseKind });
+        return { pair, remote: false };
+      }
       if (c.kind === 'rate-limit') {
         s.blockedUntil = now + c.retryAfterMs;
         await store.retryJob(job.id, job.attempts, now + c.retryAfterMs, 'Fluxer asked to slow down', now);
@@ -847,7 +953,10 @@ export function createEngine(overrides = {}) {
         if (attempts >= deps.maxAttempts) {
           await store.finishJob(job.id, 'failed', c.message, [], now);
         } else {
-          await store.retryJob(job.id, attempts, now + backoffMs(attempts), c.message, now);
+          // The call may have gone through before it timed out: the next run looks for what it made first.
+          await store.retryJob(job.id, attempts, now + backoffMs(attempts), c.message, now, {
+            maybeDone: true,
+          });
         }
       } else {
         await store.finishJob(job.id, 'failed', c.message, [], now);
@@ -911,6 +1020,11 @@ export function createEngine(overrides = {}) {
           await pausePair(pair, `Sylo is no longer in the ${sg ? 'Fluxer' : 'Discord'} server.`);
           break;
         }
+        const owners = checkOwnership(pair, sg, tg, deps.enforceOwnership());
+        if (!owners.ok) {
+          await pausePair(pair, owners.reason, { kind: 'ownership' });
+          break;
+        }
         const job = await store.nextDueJob(pairId, now);
         if (!job) {
           await maybeFinishCopy(pair);
@@ -951,6 +1065,8 @@ export function createEngine(overrides = {}) {
     for (const status of [PAIR_STATUS.COPYING, PAIR_STATUS.LIVE]) {
       for (const pair of await store.listPairsIn(status)) {
         if (active.has(pair.id)) continue;
+        // A few mirrors at a time, so mirror work cannot starve the bridge and the modules on the same Fluxer client.
+        if (active.size >= deps.maxWorkers) return;
         const due = await store.nextDueAt(pair.id);
         if (due === null && pair.status === PAIR_STATUS.LIVE) continue;
         runPair(pair.id).catch((err) => log.error('mirror', `worker for pair ${pair.id} failed:`, err));
@@ -971,29 +1087,93 @@ export function createEngine(overrides = {}) {
 
   // --- what an admin can do ---------------------------------------------------------------------------
 
-  async function pause(pairId) {
+  /** `side` is whose owner paused it ('source' for Discord, 'target' for Fluxer): only that side can resume it. */
+  async function pause(pairId, side = 'system') {
     const pair = await store.getPair(pairId);
     if (!pair || ![PAIR_STATUS.COPYING, PAIR_STATUS.LIVE].includes(pair.status)) {
       throw new MirrorError('Only a running mirror can be paused.', 'item');
     }
     const next = await store.updatePair(
       pairId,
-      { status: PAIR_STATUS.PAUSED, resumeStatus: pair.status, lastError: '' },
+      {
+        status: PAIR_STATUS.PAUSED,
+        resumeStatus: pair.status,
+        lastError: '',
+        pauseKind: 'owner',
+        pausedBy: side,
+      },
       deps.now()
     );
     touchHealth(next);
     return next;
   }
 
-  async function resume(pairId) {
-    const pair = await store.getPair(pairId);
+  /**
+   * Resume a paused mirror. The caller has checked that the person is the owner of the server `side` ('source' or
+   * 'target') they are on.
+   *   - A mirror its owner paused can be resumed only from the side that paused it.
+   *   - After a burst of deletes `confirm: true` is needed: the deletes that waited are then applied.
+   *   - After a server changed hands, the new owner's confirmation records them as the person who agreed; the mirror
+   *     goes on once both servers' owners have confirmed.
+   */
+  async function resume(pairId, { side = 'system', confirm = false } = {}) {
+    let pair = await store.getPair(pairId);
     if (!pair || pair.status !== PAIR_STATUS.PAUSED)
       throw new MirrorError('Only a paused mirror can be resumed.', 'item');
+    if (['source', 'target'].includes(pair.pausedBy) && side !== 'system' && pair.pausedBy !== side) {
+      throw new MirrorError(
+        `The owner of the ${pair.pausedBy === 'source' ? 'Discord' : 'Fluxer'} server paused this mirror, so only that owner can resume it.`,
+        'item'
+      );
+    }
+    if (pair.pauseKind === 'deletes' && !confirm) {
+      throw Object.assign(new MirrorError('Confirm the deletions first.', 'item'), {
+        code: 'confirm-needed',
+      });
+    }
+    const { sg, tg } = guildsOf(pair);
+    if (pair.pauseKind === 'ownership' && ['source', 'target'].includes(side)) {
+      const guild = side === 'source' ? sg : tg;
+      if (guild?.ownerId) {
+        pair = await store.updatePair(
+          pairId,
+          side === 'source'
+            ? { sourceConsentUser: String(guild.ownerId) }
+            : { targetConsentUser: String(guild.ownerId) },
+          deps.now()
+        );
+      }
+    }
     await requirePairConsent(pair);
+    const owners = checkOwnership(pair, sg, tg, deps.enforceOwnership());
+    if (!owners.ok) {
+      const waiting = owners.sides.map((s) => (s === 'source' ? 'Discord' : 'Fluxer'));
+      const next = await store.updatePair(
+        pairId,
+        {
+          lastError:
+            `Waiting for the owner of the ${waiting.join(' and ')} server to confirm the mirror. ${owners.reason}`.slice(
+              0,
+              500
+            ),
+          pauseKind: 'ownership',
+        },
+        deps.now()
+      );
+      touchHealth(next);
+      return next;
+    }
     state.delete(pairId);
     const next = await store.updatePair(
       pairId,
-      { status: pair.resumeStatus || PAIR_STATUS.LIVE, resumeStatus: '', lastError: '', failures: 0 },
+      {
+        status: pair.resumeStatus || PAIR_STATUS.LIVE,
+        resumeStatus: '',
+        lastError: '',
+        failures: 0,
+        pauseKind: '',
+        pausedBy: '',
+      },
       deps.now()
     );
     touchHealth(next);
@@ -1016,6 +1196,10 @@ export function createEngine(overrides = {}) {
         sourceConsentAt: 0,
         targetConsentBy: '',
         targetConsentAt: 0,
+        sourceConsentUser: '',
+        targetConsentUser: '',
+        pauseKind: '',
+        pausedBy: '',
       },
       deps.now()
     );
@@ -1053,6 +1237,10 @@ export function createEngine(overrides = {}) {
       waiting: counts.pending + counts.running,
       percent: total === 0 ? 0 : Math.round((finished / total) * 100),
       waitingChanges: await store.openSyncCount(pair.id),
+      // Copies left on Fluxer whose Discord original was deleted (locked, not deleted): for the Fluxer owner to look at.
+      removed: (await store.listRemoved(pair.id))
+        .slice(0, 100)
+        .map((m) => ({ kind: m.kind, label: m.label || m.targetId, at: m.removedAt })),
     };
   }
 

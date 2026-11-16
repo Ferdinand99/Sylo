@@ -106,12 +106,15 @@ function isThread(c) {
  */
 export function snapshotDiscordGuild(guild) {
   const everyoneId = String(guild.roles?.everyone?.id ?? guild.id);
-  return {
+  const base = big(guild.roles?.everyone?.permissions ?? guild.roles?.cache?.get?.(everyoneId)?.permissions);
+  const snap = {
     id: String(guild.id),
     name: String(guild.name ?? ''),
     iconUrl: guild.iconURL?.({ size: 1024, extension: 'png' }) ?? null,
     bannerUrl: guild.bannerURL?.({ size: 1024, extension: 'png' }) ?? null,
     everyoneId,
+    // A server marked age-restricted: its channels carry no flag of their own, so the copies get one.
+    ageRestricted: Number(guild.nsfwLevel) === 3,
     channels: values(guild.channels?.cache)
       .filter((c) => !isThread(c))
       .map(readChannel),
@@ -146,6 +149,23 @@ export function snapshotDiscordGuild(guild) {
       url: st.url ?? null,
     })),
   };
+  // What @everyone can do in each channel on Discord, so a copy is never more open than the original.
+  for (const ch of snap.channels) Object.assign(ch, everyoneAccess(base, ch.overwrites, everyoneId));
+  return snap;
+}
+
+const BIT_ADMIN = 1n << 3n;
+const BIT_VIEW = 1n << 10n;
+const BIT_CONNECT = 1n << 20n;
+
+/**
+ * Can @everyone see a channel, and join it if it is a voice channel? Discord's own order: the role's permissions,
+ * then the channel's @everyone overwrite (deny, then allow). Administrator sees everything.
+ */
+export function everyoneAccess(base, overwrites, everyoneId) {
+  const o = overwrites.find((x) => x.type === 'role' && x.id === everyoneId);
+  const perms = base & BIT_ADMIN ? ~0n : (base & ~(o?.deny ?? 0n)) | (o?.allow ?? 0n);
+  return { everyoneCanView: (perms & BIT_VIEW) !== 0n, everyoneCanConnect: (perms & BIT_CONNECT) !== 0n };
 }
 
 /**

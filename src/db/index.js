@@ -1601,7 +1601,7 @@ export const MIGRATIONS = [
   // roles, emoji and stickers, and the queue of work that makes a copy resumable.
   (database) => {
     database.exec(`
-      CREATE TABLE mirror_pairs (
+      CREATE TABLE IF NOT EXISTS mirror_pairs (
         id                INTEGER PRIMARY KEY AUTOINCREMENT,
         source_guild      TEXT NOT NULL,
         target_guild      TEXT NOT NULL,
@@ -1616,6 +1616,10 @@ export const MIGRATIONS = [
         source_consent_at INTEGER NOT NULL DEFAULT 0,
         target_consent_by TEXT NOT NULL DEFAULT '',
         target_consent_at INTEGER NOT NULL DEFAULT 0,
+        source_consent_user TEXT NOT NULL DEFAULT '',
+        target_consent_user TEXT NOT NULL DEFAULT '',
+        pause_kind        TEXT NOT NULL DEFAULT '',
+        paused_by         TEXT NOT NULL DEFAULT '',
         copy_run          INTEGER NOT NULL DEFAULT 0,
         copied_at         INTEGER NOT NULL DEFAULT 0,
         failures          INTEGER NOT NULL DEFAULT 0,
@@ -1623,23 +1627,25 @@ export const MIGRATIONS = [
         created_at        INTEGER NOT NULL,
         updated_at        INTEGER NOT NULL
       );
-      CREATE UNIQUE INDEX idx_mirror_pairs_source ON mirror_pairs (source_guild);
-      CREATE UNIQUE INDEX idx_mirror_pairs_target ON mirror_pairs (target_guild);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_mirror_pairs_source ON mirror_pairs (source_guild);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_mirror_pairs_target ON mirror_pairs (target_guild);
 
-      CREATE TABLE mirror_ids (
+      CREATE TABLE IF NOT EXISTS mirror_ids (
         pair_id    INTEGER NOT NULL,
         kind       TEXT NOT NULL,
         source_id  TEXT NOT NULL,
         target_id  TEXT NOT NULL,
         owned      INTEGER NOT NULL DEFAULT 1,
         spec_hash  TEXT NOT NULL DEFAULT '',
+        label      TEXT NOT NULL DEFAULT '',
+        removed_at INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
         PRIMARY KEY (pair_id, kind, source_id)
       );
-      CREATE INDEX idx_mirror_ids_target ON mirror_ids (pair_id, kind, target_id);
+      CREATE INDEX IF NOT EXISTS idx_mirror_ids_target ON mirror_ids (pair_id, kind, target_id);
 
-      CREATE TABLE mirror_jobs (
+      CREATE TABLE IF NOT EXISTS mirror_jobs (
         id         INTEGER PRIMARY KEY AUTOINCREMENT,
         pair_id    INTEGER NOT NULL,
         run        INTEGER NOT NULL DEFAULT 0,
@@ -1652,14 +1658,15 @@ export const MIGRATIONS = [
         attempts   INTEGER NOT NULL DEFAULT 0,
         next_at    INTEGER NOT NULL DEFAULT 0,
         recovering INTEGER NOT NULL DEFAULT 0,
+        first_claim_at INTEGER NOT NULL DEFAULT 0,
         payload    TEXT NOT NULL DEFAULT '{}',
         detail     TEXT NOT NULL DEFAULT '',
         notes      TEXT NOT NULL DEFAULT '[]',
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
       );
-      CREATE INDEX idx_mirror_jobs_pair ON mirror_jobs (pair_id, status, id);
-      CREATE UNIQUE INDEX idx_mirror_jobs_open ON mirror_jobs (pair_id, step_key) WHERE status = 'pending';
+      CREATE INDEX IF NOT EXISTS idx_mirror_jobs_pair ON mirror_jobs (pair_id, status, id);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_mirror_jobs_open ON mirror_jobs (pair_id, step_key) WHERE status = 'pending';
     `);
   },
 ];

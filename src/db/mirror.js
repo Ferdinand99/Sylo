@@ -31,6 +31,10 @@ registerPostgresBootstrap(`
     source_consent_at BIGINT NOT NULL DEFAULT 0,
     target_consent_by TEXT NOT NULL DEFAULT '',
     target_consent_at BIGINT NOT NULL DEFAULT 0,
+    source_consent_user TEXT NOT NULL DEFAULT '',
+    target_consent_user TEXT NOT NULL DEFAULT '',
+    pause_kind        TEXT NOT NULL DEFAULT '',
+    paused_by         TEXT NOT NULL DEFAULT '',
     copy_run          INTEGER NOT NULL DEFAULT 0,
     copied_at         BIGINT NOT NULL DEFAULT 0,
     failures          INTEGER NOT NULL DEFAULT 0,
@@ -48,6 +52,8 @@ registerPostgresBootstrap(`
     target_id  TEXT NOT NULL,
     owned      INTEGER NOT NULL DEFAULT 1,
     spec_hash  TEXT NOT NULL DEFAULT '',
+    label      TEXT NOT NULL DEFAULT '',
+    removed_at BIGINT NOT NULL DEFAULT 0,
     created_at BIGINT NOT NULL,
     updated_at BIGINT NOT NULL,
     PRIMARY KEY (pair_id, kind, source_id)
@@ -67,6 +73,7 @@ registerPostgresBootstrap(`
     attempts   INTEGER NOT NULL DEFAULT 0,
     next_at    BIGINT NOT NULL DEFAULT 0,
     recovering INTEGER NOT NULL DEFAULT 0,
+    first_claim_at BIGINT NOT NULL DEFAULT 0,
     payload    TEXT NOT NULL DEFAULT '{}',
     detail     TEXT NOT NULL DEFAULT '',
     notes      TEXT NOT NULL DEFAULT '[]',
@@ -116,6 +123,10 @@ const toPair = (row) =>
         sourceConsentAt: num(row.source_consent_at),
         targetConsentBy: row.target_consent_by,
         targetConsentAt: num(row.target_consent_at),
+        sourceConsentUser: row.source_consent_user,
+        targetConsentUser: row.target_consent_user,
+        pauseKind: row.pause_kind,
+        pausedBy: row.paused_by,
         copyRun: num(row.copy_run),
         copiedAt: num(row.copied_at),
         failures: num(row.failures),
@@ -140,6 +151,7 @@ const toJob = (row) =>
         attempts: num(row.attempts),
         nextAt: num(row.next_at),
         recovering: num(row.recovering) === 1,
+        firstClaimAt: num(row.first_claim_at),
         payload: parseJson(row.payload, {}),
         detail: row.detail,
         notes: Array.isArray(parseJson(row.notes, [])) ? parseJson(row.notes, []) : [],
@@ -170,12 +182,22 @@ const s = {
   getIdByTarget: prepare('SELECT * FROM mirror_ids WHERE pair_id = ? AND kind = ? AND target_id = ?'),
   listIds: prepare('SELECT * FROM mirror_ids WHERE pair_id = ? AND kind = ? ORDER BY source_id'),
   putId: prepare(`
-    INSERT INTO mirror_ids (pair_id, kind, source_id, target_id, owned, spec_hash, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO mirror_ids (pair_id, kind, source_id, target_id, owned, spec_hash, label, removed_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
     ON CONFLICT (pair_id, kind, source_id) DO UPDATE SET
       target_id = excluded.target_id, owned = excluded.owned, spec_hash = excluded.spec_hash,
-      updated_at = excluded.updated_at
+      label = excluded.label, removed_at = 0, updated_at = excluded.updated_at
   `),
+  markRemoved: prepare(
+    'UPDATE mirror_ids SET removed_at = ?, updated_at = ? WHERE pair_id = ? AND kind = ? AND source_id = ?'
+  ),
+  listRemoved: prepare(
+    'SELECT * FROM mirror_ids WHERE pair_id = ? AND removed_at > 0 ORDER BY removed_at, source_id'
+  ),
+  countIds: prepare('SELECT COUNT(*) AS n FROM mirror_ids WHERE pair_id = ?'),
+  recentDeletes: prepare(
+    "SELECT COUNT(*) AS n FROM mirror_jobs WHERE pair_id = ? AND op = 'delete' AND created_at >= ?"
+  ),
   deleteId: prepare('DELETE FROM mirror_ids WHERE pair_id = ? AND kind = ? AND source_id = ?'),
 
   insertJob: prepare(
@@ -190,7 +212,9 @@ const s = {
   ),
   nextDue: prepare("SELECT MIN(next_at) AS at FROM mirror_jobs WHERE pair_id = ? AND status = 'pending'"),
   claimJob: prepare(
-    "UPDATE mirror_jobs SET status = 'running', updated_at = ? WHERE id = ? AND status = 'pending'"
+    `UPDATE mirror_jobs SET status = 'running', updated_at = ?,
+       first_claim_at = CASE WHEN first_claim_at = 0 THEN ? ELSE first_claim_at END
+     WHERE id = ? AND status = 'pending'`
   ),
   finishJob: prepare(
     'UPDATE mirror_jobs SET status = ?, detail = ?, notes = ?, recovering = 0, updated_at = ? WHERE id = ?'
@@ -278,6 +302,10 @@ const COLUMNS = {
   sourceConsentAt: 'source_consent_at',
   targetConsentBy: 'target_consent_by',
   targetConsentAt: 'target_consent_at',
+  sourceConsentUser: 'source_consent_user',
+  targetConsentUser: 'target_consent_user',
+  pauseKind: 'pause_kind',
+  pausedBy: 'paused_by',
   copyRun: 'copy_run',
   copiedAt: 'copied_at',
   failures: 'failures',
@@ -328,6 +356,8 @@ const toMapping = (row) =>
         targetId: row.target_id,
         owned: num(row.owned) === 1,
         specHash: row.spec_hash,
+        label: row.label,
+        removedAt: num(row.removed_at),
       }
     : null;
 
@@ -337,9 +367,47 @@ export const getMappingByTarget = async (pairId, kind, targetId) =>
   toMapping(await s.getIdByTarget.get(pairId, kind, targetId));
 export const listMappings = async (pairId, kind) => (await s.listIds.all(pairId, kind)).map(toMapping);
 
-export async function putMapping({ pairId, kind, sourceId, targetId, owned = true, specHash = '', now }) {
+export async function putMapping({
+  pairId,
+  kind,
+  sourceId,
+  targetId,
+  owned = true,
+  specHash = '',
+  label = '',
+  now,
+}) {
   const at = now ?? Date.now();
-  await s.putId.run(pairId, kind, sourceId, targetId, owned ? 1 : 0, specHash, at, at);
+  await s.putId.run(
+    pairId,
+    kind,
+    sourceId,
+    targetId,
+    owned ? 1 : 0,
+    specHash,
+    String(label).slice(0, 100),
+    at,
+    at
+  );
+}
+
+/** Note that the Discord original is gone while the Fluxer copy stays (it was locked, or left alone). */
+export const markRemoved = (pairId, kind, sourceId, now = Date.now()) =>
+  s.markRemoved.run(now, now, pairId, kind, sourceId);
+
+/** The copies whose Discord original was deleted, oldest first. */
+export async function listRemoved(pairId) {
+  return (await s.listRemoved.all(pairId)).map(toMapping);
+}
+
+/** How many items a pair has in its id map (a stopped pair that made something is not thrown away). */
+export async function countMappings(pairId) {
+  return num((await s.countIds.get(pairId))?.n);
+}
+
+/** How many delete jobs a pair queued since `since`: what the burst brake counts. */
+export async function countRecentDeletes(pairId, since) {
+  return num((await s.recentDeletes.get(pairId, since))?.n);
 }
 
 export const deleteMapping = (pairId, kind, sourceId) => s.deleteId.run(pairId, kind, sourceId);
@@ -392,7 +460,7 @@ export async function nextDueAt(pairId) {
 
 /** Take a waiting job. False when someone else took it first. */
 export async function claimJob(id, now = Date.now()) {
-  return (await s.claimJob.run(now, id)).changes === 1;
+  return (await s.claimJob.run(now, now, id)).changes === 1;
 }
 
 /** @param {'done'|'failed'|'skipped'} status */
@@ -413,10 +481,20 @@ async function requeue(job, { attempts, nextAt, detail, recovering, now }) {
   await s.requeueJob.run(attempts, nextAt, String(detail).slice(0, 500), recovering ? 1 : 0, now, job.id);
 }
 
-/** Put a job back in the queue to run again at `nextAt`. */
-export async function retryJob(id, attempts, nextAt, detail = '', now = Date.now()) {
+/**
+ * Put a job back in the queue to run again at `nextAt`. `maybeDone`: the call may have gone through before it
+ * failed (a timeout), so the next run looks for what the last one made before it makes anything.
+ */
+export async function retryJob(
+  id,
+  attempts,
+  nextAt,
+  detail = '',
+  now = Date.now(),
+  { maybeDone = false } = {}
+) {
   const job = await getJob(id);
-  if (job) await requeue(job, { attempts, nextAt, detail, recovering: job.recovering, now });
+  if (job) await requeue(job, { attempts, nextAt, detail, recovering: job.recovering || maybeDone, now });
 }
 
 /** After a restart: a job that was running when the process stopped waits again, marked as recovering. */

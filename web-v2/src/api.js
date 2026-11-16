@@ -494,8 +494,8 @@ export const setMirrorOptions = (guildId, options) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/mirror/options`, options);
 export const startMirror = (guildId) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/mirror/start`, { confirm: true });
-export const mirrorAction = (guildId, action) =>
-  postJson(`/api/v2/guilds/${gid(guildId)}/mirror/${action}`, {});
+export const mirrorAction = (guildId, action, body = {}) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/mirror/${action}`, body);
 export const getMemberData = (guildId, user) =>
   apiFetch(`/api/v2/guilds/${gid(guildId)}/member-data?user=${encodeURIComponent(user ?? '')}`);
 export const forgetMemberData = (guildId, userId, reason) =>

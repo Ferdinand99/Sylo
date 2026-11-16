@@ -1,11 +1,11 @@
-// Consent for a mirror: nothing is created on the Fluxer server until someone with Edit access on each side
-// has agreed. The Discord side agrees by asking (the person asking holds Edit there: the route is Edit-only).
-// The Fluxer side agrees in one of two ways:
-//   - the same person also holds Edit on the Fluxer server (their account has the Fluxer login): both sides
-//     agree at once;
-//   - otherwise the request carries a one-time code. Someone with Edit on the Fluxer server opens the
-//     dashboard there and enters it. The code expires after an hour, is stored only as a hash, and five wrong
-//     tries cancel the request.
+// Consent for a mirror: nothing is created on the Fluxer server until the owner of each server has agreed. Only a
+// server's owner can (src/web/lib/guildOwner.js): not an Administrator, not a dashboard Edit holder, not a bot master.
+// The Discord owner agrees by asking. The Fluxer owner agrees in one of two ways:
+//   - the same person owns both servers (their account has both logins): both sides agree at once;
+//   - otherwise the request carries a one-time code. The Fluxer server's owner opens the dashboard there and enters
+//     it. The code expires after 15 minutes, is stored only as a hash, and five wrong tries cancel the request.
+// The owners' platform user ids are kept with the agreement, and the engine checks them again before every piece of
+// work (ownership.js): a server that changes hands pauses the mirror until the new owner confirms.
 //
 // Everything that wants to know whether a mirror may go ahead asks requirePairConsent(). It asks the current
 // consent provider, so the check can later be replaced by the bridge's own link codes (setConsentProvider)
@@ -18,11 +18,12 @@ import {
   getPair,
   getPairBySource,
   getPairByTarget,
+  countMappings,
   updatePair,
 } from '../db/mirror.js';
 import { normaliseOptions } from './spec.js';
 
-export const CODE_TTL_MS = 60 * 60_000;
+export const CODE_TTL_MS = 15 * 60_000;
 export const MAX_CODE_ATTEMPTS = 5;
 
 export class ConsentError extends Error {
@@ -97,17 +98,20 @@ const replaceable = (pair) =>
   pair.status === PAIR_STATUS.STOPPED;
 
 /**
- * Ask for a mirror of a Discord server onto a Fluxer server. The caller has checked that the actor holds
- * Edit on the source and that Sylo is in both servers; `targetEdit` says whether the same person also holds
- * Edit on the Fluxer server.
- * @param {{ sourceGuild: string, targetGuild: string, actor: string, targetEdit: boolean, options?: object, now?: number }} p
+ * Ask for a mirror of a Discord server onto a Fluxer server. The caller has checked that the actor is the owner of
+ * the Discord server and that Sylo is in both servers; `targetOwner` says whether the same person also owns the
+ * Fluxer server. `sourceUser` and `targetUser` are the owners' platform user ids, kept so the engine can tell when
+ * a server changes hands.
+ * @param {{ sourceGuild: string, targetGuild: string, actor: string, sourceUser?: string, targetUser?: string, targetOwner: boolean, options?: object, now?: number }} p
  * @returns {Promise<{ pair: any, code: string | null }>} `code` is shown once, only when the Fluxer side still has to agree
  */
 export async function requestMirror({
   sourceGuild,
   targetGuild,
   actor,
-  targetEdit,
+  sourceUser = '',
+  targetUser = '',
+  targetOwner,
   options,
   now = Date.now(),
 }) {
@@ -130,18 +134,29 @@ export async function requestMirror({
     if (!stale && byTarget.status !== PAIR_STATUS.STOPPED) {
       throw new ConsentError('Another server has a pending request for that Fluxer server.', 'target-busy');
     }
+    // A stopped mirror that made something keeps its id map: the items it made stay known as Sylo's own.
+    if (!stale && (await countMappings(byTarget.id)) > 0) {
+      throw new ConsentError(
+        'That Fluxer server was the target of a mirror that made things there. Remove that mirror first.',
+        'target-busy'
+      );
+    }
     await deletePair(byTarget.id);
   }
 
   let pair = await getPairBySource(sourceGuild);
-  const code = targetEdit ? null : newCode();
+  const code = targetOwner ? null : newCode();
   const fields = {
-    status: targetEdit ? PAIR_STATUS.READY : PAIR_STATUS.PENDING,
+    status: targetOwner ? PAIR_STATUS.READY : PAIR_STATUS.PENDING,
     requestedBy: actor,
     sourceConsentBy: actor,
     sourceConsentAt: now,
-    targetConsentBy: targetEdit ? actor : '',
-    targetConsentAt: targetEdit ? now : 0,
+    sourceConsentUser: sourceUser,
+    targetConsentBy: targetOwner ? actor : '',
+    targetConsentAt: targetOwner ? now : 0,
+    targetConsentUser: targetOwner ? targetUser : '',
+    pauseKind: '',
+    pausedBy: '',
     codeHash: code ? hashCode(pairKey(sourceGuild, targetGuild), code) : '',
     codeExpiresAt: code ? now + CODE_TTL_MS : 0,
     codeAttempts: 0,
@@ -159,11 +174,11 @@ export async function requestMirror({
 }
 
 /**
- * Someone with Edit on the Fluxer server agrees, with the code the request showed. Looks only at the pair
+ * The owner of the Fluxer server agrees, with the code the request showed. Looks only at the pair
  * whose target is `targetGuild`, so a code cannot be used for another server.
- * @param {{ targetGuild: string, code: string, actor: string, now?: number }} p
+ * @param {{ targetGuild: string, code: string, actor: string, userId?: string, now?: number }} p
  */
-export async function acceptMirror({ targetGuild, code, actor, now = Date.now() }) {
+export async function acceptMirror({ targetGuild, code, actor, userId = '', now = Date.now() }) {
   const pair = await getPairByTarget(targetGuild);
   if (!pair || pair.status !== PAIR_STATUS.PENDING || !pair.codeHash) {
     throw new ConsentError('There is no request waiting for this server.', 'no-request');
@@ -192,6 +207,7 @@ export async function acceptMirror({ targetGuild, code, actor, now = Date.now() 
       status: PAIR_STATUS.READY,
       targetConsentBy: actor,
       targetConsentAt: now,
+      targetConsentUser: userId,
       codeHash: '',
       codeExpiresAt: 0,
       codeAttempts: 0,

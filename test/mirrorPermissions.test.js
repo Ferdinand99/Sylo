@@ -5,10 +5,12 @@ import assert from 'node:assert/strict';
 import { PermissionFlagsBits } from 'discord.js';
 import { PermissionFlags } from '@fluxerjs/core';
 import {
+  ELEVATED_FLUXER_MASK,
   FLUXER_ONLY_BITS,
   PERMISSION_TABLE,
   describeDropped,
   fluxerBitOf,
+  isElevated,
   keepFluxerOnly,
   lostSomething,
   mapPermissions,
@@ -29,18 +31,44 @@ test('every Discord permission discord.js knows is in the table (a new one must 
   assert.deepEqual(missing, [], `new Discord permissions to map or drop: ${missing.join(', ')}`);
 });
 
+// Fluxer's thread permissions (packages/constants ThreadPermissionUtils): the SDK's flag table does not list them yet.
+const THREAD_BITS = {
+  ManageThreads: 34n,
+  CreatePublicThreads: 35n,
+  CreatePrivateThreads: 36n,
+  SendMessagesInThreads: 38n,
+};
+
 test('every mapped row lands on the Fluxer permission of that name and bit', () => {
   for (const row of PERMISSION_TABLE) {
-    if (row.fluxer === null) {
-      assert.equal(row.fluxer, null);
-      continue;
-    }
-    assert.ok(row.fluxer in PermissionFlags, `Fluxer has ${row.fluxer}`);
-    assert.equal(PermissionFlags[row.fluxer], 1n << BigInt(fluxerBitOf(row.fluxer)), `${row.fluxer}'s bit`);
+    if (row.fluxer === null) continue;
+    const sdk =
+      PermissionFlags[row.fluxer] ?? (row.fluxer in THREAD_BITS ? 1n << THREAD_BITS[row.fluxer] : undefined);
+    assert.ok(sdk !== undefined, `Fluxer has ${row.fluxer}`);
+    assert.equal(sdk, 1n << BigInt(fluxerBitOf(row.fluxer)), `${row.fluxer}'s bit`);
     const { bits, dropped } = mapPermissions(1n << BigInt(row.bit));
-    assert.equal(bits, PermissionFlags[row.fluxer], `${row.discord} becomes ${row.fluxer}`);
+    assert.equal(bits, sdk, `${row.discord} becomes ${row.fluxer}`);
     assert.deepEqual(dropped, []);
   }
+});
+
+test('the thread permissions are mapped, so a Discord deny of thread creation stays a deny', () => {
+  for (const [name, bit] of Object.entries(THREAD_BITS)) {
+    const row = PERMISSION_TABLE.find((r) => r.fluxer === name);
+    assert.ok(row, name);
+    assert.equal(BigInt(row.bit), bit);
+    assert.equal(mapPermissions(1n << bit).bits, 1n << bit);
+  }
+});
+
+test('powerful permissions are recognised, on Discord bits and on their Fluxer counterparts', () => {
+  assert.ok(isElevated(1n << 3n), 'Administrator');
+  assert.ok(isElevated(1n << 28n), 'Manage Roles');
+  assert.ok(isElevated(1n << 34n), 'Manage Threads');
+  assert.ok(!isElevated((1n << 10n) | (1n << 11n)), 'View Channel and Send Messages are not');
+  assert.ok(ELEVATED_FLUXER_MASK & PermissionFlags.Administrator);
+  assert.equal(ELEVATED_FLUXER_MASK & PermissionFlags.SendMessages, 0n);
+  assert.equal(ELEVATED_FLUXER_MASK & FLUXER_ONLY_BITS, 0n);
 });
 
 test('a Discord permission with no Fluxer counterpart is dropped and named', () => {

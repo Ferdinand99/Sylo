@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  canResume,
   codeLeft,
   groupNotes,
   isBusy,
@@ -85,5 +86,12 @@ describe('mirrorModel', () => {
     expect(validTargetId('12345')).toBe(false);
     expect(validTargetId('discord:123456789012345678')).toBe(false);
     expect(validTargetId('')).toBe(false);
+  });
+
+  it('lets only the side that paused a mirror resume it, and either side after a pause Sylo made', () => {
+    expect(canResume({ side: 'source', pausedBy: '' })).toBe(true);
+    expect(canResume({ side: 'source', pausedBy: 'system' })).toBe(true);
+    expect(canResume({ side: 'source', pausedBy: 'source' })).toBe(true);
+    expect(canResume({ side: 'target', pausedBy: 'source' })).toBe(false);
   });
 });

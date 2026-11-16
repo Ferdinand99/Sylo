@@ -61,17 +61,21 @@ export const dRole = (over) => ({
 
 /** A Discord server. `channels`, `roles`, `emojis` and `stickers` are plain arrays of the shapes above. */
 export function fakeDiscord({
+  ownerId = 'discord-owner',
   id = SRC,
   name = 'Source',
   channels = [],
   roles = [],
   emojis = [],
   stickers = [],
+  // What @everyone can do server-wide: by default what a new Discord server gives it.
+  everyonePermissions = flag(10) | flag(11) | flag(16),
 } = {}) {
-  const everyone = dRole({ id, name: '@everyone', rawPosition: 0 });
+  const everyone = dRole({ id, name: '@everyone', rawPosition: 0, permissions: everyonePermissions });
   const guild = {
     id,
     name,
+    ownerId,
     icon: null,
     banner: null,
     iconURL: () => guild._icon ?? null,
@@ -93,14 +97,21 @@ export function fakeFluxer({
   name = 'Target',
   existingChannels = [],
   missing = [],
-  top = null,
+  top = 1000,
   emojiLimit = null,
+  ownerId = 'fluxer-owner',
+  clock = null,
 } = {}) {
   const calls = [];
+  const afterFailures = new Map();
+  // Fluxer ids carry their creation time, like the real ones (the engine adopts only what was made recently).
+  let minted = 0n;
+  const mint = () => (clock ? String(((BigInt(clock.now) - 1420070400000n) << 22n) + ++minted) : nextId());
   const failures = new Map();
   const guild = {
     id,
     name,
+    ownerId,
     channels: new Map(existingChannels.map((c) => [c.id, c])),
     roles: new Map([
       [id, { id, name: '@everyone', position: 0, _permissions: String(flag(53) | flag(10)), managed: false }],
@@ -132,7 +143,7 @@ export function fakeFluxer({
     limits: () => ({
       emoji: emojiLimit ?? 50,
       stickers: 50,
-      emojiBytes: 256 * 1024,
+      emojiBytes: 512 * 1024,
       stickerBytes: 512 * 1024,
       channelName: 100,
       roleName: 100,
@@ -160,9 +171,14 @@ export function fakeFluxer({
     },
     async createRole(spec) {
       begin('createRole');
-      const rid = nextId();
+      const rid = mint();
       guild.roles.set(rid, { id: rid, name: spec.name, position: 1, _permissions: spec.permissions });
       done('createRole', { spec, id: rid });
+      const after = afterFailures.get('createRole');
+      if (after) {
+        afterFailures.delete('createRole');
+        throw Object.assign(after, { createdId: rid });
+      }
       return rid;
     },
     async editRole(rid, spec) {
@@ -183,7 +199,7 @@ export function fakeFluxer({
     },
     async createChannel(spec) {
       begin('createChannel');
-      const cid = nextId();
+      const cid = mint();
       guild.channels.set(cid, {
         id: cid,
         name: spec.name,
@@ -212,7 +228,7 @@ export function fakeFluxer({
     },
     async createEmoji({ name, image }) {
       begin('createEmoji');
-      const eid = nextId();
+      const eid = mint();
       guild.emojis.set(eid, { id: eid, name });
       done('createEmoji', { name, bytes: image.bytes.length, id: eid });
       return eid;
@@ -229,7 +245,7 @@ export function fakeFluxer({
     },
     async createSticker(spec) {
       begin('createSticker');
-      const sid = nextId();
+      const sid = mint();
       guild.stickers.set(sid, { id: sid, name: spec.name });
       done('createSticker', { name: spec.name, id: sid });
       return sid;
@@ -251,6 +267,8 @@ export function fakeFluxer({
     attempted,
     failOn: (op, error, times = 1) => failures.set(op, { error, times }),
     clearFailures: () => failures.clear(),
+    // The next create succeeds on Fluxer and then fails (a second call after the create), carrying the new id.
+    failAfterCreate: (op, error) => afterFailures.set(op, error),
     ops: (op) => calls.filter((c) => c.op === op),
   };
 }
@@ -278,6 +296,7 @@ export function engineFor({ discord, fluxer, clock = fakeClock(), images = true,
     targetGuild: (key) => (key === `fluxer:${fluxer.guild.id}` ? fluxer.guild : undefined),
     makeTarget: () => fluxer.target,
     clientsReady: () => true,
+    enforceOwnership: () => false,
     fetchImage: async (url, { maxBytes }) => {
       fetched.push(url);
       if (!images) throw new Error('no network in tests');

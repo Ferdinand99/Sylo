@@ -11,7 +11,7 @@
 // anything is created; the copy stores the same notes with each item for the report.
 import { createHash } from 'node:crypto';
 import { FLUXER_CHANNEL, targetChannelType } from './snapshot.js';
-import { describeDropped, lostSomething, mapPermissions } from './permissions.js';
+import { ELEVATED_FLUXER_MASK, describeDropped, lostSomething, mapPermissions } from './permissions.js';
 
 /** What the mirror copies, and whether it goes on after the first copy. All on unless the admin turns one off. */
 export const DEFAULT_OPTIONS = Object.freeze({
@@ -24,6 +24,8 @@ export const DEFAULT_OPTIONS = Object.freeze({
   stickers: true,
   modules: true,
   continuous: true,
+  // Off: a Discord delete locks the Fluxer copy instead of deleting it. On: it is deleted (only what Sylo made).
+  mirrorDeletes: false,
 });
 
 /** The options as stored: only the known switches, each a boolean, the rest at their default. */
@@ -41,9 +43,9 @@ export function normaliseOptions(raw) {
  * the report lists the rest.
  */
 export const FLUXER_LIMITS = Object.freeze({
-  emoji: 50,
-  stickers: 50,
-  emojiBytes: 256 * 1024,
+  emoji: 500,
+  stickers: 500,
+  emojiBytes: 512 * 1024,
   stickerBytes: 512 * 1024,
   channelName: 100,
   roleName: 100,
@@ -108,7 +110,20 @@ export function buildRoleSpec(role, { keep = 0n } = {}) {
       )
     );
   }
-  const permissions = String(mapped.bits | keep);
+  let bits = mapped.bits;
+  if (role.isEveryone && bits & ELEVATED_FLUXER_MASK) {
+    // @everyone is every member: a powerful permission there would be handed to the whole Fluxer server.
+    bits &= ~ELEVATED_FLUXER_MASK;
+    notes.push(
+      note(
+        'everyone-elevated-stripped',
+        'role',
+        refOf('role', role),
+        '@everyone: powerful permissions (Administrator, Manage Roles and the like) are not copied onto @everyone, because they would apply to every member of the Fluxer server.'
+      )
+    );
+  }
+  const permissions = String(bits | keep);
   if (role.isEveryone) return { spec: { permissions }, notes };
   if (mapped.bits & (1n << 3n)) {
     notes.push(
@@ -223,6 +238,21 @@ export function buildChannelSpec(ch, { source, copiedRoles }) {
       deny: String(deny.bits),
     });
   }
+  // Never more open than on Discord. A channel @everyone cannot see there is hidden from @everyone here, by an
+  // overwrite of its own, whatever else is copied: with roles off, or while the @everyone role itself has not been
+  // set yet, the channel is still private on Fluxer (where @everyone can see channels by default).
+  let hide = 0n;
+  if (ch.everyoneCanView === false) hide |= 1n << 10n;
+  if (type === FLUXER_CHANNEL.VOICE && ch.everyoneCanConnect === false) hide |= 1n << 20n;
+  if (hide) {
+    const own = overwrites.find((o) => o.id === '$role:everyone');
+    if (own) {
+      own.deny = String(BigInt(own.deny) | hide);
+      own.allow = String(BigInt(own.allow) & ~hide);
+    } else {
+      overwrites.push({ id: '$role:everyone', type: 0, allow: '0', deny: String(hide) });
+    }
+  }
   overwrites.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
   const spec = {
@@ -233,7 +263,7 @@ export function buildChannelSpec(ch, { source, copiedRoles }) {
   };
   if (type === FLUXER_CHANNEL.TEXT || type === FLUXER_CHANNEL.ANNOUNCEMENT) {
     spec.topic = ch.topic ? clip(ch.topic, FLUXER_LIMITS.topic) : null;
-    spec.nsfw = ch.nsfw;
+    spec.nsfw = ch.nsfw || Boolean(source.ageRestricted);
     if (type === FLUXER_CHANNEL.TEXT) spec.rateLimitPerUser = ch.rateLimitPerUser;
   } else if (type === FLUXER_CHANNEL.VOICE) {
     const bitrate =
@@ -244,7 +274,7 @@ export function buildChannelSpec(ch, { source, copiedRoles }) {
     spec.userLimit = ch.userLimit ?? 0;
   } else if (type === FLUXER_CHANNEL.FORUM || type === FLUXER_CHANNEL.MEDIA) {
     spec.topic = ch.topic ? clip(ch.topic, FLUXER_LIMITS.topic) : null;
-    spec.nsfw = ch.nsfw;
+    spec.nsfw = ch.nsfw || Boolean(source.ageRestricted);
     if (ch.forum) {
       spec.availableTags = ch.forum.tags.slice(0, 20).map((t) => ({
         name: clip(t.name, 50),
@@ -292,7 +322,8 @@ export function buildStickerSpec(sticker) {
   return {
     spec: {
       name: clip(sticker.name, 30).padEnd(2, '_'),
-      description: clip(sticker.description, 100),
+      // Fluxer wants 1 to 500 characters or nothing.
+      description: clip(sticker.description, 500) || null,
       tags: sticker.tags.slice(0, 5).map((t) => clip(t, 30)),
     },
     notes: [],
@@ -319,7 +350,7 @@ const ID = /^\d{17,20}$/;
  * A module's settings with the ids of this server turned into placeholders: a channel or role id that is
  * copied becomes "$channel:<id>" / "$role:<id>" (also inside `<#id>` and `<@&id>` mentions in text); an id
  * of a channel or role that is not copied is dropped; the id of a message is cleared, because the message
- * is not copied. Other numbers (a user id, a count) stay as they are.
+ * is not copied; any other id of 17 to 20 digits (a user, a deleted item) is cleared. Short numbers stay.
  * @param {any} config
  * @param {{ channels: Set<string>, roles: Set<string>, skippedChannels: Set<string>, skippedRoles: Set<string> }} ids
  * @returns {{ config: any, remapped: number, dropped: number, cleared: number }}
@@ -348,7 +379,9 @@ export function placeholderConfig(config, ids) {
           stats.dropped += 1;
           return undefined;
         }
-        return value;
+        // A user id, the id of something deleted, a number only Discord knows: meaningless on Fluxer.
+        stats.cleared += 1;
+        return undefined;
       }
       return value.replace(/<(#|@&)(\d{17,20})>/g, (all, sigil, id) => {
         const ref = swap(id);
