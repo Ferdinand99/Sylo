@@ -93,8 +93,10 @@ struct ServerEnvironmentSourceTests {
         // `navigationDestination(isPresented:)` resolve in the stack's context instead, so each one in the app is listed.
         // Value-based links: the server screen's own routes (`ModuleRoute`, `ServerPageRoute`, `TicketRoute`, which
         // `ServerView` wraps in `scoped`) and the search results (whose sheet sets the values above its stack).
+        // `FocusedToolsView` (the focused moderator view's Tools tab) pushes `ModuleRoute` for applications and
+        // suggestions, which `ServerView` handles through `scoped`.
         #expect(Self.counts(of: "NavigationLink(value:")
-            == ["ServerSearchView.swift": 1, "TicketListView.swift": 2, "OverviewView.swift": 5])
+            == ["ServerSearchView.swift": 1, "TicketListView.swift": 2, "OverviewView.swift": 5, "FocusedToolsView.swift": 2])
         // The one `isPresented` destination is Settings' Health page, which reads none of the server's values.
         #expect(Self.counts(of: ".navigationDestination(isPresented:") == ["SettingsView.swift": 1])
         #expect(Self.counts(of: ".navigationDestination(item:").isEmpty, "a navigationDestination(item:) needs the server's environment")
