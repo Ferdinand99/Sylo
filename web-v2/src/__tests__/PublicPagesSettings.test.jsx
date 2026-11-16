@@ -181,4 +181,58 @@ describe('Server settings: Public pages', () => {
     await waitFor(() => expect(notify).toHaveBeenCalledWith('The picture is larger than 2 MB.'));
     expect(api.uploadPublicLookImage).not.toHaveBeenCalled();
   });
+
+  it('keeps a colour typed while a picture is uploading, and chooses the picture when it arrives', async () => {
+    api.getPublicLook.mockResolvedValue(look());
+    let finish;
+    api.uploadPublicLookImage.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      })
+    );
+    const { container } = renderSection();
+    const input = await screen.findByLabelText('Accent colour');
+    const file = new File([new Uint8Array(10)], 'bg.png', { type: 'image/png' });
+    fireEvent.change(container.querySelector('input[type=file]'), { target: { files: [file] } });
+    await waitFor(() => expect(api.uploadPublicLookImage).toHaveBeenCalled());
+    // typed while the upload is on its way
+    fireEvent.change(input, { target: { value: '#5865f2' } });
+    finish(
+      look({ upload: { bytes: 9, url: '/look/123456789012345678.0123456789abcdef.webp', updatedAt: 1 } })
+    );
+    await waitFor(() => expect(screen.getByLabelText('Background').value).toBe('upload'));
+    expect(screen.getByLabelText('Accent colour').value).toBe('#5865f2');
+    expect(screen.getByRole('button', { name: 'Save public pages' }).disabled).toBe(false);
+  });
+
+  it('keeps a typed colour when the picture is removed', async () => {
+    api.getPublicLook.mockResolvedValue(
+      look({
+        background: 'upload',
+        upload: { bytes: 9, url: '/look/123456789012345678.0123456789abcdef.webp', updatedAt: 1 },
+      })
+    );
+    api.deletePublicLookImage.mockResolvedValue(look());
+    renderSection();
+    const input = await screen.findByLabelText('Accent colour');
+    fireEvent.change(input, { target: { value: '#5865f2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove picture' }));
+    await waitFor(() => expect(api.deletePublicLookImage).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByLabelText('Background').value).toBe('none'));
+    expect(screen.getByLabelText('Accent colour').value).toBe('#5865f2');
+  });
+
+  it('starts the form from the saved state again after a save', async () => {
+    api.getPublicLook.mockResolvedValue(look());
+    api.savePublicLook.mockResolvedValue(look({ accent: '#5865f2' }));
+    renderSection();
+    const input = await screen.findByLabelText('Accent colour');
+    fireEvent.change(input, { target: { value: '#5865f2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save public pages' }));
+    await waitFor(() => expect(api.savePublicLook).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Save public pages' }).disabled).toBe(true)
+    );
+    expect(screen.getByLabelText('Accent colour').value).toBe('#5865f2');
+  });
 });

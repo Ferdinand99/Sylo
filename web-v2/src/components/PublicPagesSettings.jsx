@@ -34,18 +34,24 @@ export default function PublicPagesSettings({ guildId }) {
     () => (allowed ? Promise.resolve().then(() => getPublicLook(guildId)) : Promise.resolve(null)),
     [guildId, allowed]
   );
-  // What the person has typed or chosen, on top of what is saved. It belongs to one saved state (the server and its
-  // saved colour and background): a new one (another server, or a save) starts the form from it again. No effect is
-  // needed to copy the saved values in, so there is no moment where a late copy overwrites an edit.
+  // What the person has typed or chosen, on top of what is saved, for this server. It is cleared by a save and by
+  // another server. No effect copies the saved values in (a late copy would overwrite an edit), and every change
+  // is a functional update that touches only its own fields, so an answer that arrives later (an upload, a removal)
+  // never overwrites what was typed meanwhile.
   const [draft, setDraft] = useState(null);
   const [busy, setBusy] = useState(false);
   const fileInput = useRef(null);
-  const savedFor = data ? `${guildId}|${data.accent}|${data.background}` : null;
-  const mine = draft && draft.for === savedFor ? draft : null;
+  const mine = draft && draft.for === guildId ? draft : null;
   const accent = mine?.accent ?? data?.accent ?? '';
   const background = mine?.background ?? data?.background ?? 'none';
-  const setAccent = (value) => setDraft({ for: savedFor, accent: value, background });
-  const setBackground = (value) => setDraft({ for: savedFor, accent, background: value });
+  const change = (fields) =>
+    setDraft((d) => {
+      const base =
+        d && d.for === guildId ? d : { for: guildId, accent: data.accent, background: data.background };
+      return { ...base, ...(typeof fields === 'function' ? fields(base) : fields) };
+    });
+  const setAccent = (value) => change({ accent: value });
+  const setBackground = (value) => change({ background: value });
 
   if (!allowed || error || !data) return null;
 
@@ -81,7 +87,9 @@ export default function PublicPagesSettings({ guildId }) {
   const onSave = (e) => {
     e.preventDefault();
     if (!dirty) return;
-    run(() => savePublicLook(guildId, { accent: normalised, background }), 'Public pages saved.');
+    run(() => savePublicLook(guildId, { accent: normalised, background }), 'Public pages saved.').then(
+      (out) => out && setDraft(null)
+    );
   };
 
   async function onFile(e) {
@@ -101,7 +109,8 @@ export default function PublicPagesSettings({ guildId }) {
 
   async function onRemove() {
     const out = await run(() => deletePublicLookImage(guildId), 'Picture removed.');
-    if (out && background === 'upload') setBackground('none');
+    // a picture that is gone cannot stay chosen; whatever else was typed stays
+    if (out) change((d) => (d.background === 'upload' ? { background: 'none' } : {}));
   }
 
   const platformName = data.platform === 'fluxer' ? 'Fluxer' : 'Discord';
