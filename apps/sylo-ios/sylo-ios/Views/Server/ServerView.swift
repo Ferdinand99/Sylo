@@ -1,7 +1,9 @@
 import SwiftUI
 import SyloKit
 
-/// One server, with a tab bar: Modules, Tickets, Moderation and Settings.
+/// One server, with a tab bar: Modules, Tickets, Moderation and Settings. A person with Inbox access on a
+/// Sylo 5.3 server gets the focused moderator view instead (``ModeratorView``): Tickets, Tools and Moderation,
+/// without the modules and the settings, unless they chose "Show everything".
 ///
 /// The tab view sits inside the detail column's navigation stack (one stack, never nested), so
 /// screens pushed from any tab (a module's settings, a ticket) cover the tab bar the way a
@@ -26,9 +28,15 @@ struct ServerView: View {
     /// The setup wizard, shared by the overview's offer, Server settings and the search.
     @State private var wizard: SetupWizardModel
     @State private var isSearching = false
+    /// The Inbox person's choice to see everything (kept on the device).
+    @AppStorage(ModeratorView.showEverythingKey) private var showEverything = false
+    /// The read of what this Sylo announces has finished, whether or not it worked.
+    @State private var featureCheckDone = false
+    /// The short wait for that read is over: the app draws as it would without the features.
+    @State private var featureWaitOver = false
 
     enum ServerTab: Hashable {
-        case modules, tickets, moderation, settings
+        case modules, tickets, tools, moderation, settings
     }
 
     init(summary: ServerSummary, session: AppSession, tab: Binding<ServerTab>) {
@@ -44,9 +52,70 @@ struct ServerView: View {
         _wizard = State(initialValue: SetupWizardModel(server: summary.id, session: session))
     }
 
-    var body: some View {
-        TabView(selection: $tab) {
-            OverviewView(summary: summary, model: overview, wizard: wizard, openTab: { tab = $0 })
+    // MARK: - The moderator view
+
+    /// Whether this Sylo announces the focused view; nil while that is not known (the read of its features is
+    /// on its way), so an Inbox person never sees the full app flash before it narrows.
+    private var supportsModeratorView: Bool? {
+        ModeratorView.supports(
+            hasFeature: session.has(.moderatorView), featuresRead: session.featuresKnown || featureCheckDone,
+            // The sign-in already read this server's info: a Sylo without the feature is known at once.
+            serverInfoKnown: session.serverInfo != nil, waited: featureWaitOver)
+    }
+
+    private var mode: ModeratorView.Mode {
+        ModeratorView.mode(access: summary.access, supports: supportsModeratorView, showEverything: showEverything)
+    }
+
+    /// Where the Inbox person can switch to the other view: nil for everyone else.
+    private var moderatorSwitch: Binding<Bool>? {
+        ModeratorView.canChoose(access: summary.access, supports: supportsModeratorView) ? $showEverything : nil
+    }
+
+    private static func focusedTab(_ tab: ServerTab) -> ModeratorView.Tab? {
+        switch tab {
+        case .tickets: .tickets
+        case .tools: .tools
+        case .moderation: .moderation
+        case .modules, .settings: nil
+        }
+    }
+
+    private static func serverTab(_ tab: ModeratorView.Tab) -> ServerTab {
+        switch tab {
+        case .tickets: .tickets
+        case .tools: .tools
+        case .moderation: .moderation
+        }
+    }
+
+    /// The tab that is shown: the chosen one, or where the server opens when that tab is not in this view (the
+    /// tab a tapped notification or a new server starts on, or the focused view's own landing).
+    private var visibleTab: ServerTab {
+        guard mode == .focused else { return tab == .tools ? .modules : tab }
+        let current = overview.overview
+        if let chosen = Self.focusedTab(tab), ModeratorView.tabs(overview: current).contains(chosen) { return tab }
+        return Self.serverTab(ModeratorView.landing(overview: current).tab)
+    }
+
+    private var selection: Binding<ServerTab> {
+        Binding(get: { visibleTab }, set: { tab = $0 })
+    }
+
+    @ViewBuilder
+    private var tabs: some View {
+        switch mode {
+        case .full: fullTabs
+        case .focused: focusedTabs
+        case .undecided: ProgressView("Loading Server")
+        }
+    }
+
+    private var fullTabs: some View {
+        TabView(selection: selection) {
+            OverviewView(
+                summary: summary, model: overview, wizard: wizard, openTab: { tab = $0 }, moderatorSwitch: moderatorSwitch
+            )
                 .tabItem { Label("Modules", systemImage: "square.grid.2x2") }
                 .tag(ServerTab.modules)
             TicketListView(model: tickets)
@@ -61,6 +130,35 @@ struct ServerView: View {
                 .tabItem { Label("Settings", systemImage: "gearshape") }
                 .tag(ServerTab.settings)
         }
+    }
+
+    /// The focused moderator view: the inboxes whose module is on, and the moderation tools. No modules, no
+    /// settings, no audit log.
+    private var focusedTabs: some View {
+        let shown = ModeratorView.tabs(overview: overview.overview)
+        return TabView(selection: selection) {
+            if shown.contains(.tickets) {
+                TicketListView(model: tickets)
+                    .tabItem { Label("Tickets", systemImage: "bubble.left.and.bubble.right") }
+                    .badge(tickets.unreadCount)
+                    .tag(ServerTab.tickets)
+            }
+            FocusedToolsView(model: overview, showEverything: $showEverything)
+                .tabItem { Label("Tools", systemImage: "tray.full") }
+                .tag(ServerTab.tools)
+            ModerationTabView(
+                server: summary.id, session: session,
+                showsAppeals: ModeratorView.showsAppeals(overview: overview.overview), showsCommands: false,
+                initialPart: ModeratorView.moderationStart(overview: overview.overview) == .appeals ? .appeals : .infractions
+            )
+                .tabItem { Label("Moderation", systemImage: "shield") }
+                .badge(openAppeals.count ?? 0)
+                .tag(ServerTab.moderation)
+        }
+    }
+
+    var body: some View {
+        tabs
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         // Unsaved server settings can't be lost by going back to the server list.
@@ -85,7 +183,7 @@ struct ServerView: View {
         }
         .sheet(isPresented: $isSearching) {
             ServerSearchView(
-                summary: summary, session: session, overview: overview.overview, pages: searchPages, wizard: wizard
+                summary: summary, session: session, overview: searchOverview, pages: searchPages, wizard: wizard
             ) { target in
                 tab = target
             }
@@ -126,7 +224,19 @@ struct ServerView: View {
         .task { await openAppeals.refresh() }
         .task { await health.load() }
         // What this Sylo announces (`setup-wizard`, `config-import`, `duplicate`, ...): views show a control only for it.
-        .task { _ = await session.serverFeatures() }
+        .task {
+            _ = await session.serverFeatures()
+            featureCheckDone = true
+        }
+        // An Inbox person waits for that read only a moment; then the app draws as it does without the feature.
+        .task {
+            try? await Task.sleep(for: ModeratorView.featureWait)
+            featureWaitOver = true
+        }
+        // The focused view has no Modules tab to load the overview, and its tabs and landing depend on it.
+        .task(id: mode) {
+            if mode == .focused, overview.overview == nil { await overview.load() }
+        }
         // A read of the features that failed (an offline start) is asked again when the app comes back, so the 5.2
         // controls do not stay hidden.
         .onChange(of: scenePhase) {
@@ -150,8 +260,14 @@ struct ServerView: View {
             .environment(\.dashboardAccess, summary.effectiveAccess)
     }
 
+    /// What the search lists for modules: all of them, or in the focused view only the two queues that are modules.
+    private var searchOverview: ServerOverview? {
+        mode == .focused ? ModeratorView.searchOverview(overview.overview) : overview.overview
+    }
+
     /// The pages the search can open: those of the app, and the wizard and the import where this server has them.
     private var searchPages: [SearchPage] {
+        if mode == .focused { return ModeratorView.searchPages(overview: overview.overview) }
         var pages: [SearchPage] = [.tickets, .moderation, .settings, .auditLog, .memberData, .insights, .leaderboard, .appeals]
         if ServerPages.hasScreen("commands") { pages.append(.commands) }
         if ServerPages.hasScreen("messages") { pages.append(.messages) }
@@ -163,9 +279,10 @@ struct ServerView: View {
     }
 
     private var title: String {
-        switch tab {
+        switch visibleTab {
         case .modules: summary.name
         case .tickets: String(localized: "Tickets")
+        case .tools: String(localized: "Tools")
         case .moderation: String(localized: "Moderation")
         case .settings: String(localized: "Server Settings")
         }
@@ -173,7 +290,7 @@ struct ServerView: View {
 
     @ToolbarContentBuilder
     private var settingsToolbar: some ToolbarContent {
-        if tab == .settings || settings.hasChanges {
+        if visibleTab == .settings || settings.hasChanges {
             if settings.hasChanges {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Discard") { isConfirmingDiscard = true }

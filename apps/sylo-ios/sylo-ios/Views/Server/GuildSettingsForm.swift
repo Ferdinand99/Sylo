@@ -71,6 +71,12 @@ struct GuildSettingsForm: View {
             }
             .disabled(!access.canEdit)
 
+            // The server's look on its public pages exists on a Sylo that announces `public-page-look` (5.3 and
+            // later), and is Edit work, the read too.
+            if access.canEdit, session.has(.publicPageLook) {
+                publicPagesSection
+            }
+
             serverDataSection
         }
         .tabBarClearance()
@@ -124,6 +130,19 @@ struct GuildSettingsForm: View {
         Binding(
             get: { model.accessDraft?[keyPath: keyPath] ?? [] },
             set: { model.accessDraft?[keyPath: keyPath] = $0 })
+    }
+
+    /// The accent colour and background of the pages members open without the dashboard.
+    private var publicPagesSection: some View {
+        Section {
+            NavigationLink {
+                PublicPagesSettingsView(server: model.server, session: session)
+            } label: {
+                Label("Public Pages", systemImage: "globe")
+            }
+        } footer: {
+            Text("Give the application forms, ban appeals, the web shop, the quote page and the leaderboards your server's accent colour and a background.")
+        }
     }
 
     /// What Sylo keeps about this server: its change history, its configuration as a file, and what
