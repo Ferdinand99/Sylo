@@ -142,6 +142,8 @@ export const pruneFeedHealth = feed.prune;
 export const feedHealthSize = feed.size;
 
 export const liveDue = live.due;
+/** Has this channel's live page answered 404 without a break for `minMs`? */
+export const liveNotFoundFor = live.notFoundFor;
 export const recordLiveFailure = live.failure;
 export const recordLiveSuccess = live.success;
 export const pruneLiveHealth = live.prune;

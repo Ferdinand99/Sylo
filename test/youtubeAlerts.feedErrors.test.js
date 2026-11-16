@@ -287,7 +287,7 @@ test('a new alert whose feed is not read yet goes live only after the seed, so t
     },
     async () => {
       await runAlert(GUILD_ID, alert, t0); // feed 404, unseeded: the live check waits
-      await runAlert(GUILD_ID, alert, t0 + POLL); // feed backing off, still unseeded: waits
+      await runAlert(GUILD_ID, alert, t0 + POLL); // feed due again and fails again, still unseeded: waits
       assert.equal(sends.length, 0, 'no live post before the seed');
       feedUp = true;
       await runAlert(GUILD_ID, alert, t0 + HOUR); // first good poll: seeds quietly, then the live post
@@ -362,6 +362,88 @@ test('a live page that cannot be read is unknown: the running live post stays an
   );
   assert.deepEqual(deletes, ['live-post-1']);
   assert.equal(await liveVideoId(GUILD_ID, YT_CHANNEL), null);
+});
+
+test('a live page that has answered 404 for 6 hours ends the live post, for every server that watches the channel', async () => {
+  const t0 = 1_000_000_000_000;
+  const alert = { ...ALERT, onVideo: false, onLive: true };
+  await markLive(GUILD_ID, YT_CHANNEL, 'livestream5', {
+    channelId: DISCORD_CHANNEL,
+    messageId: 'gone-post-a',
+  });
+  await markLive(GUILD_B, YT_CHANNEL, 'livestream5', {
+    channelId: DISCORD_CHANNEL,
+    messageId: 'gone-post-b',
+  });
+  await withFeed(status(404), async () => {
+    // A poll every 30 minutes, the last two minutes short of 6 hours: the posts stay.
+    for (let m = 0; m < 6 * 60 - 2; m += 30) {
+      await runAlert(GUILD_ID, alert, t0 + m * 60_000);
+      await runAlert(GUILD_B, alert, t0 + m * 60_000 + 5_000);
+    }
+    assert.deepEqual(deletes, []);
+    await runAlert(GUILD_ID, alert, t0 + 6 * HOUR);
+    await runAlert(GUILD_B, alert, t0 + 6 * HOUR + 5_000);
+  });
+  assert.deepEqual(deletes.sort(), ['gone-post-a', 'gone-post-b']);
+  assert.equal(await liveVideoId(GUILD_ID, YT_CHANNEL), null);
+  assert.equal(await liveVideoId(GUILD_B, YT_CHANNEL), null);
+});
+
+test('a 5xx on the live page in between starts the 6 hour count again', async () => {
+  const t0 = 1_000_000_000_000;
+  const alert = { ...ALERT, onVideo: false, onLive: true };
+  await markLive(GUILD_ID, YT_CHANNEL, 'livestream6', { channelId: DISCORD_CHANNEL, messageId: 'keep-post' });
+  let code = 404;
+  await withFeed(
+    async () => new Response('x', { status: code }),
+    async () => {
+      await runAlert(GUILD_ID, alert, t0);
+      code = 503;
+      await runAlert(GUILD_ID, alert, t0 + 5 * HOUR);
+      code = 404;
+      await runAlert(GUILD_ID, alert, t0 + 6 * HOUR);
+      await runAlert(GUILD_ID, alert, t0 + 7 * HOUR);
+    }
+  );
+  assert.deepEqual(deletes, [], 'not 6 hours of 404 without a break');
+  assert.equal(await liveVideoId(GUILD_ID, YT_CHANNEL), 'livestream6');
+});
+
+test('a new stream that replaces a known one ends the earlier post', async () => {
+  const t0 = 1_000_000_000_000;
+  const alert = { ...ALERT, onVideo: false, onLive: true };
+  await markLive(GUILD_ID, YT_CHANNEL, 'oldstream01', { channelId: DISCORD_CHANNEL, messageId: 'old-post' });
+  await withFeed(
+    async () => new Response(LIVE_HTML('newstream01')),
+    () => runAlert(GUILD_ID, alert, t0)
+  );
+  assert.equal(sends.length, 1, 'the new stream is announced');
+  assert.deepEqual(deletes, ['old-post'], 'the earlier post is settled');
+  assert.equal(await liveVideoId(GUILD_ID, YT_CHANNEL), 'newstream01');
+
+  // The same stream again changes nothing.
+  await withFeed(
+    async () => new Response(LIVE_HTML('newstream01')),
+    () => runAlert(GUILD_ID, alert, t0 + HOUR)
+  );
+  assert.equal(sends.length, 1);
+  assert.deepEqual(deletes, ['old-post']);
+});
+
+test('if the new stream cannot be posted, the earlier post is left for the next poll', async () => {
+  const alert = { ...ALERT, onVideo: false, onLive: true };
+  await markLive(GUILD_ID, YT_CHANNEL, 'oldstream02', {
+    channelId: DISCORD_CHANNEL,
+    messageId: 'old-post-2',
+  });
+  runtime.client = { guilds: { cache: new Map() } }; // no server to post in
+  await withFeed(
+    async () => new Response(LIVE_HTML('newstream02')),
+    () => runAlert(GUILD_ID, alert, 1_000_000_000_000)
+  );
+  assert.deepEqual(deletes, []);
+  assert.equal(await liveVideoId(GUILD_ID, YT_CHANNEL), 'oldstream02');
 });
 
 test('live page failures follow the same pattern: nothing per poll, one warning after 6, one line on recovery', async () => {
