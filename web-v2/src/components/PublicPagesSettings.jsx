@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   deletePublicLookImage,
   getPublicLook,
@@ -34,20 +34,18 @@ export default function PublicPagesSettings({ guildId }) {
     () => (allowed ? Promise.resolve().then(() => getPublicLook(guildId)) : Promise.resolve(null)),
     [guildId, allowed]
   );
-  const [accent, setAccent] = useState('');
-  const [background, setBackground] = useState('none');
+  // What the person has typed or chosen, on top of what is saved. It belongs to one saved state (the server and its
+  // saved colour and background): a new one (another server, or a save) starts the form from it again. No effect is
+  // needed to copy the saved values in, so there is no moment where a late copy overwrites an edit.
+  const [draft, setDraft] = useState(null);
   const [busy, setBusy] = useState(false);
   const fileInput = useRef(null);
-
-  // Start from what is saved, and again when another server's answer arrives.
   const savedFor = data ? `${guildId}|${data.accent}|${data.background}` : null;
-  useEffect(() => {
-    if (!data) return;
-    setAccent(data.accent);
-    setBackground(data.background);
-    // only a new saved state resets the form, not every answer (an upload changes the picture, not the choice)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savedFor]);
+  const mine = draft && draft.for === savedFor ? draft : null;
+  const accent = mine?.accent ?? data?.accent ?? '';
+  const background = mine?.background ?? data?.background ?? 'none';
+  const setAccent = (value) => setDraft({ for: savedFor, accent: value, background });
+  const setBackground = (value) => setDraft({ for: savedFor, accent, background: value });
 
   if (!allowed || error || !data) return null;
 

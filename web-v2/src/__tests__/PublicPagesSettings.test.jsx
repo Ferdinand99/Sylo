@@ -72,7 +72,6 @@ describe('Server settings: Public pages', () => {
     api.getPublicLook.mockResolvedValue(look({ accent: '#5865f2' }));
     renderSection();
     expect(await screen.findByText('Public pages')).toBeTruthy();
-    // the form takes the saved value in an effect, right after the first render with the data
     await waitFor(() => expect(screen.getByLabelText('Accent colour').value).toBe('#5865f2'));
     expect(
       screen.getByText(
