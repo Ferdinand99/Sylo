@@ -82,11 +82,15 @@ export function causeCode(err) {
 export function isNetworkError(err) {
   if (!err || typeof err !== 'object') return false;
   if (typeof err.status === 'number') return false; // we got an answer
-  return chain(err).some(
-    (e) =>
-      isTimeoutName(e) ||
-      (typeof e.code === 'string' && NETWORK_CODES.has(e.code)) ||
-      (e instanceof TypeError && (e.message === 'fetch failed' || e.message === 'terminated'))
+  const items = chain(err);
+  if (items.some(isTimeoutName)) return true;
+  // undici wraps every dispatcher error in TypeError('fetch failed', { cause }): when a cause
+  // carries a code, the code decides (UND_ERR_INVALID_ARG is our fault, ECONNRESET is the network).
+  const codes = items.map((e) => e.code).filter((c) => typeof c === 'string' && c);
+  if (codes.length > 0) return codes.some((c) => NETWORK_CODES.has(c));
+  // No code anywhere: the generic wrapper alone counts as a network failure.
+  return items.some(
+    (e) => e instanceof TypeError && (e.message === 'fetch failed' || e.message === 'terminated')
   );
 }
 
@@ -180,12 +184,21 @@ export function createPollHealth(
   let failures = 0; // transient failures in a row
   let warned = false;
   let warnedAt = 0;
-  /** The error that is not transient and goes on: its text, polls it failed, when it was last logged. */
-  let fault = null;
+  /**
+   * The errors that are not transient and go on, by kind (name, status, message without numbers),
+   * so errors that alternate, or whose message holds a changing value, are not logged every poll.
+   * A fixed number of kinds is kept; the oldest is dropped.
+   * @type {Map<string, { polls: number, loggedAt: number }>}
+   */
+  const faults = new Map();
+  const MAX_KINDS = 10;
+  const kindOf = (err) =>
+    [err?.name, err?.httpStatus ?? err?.status ?? '', describeError(err).replace(/\d+/g, '#')].join('|');
+  const faultPolls = () => [...faults.values()].reduce((sum, f) => sum + f.polls, 0);
   const reset = () => {
     failures = 0;
     warned = false;
-    fault = null;
+    faults.clear();
   };
   return {
     /** Transient failed polls in a row. */
@@ -195,16 +208,18 @@ export function createPollHealth(
     /** A poll failed with `err`. Logs now, later or not at all, see the file head. */
     failed(err) {
       if (!isTransient(err)) {
-        const text = describeError(err);
-        if (!fault || fault.text !== text) {
-          fault = { text, polls: 1, loggedAt: now() };
+        const kind = kindOf(err);
+        const fault = faults.get(kind);
+        if (!fault) {
+          if (faults.size >= MAX_KINDS) faults.delete(faults.keys().next().value);
+          faults.set(kind, { polls: 1, loggedAt: now() });
           log.error(scope, 'poll failed:', err); // the Error itself: its stack reaches the logs
           return;
         }
         fault.polls += 1;
         if (now() - fault.loggedAt >= repeatMs) {
           fault.loggedAt = now();
-          log.error(scope, `poll still failing after ${fault.polls} polls: ${text}`);
+          log.error(scope, `poll still failing after ${fault.polls} polls: ${describeError(err)}`);
         }
         return;
       }
@@ -223,8 +238,8 @@ export function createPollHealth(
     },
     /** A poll worked. */
     ok() {
-      if (warned || fault) {
-        log.warn(scope, `polling works again after ${failures + (fault?.polls ?? 0)} failed polls`);
+      if (warned || faults.size > 0) {
+        log.warn(scope, `polling works again after ${failures + faultPolls()} failed polls`);
       }
       reset();
     },
