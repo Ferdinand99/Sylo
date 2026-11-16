@@ -1,5 +1,13 @@
 # Changelog
 
+## [5.2.2](https://github.com/Ferdinand99/Sylo/compare/v5.2.1...v5.2.2) (2026-11-16)
+
+
+### Bug Fixes
+
+* **kick-alerts:** always link to the channel's Kick page ([#379](https://github.com/Ferdinand99/Sylo/issues/379)) ([79526b4](https://github.com/Ferdinand99/Sylo/commit/79526b44a33f9acf14d59aecba0e6c843568fba9))
+* **youtube-alerts:** only announce a live stream owned by the watched channel ([#378](https://github.com/Ferdinand99/Sylo/issues/378)) ([09695fb](https://github.com/Ferdinand99/Sylo/commit/09695fb7b1233b15cc3497b0c350df32353f854d))
+
 ## [5.2.1](https://github.com/Ferdinand99/Sylo/compare/v5.2.0...v5.2.1) (2026-11-16)
 
 
