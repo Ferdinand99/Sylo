@@ -1594,6 +1594,32 @@ export const MIGRATIONS = [
     if (!has.has('decided_by_user_id'))
       database.exec('ALTER TABLE appeals ADD COLUMN decided_by_user_id TEXT;');
   },
+
+  // The server's own look on the public member pages (src/db/publicLook.js, which bootstraps the same tables
+  // on Postgres): an accent colour and a background choice per server, and the picture of the background
+  // (an upload, or a copy of the server's invite splash that Sylo keeps itself). One picture per source.
+  (database) => {
+    database.exec(`
+      CREATE TABLE guild_public_look (
+        guild_id   TEXT PRIMARY KEY,
+        accent     TEXT NOT NULL DEFAULT '',
+        background TEXT NOT NULL DEFAULT 'none',
+        updated_at INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE public_look_images (
+        guild_id   TEXT NOT NULL,
+        source     TEXT NOT NULL,
+        hash       TEXT NOT NULL,
+        mime       TEXT NOT NULL,
+        bytes      INTEGER NOT NULL,
+        data       BLOB NOT NULL,
+        origin     TEXT NOT NULL DEFAULT '',
+        checked_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, source)
+      );
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { ApiError, buyWebShopItem, getWebShop } from '../api.js';
 import { useApiData } from '../useApiData.js';
 import { notify } from '../notify.js';
+import { useServerLook } from '../publicLook.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import Meta from '../components/Meta.jsx';
 import Time from '../components/Time.jsx';
@@ -36,6 +37,8 @@ function kindText(item) {
 export default function Shop() {
   const { guildId } = useParams();
   const { data, error, setData } = useApiData(() => getWebShop(guildId), [guildId]);
+  // The server's own accent colour and background, when it chose any (see publicLook.js).
+  useServerLook(data?.look);
   const [busy, setBusy] = useState(null);
 
   if (error) {

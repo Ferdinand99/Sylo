@@ -25,6 +25,7 @@ import quotesRouter from './routes/quotes.js';
 import economyBoardRouter from './routes/economyBoard.js';
 import eventPageRouter from './routes/events.js';
 import collectibleImageRouter from './routes/collectibleImage.js';
+import publicLookRouter from './routes/publicLook.js';
 import verifyRouter from './routes/verify.js';
 import appealRouter from './routes/appeal.js';
 import githubWebhookRouter from './routes/githubWebhook.js';
@@ -195,6 +196,8 @@ export function createApp() {
   // ahead of the session and the CSRF check, so an answer never carries a cookie (it is cacheable by anyone).
   // Its own limit, higher than the pages below: one collection page shows up to ten pictures, fetched in a burst.
   app.use('/c', rateLimit({ windowMs: 60_000, max: 240 }), collectibleImageRouter);
+  // The look of a server's public pages (style sheet and background picture): no login, named by content hash.
+  app.use('/look', rateLimit({ windowMs: 60_000, max: 240 }), publicLookRouter);
   // Per-client ceiling on everything below. It runs ahead of the body parsers: a request whose
   // body fails to parse (too large, broken JSON) is answered by the parser's own error, so a
   // limiter behind them would never count it. Generous for normal clicking, but stops a stuck
