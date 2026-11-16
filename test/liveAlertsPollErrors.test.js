@@ -209,6 +209,22 @@ test('isNetworkError: only the connection and timeout codes of undici count', ()
   }
 });
 
+test('isNetworkError: a fetch failure with a cause is classified by the cause code', () => {
+  const wrapped = (code) => new TypeError('fetch failed', { cause: Object.assign(new Error('x'), { code }) });
+  for (const code of ['ECONNRESET', 'UND_ERR_SOCKET', 'UND_ERR_CONNECT_TIMEOUT', 'ENOTFOUND']) {
+    assert.equal(isNetworkError(wrapped(code)), true, code);
+    assert.equal(isTransient(wrapped(code)), true, code);
+  }
+  for (const code of ['UND_ERR_INVALID_ARG', 'UND_ERR_NOT_SUPPORTED', 'UND_ERR_INVALID_RETURN_VALUE']) {
+    assert.equal(isNetworkError(wrapped(code)), false, code);
+    assert.equal(isTransient(wrapped(code)), false, code);
+  }
+  // the wrapper alone, or with a cause that has no code, still counts as a network failure
+  assert.equal(isNetworkError(new TypeError('fetch failed')), true);
+  assert.equal(isNetworkError(new TypeError('fetch failed', { cause: new Error('no code') })), true);
+  assert.equal(isNetworkError(new TypeError('Cannot read properties of undefined')), false);
+});
+
 test('httpError: Ratelimit-Reset is only the wait for a 429, never for a 503', () => {
   const reset = String(Math.floor(Date.now() / 1000) + 8);
   const wait = httpError('x', fakeResponse(429, { 'ratelimit-reset': reset })).retryAfterMs;
@@ -280,9 +296,31 @@ test('createPollHealth: an error that is not transient is logged once, again whe
   assert.equal(health.failures, 0, 'not a network failure');
   health.ok();
   assert.equal(warn.mock.callCount(), 1);
-  assert.match(warn.mock.calls[0].arguments[1], /works again after 3 failed polls/);
+  assert.match(warn.mock.calls[0].arguments[1], /works again after 104 failed polls/);
   health.ok();
   assert.equal(warn.mock.callCount(), 1);
+});
+
+test('createPollHealth: alternating errors, or a message with a changing number, are not logged on every poll', (t) => {
+  const error = t.mock.method(log, 'error', () => {});
+  let now = 9_000_000;
+  const health = createPollHealth('x-alerts', { now: () => now });
+  const a = () => httpError('Twitch /streams', fakeResponse(403));
+  const b = () => httpError('Twitch token', fakeResponse(401));
+  for (let i = 0; i < 20; i += 1) {
+    health.failed(a());
+    health.failed(b());
+    now += 60_000;
+  }
+  assert.equal(error.mock.callCount(), 2, 'one line for each of the two kinds');
+  for (let i = 0; i < 30; i += 1) {
+    health.failed(new RangeError(`index ${i} is out of range 0..${100 + i}`));
+    now += 60_000;
+  }
+  assert.equal(error.mock.callCount(), 3, 'the number in the message does not make a new kind');
+  // a different status is a different kind
+  health.failed(httpError('Twitch /streams', fakeResponse(404)));
+  assert.equal(error.mock.callCount(), 4);
 });
 
 test('createPollHealth: a long network outage gets a reminder every hour', (t) => {
@@ -830,7 +868,7 @@ test('fetchIsolated: a network failure of the canary fails the poll as that fail
   assert.equal(quarantine.size, 0);
 });
 
-test('fetchIsolated: a network failure of the canary while the platform flaps quarantines nothing and keeps the canary', async () => {
+test('fetchIsolated: a network failure of the canary while the platform flaps quarantines nothing and remembers the value for the next poll', async () => {
   const quarantine = createQuarantine();
   quarantine.setGood('known-good');
   const out = await fetchIsolated(
@@ -846,6 +884,7 @@ test('fetchIsolated: a network failure of the canary while the platform flaps qu
   assert.deepEqual(out.results, ['fine1']);
   assert.equal(quarantine.size, 0, 'a value is not quarantined on the word of a failing request');
   assert.ok(out.unresolved.has('flaky'));
+  assert.ok(quarantine.suspects.has('flaky'), 'it is batched apart from the clean values next time');
 });
 
 test('twitch tick: a failed user lookup is neither retried nor logged, the stream is still announced', async (t) => {
