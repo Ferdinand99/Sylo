@@ -196,7 +196,127 @@ async function fetchFeed(ytChannelId) {
 
 // --- live check ------------------------------------------------------
 
-/** @returns {Promise<{ live: boolean, videoId?: string, title?: string }>} */
+const CHANNEL_ID = '(UC[\\w-]{20,})';
+/** How far past an anchor each lookup reads. The page is full of other videos and channels, so a
+ * field is only trusted close to the thing that says whose it is, never "anywhere on the page". */
+const CURRENT_VIDEO_SCAN = 8_000;
+const PAGE_OWNER_SCAN = 500;
+const OWNER_SCAN = 4_000;
+const TITLE_SCAN = 1_500;
+/** videoDetails carries the whole description, so its object may be long: read it up to this size. */
+const VIDEO_DETAILS_MAX = 64_000;
+
+/**
+ * The JSON object that follows `anchor` (like `"currentVideoEndpoint":`), or null when it is missing,
+ * cut off or not JSON. With `startsWith` the first occurrence of the anchor whose object begins with
+ * that text is used: a page has several "videoDetails" objects, and only the player's starts with its
+ * video id.
+ */
+function jsonObjectAfter(page, anchor, maxLen, startsWith = '{') {
+  let at = page.indexOf(anchor);
+  let i = -1;
+  while (at >= 0) {
+    i = at + anchor.length;
+    while (/\s/.test(page[i] ?? '')) i += 1;
+    if (page.startsWith(startsWith, i)) break;
+    at = page.indexOf(anchor, at + anchor.length);
+  }
+  if (at < 0) return null;
+  const limit = Math.min(page.length, i + maxLen);
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let j = i; j < limit; j += 1) {
+    const ch = page[j];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') inString = true;
+    else if (ch === '{') depth += 1;
+    else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        try {
+          return JSON.parse(page.slice(i, j + 1));
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/** The first capture of `re` in the `len` characters after the first `anchor`, or null. */
+function grabAfter(page, anchor, re, len) {
+  const at = page.indexOf(anchor);
+  if (at < 0) return null;
+  const from = at + anchor.length;
+  return (page.slice(from, from + len).match(re) || [])[1] || null;
+}
+
+const validVideoId = (id) => (typeof id === 'string' && /^[\w-]{11}$/.test(id) ? id : null);
+
+/**
+ * Read a /channel/<id>/live page. It only counts as that channel's live stream when the video on
+ * the page belongs to the watched channel: with no player response the page shows recommended
+ * videos too, and the first video id on it can be another channel's stream (issue #377).
+ * @returns {{ live: boolean|null, videoId?: string, title?: string, reason?: string }}
+ */
+function readLivePage(html, ytChannelId) {
+  const page = html.length > PAGE_MAX_SCAN ? html.slice(0, PAGE_MAX_SCAN) : html;
+  const details = jsonObjectAfter(page, '"videoDetails":', VIDEO_DETAILS_MAX, '{"videoId":');
+
+  // With the video's own details, its own flag decides; an upcoming or ended video of the channel
+  // is not live, even when a recommended stream on the same page is.
+  const isLive = details
+    ? details.isLive === true
+    : /"isLive":true/.test(page) || /"isLiveNow":true/.test(page);
+  if (!isLive) return { live: false };
+
+  const videoId =
+    grabPage(/<link rel="canonical" href="https:\/\/www\.youtube\.com\/watch\?v=([\w-]{11})">/, page) ||
+    validVideoId(details?.videoId) ||
+    validVideoId(
+      jsonObjectAfter(page, '"currentVideoEndpoint":', CURRENT_VIDEO_SCAN)?.watchEndpoint?.videoId
+    );
+  if (!videoId) return { live: false };
+
+  const owner =
+    (typeof details?.channelId === 'string' ? details.channelId : null) ||
+    grabAfter(
+      page,
+      '"pageOwnerDetails":',
+      new RegExp(`"externalChannelId":"${CHANNEL_ID}"`),
+      PAGE_OWNER_SCAN
+    ) ||
+    grabAfter(page, '"videoOwnerRenderer":', new RegExp(`"browseId":"${CHANNEL_ID}"`), OWNER_SCAN);
+  // Never announce what cannot be verified, and never end a running post because of it.
+  if (!owner) return { live: null, reason: 'owner unknown' };
+  if (owner !== ytChannelId) return { live: false };
+
+  const title = decodeEntities(
+    (typeof details?.title === 'string' && details.title.trim() ? details.title : null) ||
+      grabPage(/<meta name="title" content="([^"]+)">/, page) ||
+      // The runs text of any video on the page would do for the old regex; only the one right after
+      // the current video's own header is that video's title, the rest are recommendations.
+      grabAfter(
+        page,
+        '"videoPrimaryInfoRenderer":',
+        /"title":\s*{\s*"runs":\s*\[\s*{\s*"text":\s*"([^"]+)"/,
+        TITLE_SCAN
+      ) ||
+      'Live now'
+  );
+  return { live: true, videoId, title };
+}
+
+/**
+ * Is the channel live? `live: null` means unknown: the page does not say whose video it shows, so
+ * nothing is announced and a running live post is left alone.
+ * @returns {Promise<{ live: boolean|null, videoId?: string, title?: string, reason?: string }>}
+ */
 export async function checkLive(ytChannelId) {
   try {
     const res = await fetch(`https://www.youtube.com/channel/${ytChannelId}/live`, {
@@ -212,17 +332,7 @@ export async function checkLive(ytChannelId) {
       return { live: false };
     }
     const html = await readTextCapped(res, MAX_PAGE_BYTES);
-    const isLive = /"isLive":true/.test(html) || /"isLiveNow":true/.test(html);
-    if (!isLive) return { live: false };
-    const videoId =
-      grabPage(/<link rel="canonical" href="https:\/\/www\.youtube\.com\/watch\?v=([\w-]{11})">/, html) ||
-      grabPage(/"videoId":"([\w-]{11})"/, html);
-    const title = decodeEntities(
-      grabPage(/"title":\s*{\s*"runs":\s*\[\s*{\s*"text":\s*"([^"]+)"/, html) ||
-        grabPage(/<meta name="title" content="([^"]+)">/, html) ||
-        'Live now'
-    );
-    return videoId ? { live: true, videoId, title } : { live: false };
+    return readLivePage(html, ytChannelId);
   } catch (err) {
     log.warn('youtube-alerts', `live check ${ytChannelId}: ${err.message}`);
     return { live: false };
@@ -336,6 +446,8 @@ export async function runAlert(guildId, alert) {
 
   if (alert.onLive) {
     const state = await checkLive(c);
+    // Unknown, not "not live": leave a running live post alone and do not announce again.
+    if (state.live === null) return;
     const known = await liveVideoId(guildId, c);
     if (state.live && state.videoId !== known) {
       const name = alert.name || 'A channel';
