@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   canResume,
   codeLeft,
+  deleteSummary,
   groupNotes,
   isBusy,
   progressText,
@@ -93,5 +94,15 @@ describe('mirrorModel', () => {
     expect(canResume({ side: 'source', pausedBy: 'system' })).toBe(true);
     expect(canResume({ side: 'source', pausedBy: 'source' })).toBe(true);
     expect(canResume({ side: 'target', pausedBy: 'source' })).toBe(false);
+  });
+
+  it('says what a confirmation is about: the first deletions, then how many more', () => {
+    const items = [
+      { kind: 'channel', name: 'chat', action: 'delete' },
+      { kind: 'role', name: 'Mod', action: 'lock' },
+    ];
+    expect(deleteSummary(items)).toBe('delete channel chat, lock role Mod');
+    expect(deleteSummary(items, 7)).toBe('delete channel chat, lock role Mod, and 5 more');
+    expect(deleteSummary([], 0)).toBe('');
   });
 });

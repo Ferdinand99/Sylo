@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import { useParams } from 'react-router-dom';
 import {
   acceptMirror,
+  allowMirrorDeletes,
   getMirror,
   getMirrorPreview,
   getMirrorReport,
@@ -26,6 +27,7 @@ import {
   STEPS,
   canResume,
   codeLeft,
+  deleteSummary,
   groupNotes,
   isBusy,
   progressText,
@@ -194,22 +196,29 @@ function PauseBlock({ guildId, pair, onState }) {
   const kind = pair.pauseKind;
   const label =
     kind === 'deletes'
-      ? 'Apply the deletions'
+      ? 'Review the deletions'
       : kind === 'ownership'
         ? 'Confirm the mirror as the owner'
         : 'Resume';
-  const body = kind === 'deletes' ? { confirm: true } : {};
   async function go() {
-    if (kind === 'deletes') {
+    // Ask without a confirmation first: the server says when deletions wait and what they are, and the person
+    // confirms that list (or the mirror simply resumes when none wait).
+    try {
+      onState(await mirrorAction(guildId, 'resume', {}));
+      notify('The mirror goes on.', 'info');
+    } catch (err) {
+      if (err.code !== 'confirm-needed') {
+        notify(err.message || 'That did not work.');
+        return;
+      }
       const ok = await confirmDialog({
         title: 'Apply the deletions on Fluxer?',
-        body: 'Many things were deleted on Discord in a short time. If you go on, Sylo applies them on Fluxer: a channel or role is locked there, or deleted with its messages if you turned on deleting. Stop the mirror instead if this was a mistake.',
+        body: `These were deleted on Discord and wait to be applied on Fluxer: ${deleteSummary(err.deletes, err.deleteCount)}. A locked channel or role stays on Fluxer; a deleted channel loses its messages. Stop the mirror instead if this was a mistake.`,
         confirmLabel: 'Apply the deletions',
         tone: 'danger',
       });
-      if (!ok) return;
+      if (ok) await act(() => mirrorAction(guildId, 'resume', { confirm: true }), 'The mirror goes on.');
     }
-    await act(() => mirrorAction(guildId, 'resume', body), 'The mirror goes on.');
   }
   return (
     <>
@@ -401,12 +410,22 @@ function OptionsForm({ guildId, pair, onState, only }) {
         <div className="v2-mirror-option" key={key}>
           <span id={`mirror-opt-${key}`}>{label}</span>
           <Switch
-            checked={pair.options[key]}
+            checked={
+              key === 'mirrorDeletes'
+                ? pair.options.mirrorDeletes || pair.options.mirrorDeletesRequested
+                : pair.options[key]
+            }
             labelledBy={`mirror-opt-${key}`}
             disabled={working}
             need="view"
             onChange={(on) => act(() => setMirrorOptions(guildId, { [key]: on }))}
           />
+          {key === 'mirrorDeletes' && pair.options.mirrorDeletesRequested && !pair.options.mirrorDeletes ? (
+            <p className="v2-field-hint v2-mirror-option-hint">
+              Waiting for the owner of the Fluxer server to allow it in their dashboard. Until then deleted
+              items are locked, not deleted.
+            </p>
+          ) : null}
           {OPTION_HINTS[key] ? (
             <p className="v2-field-hint v2-mirror-option-hint">{OPTION_HINTS[key]}</p>
           ) : null}
@@ -736,6 +755,57 @@ function Report({ report }) {
   );
 }
 
+/** On the Fluxer server: the Discord side asks to delete here too, and only the owner here can allow it. */
+function DeletesPanel({ guildId, pair, onState }) {
+  const { working, act } = useAct(onState);
+  const asked = pair.options.mirrorDeletesRequested;
+  const allowed = pair.options.mirrorDeletes;
+  if (!asked && !allowed) return null;
+  async function allow() {
+    const ok = await confirmDialog({
+      title: 'Allow deleting on this server?',
+      body: 'From now on, what is deleted on Discord is deleted here too: a channel loses all its messages, including ones that only exist here. Only what Sylo made is ever deleted. Without this, deleted items are only locked and listed for you to look at.',
+      confirmLabel: 'Allow deleting',
+      tone: 'danger',
+    });
+    if (ok) await act(() => allowMirrorDeletes(guildId, true), 'Deleting is allowed.');
+  }
+  return (
+    <div className="v2-mirror-deletes">
+      <h3 className="v2-mirror-subtitle">Deleting on this server</h3>
+      {allowed ? (
+        <p className="v2-field-hint">
+          Deleting is allowed: what is deleted on Discord is deleted here, with its messages. Only what Sylo
+          made is deleted.
+        </p>
+      ) : (
+        <p className="v2-field-hint">
+          The Discord server asks to delete here too, when something is deleted on Discord. Until you allow
+          it, those items are locked and listed, and nothing is deleted.
+        </p>
+      )}
+      <OwnerOnly>
+        <div className="v2-setup-actions">
+          {allowed ? (
+            <button
+              type="button"
+              className="v2-btn-ghost"
+              disabled={working}
+              onClick={() => act(() => allowMirrorDeletes(guildId, false), 'Deleting is switched off.')}
+            >
+              Stop deleting here
+            </button>
+          ) : (
+            <button type="button" className="v2-btn-danger-ghost" disabled={working} onClick={allow}>
+              Allow deleting
+            </button>
+          )}
+        </div>
+      </OwnerOnly>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------------------------------
 // The Fluxer server
 
@@ -811,6 +881,7 @@ function TargetView({ guildId, state, onState }) {
           </p>
           <PauseBlock guildId={guildId} pair={pair} onState={onState} />
           <RemovedList progress={state.progress} />
+          <DeletesPanel guildId={guildId} pair={pair} onState={onState} />
           <OwnerOnly note>
             <div className="v2-setup-actions">
               {['copying', 'live'].includes(pair.status) ? (

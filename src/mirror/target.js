@@ -22,6 +22,23 @@ export const NEEDED_PERMISSIONS = Object.freeze([
   'ManageGuild',
 ]);
 
+/**
+ * Fluxer ranks roles by position, highest first, and by id (the older, smaller one first) when positions are equal;
+ * every role starts at position 1 and positions are only renumbered when someone reorders. So a position number says
+ * nothing by itself: what counts is the rank. The roles of `roles` that rank above `sylo` (not `ignore`d, not Sylo's
+ * own), in rank order.
+ * @param {{ id: string, position: number }} sylo  Sylo's highest role
+ * @param {Array<{ id: string, name: string, position: number }>} roles
+ * @param {Set<string>} ignore
+ */
+export function rolesAbove(sylo, roles, ignore = new Set()) {
+  const outranks = (a, b) =>
+    a.position > b.position || (a.position === b.position && BigInt(a.id) < BigInt(b.id));
+  return roles
+    .filter((r) => r.id !== sylo.id && !ignore.has(r.id) && outranks(r, sylo))
+    .sort((a, b) => b.position - a.position || (BigInt(a.id) < BigInt(b.id) ? -1 : 1));
+}
+
 /** @param {{ mime: string, bytes: Buffer }} image */
 export const toDataUri = (image) => `data:${image.mime};base64,${image.bytes.toString('base64')}`;
 
@@ -81,10 +98,23 @@ export function createFluxerTarget(guild) {
       if (perms.has('Administrator')) return [];
       return NEEDED_PERMISSIONS.filter((p) => !perms.has(p));
     },
-    /** The highest position a role can sit at for Sylo to manage it, or null when unknown. */
-    topPosition() {
-      const top = guild.members?.me?.roles?.highest?.position;
-      return typeof top === 'number' ? top : null;
+    /**
+     * The roles on the Fluxer server that rank above Sylo's own (see rolesAbove), apart from `ignore` (the ids of roles
+     * the mirror made itself: they are ordered under Sylo). Null when Sylo's own role is not known.
+     */
+    rolesAboveSylo(ignore = []) {
+      const highest = guild.members?.me?.roles?.highest;
+      if (!highest?.id) return null;
+      const roles = list(guild.roles).map((r) => ({
+        id: String(r.id),
+        name: String(r.name ?? ''),
+        position: Number(r.position ?? 0),
+      }));
+      return rolesAbove(
+        { id: String(highest.id), position: Number(highest.position ?? 0) },
+        roles,
+        new Set([guild.id, ...ignore])
+      );
     },
 
     // --- what is there now (for adoption after a crash, and the preview's counts) ---
@@ -100,6 +130,7 @@ export function createFluxerTarget(guild) {
         id: String(r.id),
         name: String(r.name ?? ''),
         managed: Boolean(r.managed),
+        position: Number(r.position ?? 0),
       })),
     listEmojis: () => list(guild.emojis).map((e) => ({ id: String(e.id), name: String(e.name ?? '') })),
     listStickers: () => list(guild.stickers).map((e) => ({ id: String(e.id), name: String(e.name ?? '') })),

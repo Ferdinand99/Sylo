@@ -82,7 +82,19 @@ export function buildModuleSpec(mod, sets, source) {
       message: `${mod.name}: ${out.dropped} channel or role setting(s) point at something that is not copied and ${out.cleared} other id(s) (messages, members) are cleared; set them again on the Fluxer server.`,
     });
   }
-  return { spec: { enabled: mod.enabled, config }, notes, remapped: out.remapped };
+  // The dashboard's funding guard (a copied economy that raises income from nothing) is not reproduced, so the economy
+  // comes over switched off: its owner looks at the shop and the income settings, then turns it on.
+  let enabled = mod.enabled;
+  if (mod.id === 'economy' && enabled) {
+    enabled = false;
+    notes.push({
+      code: 'module-economy-off',
+      scope: 'module',
+      ref,
+      message: `${mod.name}: it is copied switched off. Look at the income settings and the shop on the Fluxer server, then switch it on.`,
+    });
+  }
+  return { spec: { enabled, config }, notes, remapped: out.remapped };
 }
 
 /** The kinds of step, in the order the copy runs them. */
@@ -249,7 +261,7 @@ export function buildPlan({
       const rb = source.roles.find((r) => r.id === b);
       return byPosition(ra, rb);
     });
-    if (roleOrder.length > 1) {
+    if (roleOrder.length > 0) {
       const hash = specHash(roleOrder);
       push({
         key: 'order-roles:roles',

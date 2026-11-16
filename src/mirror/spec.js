@@ -26,6 +26,9 @@ export const DEFAULT_OPTIONS = Object.freeze({
   continuous: true,
   // Off: a Discord delete locks the Fluxer copy instead of deleting it. On: it is deleted (only what Sylo made).
   mirrorDeletes: false,
+  // The Discord owner asked for deletions to be mirrored; they only take effect (`mirrorDeletes`) once the owner of the
+  // Fluxer server has confirmed, because deleting a Fluxer channel deletes messages that exist only on Fluxer.
+  mirrorDeletesRequested: false,
 });
 
 /** The options as stored: only the known switches, each a boolean, the rest at their default. */

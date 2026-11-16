@@ -2,7 +2,7 @@
 // SDK (bigint permissions, data URIs, the overwrites) and how a thing that is gone shows up (a 404).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createFluxerTarget, toDataUri } from '../src/mirror/target.js';
+import { createFluxerTarget, rolesAbove, toDataUri } from '../src/mirror/target.js';
 import { classifyError, isNotFound } from '../src/mirror/errors.js';
 import { snapshotFluxerGuild } from '../src/mirror/snapshot.js';
 
@@ -23,7 +23,7 @@ function sdkGuild({ perms = [], admin = false, top = 7 } = {}) {
     members: {
       me: {
         permissions: { has: (p) => admin || perms.includes(p) },
-        roles: { highest: { position: top } },
+        roles: { highest: { id: '810000000000000000', position: top } },
       },
     },
     client: { channels: { fetch: async () => null } },
@@ -60,13 +60,35 @@ function sdkGuild({ perms = [], admin = false, top = 7 } = {}) {
   return { guild, log };
 }
 
+test("Sylo's rank is compared with the roles on the server: position first, then the older id", () => {
+  const { guild } = sdkGuild({ top: 1 });
+  const add = (id, name, position) => guild.roles.set(id, { id, name, position });
+  add('810000000000000000', 'Sylo', 1);
+  add('810000000000000007', 'Newer', 1); // the same position but a newer id: ranks below Sylo
+  add('800000000000000001', 'Older', 1); // the same position and older: ranks above
+  add('820000000000000002', 'High', 4);
+  const target = createFluxerTarget(guild);
+  assert.deepEqual(
+    target.rolesAboveSylo().map((r) => r.name),
+    ['High', 'Older']
+  );
+  assert.deepEqual(
+    target.rolesAboveSylo(['820000000000000002']).map((r) => r.name),
+    ['Older'],
+    "the mirror's own roles are ignored"
+  );
+  assert.deepEqual(rolesAbove({ id: '5', position: 3 }, [{ id: '9', name: 'x', position: 2 }]), []);
+  delete guild.members.me.roles.highest;
+  assert.equal(target.rolesAboveSylo(), null, "unknown when Sylo's own role cannot be read");
+  assert.equal(createFluxerTarget({ id: '1' }).rolesAboveSylo(), null);
+});
+
 test('what Sylo needs on the Fluxer server: Administrator covers it, otherwise the four permissions', () => {
   assert.deepEqual(createFluxerTarget(sdkGuild({ admin: true }).guild).missingPermissions(), []);
   assert.deepEqual(
     createFluxerTarget(sdkGuild({ perms: ['ManageChannels', 'ManageGuild'] }).guild).missingPermissions(),
     ['ManageRoles', 'ManageExpressions']
   );
-  assert.equal(createFluxerTarget(sdkGuild({ top: 12 }).guild).topPosition(), 12);
   assert.deepEqual(
     createFluxerTarget({ id: '1' }).missingPermissions(),
     [],
@@ -295,4 +317,15 @@ test("the SDK's own codes: not-found codes are gone, Fluxer's limit codes are li
   );
   assert.equal(isNotFound(Object.assign(new Error('x'), { cause: { statusCode: 404 } })), true);
   assert.equal(isNotFound(Object.assign(new Error('x'), { statusCode: 503 })), false);
+});
+
+test('a 5xx that only the SDK wrapper error carries in its cause is still retried, not failed', () => {
+  const wrapped = Object.assign(new Error('Failed to fetch role'), { cause: { statusCode: 503 } });
+  assert.equal(classifyError(wrapped).kind, 'transient');
+  const limited = Object.assign(new Error('x'), { cause: { statusCode: 429 }, retryAfter: 2 });
+  assert.equal(classifyError(limited).kind, 'rate-limit');
+  assert.equal(
+    classifyError(Object.assign(new Error('x'), { cause: { statusCode: 403 } })).kind,
+    'permission'
+  );
 });

@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import * as db from '../src/db/mirror.js';
 import { getGuildModule, setGuildModule } from '../src/db/modules.js';
 import { createEngine } from '../src/mirror/engine.js';
-import { BIT, engineFor } from './helpers/mirrorFakes.js';
+import { BIT, SYLO_ROLE, engineFor } from './helpers/mirrorFakes.js';
 import { drain, scenario } from './helpers/mirrorScenario.js';
 
 const OWNERS = { enforceOwnership: () => true };
@@ -151,9 +151,21 @@ test('a burst of deletes pauses the mirror, and only the owner confirming applie
   assert.equal(s.fluxer.ops('deleteChannel').length, 0, 'nothing is deleted while the mirror waits');
   assert.equal(await db.openSyncCount(s.pair.id), 6, 'the deletes wait in the queue');
 
-  await assert.rejects(s.engine.resume(s.pair.id, { side: 'source' }), (e) => e.code === 'confirm-needed');
+  // Real deletion is on, so the owner of the Discord server cannot confirm it: only the Fluxer owner can, and only after
+  // being shown what will be deleted.
+  await assert.rejects(
+    s.engine.resume(s.pair.id, { side: 'source', confirm: true }),
+    (e) => e.code === 'fluxer-owner-only'
+  );
+  await assert.rejects(s.engine.resume(s.pair.id, { side: 'target' }), (e) => {
+    assert.equal(e.code, 'confirm-needed');
+    assert.equal(e.deleteCount, 6);
+    assert.ok(e.deletes.every((d) => d.action === 'delete'));
+    assert.ok(e.deletes.some((d) => d.kind === 'channel' && d.name === 'chat'));
+    return true;
+  });
   assert.equal((await db.getPair(s.pair.id)).status, 'paused');
-  const resumed = await s.engine.resume(s.pair.id, { side: 'source', confirm: true });
+  const resumed = await s.engine.resume(s.pair.id, { side: 'target', confirm: true });
   assert.equal(resumed.status, 'live');
   await s.engine.runPair(s.pair.id);
   assert.deepEqual(
@@ -166,79 +178,178 @@ test('a burst of deletes pauses the mirror, and only the owner confirming applie
   assert.equal(s.fluxer.ops('deleteEmoji').length, 1);
 });
 
-test("the copy waits until Sylo's role is high enough on Fluxer to order every role", async () => {
-  const low = await scenario({ withExpressions: false, fluxerOpts: { top: 2 } });
-  const preview = await low.engine.previewPair(low.pair);
-  assert.equal(preview.ok, false);
-  assert.equal(preview.blockers[0].code, 'role-hierarchy');
-  assert.match(preview.blockers[0].message, /move Sylo's role to the top/i);
-  await assert.rejects(low.engine.startCopy(low.pair.id), /too low/);
-  assert.equal(low.fluxer.calls.length, 0);
+const BOSS = { id: '810000000000000005', name: 'Admins', position: 5 };
+const roleBits = (s, id) => BigInt(s.fluxer.guild.roles.get(id)._permissions);
+const ADMIN = 1n << 3n;
+const MANAGE_ROLES = 1n << 28n;
 
-  const unknown = await scenario({ withExpressions: false, fluxerOpts: { top: null } });
-  assert.equal((await unknown.engine.previewPair(unknown.pair)).blockers[0].code, 'role-hierarchy');
-
-  const fits = await scenario({ withExpressions: false, fluxerOpts: { top: 3 } });
-  assert.equal((await fits.engine.previewPair(fits.pair)).ok, true);
-  const noRoles = await scenario({
-    withExpressions: false,
-    fluxerOpts: { top: 0 },
-    options: { roles: false },
-  });
-  assert.equal((await noRoles.engine.previewPair(noRoles.pair)).ok, true, 'no roles, no order to keep');
+test('a fresh Fluxer server (only Sylo at position 1) is fine: Sylo outranks what it makes, by id', async () => {
+  const s = await scenario({ withExpressions: false });
+  const preview = await s.engine.previewPair(s.pair);
+  assert.equal(preview.ok, true, 'position 1 is not a problem: it is the top role');
+  assert.equal(preview.blockers.length, 0);
+  await s.engine.startCopy(s.pair.id);
+  assert.equal((await drain(s)).status, 'live');
+  const sylo = s.fluxer.guild.roles.get(SYLO_ROLE);
+  for (const sourceId of [s.k.member, s.k.mod]) {
+    const role = s.fluxer.guild.roles.get(await mapped(s, 'role', sourceId));
+    assert.ok(sylo.position > role.position, 'Sylo stays above every role it made');
+  }
 });
 
-test('role positions are distinct and follow Discord, even for a tie, and a lower role never outranks a higher one', async () => {
-  const s = await scenario({ withExpressions: false, fluxerOpts: { top: 3 } });
+test("the copy is refused, with advice, while a role ranks above or level with Sylo's", async () => {
+  const above = await scenario({ withExpressions: false, fluxerOpts: { extraRoles: [BOSS] } });
+  const preview = await above.engine.previewPair(above.pair);
+  assert.equal(preview.ok, false);
+  assert.equal(preview.blockers[0].code, 'role-hierarchy');
+  assert.match(preview.blockers[0].message, /Admins/);
+  assert.match(preview.blockers[0].message, /Server Settings, then Roles/);
+  assert.match(preview.blockers[0].message, /Sylo cannot move its own role/);
+  await assert.rejects(above.engine.startCopy(above.pair.id), /Admins/);
+  assert.equal(above.fluxer.calls.length, 0);
+
+  // Level with Sylo (same position) but older: it ranks above, so it blocks; a newer one does not.
+  const older = await scenario({
+    withExpressions: false,
+    fluxerOpts: { extraRoles: [{ id: '800000000000000001', name: 'Older', position: 1 }] },
+  });
+  assert.equal((await older.engine.previewPair(older.pair)).blockers[0].code, 'role-hierarchy');
+  const newer = await scenario({
+    withExpressions: false,
+    fluxerOpts: { extraRoles: [{ id: '820000000000000001', name: 'Newer', position: 1 }] },
+  });
+  assert.equal((await newer.engine.previewPair(newer.pair)).ok, true);
+
+  // Sylo's own role unknown: also refused, with the advice to check it.
+  const unknown = await scenario({ withExpressions: false });
+  unknown.fluxer.target.rolesAboveSylo = () => null;
+  assert.match((await unknown.engine.previewPair(unknown.pair)).blockers[0].message, /could not be read/);
+
+  // Roles the mirror made itself do not count, and with roles switched off there is nothing to order.
+  const off = await scenario({
+    withExpressions: false,
+    fluxerOpts: { extraRoles: [BOSS] },
+    options: { roles: false },
+  });
+  assert.equal((await off.engine.previewPair(off.pair)).ok, true);
+});
+
+test('role ranks on Fluxer follow Discord, even for a tie, and a Manage Roles role never outranks the Administrator role', async () => {
+  const s = await scenario({ withExpressions: false });
   s.discord.roles.cache.get(s.k.mod).rawPosition = 1; // a tie with Member
-  s.discord.roles.cache.get(s.k.member).permissions = { bitfield: 1n << 28n }; // Manage Roles
+  s.discord.roles.cache.get(s.k.member).permissions = { bitfield: MANAGE_ROLES };
   s.discord.roles.cache.get(s.k.mod).permissions = { bitfield: BIT.Administrator };
   await s.engine.startCopy(s.pair.id);
   await drain(s);
   const [sent] = s.fluxer.ops('setRolePositions');
-  const positions = Object.fromEntries(sent.updates.map((u) => [u.id, u.position]));
+  assert.equal(new Set(sent.updates.map((u) => u.position)).size, 2, 'no two roles share a position');
+  const member = s.fluxer.guild.roles.get(await mapped(s, 'role', s.k.member));
+  const mod = s.fluxer.guild.roles.get(await mapped(s, 'role', s.k.mod));
+  assert.ok(mod.position > member.position, 'the Administrator role ranks above the Manage Roles role');
+  assert.ok(s.fluxer.guild.roles.get(SYLO_ROLE).position > mod.position);
+});
+
+test('a role gets its powerful permissions only after its place in the order is set', async () => {
+  const s = await scenario({ withExpressions: false });
+  s.discord.roles.cache.get(s.k.member).permissions = { bitfield: MANAGE_ROLES | BIT.ViewChannel };
+  s.discord.roles.cache.get(s.k.mod).permissions = { bitfield: BIT.Administrator | BIT.ViewChannel };
+  await s.engine.startCopy(s.pair.id);
+  const end = await drain(s);
+  assert.equal(end.status, 'live');
+  const calls = s.fluxer.calls;
   const member = await mapped(s, 'role', s.k.member);
   const mod = await mapped(s, 'role', s.k.mod);
-  assert.equal(new Set(Object.values(positions)).size, 2, 'no two roles share a position');
-  assert.ok(positions[mod] > positions[member], 'the Administrator role ranks above the Manage Roles role');
+  const made = (id) => calls.findIndex((c) => c.op === 'createRole' && c.id === id);
+  const ordered = calls.findIndex((c) => c.op === 'setRolePositions');
+  const granted = (id) => calls.findIndex((c) => c.op === 'editRole' && c.id === id);
+  for (const id of [member, mod]) {
+    const created = calls[made(id)].spec;
+    assert.equal(
+      BigInt(created.permissions) & (ADMIN | MANAGE_ROLES),
+      0n,
+      'made without powerful permissions'
+    );
+    assert.ok(made(id) < ordered && ordered < granted(id), 'created, then ordered, then granted');
+  }
+  assert.equal(roleBits(s, member) & MANAGE_ROLES, MANAGE_ROLES);
+  assert.equal(roleBits(s, mod) & ADMIN, ADMIN);
   assert.ok(
-    Object.values(positions).every((p) => p >= 1 && p <= 2),
-    "all under Sylo's role"
+    (await db.getMapping(s.pair.id, 'role', s.k.mod)).specHash,
+    'and the role is fingerprinted when final'
   );
 });
 
-test("with a new role and Sylo's role too low, the mirror pauses instead of squeezing positions together", async () => {
-  const s = await scenario({ withExpressions: false, fluxerOpts: { top: 3 } });
+test('a single role is ordered too, so that it gets its permissions', async () => {
+  const s = await scenario({ withExpressions: false });
+  for (const id of [s.k.member, s.k.bot]) s.discord.roles.cache.delete(id);
+  s.discord.roles.cache.get(s.k.mod).permissions = { bitfield: BIT.Administrator };
+  await s.engine.startCopy(s.pair.id);
+  await drain(s);
+  assert.equal(s.fluxer.ops('setRolePositions').length, 1);
+  assert.equal(roleBits(s, await mapped(s, 'role', s.k.mod)) & ADMIN, ADMIN);
+});
+
+test('with a new powerful role and a role above Sylo, the mirror pauses and the role stays without its permissions', async () => {
+  const s = await scenario({ withExpressions: false });
   await s.engine.startCopy(s.pair.id);
   await drain(s);
   s.fluxer.calls.length = 0;
+  s.fluxer.guild.roles.set(BOSS.id, { _permissions: '0', managed: false, ...BOSS }); // someone moved a role above Sylo
   const id = '780000000000000001';
   s.discord.roles.cache.set(id, {
     id,
-    name: 'New',
+    name: 'New admin',
     color: 0,
     rawPosition: 5,
     hoist: false,
     mentionable: false,
     managed: false,
-    permissions: { bitfield: 0n },
+    permissions: { bitfield: BIT.Administrator },
   });
   await s.engine.noteSourceChange(s.k.src, { kind: 'role', op: 'sync', id, reorder: 'roles' });
   s.clock.now += 4000;
   await s.engine.runPair(s.pair.id);
   const pair = await db.getPair(s.pair.id);
   assert.deepEqual([pair.status, pair.pauseKind], ['paused', 'hierarchy']);
-  assert.match(pair.lastError, /Move Sylo's role to the top/);
-  assert.equal(s.fluxer.ops('createRole').length, 1, 'the role itself was made');
-  assert.equal(s.fluxer.ops('setRolePositions').length, 0, 'and no positions were sent');
-  s.fluxer.target.topPosition = () => 10;
+  assert.match(pair.lastError, /Admins/);
+  assert.equal(s.fluxer.ops('setRolePositions').length, 0, 'nothing was reordered');
+  const made = s.fluxer.ops('createRole')[0];
+  assert.equal(BigInt(made.spec.permissions) & ADMIN, 0n);
+  assert.equal(roleBits(s, made.id) & ADMIN, 0n, 'it stays without Administrator while the order is not set');
+
+  // The Fluxer owner moves Sylo's role to the top; the mirror resumes, orders, and only then grants.
+  s.fluxer.guild.roles.delete(BOSS.id);
   await s.engine.resume(s.pair.id, { side: 'source' });
   await s.engine.runPair(s.pair.id);
-  const [sent] = s.fluxer.ops('setRolePositions');
-  assert.deepEqual(
-    sent.updates.map((u) => u.position),
-    [1, 2, 3]
+  assert.equal(s.fluxer.ops('setRolePositions').length, 1);
+  assert.equal(roleBits(s, made.id) & ADMIN, ADMIN);
+});
+
+test('asking for real deletion needs the Fluxer owner; resuming with deletes waiting shows what they are', async () => {
+  const s = await scenario({ options: { mirrorDeletes: true } });
+  await s.engine.startCopy(s.pair.id);
+  await drain(s);
+  await s.engine.pause(s.pair.id); // paused by hand, not by the brake
+  const note = (kind, id) => s.engine.noteSourceChange(s.k.src, { kind, op: 'delete', id });
+  for (const id of [s.k.chat, s.k.rules, s.k.voice, s.k.cat, s.k.cat2]) {
+    s.discord.channels.cache.delete(id);
+    await note('channel', id);
+  }
+  s.discord.emojis.cache.delete(s.k.emoji1);
+  await note('emoji', s.k.emoji1);
+  assert.equal(
+    (await db.getPair(s.pair.id)).pauseKind,
+    'owner',
+    'deletes while paused do not change the pause'
   );
+  await assert.rejects(s.engine.resume(s.pair.id, { side: 'target' }), (e) => {
+    assert.equal(e.code, 'confirm-needed');
+    assert.equal(e.deleteCount, 6);
+    return true;
+  });
+  const progress = await s.engine.progress(await db.getPair(s.pair.id));
+  assert.equal(progress.pendingDeletes.length, 6, 'the page can show what will be deleted');
+  assert.equal((await s.engine.resume(s.pair.id, { side: 'target', confirm: true })).status, 'live');
 });
 
 test('with roles off, a channel @everyone cannot see on Discord is still private on Fluxer', async () => {
@@ -334,7 +445,7 @@ test('a role whose second call fails is tracked, and the retry updates it instea
   s.fluxer.failAfterCreate('createRole', Object.assign(new Error('timed out'), { statusCode: 503 }));
   assert.equal((await drain(s)).status, 'live');
   assert.equal(s.fluxer.ops('createRole').length, 2, 'Member and Mod: one create each');
-  assert.equal([...s.fluxer.guild.roles.values()].length, 3, 'and so three roles with @everyone');
+  assert.equal([...s.fluxer.guild.roles.values()].length, 4, 'and so four roles with @everyone and Sylo');
   const member = await db.getMapping(s.pair.id, 'role', s.k.member);
   assert.equal(member.owned, true);
   assert.ok(member.specHash, 'the retry updated it, so it is fingerprinted now');
@@ -470,4 +581,16 @@ test('a Discord emoji or sticker delete that arrives while its copy is still bei
   );
   await drain(s);
   assert.equal(s.fluxer.ops('createEmoji').length, 1, 'the deleted emoji was never made');
+});
+
+test('a copied economy comes over switched off, with a note', async () => {
+  const s = await scenario({ withExpressions: false });
+  await setGuildModule(s.k.src, 'economy', { enabled: true, config: { startingBalance: 100 } });
+  const preview = await s.engine.previewPair(s.pair);
+  assert.ok(preview.notes.some((n) => n.code === 'module-economy-off'));
+  await s.engine.startCopy(s.pair.id);
+  await drain(s);
+  const there = await getGuildModule(`fluxer:${s.k.dst}`, 'economy');
+  assert.equal(there.enabled, false);
+  assert.equal(there.config.startingBalance, 100, 'the settings are there for its owner to look at');
 });

@@ -46,7 +46,7 @@ import {
   roleSkipReason,
   specHash,
 } from './spec.js';
-import { keepFluxerOnly } from './permissions.js';
+import { ELEVATED_FLUXER_MASK, keepFluxerOnly } from './permissions.js';
 
 const { PAIR_STATUS } = store;
 const KINDS_WITH_MAP = ['role', 'channel', 'emoji', 'sticker', 'guild', 'order', 'module'];
@@ -170,6 +170,39 @@ export function createEngine(overrides = {}) {
     };
   }
 
+  /**
+   * What to tell the person when Sylo's role is not above the roles it has to order. Sylo cannot move its own role: the
+   * owner of the Fluxer server drags it (Server Settings, Roles).
+   * @param {Array<{ name: string }> | null} above  the roles that rank above or level with Sylo's, or null when unknown
+   */
+  function hierarchyAdvice(above) {
+    if (above === null) {
+      return "Sylo's own role on the Fluxer server could not be read. Check that Sylo is in the server with a role, then look again.";
+    }
+    const names = above.slice(0, 5).map((r) => r.name || r.id);
+    const more = above.length > names.length ? ` and ${above.length - names.length} more` : '';
+    return `Sylo's role has to be the highest role on the Fluxer server (above every role except @everyone), or it cannot order the copied roles. These roles rank above or level with it: ${names.join(', ')}${more}. On Fluxer, the server owner opens Server Settings, then Roles, and drags Sylo's role to the very top (Sylo cannot move its own role); then look again here.`;
+  }
+
+  /** The roles on Fluxer that rank above Sylo's (ignoring the roles the mirror made, which are ordered under it). */
+  async function rolesAboveSylo(pairId, target) {
+    const own = (await store.listMappings(pairId, 'role')).filter((m) => m.owned).map((m) => m.targetId);
+    return target.rolesAboveSylo(own);
+  }
+
+  /** The copied roles in Discord's order, lowest first: the order they are sent to Fluxer in. */
+  const roleOrderOf = (ctx) =>
+    ctx.source.roles
+      .filter((r) => ctx.sets.copiedRoles.has(r.id))
+      .sort((a, b) => a.position - b.position || (a.id < b.id ? -1 : 1))
+      .map((r) => r.id);
+
+  /** Has the current order of the copied roles been set on Fluxer? */
+  async function rolesOrdered(ctx) {
+    const m = await store.getMapping(ctx.pair.id, 'order', 'roles');
+    return Boolean(m && m.specHash === specHash(roleOrderOf(ctx)));
+  }
+
   // --- the dry run -----------------------------------------------------------------------------------
 
   /**
@@ -207,14 +240,12 @@ export function createEngine(overrides = {}) {
     const targetSnap = snapshotFluxerGuild(tg);
     const sets = copiedSets(source, options);
     if (options.roles && sets.copiedRoles.size > 0) {
-      // Fluxer ranks a new role at the bottom and ties by age, so the order only comes out right when every
-      // mirrored role has its own place under Sylo's role. Otherwise a lower role could outrank a higher one.
-      const top = target.topPosition();
-      if (top === null || top - 1 < sets.copiedRoles.size) {
-        blockers.push({
-          code: 'role-hierarchy',
-          message: `Sylo's role on the Fluxer server is too low to order the ${sets.copiedRoles.size} roles that would be copied: move Sylo's role to the top of the role list there, then look again.`,
-        });
+      // Fluxer ranks roles by position and then by age, and a new role starts at the bottom. Sylo can only order the
+      // roles below its own, so its role has to outrank every other role there. A position number is not a rank (a
+      // fresh server has Sylo at position 1 and is fine), so the rank is compared, not the number.
+      const above = await rolesAboveSylo(pair.id, target);
+      if (above === null || above.length > 0) {
+        blockers.push({ code: 'role-hierarchy', message: hierarchyAdvice(above) });
       }
     }
     const plan = buildPlan({
@@ -227,7 +258,7 @@ export function createEngine(overrides = {}) {
     });
     const existing = [
       [targetSnap.channels.length, 'channel(s)'],
-      [targetSnap.roles.filter((r) => !r.isEveryone).length, 'role(s)'],
+      [targetSnap.roles.filter((r) => !r.isEveryone && !r.managed).length, 'role(s)'],
       [targetSnap.emojiCount, 'emoji'],
       [targetSnap.stickerCount, 'sticker(s)'],
     ].filter(([n]) => n > 0);
@@ -466,7 +497,14 @@ export function createEngine(overrides = {}) {
     if (!ctx.sets.copiedRoles.has(roleId)) return skipped(roleSkipReason(role) ?? 'roles are not copied');
     const { spec, notes } = buildRoleSpec(role);
     const hash = specHash(spec);
+    // A role is made without its powerful permissions and gets them only once its place in the order is set: a new
+    // role starts at the bottom of the list, where a member with Manage Roles could hand it out. `specHash ''` marks
+    // a role that still waits for them (the role-order job asks for them again once the order is set).
+    const stripped = { ...spec, permissions: String(BigInt(spec.permissions) & ~ELEVATED_FLUXER_MASK) };
+    const elevated = stripped.permissions !== spec.permissions;
     const m = await store.getMapping(ctx.pair.id, 'role', roleId);
+    const waiting = elevated && (!m || m.specHash === '') && !(await rolesOrdered(ctx));
+    const sent = waiting ? stripped : spec;
     const put = (targetId, owned) =>
       store.putMapping({
         pairId: ctx.pair.id,
@@ -474,21 +512,26 @@ export function createEngine(overrides = {}) {
         sourceId: roleId,
         targetId,
         owned,
-        specHash: hash,
+        specHash: waiting ? '' : hash,
         label: role.name,
         now: deps.now(),
       });
     if (m) {
       if (m.specHash === hash) return done('unchanged', { notes });
       try {
-        await ctx.target.editRole(m.targetId, spec);
+        await ctx.target.editRole(m.targetId, sent);
         await put(m.targetId, m.owned);
-        return done('updated', { notes, remote: true });
+        return done(waiting ? 'updated, powerful permissions wait for the role order' : 'updated', {
+          notes,
+          remote: true,
+        });
       } catch (err) {
         if (classifyError(err).kind !== 'gone') throw err;
         await store.deleteMapping(ctx.pair.id, 'role', roleId); // deleted on Fluxer: make it again
       }
     }
+    const fresh = elevated && !(await rolesOrdered(ctx));
+    const createSpec = fresh ? stripped : spec;
     if (ctx.job?.recovering) {
       const found = await adoptable(
         ctx,
@@ -496,13 +539,32 @@ export function createEngine(overrides = {}) {
         (r) => r.name === spec.name && !r.managed && r.id !== ctx.target.id
       );
       if (found) {
-        await ctx.target.editRole(found.id, spec);
-        await put(found.id, false);
+        await ctx.target.editRole(found.id, createSpec);
+        await store.putMapping({
+          pairId: ctx.pair.id,
+          kind: 'role',
+          sourceId: roleId,
+          targetId: found.id,
+          owned: false,
+          specHash: fresh ? '' : hash,
+          label: role.name,
+          now: deps.now(),
+        });
         return done('adopted what an interrupted run made', { notes, remote: true });
       }
     }
     try {
-      await put(await ctx.target.createRole(spec), true);
+      const id = await ctx.target.createRole(createSpec);
+      await store.putMapping({
+        pairId: ctx.pair.id,
+        kind: 'role',
+        sourceId: roleId,
+        targetId: id,
+        owned: true,
+        specHash: fresh ? '' : hash,
+        label: role.name,
+        now: deps.now(),
+      });
     } catch (err) {
       // The role was made but a second call failed: track it (with no fingerprint, so the next run updates it)
       // instead of leaving it untracked and making another.
@@ -520,7 +582,30 @@ export function createEngine(overrides = {}) {
       }
       throw err;
     }
-    return done('created', { notes, remote: true });
+    return done(fresh ? 'created, powerful permissions wait for the role order' : 'created', {
+      notes,
+      remote: true,
+    });
+  }
+
+  /** After the role order is set: ask again for every role that was made without its powerful permissions. */
+  async function enqueueGrants(ctx) {
+    const pending = (await store.listMappings(ctx.pair.id, 'role')).filter(
+      (m) => m.owned && m.specHash === ''
+    );
+    for (const m of pending) {
+      await store.enqueueJob({
+        pairId: ctx.pair.id,
+        run: ctx.job?.run ?? 0,
+        phase: ctx.job?.phase ?? 'sync',
+        op: 'sync',
+        kind: 'role',
+        sourceId: m.sourceId,
+        stepKey: `grant:role:${m.sourceId}`,
+        payload: { name: m.label, planned: 'update' },
+        now: deps.now(),
+      });
+    }
   }
 
   async function syncChannel(ctx, channelId, depth = 0) {
@@ -745,23 +830,17 @@ export function createEngine(overrides = {}) {
 
   async function reorder(ctx, which) {
     if (which === 'roles') {
-      const order = ctx.source.roles
-        .filter((r) => ctx.sets.copiedRoles.has(r.id))
-        .sort((a, b) => a.position - b.position || (a.id < b.id ? -1 : 1))
-        .map((r) => r.id);
+      const order = roleOrderOf(ctx);
       const hash = specHash(order);
       const m = await store.getMapping(ctx.pair.id, 'order', 'roles');
-      if (m && m.specHash === hash) return done('unchanged');
-      // Distinct places, in Discord's order, all under Sylo's role: Fluxer ranks equal positions by age, so a tie
-      // (or squeezing roles together) could put a lower Discord role above a higher one. If they do not fit,
-      // nothing is sent and the mirror pauses until Sylo's role is moved up on Fluxer.
-      const top = ctx.target.topPosition();
-      if (top === null || order.length > top - 1) {
-        throw new MirrorPause(
-          `Sylo's role on the Fluxer server is too low to order the ${order.length} mirrored roles as on Discord. Move Sylo's role to the top of the role list there, then resume.`,
-          'hierarchy'
-        );
+      if (m && m.specHash === hash) {
+        await enqueueGrants(ctx);
+        return done('unchanged');
       }
+      // Sylo has to outrank every other role to order the copied ones (see hierarchyAdvice). If it does not, nothing
+      // is sent and the mirror pauses until the Fluxer owner has moved Sylo's role up.
+      const above = await rolesAboveSylo(ctx.pair.id, ctx.target);
+      if (above === null || above.length > 0) throw new MirrorPause(hierarchyAdvice(above), 'hierarchy');
       const updates = [];
       for (const [i, id] of order.entries()) {
         const mapping = await store.getMapping(ctx.pair.id, 'role', id);
@@ -769,7 +848,7 @@ export function createEngine(overrides = {}) {
         updates.push({ id: mapping.targetId, position: i + 1 });
       }
       const notes = [];
-      if (updates.length > 1) await ctx.target.setRolePositions(updates);
+      if (updates.length > 0) await ctx.target.setRolePositions(updates);
       await store.putMapping({
         pairId: ctx.pair.id,
         kind: 'order',
@@ -779,7 +858,8 @@ export function createEngine(overrides = {}) {
         specHash: hash,
         now: deps.now(),
       });
-      return done(`${updates.length} roles ordered`, { notes, remote: updates.length > 1 });
+      await enqueueGrants(ctx);
+      return done(`${updates.length} roles ordered`, { notes, remote: updates.length > 0 });
     }
     const layout = channelOrder(ctx.source, ctx.sets.copiedChannels);
     const hash = specHash(layout);
@@ -1126,9 +1206,31 @@ export function createEngine(overrides = {}) {
         'item'
       );
     }
-    if (pair.pauseKind === 'deletes' && !confirm) {
+    // Deletes that wait (after a burst, or while the mirror was paused) are applied only after a confirmation that shows
+    // what they are. With real deletion on, only the owner of the Fluxer server can confirm: it destroys messages that
+    // exist only there.
+    const waiting = await pendingDeletes(pair);
+    if (waiting.count > 0 && (pair.pauseKind === 'deletes' || waiting.count > deps.deleteBurst.max)) {
+      if (normaliseOptions(pair.options).mirrorDeletes && side === 'source') {
+        throw Object.assign(
+          new MirrorError(
+            'Deleting on Fluxer is switched on, so only the owner of the Fluxer server can confirm these deletions.',
+            'item'
+          ),
+          { code: 'fluxer-owner-only', deletes: waiting.items }
+        );
+      }
+      if (!confirm) {
+        throw Object.assign(new MirrorError('Confirm the deletions first.', 'item'), {
+          code: 'confirm-needed',
+          deletes: waiting.items,
+          deleteCount: waiting.count,
+        });
+      }
+    } else if (pair.pauseKind === 'deletes' && !confirm) {
       throw Object.assign(new MirrorError('Confirm the deletions first.', 'item'), {
         code: 'confirm-needed',
+        deletes: [],
       });
     }
     const { sg, tg } = guildsOf(pair);
@@ -1221,6 +1323,19 @@ export function createEngine(overrides = {}) {
     return true;
   }
 
+  /** The deletes waiting in a pair's queue, as what the person is asked to confirm: the item and what will happen to it. */
+  async function pendingDeletes(pair) {
+    const { count, jobs } = await store.listPendingDeletes(pair.id, 50);
+    const really = normaliseOptions(pair.options).mirrorDeletes;
+    const items = [];
+    for (const j of jobs) {
+      const m = await store.getMapping(pair.id, j.kind, j.sourceId);
+      if (!m || !m.owned) continue; // nothing of Sylo's to touch
+      items.push({ kind: j.kind, name: m.label || j.sourceId, action: really ? 'delete' : 'lock' });
+    }
+    return { count, items };
+  }
+
   // --- what the dashboard shows ------------------------------------------------------------------------
 
   /** How far a pair is: the copy's jobs by state, and the changes still waiting. */
@@ -1237,6 +1352,7 @@ export function createEngine(overrides = {}) {
       waiting: counts.pending + counts.running,
       percent: total === 0 ? 0 : Math.round((finished / total) * 100),
       waitingChanges: await store.openSyncCount(pair.id),
+      pendingDeletes: (await pendingDeletes(pair)).items,
       // Copies left on Fluxer whose Discord original was deleted (locked, not deleted): for the Fluxer owner to look at.
       removed: (await store.listRemoved(pair.id))
         .slice(0, 100)

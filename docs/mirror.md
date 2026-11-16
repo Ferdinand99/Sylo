@@ -25,10 +25,13 @@ the new owner has confirmed it on that server's page.
 
 1. A Fluxer server for the copy. Create an empty one: Sylo never deletes anything it did not make itself, so an
    empty server gives the cleanest result.
-2. Sylo in that server, with a role that has the **Administrator** permission, **moved to the top of the role list**.
-   Sylo can only order roles below its own, and Fluxer ranks a new role at the bottom and breaks ties by age, so the
-   preview refuses to start while Sylo's role is too low to give every copied role its own place. (Without this, a
-   mirrored role with Manage Roles could end up above the mirrored Administrator role.)
+2. Sylo in that server, with a role that has the **Administrator** permission, **at the very top of the role list**.
+   Sylo can only order the roles below its own. Fluxer ranks roles by position and then by age, and every new role (a
+   bot's too) starts at position 1, so a position number says nothing: what counts is the rank. On a fresh server where
+   Sylo has just been invited, its role is already the top one and nothing needs doing. If another role ranks above or
+   level with Sylo's, the preview refuses to start and names those roles: the Fluxer server's owner opens Server
+   Settings, then Roles, and drags Sylo's role to the very top (Sylo cannot move its own role), and you look again.
+   (Without this, a mirrored role with Manage Roles could end up above the mirrored Administrator role.)
 3. To be the owner of the Discord server, and the owner of the Fluxer server to agree (or to own both).
 
 ## The steps
@@ -60,7 +63,7 @@ still finishes.
 | Server name, icon, banner | The same (each can be switched off). A missing icon or banner is left as it is on Fluxer. |
 | Roles | Name, colour, hoist, mentionable, order and permissions. Managed roles (a bot's, an integration's) are not copied. |
 | @everyone | Its permissions are set on the Fluxer @everyone role, without powerful permissions (Administrator, Manage Roles and the like are never copied onto @everyone). The role itself is never created or deleted. |
-| Categories and channels | Text, voice, announcement, forum and media channels: name, topic, order, category, slowmode, age restriction (a server marked age-restricted gives every copied channel the flag), bitrate, user limit, and the permission overwrites. A stage channel becomes a voice channel. Threads are not copied. |
+| Categories and channels | Text, voice, announcement, forum and media channels: name, topic, order, category, slowmode, age restriction (a server marked age-restricted gives every copied text, announcement, forum and media channel the flag; voice channels and categories carry no flag), bitrate, user limit, and the permission overwrites. A stage channel becomes a voice channel. Threads are not copied. |
 | Emoji and stickers | Up to 500 of each, within 512 KB per emoji and per sticker. Lottie stickers are not copied. |
 | Sylo's own settings | The settings and on/off state of each module (not the operator's own modules, and not the bridge), with channels and roles pointing at the new ones. See the checks below. A module that already has settings on the Fluxer server is left alone. |
 
@@ -79,7 +82,8 @@ whatever else is copied: with roles switched off, or if the @everyone step fails
 The copied settings pass the same rules as saving them in the dashboard. A role with powerful permissions is not
 handed out by the copied settings (autoroles, reaction roles, level rewards, the verified role, the birthday role,
 command actions): that part is left out and the report says so. A giveaway that pings @here or @everyone is copied
-with the ping off. Other ids that mean nothing on Fluxer (the ids of people, of messages, of things that were not
+with the ping off. The economy module comes over switched off (its settings are copied, so you can look at the income and the shop
+first). Other ids that mean nothing on Fluxer (the ids of people, of messages, of things that were not
 copied) are cleared, and the report counts them. Set them again on the Fluxer server if you need them.
 
 ### Permissions, bit by bit
@@ -109,10 +113,14 @@ update, and a drag that moves many channels becomes one reorder.
   from @everyone and made read-only (its messages are kept: deleting a Fluxer channel deletes its messages), a
   role loses its permissions, and it is listed on the Mirror page as "Removed on Discord" for the Fluxer owner to
   look at and delete. Only with **Delete on Fluxer what is deleted on Discord** switched on is the copy really
-  deleted (with its messages). The option is off by default and carries a warning.
+  deleted (with its messages). The option is off by default and carries a warning. The Discord owner can only *ask* for
+  it: it stays off until the owner of the Fluxer server allows it on their Mirror page, because deleting a Fluxer channel
+  destroys messages that exist only there. The Fluxer owner can switch it off again, and so can the Discord owner.
 - **A burst of deletions pauses the mirror.** More than five deletions on Discord within ten minutes (a nuke, a
   mistaken clean-up) pause the mirror, with the reason in Health on both servers. The deletions wait in the queue and
-  are applied only when the owner presses **Apply the deletions** in the dashboard and confirms.
+  are applied only when the owner confirms in the dashboard, in a dialog that lists what will be locked or deleted
+  (with real deletion on, only the Fluxer owner can confirm). The same confirmation is asked when a paused mirror is
+  resumed with more than five deletions waiting.
 - Sylo **never deletes something on Fluxer that it did not create.** A Fluxer channel that was there before the
   mirror stays, even with the same name as a copied one. Only what Sylo made (and what Sylo's id map shows as made
   by Sylo) is ever locked or deleted, and only when its Discord original is deleted.
@@ -136,9 +144,12 @@ update, and a drag that moves many channels becomes one reorder.
 - **A failing mirror pauses itself** after a few failures in a row, with the reason, and shows up in
   [Health](dashboard-v2.md). Fix the cause (for example give Sylo's role the missing permission on Fluxer), then
   press **Resume**. A single item Fluxer refuses (a name it does not accept) is reported and the copy goes on.
-- **The role order is exact.** Sylo sends a distinct position to every mirrored role, in Discord's order, all under
-  Sylo's own role. If they do not fit (a new role was added and Sylo's role is too low) the mirror pauses instead of
-  squeezing roles together.
+- **The role order is exact, and powerful permissions come last.** Sylo sends a distinct position to every mirrored
+  role, in Discord's order, all under its own role. A new role is first made without its powerful permissions
+  (Administrator, Manage Roles and the like), because a new role starts at the bottom where a member with Manage Roles
+  could hand it out; only after the order is set does Sylo give it its permissions. If a role ranks above Sylo's (the
+  order cannot be set) the mirror pauses with the roles named, and the new role stays without its permissions until the
+  Fluxer owner has fixed it and the mirror is resumed.
 - **Limits.** Sylo plans with Fluxer's defaults (500 emoji and 500 stickers per server, 512 KB per emoji and per
   sticker). If Fluxer refuses more because of its own limit, Sylo stops that kind and lists the rest in the report.
 

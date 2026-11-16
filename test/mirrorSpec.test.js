@@ -262,6 +262,7 @@ test('options: only known switches, only booleans, the rest on', () => {
     modules: true,
     continuous: true,
     mirrorDeletes: false,
+    mirrorDeletesRequested: false,
   });
   assert.equal(normaliseOptions(null).continuous, true);
 });

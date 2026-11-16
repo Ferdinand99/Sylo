@@ -47,7 +47,8 @@ export function isNotFound(err) {
 export function classifyError(err) {
   const message = String(err?.message ?? err ?? 'Unknown error').slice(0, 300);
   if (err instanceof MirrorError) return { kind: err.kind, message };
-  const status = Number(err?.statusCode ?? err?.status ?? 0);
+  // The SDK wraps a failed look-up in an error that keeps the HTTP status only in `cause`.
+  const status = Number(err?.statusCode ?? err?.status ?? err?.cause?.statusCode ?? err?.cause?.status ?? 0);
   if (status === 429 || typeof err?.retryAfter === 'number') {
     const seconds = Number(err?.retryAfter ?? 1);
     return {

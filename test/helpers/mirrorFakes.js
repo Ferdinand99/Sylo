@@ -1,10 +1,13 @@
 // Doubles for the server mirror tests: a Discord server in the shape of discord.js (read by snapshot.js), and a
 // Fluxer server with the adapter the engine writes through (target.js), which records every call it gets.
 import { createEngine } from '../../src/mirror/engine.js';
+import { rolesAbove } from '../../src/mirror/target.js';
 
 export const SRC = '900000000000000301';
 export const DST_RAW = '800000000000000001';
 export const DST = `fluxer:${DST_RAW}`;
+/** Sylo's own role on a fake Fluxer server: older than anything the mirror makes. */
+export const SYLO_ROLE = '810000000000000000';
 
 let seq = 700000000000000000n;
 export const nextId = () => String(++seq);
@@ -97,7 +100,10 @@ export function fakeFluxer({
   name = 'Target',
   existingChannels = [],
   missing = [],
-  top = 1000,
+  // The roles that already exist on the server, as Fluxer numbers them: { id, name, position }. A new server has only
+  // Sylo's own role, at position 1 (every role starts at position 1 on Fluxer; positions change only when reordered).
+  extraRoles = [],
+  syloPosition = 1,
   emojiLimit = null,
   ownerId = 'fluxer-owner',
   clock = null,
@@ -115,6 +121,8 @@ export function fakeFluxer({
     channels: new Map(existingChannels.map((c) => [c.id, c])),
     roles: new Map([
       [id, { id, name: '@everyone', position: 0, _permissions: String(flag(53) | flag(10)), managed: false }],
+      [SYLO_ROLE, { id: SYLO_ROLE, name: 'Sylo', position: syloPosition, _permissions: '8', managed: true }],
+      ...extraRoles.map((r) => [r.id, { _permissions: '0', managed: false, ...r }]),
     ]),
     emojis: new Map(),
     stickers: new Map(),
@@ -152,7 +160,9 @@ export function fakeFluxer({
       bitrateMax: 96000,
     }),
     missingPermissions: () => missing,
-    topPosition: () => top,
+    // The roles that rank above Sylo's own (Fluxer's order: position, then the older id), like the real adapter.
+    rolesAboveSylo: (ignore = []) =>
+      rolesAbove(guild.roles.get(SYLO_ROLE), [...guild.roles.values()], new Set([id, ...ignore])),
     listChannels: () =>
       [...guild.channels.values()].map((c) => ({
         id: c.id,
@@ -161,7 +171,12 @@ export function fakeFluxer({
         parentId: c.parentId ?? null,
       })),
     listRoles: () =>
-      [...guild.roles.values()].map((r) => ({ id: r.id, name: r.name, managed: Boolean(r.managed) })),
+      [...guild.roles.values()].map((r) => ({
+        id: r.id,
+        name: r.name,
+        managed: Boolean(r.managed),
+        position: r.position,
+      })),
     listEmojis: () => [...guild.emojis.values()],
     listStickers: () => [...guild.stickers.values()],
     async editGuild(body) {
@@ -193,8 +208,31 @@ export function fakeFluxer({
       if (!guild.roles.delete(rid)) throw gone('role');
       done('deleteRole', { id: rid });
     },
+    // Like Fluxer: only the roles below Sylo's own are rearranged, into the slots they already hold, by the positions
+    // sent (ties keep their order); then every role is renumbered. Sylo's role never moves.
     async setRolePositions(updates) {
       begin('setRolePositions');
+      const older = (a, b) => (BigInt(a.id) < BigInt(b.id) ? -1 : 1);
+      const current = [...guild.roles.values()]
+        .filter((r) => r.id !== id)
+        .sort((a, b) => b.position - a.position || older(a, b));
+      const sylo = current.findIndex((r) => r.id === SYLO_ROLE);
+      const explicit = new Map(updates.map((u) => [u.id, u.position]));
+      const slots = current.map((_, i) => i).filter((i) => i > sylo);
+      const movable = slots
+        .map((i) => ({ role: current[i], i }))
+        .sort(
+          (a, b) =>
+            (explicit.get(b.role.id) ?? b.role.position) - (explicit.get(a.role.id) ?? a.role.position) ||
+            a.i - b.i
+        );
+      const order = [...current];
+      slots.forEach((slot, k) => {
+        order[slot] = movable[k].role;
+      });
+      order.forEach((r, i) => {
+        r.position = order.length - i;
+      });
       done('setRolePositions', { updates });
     },
     async createChannel(spec) {

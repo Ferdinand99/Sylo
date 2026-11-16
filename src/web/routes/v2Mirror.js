@@ -275,12 +275,61 @@ router.post(
     const pair = await sourcePair(req, res);
     if (!pair) return;
     const options = normaliseOptions({ ...pair.options, ...req.body });
+    // Real deletion on Fluxer takes the owner of the Fluxer server: from here it can only be asked for, never switched
+    // on (POST /mirror/deletes on the Fluxer server does that). Switching it off is always allowed.
+    if (req.body?.mirrorDeletes === true) {
+      options.mirrorDeletes = pair.options?.mirrorDeletes === true;
+      options.mirrorDeletesRequested = true;
+    } else if (req.body?.mirrorDeletes === false) {
+      options.mirrorDeletes = false;
+      options.mirrorDeletesRequested = false;
+    } else {
+      options.mirrorDeletes = pair.options?.mirrorDeletes === true;
+    }
+    if (req.body?.mirrorDeletesRequested === undefined && req.body?.mirrorDeletes === undefined) {
+      options.mirrorDeletesRequested = pair.options?.mirrorDeletesRequested === true;
+    }
     await updatePair(pair.id, { options });
     await recordAudit(req.guild.id, {
       actor: actor(req),
       action: 'mirror:options',
       detail: 'mirror options changed',
     });
+    res.json(await stateOf(req));
+  })
+);
+
+// The owner of the Fluxer server allows (or stops) real deletion: only after the Discord side asked for it, and
+// only from the Fluxer server's own page.
+router.post(
+  '/mirror/deletes',
+  controlLimit,
+  asyncHandler(async (req, res) => {
+    if (!needOwner(req, res, 'allow deleting on this server')) return;
+    const found = await pairOf(req);
+    if (!found || found.side !== 'target') {
+      return fail(res, 'This server is not the target of a mirror.', 404);
+    }
+    const options = normaliseOptions(found.pair.options);
+    if (req.body?.allow === true) {
+      if (!options.mirrorDeletesRequested) {
+        return fail(res, 'The Discord server has not asked for deletions to be mirrored.', 409);
+      }
+      options.mirrorDeletes = true;
+    } else {
+      options.mirrorDeletes = false;
+      options.mirrorDeletesRequested = false;
+    }
+    await updatePair(found.pair.id, { options });
+    for (const key of [found.pair.sourceGuild, found.pair.targetGuild]) {
+      await recordAudit(key, {
+        actor: actor(req),
+        action: 'mirror:deletes',
+        detail: options.mirrorDeletes
+          ? 'deleting on Fluxer was allowed'
+          : 'deleting on Fluxer was switched off',
+      });
+    }
     res.json(await stateOf(req));
   })
 );
@@ -369,7 +418,12 @@ function control(name, run, detail) {
         await run(found.pair, found.side, req.body);
       } catch (err) {
         if (err instanceof MirrorError || err instanceof ConsentError) {
-          return fail(res, err.message, 409, err.code ? { code: err.code } : {});
+          return fail(res, err.message, 409, {
+            ...(err.code ? { code: err.code } : {}),
+            ...(err.deletes
+              ? { deletes: err.deletes, deleteCount: err.deleteCount ?? err.deletes.length }
+              : {}),
+          });
         }
         throw err;
       }

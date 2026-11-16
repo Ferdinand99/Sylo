@@ -109,10 +109,18 @@ export const OPTION_ROWS = [
   ['mirrorDeletes', 'Delete on Fluxer what is deleted on Discord'],
 ];
 
+/** The deletions that wait, as a short text for a confirmation: "lock channel #chat, delete role Mod, and 3 more". */
+export function deleteSummary(items = [], count = items.length) {
+  const verb = { lock: 'lock', delete: 'delete' };
+  const shown = items.slice(0, 10).map((i) => `${verb[i.action] ?? i.action} ${i.kind} ${i.name}`);
+  const more = count - shown.length;
+  return shown.join(', ') + (more > 0 ? `, and ${more} more` : '');
+}
+
 /** What sits under an option row, when it needs a word of warning. */
 export const OPTION_HINTS = {
   mirrorDeletes:
-    'Off (the default): a channel or role deleted on Discord stays on Fluxer, locked and marked as removed, and its messages are kept. On: it is deleted on Fluxer too, with all its messages. Only what Sylo made is ever deleted.',
+    'Off (the default): a channel or role deleted on Discord stays on Fluxer, locked and marked as removed, and its messages are kept. On: it is deleted on Fluxer too, with all its messages. Only what Sylo made is ever deleted. Turning it on only asks: the owner of the Fluxer server has to allow it in their dashboard.',
 };
 
 /** May this side resume a paused mirror? Only the side whose owner paused it can; a pause Sylo made is open to both. */

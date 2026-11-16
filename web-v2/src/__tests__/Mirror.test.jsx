@@ -6,6 +6,7 @@ import { renderAtGuild } from './routerHarness.jsx';
 vi.mock('../api.js', () => ({
   ApiError: class ApiError extends Error {},
   getMirror: vi.fn(),
+  allowMirrorDeletes: vi.fn(),
   getMirrorPreview: vi.fn(),
   getMirrorReport: vi.fn(),
   requestMirror: vi.fn(),
@@ -31,6 +32,8 @@ const OPTIONS = {
   stickers: true,
   modules: true,
   continuous: true,
+  mirrorDeletes: false,
+  mirrorDeletesRequested: false,
 };
 
 const pair = (over = {}) => ({
@@ -283,7 +286,7 @@ describe('Mirror: only the owner, and the pauses', () => {
     expect(screen.getByText('Mirroring')).toBeTruthy();
   });
 
-  it('asks the owner to confirm a burst of deletions before they are applied', async () => {
+  it('asks the owner to confirm a burst of deletions, with the list, before they are applied', async () => {
     api.getMirror.mockResolvedValue(
       state({
         pair: pair({
@@ -296,15 +299,27 @@ describe('Mirror: only the owner, and the pauses', () => {
         progress: progress({ total: 2, done: 2, waiting: 0, percent: 100 }),
       })
     );
-    api.mirrorAction.mockResolvedValue(state({ pair: pair({ status: 'live', copyRun: 1 }) }));
+    const needs = () =>
+      Object.assign(new api.ApiError('Confirm the deletions first.'), {
+        code: 'confirm-needed',
+        deleteCount: 6,
+        deletes: [{ kind: 'channel', name: 'chat', action: 'lock' }],
+      });
+    api.mirrorAction
+      .mockRejectedValueOnce(needs())
+      .mockRejectedValueOnce(needs())
+      .mockResolvedValueOnce(state({ pair: pair({ status: 'live', copyRun: 1 }) }));
     confirmDialog.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     renderAtGuild(<Mirror />, GUILD);
-    const apply = await screen.findByRole('button', { name: 'Apply the deletions' });
-    fireEvent.click(apply);
+    const review = await screen.findByRole('button', { name: 'Review the deletions' });
+    fireEvent.click(review);
     await waitFor(() => expect(confirmDialog).toHaveBeenCalledTimes(1));
-    expect(api.mirrorAction).not.toHaveBeenCalled();
-    fireEvent.click(apply);
-    await waitFor(() => expect(api.mirrorAction).toHaveBeenCalledWith(GUILD, 'resume', { confirm: true }));
+    expect(confirmDialog.mock.calls[0][0].body).toMatch(/lock channel chat, and 5 more/);
+    expect(api.mirrorAction).toHaveBeenCalledTimes(1);
+    fireEvent.click(review);
+    await waitFor(() =>
+      expect(api.mirrorAction).toHaveBeenLastCalledWith(GUILD, 'resume', { confirm: true })
+    );
   });
 
   it('asks a new owner to confirm the mirror after a server changed hands', async () => {
@@ -363,5 +378,75 @@ describe('Mirror: only the owner, and the pauses', () => {
     renderAtGuild(<Mirror />, GUILD);
     expect(await screen.findByText(/it is deleted on Fluxer too, with all its messages/)).toBeTruthy();
     expect(screen.getByText('Delete on Fluxer what is deleted on Discord')).toBeTruthy();
+  });
+});
+
+describe('Mirror: real deletion needs the Fluxer owner', () => {
+  it('shows the Discord owner that the request waits for the Fluxer owner', async () => {
+    api.getMirror.mockResolvedValue(
+      state({ pair: pair({ options: { ...OPTIONS, mirrorDeletesRequested: true } }) })
+    );
+    renderAtGuild(<Mirror />, GUILD);
+    expect(await screen.findByText(/Waiting for the owner of the Fluxer server to allow it/)).toBeTruthy();
+  });
+
+  it('lets the Fluxer owner allow deleting after a confirmation that says what it does', async () => {
+    const asked = pair({
+      side: 'target',
+      status: 'live',
+      otherName: 'Home Discord',
+      otherId: GUILD,
+      options: { ...OPTIONS, mirrorDeletesRequested: true },
+    });
+    api.getMirror.mockResolvedValue(fluxerState(asked));
+    api.allowMirrorDeletes.mockResolvedValue(
+      fluxerState({ ...asked, options: { ...asked.options, mirrorDeletes: true } })
+    );
+    confirmDialog.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    renderAtGuild(<Mirror />, FLUXER);
+    const allow = await screen.findByRole('button', { name: 'Allow deleting' });
+    fireEvent.click(allow);
+    await waitFor(() => expect(confirmDialog).toHaveBeenCalledTimes(1));
+    expect(confirmDialog.mock.calls[0][0].body).toMatch(/loses all its messages/);
+    expect(api.allowMirrorDeletes).not.toHaveBeenCalled();
+    fireEvent.click(allow);
+    await waitFor(() => expect(api.allowMirrorDeletes).toHaveBeenCalledWith(FLUXER, true));
+    expect(await screen.findByRole('button', { name: 'Stop deleting here' })).toBeTruthy();
+  });
+
+  it('shows what will be deleted before deletions that waited are applied', async () => {
+    api.getMirror.mockResolvedValue(
+      state({
+        pair: pair({
+          status: 'paused',
+          pauseKind: 'owner',
+          pausedBy: 'system',
+          copyRun: 1,
+          lastError: '',
+        }),
+        progress: progress({ total: 2, done: 2, waiting: 0, percent: 100 }),
+      })
+    );
+    const { ApiError } = api;
+    api.mirrorAction
+      .mockRejectedValueOnce(
+        Object.assign(new ApiError('Confirm the deletions first.'), {
+          code: 'confirm-needed',
+          deleteCount: 7,
+          deletes: [
+            { kind: 'channel', name: 'chat', action: 'delete' },
+            { kind: 'role', name: 'Mod', action: 'lock' },
+          ],
+        })
+      )
+      .mockResolvedValueOnce(state({ pair: pair({ status: 'live', copyRun: 1 }) }));
+    confirmDialog.mockResolvedValueOnce(true);
+    renderAtGuild(<Mirror />, GUILD);
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume' }));
+    await waitFor(() => expect(confirmDialog).toHaveBeenCalledTimes(1));
+    expect(confirmDialog.mock.calls[0][0].body).toMatch(/delete channel chat, lock role Mod, and 5 more/);
+    await waitFor(() =>
+      expect(api.mirrorAction).toHaveBeenLastCalledWith(GUILD, 'resume', { confirm: true })
+    );
   });
 });

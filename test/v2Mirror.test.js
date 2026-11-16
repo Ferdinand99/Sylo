@@ -147,14 +147,44 @@ test('the owner of the Discord server asks; the owner of the Fluxer server agree
     report.items.map((i) => i.kind),
     ['guild', 'bridge']
   );
+  // Real deletion: the Discord owner can only ask; the owner of the Fluxer server decides.
+  assert.equal(
+    (await bo.post(`/guilds/${F_KEY}/mirror/deletes`, { allow: true })).status,
+    409,
+    'nothing has been asked for yet'
+  );
   const opts = await anna.post(`/guilds/${D_GUILD}/mirror/options`, {
     continuous: false,
     mirrorDeletes: true,
     bogus: 1,
   });
   const optionsNow = (await opts.json()).pair.options;
-  assert.deepEqual([optionsNow.continuous, optionsNow.mirrorDeletes], [false, true]);
+  assert.deepEqual(
+    [optionsNow.continuous, optionsNow.mirrorDeletes, optionsNow.mirrorDeletesRequested],
+    [false, false, true],
+    'asking is not switching on'
+  );
   assert.equal(optionsNow.bogus, undefined);
+  assert.equal(
+    (await anna.post(`/guilds/${D_GUILD}/mirror/deletes`, { allow: true })).status,
+    404,
+    'not from the Discord side'
+  );
+  const seenByBo = await (await bo.get(`/guilds/${F_KEY}/mirror`)).json();
+  assert.equal(seenByBo.pair.options.mirrorDeletesRequested, true, 'the Fluxer owner sees the request');
+  const allowed = await (await bo.post(`/guilds/${F_KEY}/mirror/deletes`, { allow: true })).json();
+  assert.equal(allowed.pair.options.mirrorDeletes, true, 'the Fluxer owner switched it on');
+  const again = await (
+    await anna.post(`/guilds/${D_GUILD}/mirror/options`, { mirrorDeletes: true, continuous: false })
+  ).json();
+  assert.equal(again.pair.options.mirrorDeletes, true, 'asking again does not change it');
+  const off = await (await anna.post(`/guilds/${D_GUILD}/mirror/options`, { mirrorDeletes: false })).json();
+  assert.deepEqual(
+    [off.pair.options.mirrorDeletes, off.pair.options.mirrorDeletesRequested],
+    [false, false],
+    'either side can switch it off'
+  );
+  assert.ok((await listAudit(F_KEY, 20)).some((e) => e.action === 'mirror:deletes'));
 
   // Either owner can pause; only the owner that paused can resume it.
   assert.equal((await bo.post(`/guilds/${F_KEY}/mirror/resume`)).status, 409, 'only a paused mirror resumes');
@@ -235,6 +265,7 @@ test('an Administrator who is not the owner can look, but cannot ask, agree, cha
   for (const [path, body] of [
     ['request', { targetGuildId: F_KEY }],
     ['options', { continuous: false }],
+    ['deletes', { allow: true }],
     ['start', { confirm: true }],
     ['pause', {}],
     ['resume', {}],

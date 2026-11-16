@@ -322,6 +322,7 @@ export const ROUTE_ACCESS = Object.freeze({
   'POST /guilds/:guildId/mirror/request': 'edit',
   'POST /guilds/:guildId/mirror/accept': 'edit',
   'POST /guilds/:guildId/mirror/options': 'edit',
+  'POST /guilds/:guildId/mirror/deletes': 'edit',
   'POST /guilds/:guildId/mirror/start': 'edit',
   'POST /guilds/:guildId/mirror/pause': 'edit',
   'POST /guilds/:guildId/mirror/resume': 'edit',

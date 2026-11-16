@@ -15,6 +15,9 @@ export class ApiError extends Error {
     // A refusal the page can act on (the settings changed since an audit entry: confirm to undo anyway).
     this.code = body?.code;
     this.laterChanges = body?.laterChanges;
+    // What a mirror resume asks to confirm: the deletions that wait (src/web/routes/v2Mirror.js).
+    this.deletes = body?.deletes;
+    this.deleteCount = body?.deleteCount;
     this.token = body?.token;
   }
 }
@@ -492,6 +495,9 @@ export const acceptMirror = (guildId, code) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/mirror/accept`, { code });
 export const setMirrorOptions = (guildId, options) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/mirror/options`, options);
+// The owner of the Fluxer server allows, or stops, real deletion (the Discord owner can only ask for it).
+export const allowMirrorDeletes = (guildId, allow) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/mirror/deletes`, { allow });
 export const startMirror = (guildId) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/mirror/start`, { confirm: true });
 export const mirrorAction = (guildId, action, body = {}) =>

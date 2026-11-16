@@ -198,6 +198,12 @@ const s = {
   recentDeletes: prepare(
     "SELECT COUNT(*) AS n FROM mirror_jobs WHERE pair_id = ? AND op = 'delete' AND created_at >= ?"
   ),
+  pendingDeletes: prepare(
+    "SELECT * FROM mirror_jobs WHERE pair_id = ? AND op = 'delete' AND status = 'pending' ORDER BY id LIMIT ?"
+  ),
+  countPendingDeletes: prepare(
+    "SELECT COUNT(*) AS n FROM mirror_jobs WHERE pair_id = ? AND op = 'delete' AND status = 'pending'"
+  ),
   deleteId: prepare('DELETE FROM mirror_ids WHERE pair_id = ? AND kind = ? AND source_id = ?'),
 
   insertJob: prepare(
@@ -542,4 +548,12 @@ export async function listFailedJobs(pairId, limit = 50) {
 export async function pruneMirrorJobs({ before, pairId, keepRun }) {
   if (before) await s.pruneJobs.run(before);
   if (pairId && keepRun) await s.pruneOldRuns.run(pairId, keepRun);
+}
+
+/** The deletes still waiting in a pair's queue: how many, and the first `limit` of them. */
+export async function listPendingDeletes(pairId, limit = 50) {
+  return {
+    count: num((await s.countPendingDeletes.get(pairId))?.n),
+    jobs: (await s.pendingDeletes.all(pairId, limit)).map(toJob),
+  };
 }
