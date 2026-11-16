@@ -617,6 +617,9 @@ its account is an operator.
   is stored as a snapshot only.
   The import is sent as raw `application/octet-stream` (a JSON body is cut at
   256 kB) of up to 128 MB, read from the file as it goes.
+  A client detects that the server asks for the restore confirmation (`confirm` and
+  `acknowledgeSql`) by `db.roleRisks` being an array in the health report from
+  `GET /api/v2/health` (5.3 and later); an older server does not send it.
 - **Bot Personalizer**: the bot's name and pictures, its presence, and the
   announcement everyone sees.
 - **Stats cache**: the game-stats lookups every server shares (read only).
