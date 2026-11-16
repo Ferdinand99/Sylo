@@ -31,6 +31,11 @@
 // flapping): nothing is quarantined, and when no request of the poll succeeded the poll fails like
 // any other failed poll. If no value is known to be good yet and nothing succeeded, the poll cannot
 // tell: nothing is quarantined and it reports `inconclusive`.
+// A canary request that fails for a network reason (lib/pollErrors.js isTransient) is not a refusal:
+// with nothing succeeded the poll fails with that error, otherwise nothing is quarantined, and the
+// canary is kept for the next poll.
+
+import { isTransient } from './pollErrors.js';
 
 /** Requests per poll, beyond one per batch, for finding the rejected items. */
 export const EXTRA_REQUESTS = 120;
@@ -218,6 +223,9 @@ export async function fetchIsolated(
   if (succeeded === 0 && firstFailure !== null && canary) {
     const answer = await ask([canary], false).catch((err) => err);
     if (answer !== true) {
+      // A network failure of the canary says nothing about the values or the canary: the poll
+      // fails as the network failure it is, and the canary stays.
+      if (isTransient(answer)) throw answer;
       quarantine.setGood(null);
       throw firstFailure;
     }
@@ -264,8 +272,10 @@ export async function fetchIsolated(
       // poll already fetched.
       const answer = await ask([canary], false).catch((err) => err);
       if (answer !== true) {
-        quarantine.setGood(null); // it may have gone bad itself: pick a fresh one next time
-        if (succeeded === 0) throw found[0].err;
+        // A network failure (after its retry) is not a refusal of the canary: it stays.
+        const network = isTransient(answer);
+        if (!network) quarantine.setGood(null); // it may have gone bad itself: pick a fresh one next time
+        if (succeeded === 0) throw network ? answer : found[0].err;
         quarantineFound = false; // flapping: some requests answer, some are refused
       }
     } else if (succeeded === 0) {
