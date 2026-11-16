@@ -256,6 +256,9 @@ Two things to know about modules that reach outside Fluxer:
 - Some feed hosts rate limit shared server addresses. Reddit in particular answers
   with `HTTP 429` now and then. That shows up in the error log, not as a bot fault.
 
+- A Discord server can be mirrored to a Fluxer server (channels, roles, emoji, stickers and Sylo's settings,
+  kept in step afterwards): see [Mirror to Fluxer](mirror.md).
+
 ---
 
 ## Server ids

@@ -1,0 +1,141 @@
+/* The Mirror to Fluxer page (pages/Mirror.jsx). The stepper reuses the setup wizard's (setup-wizard.css). */
+
+.v2-mirror-facts {
+  margin: 12px 0 18px;
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.v2-mirror-facts strong {
+  color: var(--text);
+}
+.v2-mirror-todo {
+  margin: 8px 0 14px;
+  padding-left: 22px;
+  display: grid;
+  gap: 4px;
+}
+
+.v2-mirror-code {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0;
+}
+.v2-mirror-code code {
+  padding: 8px 14px;
+  border: 1px solid var(--border-control);
+  border-radius: 8px;
+  background: var(--bg-elevated, var(--bg-main));
+  font-size: 1.15rem;
+  letter-spacing: 0.12em;
+  font-weight: 600;
+}
+
+.v2-mirror-options {
+  display: grid;
+  gap: 2px;
+  margin: 10px 0 16px;
+  max-width: 560px;
+}
+.v2-mirror-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.v2-mirror-subtitle {
+  margin: 20px 0 8px;
+  font-size: var(--fs-md, 1rem);
+  font-weight: 600;
+}
+.v2-mirror-summary,
+.v2-mirror-steps {
+  margin: 0 0 12px;
+  padding-left: 20px;
+  display: grid;
+  gap: 4px;
+}
+.v2-mirror-steps {
+  list-style: none;
+  padding-left: 0;
+  max-height: 320px;
+  overflow: auto;
+}
+.v2-mirror-op {
+  display: inline-block;
+  min-width: 78px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--bg-hover, var(--bg-main));
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+.v2-mirror-op.is-create {
+  color: var(--success);
+}
+.v2-mirror-op.is-skip {
+  color: var(--warning, var(--text-muted));
+}
+.v2-mirror-notes {
+  margin: 6px 0;
+}
+.v2-mirror-notes summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 4px 0;
+}
+.v2-mirror-notes ul {
+  margin: 4px 0 8px;
+  padding-left: 22px;
+  display: grid;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+
+.v2-mirror-progress {
+  margin: 12px 0;
+  max-width: 560px;
+}
+.v2-mirror-progress progress {
+  width: 100%;
+  height: 10px;
+  accent-color: var(--success);
+}
+.v2-mirror-again,
+.v2-mirror-report {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+@media (max-width: 600px) {
+  .v2-mirror-option {
+    align-items: flex-start;
+  }
+}
+
+.v2-mirror-option {
+  flex-wrap: wrap;
+}
+.v2-mirror-option-hint {
+  flex-basis: 100%;
+  margin: 0 0 6px;
+}
+.v2-mirror-removed ul {
+  margin: 4px 0 8px;
+  padding-left: 22px;
+  display: grid;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}

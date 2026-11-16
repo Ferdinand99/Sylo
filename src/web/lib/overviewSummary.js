@@ -158,6 +158,7 @@ export const V2_CARD_PAGES = {
   commands: 'moderation/commands',
   messages: 'messages',
   insights: 'insights',
+  mirror: 'mirror',
 };
 
 export function v2CardHref(id, guildId) {

@@ -1594,6 +1594,81 @@ export const MIGRATIONS = [
     if (!has.has('decided_by_user_id'))
       database.exec('ALTER TABLE appeals ADD COLUMN decided_by_user_id TEXT;');
   },
+
+  // Migration 84 of the 5.3 line (it follows the bridge's 83 once both are merged; the entry is the next one
+  // in this list whichever migrations sit before it): the server mirror (src/db/mirror.js, which bootstraps
+  // the same tables on Postgres). Pairs of a Discord and a Fluxer server, the id map between their channels,
+  // roles, emoji and stickers, and the queue of work that makes a copy resumable.
+  (database) => {
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS mirror_pairs (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        source_guild      TEXT NOT NULL,
+        target_guild      TEXT NOT NULL,
+        status            TEXT NOT NULL DEFAULT 'pending',
+        resume_status     TEXT NOT NULL DEFAULT '',
+        options           TEXT NOT NULL DEFAULT '{}',
+        code_hash         TEXT NOT NULL DEFAULT '',
+        code_expires_at   INTEGER NOT NULL DEFAULT 0,
+        code_attempts     INTEGER NOT NULL DEFAULT 0,
+        requested_by      TEXT NOT NULL DEFAULT '',
+        source_consent_by TEXT NOT NULL DEFAULT '',
+        source_consent_at INTEGER NOT NULL DEFAULT 0,
+        target_consent_by TEXT NOT NULL DEFAULT '',
+        target_consent_at INTEGER NOT NULL DEFAULT 0,
+        source_consent_user TEXT NOT NULL DEFAULT '',
+        target_consent_user TEXT NOT NULL DEFAULT '',
+        pause_kind        TEXT NOT NULL DEFAULT '',
+        paused_by         TEXT NOT NULL DEFAULT '',
+        copy_run          INTEGER NOT NULL DEFAULT 0,
+        copied_at         INTEGER NOT NULL DEFAULT 0,
+        failures          INTEGER NOT NULL DEFAULT 0,
+        last_error        TEXT NOT NULL DEFAULT '',
+        created_at        INTEGER NOT NULL,
+        updated_at        INTEGER NOT NULL
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_mirror_pairs_source ON mirror_pairs (source_guild);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_mirror_pairs_target ON mirror_pairs (target_guild);
+
+      CREATE TABLE IF NOT EXISTS mirror_ids (
+        pair_id    INTEGER NOT NULL,
+        kind       TEXT NOT NULL,
+        source_id  TEXT NOT NULL,
+        target_id  TEXT NOT NULL,
+        owned      INTEGER NOT NULL DEFAULT 1,
+        spec_hash  TEXT NOT NULL DEFAULT '',
+        label      TEXT NOT NULL DEFAULT '',
+        removed_at INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (pair_id, kind, source_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_mirror_ids_target ON mirror_ids (pair_id, kind, target_id);
+
+      CREATE TABLE IF NOT EXISTS mirror_jobs (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        pair_id    INTEGER NOT NULL,
+        run        INTEGER NOT NULL DEFAULT 0,
+        phase      TEXT NOT NULL,
+        op         TEXT NOT NULL,
+        kind       TEXT NOT NULL,
+        source_id  TEXT NOT NULL DEFAULT '',
+        step_key   TEXT NOT NULL,
+        status     TEXT NOT NULL DEFAULT 'pending',
+        attempts   INTEGER NOT NULL DEFAULT 0,
+        next_at    INTEGER NOT NULL DEFAULT 0,
+        recovering INTEGER NOT NULL DEFAULT 0,
+        first_claim_at INTEGER NOT NULL DEFAULT 0,
+        payload    TEXT NOT NULL DEFAULT '{}',
+        detail     TEXT NOT NULL DEFAULT '',
+        notes      TEXT NOT NULL DEFAULT '[]',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_mirror_jobs_pair ON mirror_jobs (pair_id, status, id);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_mirror_jobs_open ON mirror_jobs (pair_id, step_key) WHERE status = 'pending';
+    `);
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

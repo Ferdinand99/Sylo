@@ -65,6 +65,7 @@ import './welcomeSent.js';
 import './applications.js';
 import './economy.js';
 import './economyShop.js';
+import { purgeMirrorOf } from './mirror.js';
 
 // Tables keyed directly by guild_id. A test in test/guildTables.test.js checks
 // this stays in sync with the schema so new guild data can't escape /forget or
@@ -149,6 +150,9 @@ export async function purgeGuild(guildId) {
   await eventParticipantStmt.run(guildId); // before `guild_events`, which the subquery reads
   await suggestionVoteStmt.run(guildId); // before `guild_suggestions`, which the subquery reads
   for (const stmt of simpleStmts) await stmt.run(guildId);
+  // A mirror pair belongs to two servers, so it has no guild_id column: every pair this server is part of
+  // goes, with its id map and queue (the server on the other side keeps what Sylo made there).
+  await purgeMirrorOf(guildId);
   clearCommandPrefixCache(guildId);
 }
 
