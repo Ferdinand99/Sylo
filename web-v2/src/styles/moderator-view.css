@@ -4,7 +4,10 @@
   padding: 16px 12px 0;
 }
 .v2-sidebar-focus-toggle {
-  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 6px 0;
   border: 0;
   background: none;
   color: var(--text-muted);
@@ -13,6 +16,12 @@
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
+}
+/* A touch screen gets a full-size tap target; the look stays the same. */
+@media (pointer: coarse) {
+  .v2-sidebar-focus-toggle {
+    min-height: 44px;
+  }
 }
 .v2-sidebar-focus-toggle:hover {
   color: var(--text);

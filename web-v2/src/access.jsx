@@ -20,11 +20,15 @@ const AccessContext = createContext({
   guildId: null,
   reload: () => {},
   ready: true,
+  hintLevel: null,
   showEverything: false,
   setShowEverything: () => {},
 });
 
-export function AccessProvider({ guildId, children }) {
+// `hint` is the level the server list already gave for this server (`access` on each entry): it stands in
+// until the server's own answer is in, so a person with Inbox access never sees the full navigation flash
+// before it narrows. Only the answer itself sets `ready`.
+export function AccessProvider({ guildId, hint, children }) {
   const [state, setState] = useState({ guildId: null, level: 'edit' });
   const [tick, setTick] = useState(0);
   const reload = useCallback(() => setTick((t) => t + 1), []);
@@ -53,11 +57,12 @@ export function AccessProvider({ guildId, children }) {
 
   // The level of another server (the previous one, while the new one loads) is not used.
   const known = state.guildId === guildId;
-  const level = known ? state.level : 'edit';
+  const hintLevel = RANK[hint] ? hint : null;
+  const level = known ? state.level : (hintLevel ?? 'edit');
   // Without a server there is nothing to wait for.
   const ready = !guildId || known;
   return (
-    <AccessContext.Provider value={{ level, guildId, reload, ready, showEverything, setShowEverything }}>
+    <AccessContext.Provider value={{ level, guildId, reload, ready, hintLevel, showEverything, setShowEverything }}>
       {children}
     </AccessContext.Provider>
   );
@@ -68,12 +73,16 @@ export function AccessProvider({ guildId, children }) {
  *   const { can } = useAccess(); <button disabled={!can('inbox')}>Reply</button>
  */
 export function useAccess() {
-  const { level, guildId, reload, ready, showEverything, setShowEverything } = useContext(AccessContext);
+  const { level, guildId, reload, ready, hintLevel, showEverything, setShowEverything } =
+    useContext(AccessContext);
   return {
     level,
     guildId,
     reload,
     ready,
+    // The level is settled enough to draw the navigation: the answer is in, or the server list gave it.
+    levelKnown: ready || Boolean(hintLevel),
+    hintLevel,
     can: (need) => (RANK[level] ?? 0) >= RANK[need],
     // The focused moderator view: a person whose level here is exactly Inbox gets the moderation tools
     // instead of the whole dashboard, unless they chose "Show everything". View keeps the full read-only

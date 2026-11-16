@@ -94,7 +94,7 @@ function SignedInShell() {
   const { guilds, loading, error } = state;
 
   return (
-    <AccessProvider guildId={lastGuildId}>
+    <AccessProvider guildId={lastGuildId} hint={guilds.find((g) => g.id === lastGuildId)?.access}>
       <div className="v2-shell">
         <header ref={topbarRef} className="v2-topbar">
           <button

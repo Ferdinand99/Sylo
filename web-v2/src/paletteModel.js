@@ -138,6 +138,7 @@ export function paletteItems({ guildId, data, operator, guilds = [], focused = f
       label: `Switch to ${g.name}`,
       icon: 'grid',
       href: `/guilds/${g.id}`,
+      access: g.access,
       keywords: `server ${g.name}`,
     });
   }

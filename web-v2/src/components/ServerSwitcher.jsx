@@ -3,6 +3,8 @@ import { Link, useLocation } from 'react-router-dom';
 import PlatformBadge from './PlatformBadge.jsx';
 import { getInvites } from '../api.js';
 import { useApiData } from '../useApiData.js';
+import { useAccess } from '../access.jsx';
+import { switchSubpath } from '../overviewModel.js';
 import { initial } from '../util.js';
 
 // Matches /guilds/:id or /guilds/:id/<subpath> — captures the subpath (or ''
@@ -19,6 +21,7 @@ export default function ServerSwitcher({ guilds, activeGuildId, onSelectGuild })
   const multiPlatform = new Set(guilds.map((g) => g.platform)).size > 1;
   const { data: invites } = useApiData(() => getInvites(), []);
   const addLinks = invites ?? [];
+  const { showEverything } = useAccess();
   const detailsRef = useRef(null);
   const { pathname } = useLocation();
   const guildPageMatch = pathname.match(GUILD_PAGE);
@@ -83,7 +86,12 @@ export default function ServerSwitcher({ guilds, activeGuildId, onSelectGuild })
           // picker) there's no guild-scoped page to jump to, so just update
           // the selection in place — no navigation.
           return subpath !== null ? (
-            <Link key={g.id} to={`/guilds/${g.id}${subpath}`} className={className} onClick={closeMenu}>
+            <Link
+              key={g.id}
+              to={`/guilds/${g.id}${switchSubpath(subpath, { access: g.access, showEverything })}`}
+              className={className}
+              onClick={closeMenu}
+            >
               {inner}
             </Link>
           ) : (

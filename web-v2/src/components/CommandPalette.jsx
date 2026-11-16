@@ -4,6 +4,7 @@ import { searchInbox, searchMembers } from '../api.js';
 import { useAccess } from '../access.jsx';
 import { useOverview } from '../OverviewContext.jsx';
 import { useOperator } from '../useOperator.js';
+import { switchSubpath } from '../overviewModel.js';
 import { groupItems, paletteItems, rankItems, readRecent, rememberRecent } from '../paletteModel.js';
 import { parseMemberIds } from './MemberPicker.jsx';
 import { Icon } from './icons.jsx';
@@ -106,7 +107,7 @@ function PaletteDialog({ onClose, guildId, guilds }) {
   const { data: shared, dataGuildId } = useOverview();
   const data = dataGuildId === guildId ? shared : null;
   const operator = useOperator();
-  const { focused } = useAccess();
+  const { focused, showEverything } = useAccess();
   const dialogRef = useRef(null);
   const settled = useRef(false);
   const closeTimer = useRef(null);
@@ -184,7 +185,7 @@ function PaletteDialog({ onClose, guildId, guilds }) {
     let href = item.href;
     if (item.key.startsWith('guild:')) {
       const m = pathname.match(GUILD_PAGE);
-      if (m) href = `${item.href}${m[1] ?? ''}`;
+      if (m) href = `${item.href}${switchSubpath(m[1], { access: item.access, showEverything })}`;
     }
     navigate(href);
     finish();
