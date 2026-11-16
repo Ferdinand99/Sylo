@@ -11,7 +11,9 @@
 //                     paused_side   'a' or 'b' when status is paused: only that server may resume it
 //                     options_x     JSON text, see normaliseOptions in modules/lib/bridgeText.js
 //                     hook_x_id / hook_x_token   the webhook Sylo made in that channel. The token is a
-//                                   secret: it never leaves this table (the dashboard only gets "has a webhook")
+//                                   secret: it is stored sealed (AES-256-GCM, lib/seal.js) and never leaves
+//                                   this table (the dashboard only gets "has a webhook"). A token that cannot
+//                                   be opened reads as empty, and Sylo makes a new webhook.
 //                     requested_by_name / accepted_by_name   display names for the audit trail, not user ids
 //   bridge_codes      a pending request: only the SHA-256 of the code is stored, it expires, and it is
 //                     used up by the first server that accepts it
@@ -22,6 +24,8 @@
 // GUILD_TABLES.
 import { createHash, randomBytes } from 'node:crypto';
 import { prepare, registerPostgresBootstrap } from './driver.js';
+import { config } from '../config.js';
+import { isSealed, open, seal } from '../lib/seal.js';
 
 registerPostgresBootstrap(`
   CREATE TABLE IF NOT EXISTS bridge_links (
@@ -99,7 +103,6 @@ const s = {
     `UPDATE bridge_links SET status = @status, paused_side = @pausedSide, fail_reason = @reason,
        failure_count = @failures, updated_at = @now WHERE id = @id`
   ),
-  setFailures: prepare('UPDATE bridge_links SET failure_count = @failures, updated_at = @now WHERE id = @id'),
   setOptionsA: prepare('UPDATE bridge_links SET options_a = @options, updated_at = @now WHERE id = @id'),
   setOptionsB: prepare('UPDATE bridge_links SET options_b = @options, updated_at = @now WHERE id = @id'),
   setHookA: prepare(
@@ -151,6 +154,15 @@ const s = {
 
 // --- links -----------------------------------------------------------------------------------------
 
+// A webhook token is a bearer credential for the channel, so it is sealed in the table. A value stored
+// before sealing (it has no v1. prefix) is read as it is.
+const TOKEN_PURPOSE = 'bridge-webhook';
+const sealToken = (token) => (token ? seal(config.sessionSecret, TOKEN_PURPOSE, token) : '');
+const openToken = (stored) => {
+  if (!stored) return '';
+  return isSealed(stored) ? (open(config.sessionSecret, TOKEN_PURPOSE, stored) ?? '') : stored;
+};
+
 const parseJson = (text) => {
   try {
     const value = JSON.parse(text);
@@ -176,9 +188,9 @@ export function linkFrom(row) {
     optionsA: parseJson(row.options_a),
     optionsB: parseJson(row.options_b),
     hookAId: row.hook_a_id || '',
-    hookAToken: row.hook_a_token || '',
+    hookAToken: openToken(row.hook_a_token),
     hookBId: row.hook_b_id || '',
-    hookBToken: row.hook_b_token || '',
+    hookBToken: openToken(row.hook_b_token),
     requestedBy: row.requested_by_name || '',
     acceptedBy: row.accepted_by_name || '',
     createdAt: Number(row.created_at),
@@ -203,9 +215,9 @@ export async function createLink(link) {
       optionsA: JSON.stringify(link.optionsA ?? {}),
       optionsB: JSON.stringify(link.optionsB ?? {}),
       hookAId: link.hookA?.id ?? '',
-      hookAToken: link.hookA?.token ?? '',
+      hookAToken: sealToken(link.hookA?.token),
       hookBId: link.hookB?.id ?? '',
-      hookBToken: link.hookB?.token ?? '',
+      hookBToken: sealToken(link.hookB?.token),
       requestedBy: String(link.requestedBy ?? '').slice(0, 100),
       acceptedBy: String(link.acceptedBy ?? '').slice(0, 100),
       now: Date.now(),
@@ -253,10 +265,6 @@ export async function setLinkStatus(id, { status, pausedSide = '', reason = '', 
   });
 }
 
-/** Remember how many sends in a row failed (reset to 0 by a success). */
-export const setLinkFailures = (id, failures) =>
-  s.setFailures.run({ id: Number(id), failures, now: Date.now() });
-
 export const setLinkOptions = (id, side, options) =>
   (side === 'a' ? s.setOptionsA : s.setOptionsB).run({
     id: Number(id),
@@ -269,7 +277,7 @@ export const setLinkHook = (id, side, hook) =>
   (side === 'a' ? s.setHookA : s.setHookB).run({
     id: Number(id),
     id2: hook?.id ?? '',
-    token: hook?.token ?? '',
+    token: sealToken(hook?.token),
     now: Date.now(),
   });
 

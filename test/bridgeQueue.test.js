@@ -24,6 +24,12 @@ test('a failed webhook call is classified by what it means for the link', () => 
   );
   assert.equal(classifyError(err({ status: 429, retryAfter: 9999 })).retryAfterMs, 9999);
   assert.equal(
+    classifyError(err({ status: 429, retry_after: 100 })).retryAfterMs,
+    60000,
+    'the API field is always seconds'
+  );
+  assert.equal(classifyError(err({ status: 429, rawError: { retry_after: 0.1 } })).retryAfterMs, 250);
+  assert.equal(
     classifyError(err({ status: 429, retryAfter: 600000 })).retryAfterMs,
     60000,
     'never longer than a minute'
@@ -192,6 +198,26 @@ test('a job that waited too long is dropped instead of arriving late', async () 
   gate.release();
   assert.equal(await first, 'first');
   await expired;
+});
+
+test('a delete is never dropped: not for a full lane, not for waiting too long, not by clear()', async () => {
+  const { queue, tick } = harness({ maxQueued: 1, maxAgeMs: 1000 });
+  const gate = {};
+  gate.open = new Promise((r) => (gate.release = r));
+  const running = queue.enqueue('h', () => gate.open.then(() => 'ran'));
+  const del1 = queue.enqueue('h', async () => 'del1', { op: 'delete' });
+  const del2 = queue.enqueue('h', async () => 'del2', { op: 'delete' });
+  const edit = queue.enqueue('h', async () => 'edit', { op: 'edit' });
+  await assert.rejects(
+    edit,
+    (e) => e.reason === 'overflow',
+    'an ordinary job is turned away from a full lane'
+  );
+  assert.equal(queue.stats('h').queued, 3, 'the deletes were accepted');
+  assert.equal(queue.clear('h'), 0, 'clear() leaves the deletes');
+  tick(60_000);
+  gate.release();
+  assert.deepEqual(await Promise.all([running, del1, del2]), ['ran', 'del1', 'del2']);
 });
 
 test('clearing a lane drops what waits (a paused or unlinked bridge) but lets the running job finish', async () => {

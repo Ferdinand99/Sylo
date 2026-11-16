@@ -7,6 +7,9 @@
 // the newest message is dropped (and counted) instead of the bridge growing without bound, and a job that
 // has waited longer than `maxAgeMs` is dropped as stale instead of arriving minutes late.
 //
+// A delete is the exception to all three limits: a moderator's removal must reach the copy however busy the
+// lane is, however long it waited, and even if the link was paused or stopped meanwhile (clear() keeps it).
+//
 // What a failure MEANS for the link (pause it, recreate the webhook) is the engine's decision, in
 // modules/bridge.js; this file only classifies errors and decides whether to try again.
 
@@ -30,10 +33,16 @@ const codeOf = (err, depth = 0) => {
   return err.code ?? err.rawError?.code ?? (depth < 2 ? codeOf(err.cause, depth + 1) : undefined);
 };
 
-/** How long the platform said to wait, in ms (it reports seconds or milliseconds, depending on the SDK). */
+/**
+ * How long the platform said to wait, in ms. The API's own `retry_after` field is always seconds. The SDKs'
+ * `retryAfter` property is not the same unit everywhere (discord.js reports milliseconds), so a small number
+ * there is read as seconds and a large one as milliseconds.
+ */
 function retryAfterOf(err, depth = 0) {
   if (!err || typeof err !== 'object') return undefined;
-  const n = Number(err.retryAfter ?? err.retry_after ?? err.data?.retry_after ?? err.rawError?.retry_after);
+  const seconds = Number(err.retry_after ?? err.data?.retry_after ?? err.rawError?.retry_after);
+  if (Number.isFinite(seconds) && seconds > 0) return seconds * 1000;
+  const n = Number(err.retryAfter);
   if (Number.isFinite(n) && n > 0) return n <= 120 ? n * 1000 : n;
   return depth < 2 ? retryAfterOf(err.cause, depth + 1) : undefined;
 }
@@ -88,7 +97,7 @@ export function createRelayQueue({
     try {
       while (lane.tasks.length) {
         const task = lane.tasks[0];
-        if (now() - task.at > maxAgeMs) {
+        if (!task.keep && now() - task.at > maxAgeMs) {
           lane.tasks.shift();
           lane.dropped += 1;
           task.reject(new BridgeQueueError('expired'));
@@ -131,12 +140,12 @@ export function createRelayQueue({
         lane = { tasks: [], running: false, dropped: 0 };
         lanes.set(key, lane);
       }
-      if (lane.tasks.length >= maxQueued) {
+      if (op !== 'delete' && lane.tasks.length >= maxQueued) {
         lane.dropped += 1;
         return Promise.reject(new BridgeQueueError('overflow'));
       }
       const result = new Promise((resolve, reject) => {
-        lane.tasks.push({ run, op, at: now(), attempts: 0, resolve, reject });
+        lane.tasks.push({ run, op, keep: op === 'delete', at: now(), attempts: 0, resolve, reject });
       });
       if (!lane.running) void drain(key, lane);
       return result;
@@ -150,10 +159,11 @@ export function createRelayQueue({
     clear(key) {
       const lane = lanes.get(key);
       if (!lane) return 0;
-      // The job at the head may be running; leave it, drop the ones behind it.
-      const waiting = lane.running ? lane.tasks.splice(1) : lane.tasks.splice(0);
-      for (const t of waiting) t.reject(new BridgeQueueError('cleared'));
-      return waiting.length;
+      // The job at the head may be running, and a delete is never dropped: leave those, drop the rest.
+      const dropped = lane.tasks.filter((t, i) => !t.keep && !(lane.running && i === 0));
+      lane.tasks = lane.tasks.filter((t) => !dropped.includes(t));
+      for (const t of dropped) t.reject(new BridgeQueueError('cleared'));
+      return dropped.length;
     },
     /** How many webhooks have a queue right now (for tests and the health page). */
     lanes: () => lanes.size,

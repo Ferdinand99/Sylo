@@ -54,12 +54,16 @@ stopped itself (see below) can be resumed by either server once the cause is fix
   plain names ("@Bobby", "@moderators", "#rules").
 - **No loops or echoes.** A message posted by any Sylo bridge webhook, or by Sylo itself, is never relayed.
   A channel is in only one link, so a copy cannot find its way back.
-- **Bots are off by default.** Each server decides for itself what it sends: **bot messages**, **who
+- **Webhook messages never cross**, whatever the options say: they are what bridges post (this one and any other
+  bridge on the same channels), and relaying them would make two bridges feed each other forever. Bot accounts
+  whose name already carries a platform tag are skipped too.
+- **Bots are off by default.** Each server decides for itself what it sends: **bot messages** (bot accounts), **who
   joins** and **copy files** are options of that server's side only, and the other server cannot change them.
   System messages (joins, pins, boosts) are never relayed.
-- **Age restriction.** An age-restricted channel can only be linked to an age-restricted channel. It is
-  checked when linking, when resuming, and on **every message**: if one of the channels changes, the link
-  stops.
+- **Age restriction.** An age-restricted channel can only be linked to an age-restricted channel. On Fluxer a
+  channel counts as age-restricted when its own setting, its category's or the server's says so (what Sylo cannot
+  read counts as restricted); a Discord server marked age-restricted counts for all its channels. It is checked
+  when linking, when resuming, and on **every message**: if one of the channels changes, the link stops.
 - **Visible notice.** Both channels get a notice while a bridge is on, and when it is paused, stopped or
   ended.
 - **Rate limits.** Each webhook has its own queue: sends are spaced out, a rate limit from the platform is
@@ -70,8 +74,16 @@ stopped itself (see below) can be resumed by either server once the cause is fix
   failed deliveries in a row stop the link. Sylo says so in both channels, the **Health** page shows it as a
   problem with the reason, and it is not retried until someone presses **Resume**.
 - **Webhooks are Sylo's.** Sylo makes and manages the webhook of each channel and makes a new one if it is
-  deleted. Its token is stored in the database and never sent to the browser. A database backup therefore
-  holds it, like every other secret; encrypt off-site backups.
+  deleted. Its token is stored sealed (AES-256-GCM, keyed from the session secret) and never sent to the
+  browser. If the session secret changes, the tokens cannot be read and Sylo makes new webhooks.
+- **You can only bridge what you can see.** The person who asks for a link, and the one who uses a code, must
+  be able to view, read and send in their channel themselves; Edit access to the dashboard alone is not enough.
+- **Deletes always follow.** A copy is removed even if the link is paused or stopped, when the delete comes
+  before the copy was posted, after a webhook was replaced (Sylo then deletes it as the bot, which needs Manage
+  Messages), and for a purge of many messages. After an unlink the message map is gone, so copies already
+  posted stay and a later delete of the original no longer reaches them.
+- **File downloads share one budget** (4 at a time and 32 MB in flight for the whole Sylo): a file that does not
+  fit crosses as a link.
 
 ## Needs
 

@@ -9,10 +9,15 @@ import { setGuildModule } from '../src/db/modules.js';
 import { purgeGuild } from '../src/db/purge.js';
 import { listAudit } from '../src/db/audit.js';
 import * as store from '../src/db/bridge.js';
+import { db } from '../src/db/index.js';
+import { config } from '../src/config.js';
+import { seal } from '../src/lib/seal.js';
 import {
   BridgeError,
   FAIL_THRESHOLD,
   acceptLink,
+  assertActorMayUse,
+  failLink,
   bridgeIdle,
   bridgeProblems,
   cancelRequest,
@@ -466,7 +471,7 @@ test('bots are off by default and only cross when that side turns them on', asyn
   await setSideOptions({ guildKey: D, id: link.id, options: { bots: true }, actor: 'A' });
   await relay(bot(), D);
   await relay(foreignHook(), D);
-  assert.equal(fakes.transport.sends.length, 2);
+  assert.equal(fakes.transport.sends.length, 1, 'a bot account crosses; a webhook message never does');
   assert.equal(fakes.transport.sends[0].payload.username, 'RoleBot [Discord]');
 });
 
@@ -1012,8 +1017,12 @@ test('when Sylo is removed from a server, the server on the other end loses its 
   await purgeGuild(F);
   assert.equal(await store.getLink(link.id), null);
   assert.deepEqual(
-    fakes.transport.deleted.map((d) => [d.guildKey, d.hook.id]),
-    [[D, link.hookAId]]
+    fakes.transport.deleted.map((d) => [d.guildKey, d.hook.id]).sort(),
+    [
+      [D, link.hookAId],
+      [F, link.hookBId],
+    ].sort(),
+    "the other side's webhook, and the leaving server's own"
   );
   assert.match(say(dCh).at(-1), /the other server removed Sylo/);
   assert.ok((await listAudit(D)).some((e) => e.action === 'bridge:unlink'));
@@ -1042,4 +1051,523 @@ test('a bulk delete finds the channel from the messages when the platform did no
     [D]
   );
   assert.ok(dCh);
+});
+
+// --- round 2: age restriction on Fluxer, the person linking, deletes, loops, sealed tokens, budgets ---------
+
+const waitFor = () => {
+  const gate = {};
+  gate.open = new Promise((resolve) => {
+    gate.release = resolve;
+  });
+  return gate;
+};
+
+test('Fluxer age restriction counts the category, the server and what cannot be read, not only the own flag', async () => {
+  const dCh = p.channel(p.dGuild, { name: 'ordinary-discord' });
+  const made = await requestLink({ guildKey: D, channelId: dCh.id, actor: 'A' });
+  const accept = (channel) => () =>
+    acceptLink({ guildKey: F, channelId: channel.id, code: made.code, actor: 'B' });
+  const tooStrict = /age-restricted channel can only be bridged with another age-restricted/;
+
+  const category = p.channel(p.fGuild, { type: 4, nsfwOverride: true });
+  const inheriting = p.channel(p.fGuild, { parentId: category.id }); // nsfw false, nsfwOverride null: inherits
+  await refuses(accept(inheriting)(), tooStrict);
+
+  p.fGuild.nsfw = true; // the whole Fluxer server is age-restricted
+  const inServer = p.channel(p.fGuild, {});
+  await refuses(accept(inServer)(), tooStrict);
+  p.fGuild.nsfw = false;
+
+  const unreadable = p.channel(p.fGuild, {});
+  unreadable.nsfwOverride = undefined; // the field is missing: cannot tell, so restricted
+  await refuses(accept(unreadable)(), tooStrict);
+  const orphan = p.channel(p.fGuild, { parentId: snowflake() }); // its category is unknown
+  await refuses(accept(orphan)(), tooStrict);
+  assert.equal(fakes.transport.hooks.length, 0, 'refused before any webhook was made');
+
+  const plain = p.channel(p.fGuild, {});
+  assert.ok(await accept(plain)(), 'a channel that is clearly ordinary links');
+});
+
+test('an age-restricted Fluxer category is refused for an ordinary Discord channel, and the same the other way round', async () => {
+  const category = p.channel(p.fGuild, { type: 4, nsfwOverride: true });
+  const fCh = p.channel(p.fGuild, { parentId: category.id });
+  const dNsfw = p.channel(p.dGuild, { nsfw: true });
+  const dPlain = p.channel(p.dGuild, {});
+  const made = await requestLink({ guildKey: D, channelId: dPlain.id, actor: 'A' });
+  await refuses(
+    acceptLink({ guildKey: F, channelId: fCh.id, code: made.code, actor: 'B' }),
+    /age-restricted/
+  );
+  const made2 = await requestLink({ guildKey: D, channelId: dNsfw.id, actor: 'A' });
+  assert.ok(
+    await acceptLink({ guildKey: F, channelId: fCh.id, code: made2.code, actor: 'B' }),
+    'restricted with restricted'
+  );
+});
+
+test('a Discord server that is itself age-restricted counts for all its channels', async () => {
+  p.dGuild.nsfwLevel = 3;
+  const dCh = p.channel(p.dGuild, {});
+  const fCh = p.channel(p.fGuild, {});
+  const made = await requestLink({ guildKey: D, channelId: dCh.id, actor: 'A' });
+  await refuses(
+    acceptLink({ guildKey: F, channelId: fCh.id, code: made.code, actor: 'B' }),
+    /age-restricted/
+  );
+});
+
+test('a category that turns age-restricted later stops the link on the next message, and resume re-checks', async () => {
+  const category = p.channel(p.fGuild, { type: 4, nsfwOverride: false });
+  const dCh = p.channel(p.dGuild, {});
+  const fCh = p.channel(p.fGuild, { parentId: category.id });
+  const made = await requestLink({ guildKey: D, channelId: dCh.id, actor: 'A' });
+  const link = await acceptLink({ guildKey: F, channelId: fCh.id, code: made.code, actor: 'B' });
+  await relay(fromD(dCh, { content: 'fine' }), D);
+  assert.equal(fakes.transport.sends.length, 1);
+
+  category.nsfwOverride = true;
+  await relay(fromD(dCh, { content: 'now what' }), D);
+  await relay(fromF(fCh, { content: 'and back' }), F);
+  assert.equal(fakes.transport.sends.length, 1, 'nothing crossed after the change');
+  const row = await store.getLink(link.id);
+  assert.deepEqual([row.status, row.failReason], ['failed', 'age-restriction']);
+  await refuses(resumeLink({ guildKey: D, id: link.id, actor: 'A' }), /age-restricted/);
+  category.nsfwOverride = false;
+  await resumeLink({ guildKey: D, id: link.id, actor: 'A' });
+  assert.equal((await store.getLink(link.id)).status, 'active');
+});
+
+test('the person linking must be able to view, read and send in the channel; open mode needs no check', async () => {
+  const hidden = p.channel(p.dGuild, { name: 'staff' });
+  const lacking = (denied) => ({ id: 'someone', denied });
+  hidden.permissionsFor = (member) => ({ has: (perm) => !(member?.denied ?? []).includes(perm) });
+  assert.doesNotThrow(() => assertActorMayUse(D, hidden.id, lacking([])));
+  for (const perm of ['ViewChannel', 'ReadMessageHistory', 'SendMessages']) {
+    assert.throws(
+      () => assertActorMayUse(D, hidden.id, lacking([perm])),
+      (e) => e instanceof BridgeError && e.status === 403 && /#staff/.test(e.message),
+      perm
+    );
+  }
+  assert.throws(() => assertActorMayUse(D, hidden.id, null), BridgeError, 'no member found: refused');
+  assert.throws(() => assertActorMayUse(D, snowflake(), lacking([])), BridgeError, 'no such channel');
+  assert.doesNotThrow(
+    () => assertActorMayUse(D, hidden.id, null, { open: true }),
+    'open mode: everyone is the admin'
+  );
+});
+
+test("Sylo's own rights that cannot be read count as missing", async () => {
+  const dCh = p.channel(p.dGuild, {});
+  dCh.permissionsFor = undefined;
+  await refuses(
+    requestLink({ guildKey: D, channelId: dCh.id, actor: 'A' }),
+    /Sylo needs ViewChannel, SendMessages, ManageWebhooks/
+  );
+  dCh.permissionsFor = () => null;
+  await refuses(requestLink({ guildKey: D, channelId: dCh.id, actor: 'A' }), /Sylo needs/);
+});
+
+// deletes
+
+/** A webhook send that waits at a gate, so a delete or an edit can arrive while the relay is in progress. */
+function slowDownloads(gate) {
+  useBridgeParts({
+    transport: fakes.transport,
+    queue: fakes.queue,
+    download: async () => {
+      await gate.open;
+      return { ok: true, status: 200, body: Buffer.from('FILE') };
+    },
+  });
+}
+const withFile = (over = {}) => ({
+  attachments: new Map([['a', { name: 'cat.png', url: 'https://cdn/cat.png', size: 4 }]]),
+  ...over,
+});
+
+test('a delete that comes while the copy is still being made leaves no copy behind', async () => {
+  const { dCh } = await bridged();
+  const gate = waitFor();
+  slowDownloads(gate);
+  const m = fromD(dCh, withFile({ content: 'about to be removed by automod' }));
+  await handleMessage(m, {}, D); // the relay is queued and waits for the download
+  await handleDelete({ id: m.id, channelId: dCh.id }, {}, D);
+  gate.release();
+  await bridgeIdle();
+  const standing =
+    fakes.transport.sends.length - fakes.transport.removes.length - fakes.transport.botDeletes.length;
+  assert.equal(standing, 0, 'no copy of the deleted message is left on the other side');
+});
+
+test('a delete that comes before the relay has even started stops the relay', async () => {
+  const { dCh } = await bridged();
+  const m = fromD(dCh, { content: 'gone first' });
+  await handleDelete({ id: m.id, channelId: dCh.id }, {}, D);
+  await relay(m, D);
+  assert.equal(fakes.transport.sends.length, 0);
+});
+
+test('a copy posted while its original is deleted is taken down again', async () => {
+  const { dCh } = await bridged();
+  const gate = waitFor();
+  const realSend = fakes.transport.send;
+  fakes.transport.send = async (...args) => {
+    await gate.open; // the delete lands while the send is in flight
+    return realSend(...args);
+  };
+  const m = fromD(dCh, { content: 'raced' });
+  await handleMessage(m, {}, D);
+  await new Promise((r) => setImmediate(r));
+  await handleDelete({ id: m.id, channelId: dCh.id }, {}, D);
+  gate.release();
+  await bridgeIdle();
+  assert.equal(fakes.transport.sends.length, 1);
+  assert.equal(fakes.transport.removes.length, 1, 'removed as soon as it was posted');
+  assert.equal(fakes.transport.removes[0].messageId, fakes.transport.sends[0].id);
+});
+
+test('a delete reaches the copy while the link is paused or stopped', async () => {
+  const { dCh, link } = await bridged();
+  const one = fromD(dCh, { content: 'one' });
+  const two = fromD(dCh, { content: 'two' });
+  await relay(one, D);
+  await relay(two, D);
+  await pauseLink({ guildKey: D, id: link.id, actor: 'A' });
+  await handleDelete({ id: one.id, channelId: dCh.id }, {}, D);
+  await bridgeIdle();
+  assert.deepEqual(
+    fakes.transport.removes.map((r) => r.messageId),
+    [fakes.transport.sends[0].id],
+    'paused'
+  );
+  await resumeLink({ guildKey: D, id: link.id, actor: 'A' });
+  await failLink(link.id, 'permissions');
+  await handleDelete({ id: two.id, channelId: dCh.id }, {}, D);
+  await bridgeIdle();
+  assert.equal(fakes.transport.removes.length, 2, 'stopped');
+  assert.equal(await store.mappingOf(link.id, 'a', two.id), null);
+});
+
+test('the webhook that really posted a copy is the one remembered, so a delete after a recreation works', async () => {
+  const { dCh, link } = await bridged();
+  fakes.transport.sendFailures.push(apiError(404, { code: 10015 })); // the webhook was deleted: remade
+  const m = fromD(dCh, { content: 'posted by the new webhook' });
+  await relay(m, D);
+  const row = await store.getLink(link.id);
+  assert.notEqual(row.hookBId, link.hookBId);
+  assert.equal(
+    (await store.mappingOf(link.id, 'a', m.id)).copyHookId,
+    row.hookBId,
+    'the id of the webhook that sent it'
+  );
+  await handleDelete({ id: m.id, channelId: dCh.id }, {}, D);
+  await bridgeIdle();
+  assert.equal(fakes.transport.removes.length, 1);
+  assert.equal(fakes.transport.botDeletes.length, 0, 'the webhook did it');
+});
+
+test('when the webhook cannot delete a copy (it was replaced, or is gone) the bot does', async () => {
+  const { dCh, fCh, link } = await bridged();
+  const m1 = fromD(dCh, { content: 'one' });
+  const m2 = fromD(dCh, { content: 'two' });
+  const m3 = fromD(dCh, { content: 'three' });
+  for (const m of [m1, m2, m3]) await relay(m, D);
+  const copies = fakes.transport.sends.map((s) => s.id);
+  // m1: its copy was posted by a webhook that has since been replaced
+  db.prepare('UPDATE bridge_messages SET copy_hook_id = ? WHERE a_message_id = ?').run(
+    'an-older-webhook',
+    m1.id
+  );
+  // m2: the webhook is gone when the delete is tried
+  fakes.transport.removeFailures.push(apiError(404, { code: 10015 }));
+  await handleDelete({ id: m1.id, channelId: dCh.id }, {}, D);
+  await handleDelete({ id: m2.id, channelId: dCh.id }, {}, D);
+  await bridgeIdle();
+  assert.deepEqual(
+    fakes.transport.botDeletes.map((d) => [d.guildKey, d.channelId, d.messageId]),
+    [
+      [F, fCh.id, copies[0]],
+      [F, fCh.id, copies[1]],
+    ]
+  );
+  // m3: nothing can delete it (no Manage Messages): the failure is quiet and the link keeps running
+  fakes.transport.removeFailures.push(apiError(404, { code: 10015 }));
+  fakes.transport.botDeleteFailures.push(apiError(403));
+  await handleDelete({ id: m3.id, channelId: dCh.id }, {}, D);
+  await bridgeIdle();
+  assert.equal((await store.getLink(link.id)).status, 'active', 'a delete that fails never stops the link');
+});
+
+test('a purge of 100 messages on a busy lane removes every copy; deletes are not dropped for a full lane', async () => {
+  const gate = waitFor();
+  fakes = useFakes({ queue: createRelayQueue({ minGapMs: 0, maxQueued: 2, sleep: async () => {} }) });
+  const realSend = fakes.transport.send;
+  fakes.transport.send = async (...args) => {
+    await gate.open;
+    return realSend(...args);
+  };
+  const { dCh, link } = await bridged();
+  const ids = Array.from({ length: 100 }, (_, i) => `9000000000000${String(1000 + i)}`);
+  for (const [i, id] of ids.entries())
+    await store.saveMapping(link.id, 'a', { sourceId: id, copyId: `c${i}`, hookId: link.hookBId });
+  for (let i = 0; i < 4; i += 1) await handleMessage(fromD(dCh, { content: `busy ${i}` }), {}, D); // the lane is full (cap 2)
+  await handleBulkDelete({ messages: new Map(ids.map((id) => [id, { id }])), channel: dCh }, {}, D);
+  gate.release();
+  await bridgeIdle();
+  assert.equal(fakes.transport.removes.length, 100);
+  assert.equal(
+    await store.mappingCount(link.id),
+    2,
+    'only the two busy messages that fit are left in the map'
+  );
+});
+
+test('a delete is not dropped for waiting too long', async () => {
+  let clock = 1_000_000;
+  fakes = useFakes({
+    queue: createRelayQueue({
+      minGapMs: 0,
+      maxAgeMs: 1000,
+      now: () => clock,
+      sleep: async () => {
+        clock += 5000;
+      },
+    }),
+  });
+  const gate = waitFor();
+  const realSend = fakes.transport.send;
+  fakes.transport.send = async (...args) => {
+    await gate.open;
+    return realSend(...args);
+  };
+  const { dCh, link } = await bridged();
+  await store.saveMapping(link.id, 'a', {
+    sourceId: '900000000000009001',
+    copyId: 'old-copy',
+    hookId: link.hookBId,
+  });
+  await handleMessage(fromD(dCh, { content: 'blocker' }), {}, D);
+  await handleDelete({ id: '900000000000009001', channelId: dCh.id }, {}, D);
+  clock += 60_000; // far past the age at which an ordinary job is dropped
+  gate.release();
+  await bridgeIdle();
+  assert.deepEqual(
+    fakes.transport.removes.map((r) => r.messageId),
+    ['old-copy']
+  );
+});
+
+test('an edit that comes while the copy is still being made reaches it', async () => {
+  const { dCh } = await bridged();
+  const gate = waitFor();
+  slowDownloads(gate);
+  const m = fromD(dCh, withFile({ content: 'first' }));
+  await handleMessage(m, {}, D);
+  await handleUpdate({ old: m, new: { ...m, content: 'second' } }, {}, D);
+  gate.release();
+  await bridgeIdle();
+  assert.equal(fakes.transport.sends.length, 1);
+  assert.equal(fakes.transport.edits.length, 1);
+  assert.equal(fakes.transport.edits[0].payload.content, 'second');
+});
+
+// loops with other bridges
+
+test('a webhook message is never relayed, even with bots on, so another bridge on the same channels cannot make a loop', async () => {
+  const { dCh, fCh } = await bridged({ optionsD: { bots: true }, optionsF: { bots: true } });
+  // Another bridge relays Alice's message into the Discord channel through its own webhook
+  await relay(
+    fromD(dCh, {
+      content: 'echo',
+      webhookId: snowflake(),
+      author: { bot: true, username: 'Alice [Fluxer]' },
+      member: null,
+    }),
+    D
+  );
+  await relay(
+    fromF(fCh, {
+      content: 'echo',
+      webhookId: snowflake(),
+      author: { bot: true, username: 'Bob [Discord]' },
+      member: null,
+    }),
+    F
+  );
+  // and a bot account that already wears a platform tag (a bridge's relay account)
+  await relay(
+    fromD(dCh, { content: 'echo', author: { bot: true, username: 'Alice [Fluxer]' }, member: null }),
+    D
+  );
+  assert.equal(fakes.transport.sends.length, 0);
+  // an ordinary bot account still crosses
+  await relay(fromD(dCh, { content: 'real', author: { bot: true, username: 'Deploy' }, member: null }), D);
+  assert.equal(fakes.transport.sends.length, 1);
+});
+
+// sealed tokens
+
+test('webhook tokens are stored sealed; a token that cannot be opened leads to a new webhook, not a failure', async () => {
+  const { dCh, link } = await bridged();
+  const stored = db.prepare('SELECT hook_a_token, hook_b_token FROM bridge_links WHERE id = ?').get(link.id);
+  for (const [column, token] of [
+    [stored.hook_a_token, link.hookAToken],
+    [stored.hook_b_token, link.hookBToken],
+  ]) {
+    assert.ok(token.startsWith('tok-'), 'the code sees the real token');
+    assert.ok(column.startsWith('v1.') && !column.includes(token), 'the table holds a sealed value');
+  }
+  await relay(fromD(dCh, { content: 'works' }), D);
+  assert.equal(fakes.transport.sends.length, 1);
+
+  // the session secret changed since: the stored value cannot be opened
+  db.prepare('UPDATE bridge_links SET hook_b_token = ? WHERE id = ?').run(
+    seal('another secret', 'bridge-webhook', 'tok-x'),
+    link.id
+  );
+  dropBridgeCache();
+  assert.equal((await store.getLink(link.id)).hookBToken, '');
+  const before = fakes.transport.hooks.length;
+  await relay(fromD(dCh, { content: 'after the secret changed' }), D);
+  assert.equal(fakes.transport.hooks.length, before + 1, 'a new webhook was made');
+  assert.equal(fakes.transport.sends.at(-1).payload.content, 'after the secret changed');
+  assert.ok(fakes.transport.sends.at(-1).hook.token, 'sent with the new token');
+  assert.equal((await store.getLink(link.id)).status, 'active');
+  assert.ok(config.sessionSecret);
+});
+
+// download budget
+
+test('files that do not fit the process-wide download budget cross as links instead of waiting', async () => {
+  const gate = waitFor();
+  fakes = useFakes({ files: {} });
+  useBridgeParts({
+    transport: fakes.transport,
+    queue: fakes.queue,
+    budget: { concurrent: 1, bytes: 1024 },
+    download: async (url) => {
+      fakes.downloads.push({ url });
+      await gate.open;
+      return { ok: true, status: 200, body: Buffer.from('FILE') };
+    },
+  });
+  const one = await bridged();
+  const other = p.extra('95');
+  const otherF = `fluxer:${other.fGuild.id}`;
+  await setGuildModule(other.dGuild.id, 'bridge', { enabled: true });
+  await setGuildModule(otherF, 'bridge', { enabled: true });
+  const dCh2 = p.channel(other.dGuild, {});
+  const fCh2 = p.channel(other.fGuild, {});
+  const made = await requestLink({ guildKey: other.dGuild.id, channelId: dCh2.id, actor: 'A' });
+  await acceptLink({ guildKey: otherF, channelId: fCh2.id, code: made.code, actor: 'B' });
+
+  const file = (name, size = 4) => ({
+    attachments: new Map([['a', { name, url: `https://cdn/${name}`, size }]]),
+  });
+  await handleMessage(fromD(one.dCh, file('first.png')), {}, D); // takes the only slot and waits
+  await new Promise((r) => setImmediate(r));
+  await handleMessage(fromD(dCh2, file('second.png')), {}, other.dGuild.id); // another server: no room
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(
+    fakes.downloads.map((d) => d.url),
+    ['https://cdn/first.png'],
+    'the second never started a download'
+  );
+  const second = fakes.transport.sends.find((s) => s.payload.content?.includes('second.png'));
+  assert.equal(second.payload.content, '📎 second.png: https://cdn/second.png', 'it went as a link at once');
+  assert.equal(second.payload.files, undefined);
+  gate.release();
+  await bridgeIdle();
+  const first = fakes.transport.sends.find((s) => s.payload.files?.length);
+  assert.equal(first.payload.files[0].name, 'first.png');
+  // and a file larger than the whole byte budget is a link too
+  gate.release();
+  await relay(fromD(one.dCh, file('huge.png', 2048)), D);
+  assert.ok(fakes.transport.sends.at(-1).payload.content.includes('huge.png: https://cdn/huge.png'));
+});
+
+// minor findings
+
+test('names that Sylo puts in its own text cannot carry markdown links', async () => {
+  p.fGuild.name = 'x](https://evil.example)[y';
+  const { dCh } = await bridged();
+  const notice = say(dCh)[0];
+  assert.ok(!notice.includes('](https://evil.example)'), notice);
+  assert.ok(notice.includes('x\\]\\(https://evil.example\\)\\[y'));
+  await handleJoin({ displayName: 'a](https://evil.example)[b', user: { bot: false } }, {}, F);
+  const { link } = { link: (await store.linksOfGuild(F))[0] };
+  await setSideOptions({ guildKey: F, id: link.id, options: { joinMessages: true }, actor: 'B' });
+  await handleJoin({ displayName: 'a](https://evil.example)[b', user: { bot: false } }, {}, F);
+  await bridgeIdle();
+  const join = fakes.transport.sends.at(-1).payload.content;
+  assert.ok(!join.includes('](https://evil.example)'), join);
+});
+
+test('sticker, poll and file names get the same mention rules as the text', async () => {
+  const { dCh } = await bridged();
+  await relay(
+    fromD(dCh, {
+      content: 'x',
+      stickers: new Map([['s', { name: '@everyone', url: 'https://cdn/s.png' }]]),
+      poll: {
+        question: { text: '@here vote <@123456789012345678>' },
+        answers: new Map([[1, { text: '@everyone' }]]),
+      },
+      attachments: new Map([
+        ['a', { name: '@everyone.zip', url: 'https://cdn/a.zip', size: 99 * 1024 * 1024 }],
+      ]),
+    }),
+    D
+  );
+  const text = fakes.transport.sends[0].payload.content;
+  assert.ok(!/@everyone|@here|<@\d/.test(text), text);
+});
+
+test('a link a server paused is not turned into a stopped one by a late failure', async () => {
+  const { link } = await bridged();
+  await pauseLink({ guildKey: D, id: link.id, actor: 'A' });
+  await failLink(link.id, 'unreachable');
+  const row = await store.getLink(link.id);
+  assert.deepEqual(
+    [row.status, row.pausedSide],
+    ['paused', 'a'],
+    'still paused by Discord, so only Discord can resume it'
+  );
+  await refuses(resumeLink({ guildKey: F, id: link.id, actor: 'B' }), /only they can resume/, 403);
+});
+
+test('the dashboard names only your own side, not the other server staff', async () => {
+  const { link } = await bridged();
+  assert.equal(linkView(await store.getLink(link.id), D).by, 'Alice (dashboard)');
+  assert.equal(linkView(await store.getLink(link.id), F).by, 'Bob (dashboard)');
+  const text = JSON.stringify(linkView(await store.getLink(link.id), D));
+  assert.ok(!text.includes('Bob (dashboard)'));
+});
+
+test('a platform that refuses a message gets a plain name, then the text without files and embeds', async () => {
+  const { dCh } = await bridged({ optionsD: { bots: true } });
+  fakes.transport.sendFailures.push(apiError(400));
+  await relay(
+    fromD(dCh, { content: 'name refused', member: null, author: { bot: true, username: 'Weird' } }),
+    D
+  );
+  assert.equal(fakes.transport.sends[0].payload.username, 'Bridge [Discord]');
+
+  fakes.transport.sendFailures.push(apiError(400), apiError(400));
+  await relay(
+    fromD(dCh, {
+      content: 'text survives',
+      member: null,
+      author: { bot: true, username: 'Deploy' },
+      embeds: [{ type: 'rich', title: 'big embed' }],
+    }),
+    D
+  );
+  const last = fakes.transport.sends.at(-1).payload;
+  assert.equal(last.content, 'text survives');
+  assert.equal(last.embeds, undefined);
+  assert.equal(last.files, undefined);
 });

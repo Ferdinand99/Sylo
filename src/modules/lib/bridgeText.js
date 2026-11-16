@@ -67,6 +67,12 @@ const stripControl = (text) =>
 export const inertAt = (text) => String(text ?? '').replace(/@/g, `@${ZWSP}`);
 
 /**
+ * Markdown out of a name that Sylo puts into its own text (a server, a channel, a member in a notice or a
+ * quote): a name like "x](https://evil.example)[y" must not turn into a link under Sylo's identity.
+ */
+export const escapeMarkdown = (text) => String(text ?? '').replace(/([\\*_~`|[\]()>#<])/g, '\\$1');
+
+/**
  * Replace the mentions in a message with plain text and break @everyone / @here. `names` looks up what
  * the other side should read for a user, a role or a channel; it may return nothing (then a neutral word).
  * @param {string} text
@@ -132,7 +138,7 @@ export function senderName(displayName, platform, { forDiscord = false } = {}) {
 
 /** The first line of a copy that answers another message: who, a short quote, and a link when it is mapped. */
 export function replyHead({ name, snippet, url }) {
-  const who = inertAt(clip(stripControl(name) || 'someone', 40));
+  const who = escapeMarkdown(inertAt(clip(stripControl(name) || 'someone', 40)));
   const text = clip(stripControl(String(snippet ?? '').replace(/\s+/g, ' ')).replace(/^>+\s*/, ''), 100);
   const label = url ? `[**${who}**](<${url}>)` : `**${who}**`;
   return text ? `> ↪ ${label}: ${text}` : `> ↪ ${label}`;

@@ -10,6 +10,7 @@ import {
   TOTAL_BYTES_LIMIT,
   ZWSP,
   clip,
+  escapeMarkdown,
   fileLinkLines,
   hashContent,
   inertAt,
@@ -216,4 +217,16 @@ test('the content hash tells a changed text from an unchanged one', () => {
   assert.equal(hashContent('a'), hashContent('a'));
   assert.notEqual(hashContent('a'), hashContent('b'));
   assert.equal(hashContent(null), hashContent(''));
+});
+
+test('a name cannot turn into a markdown link in Sylo’s own text', () => {
+  const evil = 'x](https://evil.example)[y';
+  assert.ok(!escapeMarkdown(evil).includes('](https'));
+  assert.equal(
+    escapeMarkdown('a_b *c* ~d~ `e` |f| >g #h <i>'),
+    String.raw`a\_b \*c\* \~d\~ \`e\` \|f\| \>g \#h \<i\>`
+  );
+  assert.equal(escapeMarkdown('plain name 123'), 'plain name 123');
+  assert.ok(!replyHead({ name: evil, snippet: 'hi', url: 'https://x/y' }).includes('](https://evil'));
+  assert.equal(plain(replyHead({ name: '@everyone', snippet: '' })), '> ↪ **@<z>everyone**');
 });

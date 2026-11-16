@@ -25,6 +25,8 @@ export const NO_MENTIONS = Object.freeze({ parse: [] });
  * @property {(guildKey: string, hook: Hook, messageId: string, payload: object) => Promise<void>} edit
  * @property {(guildKey: string, hook: Hook, messageId: string) => Promise<void>} remove
  * @property {(guildKey: string, hook: Hook) => Promise<void>} deleteHook  best effort
+ * @property {(guildKey: string, channelId: string, messageId: string) => Promise<void>} botDelete  delete a message as the
+ *   bot (needs Manage Messages): the way to remove a copy whose webhook is gone
  */
 
 const platformOfKey = (key) => splitPlatformGuildId(key)?.platform ?? 'discord';
@@ -127,6 +129,14 @@ export function createWebhookTransport() {
         return;
       }
       await (await discordHook(hook)).deleteMessage(messageId);
+    },
+
+    async botDelete(guildKey, channelId, messageId) {
+      const channel = guildOf(guildKey).channels?.cache?.get(channelId);
+      if (!channel?.messages?.fetch)
+        throw Object.assign(new Error('That channel cannot be read'), { code: 'NO_CHANNEL' });
+      const message = await channel.messages.fetch(messageId);
+      await message.delete();
     },
 
     async deleteHook(guildKey, hook) {

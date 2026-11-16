@@ -7,13 +7,14 @@
 // looked up through the server in the URL (a link names two servers, and a server may only see and change
 // its own side), so another server's link id is a 404 here.
 import { accessRouter } from '../middleware/access.js';
-import { currentUser } from '../middleware/auth.js';
+import { currentUser, userIdForGuild } from '../middleware/auth.js';
 import { clientKey, platformActionLimit, rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { sweepMap } from '../../lib/sweepMap.js';
 import {
   BridgeError,
   acceptLink,
+  assertActorMayUse,
   bridgeOverview,
   cancelRequest,
   pauseLink,
@@ -71,6 +72,19 @@ const noteWrong = (req) => {
 
 const overview = (req) => bridgeOverview(req.guild.id);
 
+// The person must be able to view, read and send in the channel themselves (Edit access alone is not enough:
+// a bot-master may not see every channel, and the bridge would carry it to a server they run).
+async function requireActorAccess(req, channelId) {
+  const user = currentUser(req);
+  if (user?.open) return;
+  const userId = userIdForGuild(req, req.guild.id);
+  const guild = req.guild;
+  const member = userId
+    ? (guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null)))
+    : null;
+  assertActorMayUse(guild.id, channelId, member);
+}
+
 router.get(
   '/modules/bridge/config',
   asyncHandler(async (req, res) => {
@@ -83,6 +97,7 @@ router.post(
   platformActionLimit,
   guarded(async (req, res) => {
     if (!isId(req.body?.channelId)) throw new BridgeError('Pick a channel.');
+    await requireActorAccess(req, String(req.body.channelId));
     const made = await requestLink({
       guildKey: req.guild.id,
       channelId: String(req.body.channelId),
@@ -111,6 +126,7 @@ router.post(
       throw new BridgeError('Too many wrong codes. Wait a few minutes before trying again.', 429);
     }
     if (!isId(req.body?.channelId)) throw new BridgeError('Pick a channel.');
+    await requireActorAccess(req, String(req.body.channelId));
     try {
       await acceptLink({
         guildKey: req.guild.id,
@@ -143,6 +159,7 @@ router.post(
 
 router.post(
   '/modules/bridge/links/:id/pause',
+  platformActionLimit,
   guarded(async (req, res) => {
     await pauseLink({ guildKey: req.guild.id, id: linkId(req), actor: actor(req) });
     res.json({ overview: await overview(req) });

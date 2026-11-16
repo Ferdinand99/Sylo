@@ -379,3 +379,53 @@ test('deleting a link removes its map; a server leaving removes every link it is
   await purgeGuild(D);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM bridge_codes WHERE guild_id = ?').get(D).n, 0);
 });
+
+test('a webhook token is stored sealed and read back whole; a legacy plain value and an unreadable one are handled', async () => {
+  const { seal } = await import('../src/lib/seal.js');
+  const id = await createLink(link());
+  const row = db.prepare('SELECT hook_a_token, hook_b_token FROM bridge_links WHERE id = ?').get(id);
+  for (const [stored, token] of [
+    [row.hook_a_token, 'secret-a'],
+    [row.hook_b_token, 'secret-b'],
+  ]) {
+    assert.ok(stored.startsWith('v1.'));
+    assert.ok(!stored.includes(token), 'the plain token is not in the column');
+  }
+  const read = await getLink(id);
+  assert.deepEqual([read.hookAToken, read.hookBToken], ['secret-a', 'secret-b']);
+
+  await setLinkHook(id, 'a', { id: 'hook-new', token: 'rotated' });
+  assert.ok(
+    db.prepare('SELECT hook_a_token FROM bridge_links WHERE id = ?').get(id).hook_a_token.startsWith('v1.')
+  );
+  assert.equal((await getLink(id)).hookAToken, 'rotated');
+
+  db.prepare('UPDATE bridge_links SET hook_a_token = ? WHERE id = ?').run('legacy-plain-token', id);
+  assert.equal(
+    (await getLink(id)).hookAToken,
+    'legacy-plain-token',
+    'a value from before sealing reads as it is'
+  );
+  db.prepare('UPDATE bridge_links SET hook_a_token = ? WHERE id = ?').run(
+    seal('some other secret', 'bridge-webhook', 'x'),
+    id
+  );
+  assert.equal((await getLink(id)).hookAToken, '', 'sealed with another secret: empty, not a crash');
+  db.prepare('UPDATE bridge_links SET hook_a_token = ? WHERE id = ?').run(
+    seal(process.env.SESSION_SECRET ?? 'x', 'pigeon-credential', 'x'),
+    id
+  );
+  assert.equal((await getLink(id)).hookAToken, '', 'another purpose never opens it');
+});
+
+test('the shared seal helper keeps the Pigeon credential format (v1.iv.tag.data) and rejects damage', async () => {
+  const { seal, open, isSealed } = await import('../src/lib/seal.js');
+  const sealed = seal('secret', 'pigeon-credential', 'credential');
+  assert.match(sealed, /^v1\.[\w-]+\.[\w-]+\.[\w-]+$/);
+  assert.ok(isSealed(sealed) && !isSealed('plain') && !isSealed(null));
+  assert.equal(open('secret', 'pigeon-credential', sealed), 'credential');
+  assert.equal(open('other', 'pigeon-credential', sealed), null);
+  assert.equal(open('secret', 'bridge-webhook', sealed), null);
+  assert.equal(open('secret', 'pigeon-credential', `${sealed}x`), null);
+  assert.equal(open('secret', 'pigeon-credential', 'v1.a.b'), null);
+});

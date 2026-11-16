@@ -29,7 +29,7 @@ const OPTION_ROWS = [
   {
     key: 'bots',
     label: 'Share messages from bots',
-    hint: 'Off by default. Messages from other bots and webhooks of this server cross; Sylo is never relayed.',
+    hint: 'Off by default. Messages from other bot accounts of this server cross. Webhook messages (what bridges post) and Sylo itself never cross.',
   },
   {
     key: 'joinMessages',
@@ -160,7 +160,7 @@ export default function Bridge() {
   async function onUnlink(link) {
     const ok = await confirmDialog({
       title: `Unlink #${link.mine.channel}?`,
-      body: `Messages stop crossing to #${link.theirs.channel} in ${link.theirs.server}. Sylo deletes both webhooks and tells both channels. Messages already posted stay where they are.`,
+      body: `Messages stop crossing to #${link.theirs.channel} in ${link.theirs.server}. Sylo deletes both webhooks and tells both channels. Messages already posted stay where they are, and deleting an original later no longer removes its copy.`,
       confirmLabel: 'Unlink',
     });
     if (ok) await run(() => bridgeLinkAction(guildId, link.id, 'unlink'));

@@ -243,8 +243,15 @@ export const NEEDS = {
       post(b?.channelId, `The channel of ${b?.name || 'a starboard'}`, { field: 'channelId' })
     ),
   // The bridge makes and uses a webhook in each bridged channel, and says things in it.
+  // Manage Messages is optional: it lets Sylo remove a copy as the bot when the webhook that posted it is gone.
   bridge: (_cfg, x) =>
-    arr(x.channels).map((id) => post(id, 'A bridged channel', { embed: false, extra: ['ManageWebhooks'] })),
+    arr(x.channels).flatMap((id) => [
+      post(id, 'A bridged channel', { embed: false, extra: ['ManageWebhooks'] }),
+      inChannel(id, 'A bridged channel (to remove copies when their webhook is gone)', ['ManageMessages'], {
+        severity: WARNING,
+        part: 'delete',
+      }),
+    ]),
   introductions: (cfg) => [
     post(cfg.channelId, 'The introductions channel', { extra: ['ReadMessageHistory'], field: 'channelId' }),
     post(cfg.promptChannelId, 'The prompt channel', { optional: true, field: 'promptChannelId' }),

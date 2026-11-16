@@ -16,12 +16,21 @@ export const ME_F = '999000000000000002';
 let nextId = 80_000_000_000_000_000n;
 export const snowflake = () => String((nextId += 1n));
 
-function makeChannel(guild, { id, name, nsfw = false, type = ChannelType.GuildText, deny = [] }) {
+/**
+ * `nsfwOverride` and `parentId` are what Fluxer's age restriction reads (own override, else the category's,
+ * else the server's); the plain `nsfw` is the channel's own mark.
+ */
+function makeChannel(
+  guild,
+  { id, name, nsfw = false, nsfwOverride = null, parentId = null, type = ChannelType.GuildText, deny = [] }
+) {
   const channel = {
     id,
     name,
     type,
     nsfw,
+    nsfwOverride,
+    parentId,
     rawPosition: 0,
     guild,
     said: [],
@@ -41,6 +50,7 @@ function makeGuild(client, { id, name }) {
     name,
     client,
     ownerId: 'owner',
+    nsfw: false, // the server's own age restriction (Fluxer)
     channels: { cache: new Map() },
     emojis: { cache: new Map() },
     roles: { cache: new Map() },
@@ -93,6 +103,9 @@ export function fakeTransport() {
     edits: [],
     removes: [],
     deleted: [],
+    botDeletes: [],
+    botDeleteFailures: [],
+    removeFailures: [], // errors thrown by the next webhook deletes
     sendFailures: [], // errors thrown by the next sends, in order
     hookFailures: [], // errors thrown by the next createHook calls
     attempts: 0,
@@ -115,7 +128,14 @@ export function fakeTransport() {
       t.edits.push({ guildKey, hook, messageId, payload });
     },
     async remove(guildKey, hook, messageId) {
+      const next = t.removeFailures.shift();
+      if (next) throw next;
       t.removes.push({ guildKey, hook, messageId });
+    },
+    async botDelete(guildKey, channelId, messageId) {
+      const next = t.botDeleteFailures.shift();
+      if (next) throw next;
+      t.botDeletes.push({ guildKey, channelId, messageId });
     },
     async deleteHook(guildKey, hook) {
       t.deleted.push({ guildKey, hook });

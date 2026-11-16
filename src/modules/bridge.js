@@ -31,12 +31,14 @@ import { runtime } from '../runtime.js';
 import { splitPlatformGuildId } from '../lib/platformId.js';
 import { guildByKey } from '../platform/platformOf.js';
 import { createWebhookTransport } from '../platform/webhooks.js';
-import { jumpUrl } from './quoteBoard.js';
+import { isAgeRestricted as ageOf, jumpUrl } from './quoteBoard.js';
 import { safeFetch } from '../lib/safeFetch.js';
 import { log } from '../lib/log.js';
+import { sweepMap } from '../lib/sweepMap.js';
 import { BridgeQueueError, classifyError, createRelayQueue } from './lib/bridgeQueue.js';
 import {
   FILE_BYTES_LIMIT,
+  escapeMarkdown,
   fileLinkLines,
   hashContent,
   ZWSP,
@@ -80,11 +82,29 @@ let transport = createWebhookTransport();
 let queue = createRelayQueue();
 let download = (url, maxBytes) => safeFetch(url, { maxBytes, timeoutMs: 15_000 });
 
-/** Use another transport, queue or downloader (tests); call with nothing to go back to the real ones. */
-export function useBridgeParts({ transport: t, queue: q, download: d } = {}) {
+// One budget for every file download of the process, across all servers: files are held in memory until
+// they are sent, so a few busy bridges must not add up to hundreds of megabytes. A file that does not fit in
+// the budget crosses as a link instead of waiting for room.
+const DEFAULT_BUDGET = Object.freeze({ concurrent: 4, bytes: 32 * 1024 * 1024 });
+let budget = { ...DEFAULT_BUDGET };
+const inUse = { concurrent: 0, bytes: 0 };
+function reserveDownload(size) {
+  if (inUse.concurrent >= budget.concurrent || inUse.bytes + size > budget.bytes) return false;
+  inUse.concurrent += 1;
+  inUse.bytes += size;
+  return true;
+}
+function releaseDownload(size) {
+  inUse.concurrent -= 1;
+  inUse.bytes -= size;
+}
+
+/** Use other parts (tests): a transport, a queue, a downloader, a download budget. No arguments: the real ones. */
+export function useBridgeParts({ transport: t, queue: q, download: d, budget: b } = {}) {
   transport = t ?? createWebhookTransport();
   queue = q ?? createRelayQueue();
   download = d ?? ((url, maxBytes) => safeFetch(url, { maxBytes, timeoutMs: 15_000 }));
+  budget = { ...DEFAULT_BUDGET, ...b };
 }
 
 // Relays that are still on their way, so a test (and a shutdown) can wait for them.
@@ -116,7 +136,33 @@ const TEXT_TYPES = new Set([ChannelType.GuildText, ChannelType.GuildAnnouncement
 
 const channelIn = (key, channelId) => guildByKey(key)?.channels?.cache?.get?.(channelId) ?? null;
 const isTextChannel = (channel) => Boolean(channel) && TEXT_TYPES.has(channel.type);
-const isAgeRestricted = (channel) => channel?.nsfw === true;
+/**
+ * Is this channel age-restricted, the way the platform decides it? On Fluxer that is the channel's own
+ * setting, else its category's, else the server's (and what cannot be read counts as restricted:
+ * quoteBoard.js, fluxerAgeRestricted). A Discord server that is itself marked age-restricted counts for
+ * every channel in it.
+ */
+function ageRestricted(key, channel) {
+  const guild = guildByKey(key);
+  if (platformOf(key) === 'discord' && guild?.nsfwLevel === 3) return true;
+  return ageOf(guild, channel);
+}
+
+// Names of servers and channels in Sylo's own notices: no markdown, so a name cannot make a link.
+const serverLabel = (key) => escapeMarkdown(inertAt(guildByKey(key)?.name ?? 'another server'));
+const channelLabel = (key, channelId) => escapeMarkdown(channelIn(key, channelId)?.name ?? 'a channel');
+
+// Messages that were deleted: a delete can win the race against the relay of the same message (moderation
+// runs right after the relay starts), so the relay asks before it posts and again after.
+const deletedSoon = new Map();
+const TOMBSTONE_MS = 2 * 60_000;
+const markDeleted = (key, messageId) => {
+  if (deletedSoon.size > 20_000) deletedSoon.clear();
+  deletedSoon.set(`${key}|${messageId}`, Date.now());
+};
+const wasDeleted = (key, messageId) =>
+  Date.now() - (deletedSoon.get(`${key}|${messageId}`) ?? 0) < TOMBSTONE_MS;
+sweepMap(deletedSoon, (at, now) => now - at > TOMBSTONE_MS);
 
 /** Cached lookups of "which link is this channel in", dropped whenever a link changes. */
 const cache = new Map();
@@ -146,8 +192,8 @@ const channelName = (key, channelId) => channelIn(key, channelId)?.name ?? 'a ch
 
 /** The notice both channels show while a bridge is on. */
 const onNotice = (mineKey, theirKey, theirChannelId) =>
-  `🌉 **Bridge on.** Messages in this channel are shared with #${channelName(theirKey, theirChannelId)} in ` +
-  `**${serverName(theirKey)}** on ${platformName(theirKey)}, and theirs appear here. Nobody is pinged across ` +
+  `🌉 **Bridge on.** Messages in this channel are shared with #${channelLabel(theirKey, theirChannelId)} in ` +
+  `**${serverLabel(theirKey)}** on ${platformName(theirKey)}, and theirs appear here. Nobody is pinged across ` +
   `the bridge. Server admins can pause or unlink it at any time in the Sylo dashboard.`;
 
 const REASONS = {
@@ -165,6 +211,34 @@ export const reasonText = (code) => REASONS[code] ?? 'The bridge stopped working
 
 // --- the pieces of a link, looked up on the platforms ------------------------------------------------
 
+/** Does `perms` lack `name`? No answer at all counts as lacking; a permission name the platform does not know does not. */
+function lacks(perms, name) {
+  if (!perms || typeof perms.has !== 'function') return true;
+  try {
+    return perms.has(name) !== true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The person linking must be able to view, read and send in the channel themselves: Sylo does not let
+ * anyone make it do what they could not do (the bridge would carry a hidden channel to a server they run).
+ * `member` is their member in this server. Open mode (no logins) passes `open: true`.
+ */
+export function assertActorMayUse(key, channelId, member, { open = false } = {}) {
+  if (open) return;
+  const channel = channelIn(key, channelId);
+  const perms = member && channel?.permissionsFor?.(member);
+  const missing = ['ViewChannel', 'ReadMessageHistory', 'SendMessages'].filter((p) => lacks(perms, p));
+  if (!perms || missing.length) {
+    throw new BridgeError(
+      `You need to be able to view, read and send in #${channel?.name ?? 'that channel'} yourself to bridge it.`,
+      403
+    );
+  }
+}
+
 /**
  * Check a channel of a server can be bridged: Sylo sees it, it is a normal text channel, and Sylo may
  * view it, send in it and manage webhooks there.
@@ -176,7 +250,8 @@ function checkChannel(key, channelId) {
   const channel = guild.channels?.cache?.get?.(channelId);
   if (!isTextChannel(channel)) throw new BridgeError('Pick a normal text channel of this server.');
   const perms = channel.permissionsFor?.(guild.members?.me);
-  const missing = ['ViewChannel', 'SendMessages', 'ManageWebhooks'].filter((p) => perms?.has?.(p) === false);
+  // Sylo's own rights: when they cannot be read, they count as missing.
+  const missing = ['ViewChannel', 'SendMessages', 'ManageWebhooks'].filter((p) => lacks(perms, p));
   if (missing.length) {
     throw new BridgeError(
       `Sylo needs ${missing.join(', ')} in #${channel.name}. Give Sylo's role those permissions there first.`
@@ -201,8 +276,8 @@ function requireBothPlatforms() {
 }
 
 /** The age rule: an age-restricted channel only with an age-restricted channel. */
-function checkAge(a, b) {
-  if (isAgeRestricted(a) !== isAgeRestricted(b)) {
+function checkAge(keyA, a, keyB, b) {
+  if (ageRestricted(keyA, a) !== ageRestricted(keyB, b)) {
     throw new BridgeError(
       'An age-restricted channel can only be bridged with another age-restricted channel.'
     );
@@ -296,7 +371,7 @@ export async function acceptLink({ guildKey, channelId, code, options, actor }) 
   if (await store.linkForChannel(request.guildId, request.channelId)) {
     throw new BridgeError('The other channel was bridged in the meantime.', 409);
   }
-  checkAge(mine.channel, theirs.channel);
+  checkAge(guildKey, mine.channel, request.guildId, theirs.channel);
 
   // A webhook in each channel, made before the code is claimed (the claim is the atomic step: if two servers
   // race, one loses and its webhooks are removed again).
@@ -406,7 +481,7 @@ export async function pauseLink({ guildKey, id, actor }) {
   await say(
     theirKey,
     channelOf(link, other(side)),
-    `🌉 **Bridge paused** by ${serverName(guildKey)}. Nothing is shared until they resume it.`
+    `🌉 **Bridge paused** by ${serverLabel(guildKey)}. Nothing is shared until they resume it.`
   );
 }
 
@@ -426,7 +501,7 @@ export async function resumeLink({ guildKey, id, actor }) {
   await requireModule(link.guildB);
   const a = checkChannel(link.guildA, link.channelA);
   const b = checkChannel(link.guildB, link.channelB);
-  checkAge(a.channel, b.channel);
+  checkAge(link.guildA, a.channel, link.guildB, b.channel);
   for (const s of ['a', 'b']) {
     const key = guildOf(link, s);
     const hook = hookOf(link, s);
@@ -462,7 +537,7 @@ export async function resumeLink({ guildKey, id, actor }) {
 /** Unlink: either side may, at any time. The webhooks are deleted and the message map with the link. */
 export async function unlinkLink({ guildKey, id, actor }) {
   const { link, side } = await ownLink(guildKey, id);
-  await dismantle(link, `unlinked by ${serverName(guildKey)}`);
+  await dismantle(link, `unlinked by ${serverLabel(guildKey)}`);
   await recordAudit(guildKey, {
     actor,
     action: 'bridge:unlink',
@@ -510,6 +585,9 @@ export async function bridgeServerLeft(key) {
     queue.clear(laneKey(link, 'a'));
     queue.clear(laneKey(link, 'b'));
     if (hook.id) await transport.deleteHook(guildOf(link, theirs), hook).catch(() => {});
+    // The leaving server's own webhook goes too (a webhook can be deleted by its token without the bot).
+    const own = hookOf(link, side);
+    if (own.id) await transport.deleteHook(key, own).catch(() => {});
     await say(
       guildOf(link, theirs),
       channelOf(link, theirs),
@@ -557,7 +635,8 @@ function recreateHook(link, side) {
 /** Stop a link that cannot work, show why in Health, and say so in both channels. */
 export async function failLink(linkId, reason) {
   const link = await store.getLink(linkId);
-  if (!link || link.status === 'failed') return;
+  // Only a running link is stopped: a link a server paused stays paused (and only that server resumes it).
+  if (!link || link.status !== 'active') return;
   await store.setLinkStatus(link.id, { status: 'failed', reason, failures: FAIL_THRESHOLD });
   dropBridgeCache();
   queue.clear(laneKey(link, 'a'));
@@ -728,6 +807,11 @@ async function buildCopy(message, link, side, { guildKey }) {
   const files = [];
   const links = [...plan.links];
   for (const a of plan.upload) {
+    // No room in the process-wide budget: a link, never a wait.
+    if (!reserveDownload(a.size)) {
+      links.push(a);
+      continue;
+    }
     try {
       const res = await download(a.url, FILE_BYTES_LIMIT);
       if (!res.ok || !res.body?.length) throw new Error(`HTTP ${res.status}`);
@@ -735,6 +819,8 @@ async function buildCopy(message, link, side, { guildKey }) {
     } catch (err) {
       log.debug('bridge', `file left as a link (${err?.message ?? err})`);
       links.push(a);
+    } finally {
+      releaseDownload(a.size);
     }
   }
 
@@ -744,9 +830,10 @@ async function buildCopy(message, link, side, { guildKey }) {
         answers: toList(message.poll.answers).map((a) => ({ text: a.text, emoji: a.emoji?.name })),
       })
     : '';
-  const tail = [...stickerLines(toList(message.stickers)), poll, ...fileLinkLines(links)]
-    .filter(Boolean)
-    .join('\n');
+  // The sticker, poll and file names are text from the other side too: the same mention rules apply.
+  const tail = convert(
+    [...stickerLines(toList(message.stickers)), poll, ...fileLinkLines(links)].filter(Boolean).join('\n')
+  );
 
   const content = joinParts([head, body, tail]);
   if (!content && !embeds.length && !files.length) return null;
@@ -766,41 +853,85 @@ async function buildCopy(message, link, side, { guildKey }) {
 
 // --- relaying ----------------------------------------------------------------------------------------
 
-/** A webhook send that tries once more with a plain name when the platform refuses the sender's name. */
+/**
+ * A webhook send that gives way when the platform refuses it (a 400): first with a plain sender name (some
+ * names are refused), then without the files and embeds (the text still crosses).
+ */
 async function sendCopy(dstKey, hook, payload) {
   try {
     return await transport.send(dstKey, hook, payload);
   } catch (err) {
-    if (classifyError(err).kind === 'bad-request' && payload.username) {
+    if (classifyError(err).kind !== 'bad-request') throw err;
+    const plain = {
+      ...payload,
+      username: `Bridge [${platformName(dstKey) === 'Discord' ? 'Fluxer' : 'Discord'}]`,
+    };
+    try {
+      return await transport.send(dstKey, hook, plain);
+    } catch (err2) {
+      if (classifyError(err2).kind !== 'bad-request' || (!payload.files && !payload.embeds)) throw err2;
+      log.info('bridge', 'a message crossed without its files and embeds: the platform refused them');
       return transport.send(dstKey, hook, {
-        ...payload,
-        username: `Bridge [${platformName(dstKey) === 'Discord' ? 'Fluxer' : 'Discord'}]`,
+        content: payload.content || '(a file or embed could not be copied)',
+        username: plain.username,
+        avatarUrl: payload.avatarUrl,
       });
     }
-    throw err;
   }
 }
 
-/** Run a transport call with the link's webhook, making a new webhook once if the platform says it is gone. */
+/**
+ * Run a transport call with the link's webhook, making a new webhook once if the platform says it is gone
+ * (or if the stored token cannot be read any more). Resolves `{ value, hook }`: the webhook that was used.
+ */
 async function withHook(link, side, call) {
   let hook = hookOf(link, side);
+  if (!hook.id || !hook.token) hook = await recreateHook(link, side);
   try {
-    return await call(hook);
+    return { value: await call(hook), hook };
   } catch (err) {
     if (classifyError(err).kind !== 'hook-gone') throw err;
     hook = await recreateHook(link, side);
-    return call(hook);
+    return { value: await call(hook), hook };
+  }
+}
+
+/**
+ * Remove a copy from the target channel: through the webhook that posted it, and when that cannot (the
+ * webhook was replaced or is gone) as the bot, which needs Manage Messages there. True when the copy is gone.
+ */
+async function removeCopy(link, target, copyId, copyHookId) {
+  const dstKey = guildOf(link, target);
+  const hook = hookOf(link, target);
+  if (hook.id && hook.token && (!copyHookId || copyHookId === hook.id)) {
+    try {
+      await transport.remove(dstKey, hook, copyId);
+      return true;
+    } catch (err) {
+      if (classifyError(err, 'delete').kind === 'message-gone') return true;
+    }
+  }
+  try {
+    await transport.botDelete(dstKey, channelOf(link, target), copyId);
+    return true;
+  } catch (err) {
+    if (classifyError(err, 'delete').kind === 'message-gone') return true;
+    log.debug('bridge', `a copy could not be removed (link ${link.id}): ${err?.message ?? err}`);
+    return false;
   }
 }
 
 /** Can a message in this channel be relayed at all right now? Loop, bot and age rules. */
 async function allowed(message, link, side, key) {
   if (!isChatMessage(message)) return false;
-  // Never again what a bridge webhook posted (any link's), and never Sylo's own messages.
-  if (message.webhookId && (await store.linkForHook(message.webhookId))) return false;
+  // Webhook messages never cross, whatever the bots option says: they are what bridges (this one and any
+  // other) post, and relaying them is how two bridges on the same channels would feed each other forever.
+  if (message.webhookId) return false;
   if (message.author?.id && message.author.id === message.client?.user?.id) return false;
-  if (message.author?.bot || message.webhookId) {
+  if (message.author?.bot) {
     if (!optionsOf(link, side).bots) return false;
+    // A bot that already carries a platform tag in its name is a bridge's relay account.
+    if (SUFFIX.test(String(message.author.username ?? ''))) return false;
   }
   const theirKey = guildOf(link, other(side));
   if (!(await isModuleEnabled(theirKey, 'bridge'))) return false;
@@ -811,7 +942,7 @@ async function allowed(message, link, side, key) {
     await failLink(link.id, 'channel-missing');
     return false;
   }
-  if (isAgeRestricted(mine) !== isAgeRestricted(theirs)) {
+  if (ageRestricted(key, mine) !== ageRestricted(theirKey, theirs)) {
     await failLink(link.id, 'age-restriction');
     return false;
   }
@@ -823,6 +954,7 @@ export async function handleMessage(message, _config, key) {
   const found = await findLink(key, message.channelId);
   if (!found || found.link.status !== 'active') return;
   const { link, side } = found;
+  if (wasDeleted(key, message.id)) return;
   if (!(await allowed(message, link, side, key))) return;
 
   const target = other(side);
@@ -831,8 +963,9 @@ export async function handleMessage(message, _config, key) {
   const job = async () => {
     const current = await store.getLink(link.id);
     if (!current || current.status !== 'active') return null;
+    if (wasDeleted(key, message.id)) return null;
     built ??= await buildCopy(message, current, side, { guildKey: key });
-    if (!built) return null;
+    if (!built || wasDeleted(key, message.id)) return null;
     const payload = {
       content: built.content || undefined,
       username: built.username,
@@ -840,19 +973,24 @@ export async function handleMessage(message, _config, key) {
       embeds: built.embeds.length ? built.embeds : undefined,
       files: built.files.length ? built.files : undefined,
     };
-    const copyId = await withHook(current, target, (hook) => sendCopy(dstKey, hook, payload));
+    const { value: copyId, hook } = await withHook(current, target, (h) => sendCopy(dstKey, h, payload));
+    if (failures.has(current.id)) failures.delete(current.id);
+    // Deleted while it was being sent (moderation can be quicker than the relay): take the copy down again.
+    if (wasDeleted(key, message.id)) {
+      await removeCopy(current, target, copyId, hook.id);
+      return copyId;
+    }
     try {
       await store.saveMapping(current.id, side, {
         sourceId: message.id,
         copyId,
-        hookId: hookOf(current, target).id,
+        hookId: hook.id,
         hash: hashContent(`${built.body}\n${JSON.stringify(built.embeds)}`),
         extra: { head: built.head.slice(0, 900), tail: built.tail.slice(0, 900) },
       });
     } catch (err) {
       log.warn('bridge', `could not remember a copy: ${err?.message ?? err}`);
     }
-    if (failures.has(current.id)) failures.delete(current.id);
     return copyId;
   };
   track(
@@ -874,15 +1012,17 @@ export async function handleUpdate({ new: updated }, _config, key) {
   const found = await findLink(key, message.channelId);
   if (!found || found.link.status !== 'active') return;
   const { link, side } = found;
-  const map = await store.mappingOf(link.id, side, message.id);
-  if (!map?.isOriginal) return;
   if (!(await allowed(message, link, side, key))) return;
 
   const target = other(side);
   const dstKey = guildOf(link, target);
+  // The map is read inside the job: the job waits behind the send of the same message in the same lane, so
+  // an edit that comes quickly still finds the copy.
   const job = async () => {
     const current = await store.getLink(link.id);
     if (!current || current.status !== 'active') return null;
+    const map = await store.mappingOf(current.id, side, message.id);
+    if (!map?.isOriginal) return null;
     const names = nameResolvers(message, guildByKey(key));
     const find = emojiFinder(guildByKey(dstKey));
     const convert = (text) => mapEmoji(neutraliseMentions(text, names), find);
@@ -904,52 +1044,55 @@ export async function handleUpdate({ new: updated }, _config, key) {
   );
 }
 
-async function deleteCopyOf(link, side, messageId) {
-  const map = await store.mappingOf(link.id, side, messageId);
-  if (!map) return;
+/**
+ * Take the copies of deleted messages down. A removal by a moderator must reach the other side, so this
+ * never depends on the state the link has right now: it runs while the link is paused or stopped, it looks
+ * the map up inside the job (behind the send of the same message in the same lane), it is not dropped for a
+ * full or slow lane, and when the webhook cannot do it the bot does. A purge of many messages is one job.
+ */
+async function deleteCopies(link, side, ids) {
   const target = other(side);
-  if (!map.isOriginal) {
-    // Someone removed a copy: forget it, and leave the original alone.
-    await store.deleteMapping(link.id, side, messageId);
-    return;
-  }
-  const dstKey = guildOf(link, target);
+  const sourceKey = guildOf(link, side);
+  for (const id of ids) markDeleted(sourceKey, id);
   const job = async () => {
     const current = await store.getLink(link.id);
-    if (!current || current.status !== 'active') return null;
-    const hook = hookOf(current, target);
-    if (hook.id && (!map.copyHookId || map.copyHookId === hook.id)) {
-      try {
-        await transport.remove(dstKey, hook, map.counterpartId);
-      } catch (err) {
-        if (classifyError(err, 'delete').kind !== 'message-gone') throw err;
-      }
+    if (!current) return null;
+    for (const id of ids) {
+      const map = await store.mappingOf(current.id, side, id);
+      if (!map) continue;
+      // Someone removed a copy: forget it, and leave the original alone.
+      if (map.isOriginal) await removeCopy(current, target, map.counterpartId, map.copyHookId);
+      await store.deleteMapping(current.id, side, id);
     }
-    await store.deleteMapping(current.id, side, messageId);
-    return map.counterpartId;
+    return ids.length;
   };
   track(
-    queue.enqueue(laneKey(link, target), job, { op: 'delete' }).catch((err) => noteFailure(link, target, err))
+    queue
+      .enqueue(laneKey(link, target), job, { op: 'delete' })
+      .catch((err) =>
+        log.debug('bridge', `a delete was not carried across (link ${link.id}): ${err?.message ?? err}`)
+      )
   );
 }
 
 /** `messageDelete`: the copy of a deleted message is deleted too. */
 export async function handleDelete(message, _config, key) {
   if (!message?.channelId || !message.id) return;
+  // Not only on a running link: a removal while the link is paused or stopped still has to reach the copy.
   const found = await findLink(key, message.channelId);
-  if (!found || found.link.status !== 'active') return;
-  await deleteCopyOf(found.link, found.side, message.id);
+  if (!found) return;
+  await deleteCopies(found.link, found.side, [String(message.id)]);
 }
 
 /** `messageDeleteBulk`: the same for a purge of many messages. */
 export async function handleBulkDelete({ messages, channel }, _config, key) {
-  const ids = typeof messages?.keys === 'function' ? [...messages.keys()] : [];
+  const ids = typeof messages?.keys === 'function' ? [...messages.keys()].map(String) : [];
   // Fluxer may not have the channel cached: the deleted messages carry its id as well.
   const channelId = channel?.id ?? [...(messages?.values?.() ?? [])][0]?.channelId;
-  if (!channelId) return;
+  if (!channelId || !ids.length) return;
   const found = await findLink(key, channelId);
-  if (!found || found.link.status !== 'active') return;
-  for (const id of ids) await deleteCopyOf(found.link, found.side, id);
+  if (!found) return;
+  await deleteCopies(found.link, found.side, ids);
 }
 
 /** `guildMemberAdd`: a join notice on the other side, for the links whose server turned it on. */
@@ -963,9 +1106,11 @@ export async function handleJoin(member, _config, key) {
     const target = other(side);
     const dstKey = guildOf(link, target);
     if (!(await isModuleEnabled(dstKey, 'bridge'))) continue;
-    const who = inertAt(String(member.displayName ?? member.user?.username ?? 'Someone')).slice(0, 80);
+    const who = escapeMarkdown(
+      inertAt(String(member.displayName ?? member.user?.username ?? 'Someone')).slice(0, 80)
+    );
     const payload = {
-      content: `👋 **${who}** joined **${serverName(key)}**`,
+      content: `👋 **${who}** joined **${serverLabel(key)}**`,
       username: senderName(guildByKey(key)?.name ?? 'Server', platformOf(key), {
         forDiscord: platformOf(dstKey) === 'discord',
       }),
@@ -977,7 +1122,7 @@ export async function handleJoin(member, _config, key) {
           async () => {
             const current = await store.getLink(link.id);
             if (!current || current.status !== 'active') return null;
-            return withHook(current, target, (hook) => sendCopy(dstKey, hook, payload));
+            return (await withHook(current, target, (hook) => sendCopy(dstKey, hook, payload))).value;
           },
           { op: 'send' }
         )
@@ -1008,7 +1153,7 @@ function endView(key, channelId) {
     platform: platformOf(key),
     server: guildByKey(key)?.name ?? 'Unknown server',
     channel: channel?.name ?? 'unknown channel',
-    ageRestricted: isAgeRestricted(channel),
+    ageRestricted: ageRestricted(key, channel),
   };
 }
 
@@ -1027,8 +1172,8 @@ export function linkView(link, key) {
     options: optionsOf(link, side),
     theirOptions: optionsOf(link, theirs),
     createdAt: link.createdAt,
-    requestedBy: link.requestedBy,
-    acceptedBy: link.acceptedBy,
+    // Only this server's own dashboard name: the other server's staff are not shown to it.
+    by: side === 'a' ? link.requestedBy : link.acceptedBy,
     queued: queue.stats(laneKey(link, theirs)).queued,
     dropped: queue.stats(laneKey(link, theirs)).dropped,
   };
@@ -1059,7 +1204,7 @@ export async function bridgeOverview(key) {
     channels: toList(guild?.channels?.cache)
       .filter(isTextChannel)
       .sort((x, y) => (x.rawPosition ?? 0) - (y.rawPosition ?? 0))
-      .map((c) => ({ id: c.id, name: c.name, ageRestricted: isAgeRestricted(c), taken: taken.has(c.id) })),
+      .map((c) => ({ id: c.id, name: c.name, ageRestricted: ageRestricted(key, c), taken: taken.has(c.id) })),
   };
 }
 

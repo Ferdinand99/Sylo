@@ -42,10 +42,12 @@ const addChannel = (guild, id, name, nsfw = false) =>
     name,
     type: 0,
     nsfw,
+    nsfwOverride: null,
     rawPosition: Number(id.slice(-2)),
     guild,
     said: [],
-    permissionsFor: () => ({ has: () => true }),
+    // Sylo (no member) may do everything; a person may not use a channel that is hidden from them.
+    permissionsFor: (member) => ({ has: () => !member?.hidden?.has(id) }),
     async send(payload) {
       this.said.push(payload);
       return { id: '1' };
@@ -60,6 +62,9 @@ beforeEach(async () => {
   fakes = useFakes();
   dGuild.channels.cache.clear();
   fGuild.channels.cache.clear();
+  fGuild.nsfw = false;
+  dGuild.members.cache.clear();
+  fGuild.members.cache.clear();
   addChannel(dGuild, CH.d1, 'discord-main');
   addChannel(dGuild, CH.d2, 'discord-two');
   addChannel(dGuild, CH.dNsfw, 'discord-nsfw', true);
@@ -81,11 +86,16 @@ function ownBrowser() {
 }
 
 /** Someone signed in on a platform, with JSON helpers that carry the CSRF token. */
-async function person(platform, { guilds } = {}) {
+async function person(platform, { guilds, hidden = [], member = true } = {}) {
   setProfiles();
   if (guilds) profiles[platform].guilds = guilds;
   const b = ownBrowser();
   await signIn(b, platform);
+  // The person's member in the server (the channel rights are read from it); `hidden` channels they cannot see.
+  if (member) {
+    const id = profiles[platform].id;
+    (platform === 'discord' ? dGuild : fGuild).members.cache.set(id, { id, hidden: new Set(hidden) });
+  }
   const token = (await (await b.get('/api/v2/csrf')).json()).token;
   const headers = { accept: 'application/json', 'content-type': 'application/json', 'x-csrf-token': token };
   return {
@@ -378,4 +388,63 @@ test('a request can be cancelled by the server that made it, which kills its cod
   assert.equal(cancelled.status, 200);
   assert.deepEqual((await json(cancelled)).overview.requests, []);
   assert.equal((await f.post(`${base(F_KEY)}/accept`, { code, channelId: CH.f1 })).status, 404);
+});
+
+test('a person must be able to view, read and send in the channel themselves: a hidden staff channel is refused', async () => {
+  const d = await person('discord', { hidden: [CH.d2] });
+  const hiddenAsk = await d.post(`${base(D_GUILD)}/request`, { channelId: CH.d2 });
+  assert.equal(hiddenAsk.status, 403);
+  assert.match((await json(hiddenAsk)).error, /view, read and send in #discord-two yourself/);
+  assert.equal((await store.pendingCodes(D_GUILD)).length, 0, 'no request was made');
+
+  const ok = await d.post(`${base(D_GUILD)}/request`, { channelId: CH.d1 });
+  assert.equal(ok.status, 200);
+  const { code } = await json(ok);
+
+  const f = await person('fluxer', { hidden: [CH.f2] });
+  const hiddenAccept = await f.post(`${base(F_KEY)}/accept`, { code, channelId: CH.f2 });
+  assert.equal(hiddenAccept.status, 403);
+  assert.equal((await store.pendingCodes(D_GUILD)).length, 1, 'the code is still unused');
+  assert.equal(fakes.transport.hooks.length, 0, 'and no webhook was made');
+  assert.equal((await f.post(`${base(F_KEY)}/accept`, { code, channelId: CH.f1 })).status, 200);
+});
+
+test('a person Sylo cannot look up in the server (no member) is refused: it fails closed', async () => {
+  const d = await person('discord', { member: false });
+  const res = await d.post(`${base(D_GUILD)}/request`, { channelId: CH.d1 });
+  assert.equal(res.status, 403);
+  assert.match((await json(res)).error, /yourself/);
+});
+
+test('a Fluxer channel in an age-restricted category or server is refused for an ordinary Discord channel', async () => {
+  const d = await dAdmin();
+  const f = await fAdmin();
+  const { code } = await json(await d.post(`${base(D_GUILD)}/request`, { channelId: CH.d1 }));
+  // a category with its own override, the channel itself inheriting
+  fGuild.channels.cache.set('810000000000000007', {
+    id: '810000000000000007',
+    name: 'adult',
+    type: 4,
+    nsfwOverride: true,
+    nsfw: false,
+  });
+  fGuild.channels.cache.get(CH.f1).parentId = '810000000000000007';
+  const category = await f.post(`${base(F_KEY)}/accept`, { code, channelId: CH.f1 });
+  assert.equal(category.status, 400);
+  assert.match((await json(category)).error, /age-restricted/);
+  // the server itself is age-restricted
+  fGuild.channels.cache.get(CH.f1).parentId = null;
+  fGuild.nsfw = true;
+  assert.equal((await f.post(`${base(F_KEY)}/accept`, { code, channelId: CH.f1 })).status, 400);
+  // what cannot be read counts as age-restricted
+  fGuild.nsfw = false;
+  fGuild.channels.cache.get(CH.f1).nsfwOverride = undefined;
+  assert.equal((await f.post(`${base(F_KEY)}/accept`, { code, channelId: CH.f1 })).status, 400);
+  assert.equal(fakes.transport.hooks.length, 0);
+  fGuild.channels.cache.get(CH.f1).nsfwOverride = null;
+  assert.equal(
+    (await f.post(`${base(F_KEY)}/accept`, { code, channelId: CH.f1 })).status,
+    200,
+    'clear: it links'
+  );
 });
