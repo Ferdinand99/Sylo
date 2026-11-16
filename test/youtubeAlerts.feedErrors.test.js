@@ -100,7 +100,7 @@ test.beforeEach(() => {
 });
 
 const LIVE_HTML = (videoId) =>
-  `<html>"isLive":true<link rel="canonical" href="https://www.youtube.com/watch?v=${videoId}"></html>`;
+  `<html>"isLive":true"pageOwnerDetails":{"name":"x","externalChannelId":"${YT_CHANNEL}"}<link rel="canonical" href="https://www.youtube.com/watch?v=${videoId}"></html>`;
 const isFeedUrl = (url) => url.includes('feeds/videos.xml');
 
 test('a feed that answers 404 or 5xx does not throw and logs nothing for the first failures', async () => {
