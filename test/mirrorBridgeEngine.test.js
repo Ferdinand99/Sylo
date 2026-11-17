@@ -72,8 +72,38 @@ test('when more channels wait than one run links, another run follows and does n
   assert.equal(report.bridge.status, 'done');
   assert.equal(
     report.bridge.detail,
-    '2 channels linked, 1 already linked, 1 not linked (see the notes), 2 more follow; 2 channels linked, 3 already linked'
+    '4 channels linked, 1 was linked already, 1 not linked (see the notes)',
+    'one sentence for the whole step: the links of the first batch are not counted as "already" again'
   );
+  assert.deepEqual(
+    report.items.filter((i) => i.op === 'link').map((i) => i.detail),
+    [
+      '2 channels linked so far, 1 was linked already, 1 not linked (see the notes), 2 more follow',
+      '4 channels linked, 1 was linked already, 1 not linked (see the notes)',
+    ]
+  );
+  assert.equal(
+    report.notes.filter((n) => n.code === 'bridge-permissions').length,
+    1,
+    'a channel that was not linked is reported once'
+  );
+});
+
+test('a copy that links 35 channels in two batches says so in one sentence', async () => {
+  const first = Array.from({ length: 25 }, (_, i) => `c${i}`);
+  const answers = [
+    { linked: 25, already: 0, remaining: 10, tried: first, skipped: [] },
+    { linked: 10, already: 25, remaining: 0, tried: [], skipped: [] },
+  ];
+  let n = 0;
+  const s = await scenario({
+    withExpressions: false,
+    engineOpts: { linkMirroredChannels: async () => answers[n++] },
+  });
+  await s.engine.startCopy(s.pair.id);
+  await drain(s);
+  const report = await s.engine.report(await db.getPair(s.pair.id));
+  assert.equal(report.bridge.detail, '35 channels linked');
 });
 
 test('a step that links nothing says why', async () => {

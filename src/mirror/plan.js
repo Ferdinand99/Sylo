@@ -405,23 +405,103 @@ export function buildPlan({
   return { steps, notes, summary: summarise(steps) };
 }
 
-/** The copied channels in the order they sit: for each parent, its children by position. */
+/** Discord's voice-like channels (a stage becomes a voice channel on Fluxer). */
+const VOICE_LIKE = new Set([DISCORD_CHANNEL.VOICE, DISCORD_CHANNEL.STAGE]);
+
+/**
+ * The copied channels in the order Discord shows them, as the list of moves sent to Fluxer.
+ *
+ * Discord numbers text-like and voice channels separately (a voice channel at position 0 and a text channel at
+ * position 0 can share a category), and shows the text-like ones first; so a channel's place is its kind first and
+ * its position second, never the position alone. At the top, the channels without a category come before the
+ * categories, as on Discord.
+ *
+ * The list is in the order the moves are sent: first everything at the top (categories carry their channels along),
+ * then the text-like channels of every category, then the voice channels. Fluxer applies the moves one at a time and
+ * refuses any move that leaves a voice channel above a text channel in a category; in this order every text-like
+ * channel is in place before a voice channel moves, so no step does.
+ *
+ * Each item: `position` is its index among its siblings (0 first); `voice` marks a voice channel in a category.
+ * @returns {Array<{ id: string, parentId: string | null, position: number, voice?: boolean }>}
+ */
 export function channelOrder(source, copied) {
   const list = source.channels.filter((c) => copied.has(c.id));
-  const out = [];
-  const groups = new Map();
+  const isCategory = (c) => c.type === DISCORD_CHANNEL.CATEGORY;
+  const categories = new Set(list.filter(isCategory).map((c) => c.id));
+  const rank = (c) => (VOICE_LIKE.has(c.type) ? 1 : 0);
+  const byLayout = (a, b) => rank(a) - rank(b) || byPosition(a, b);
+  const roots = [];
+  const children = new Map();
   for (const c of list) {
-    const parent = c.parentId && copied.has(c.parentId) ? c.parentId : '';
-    if (!groups.has(parent)) groups.set(parent, []);
-    groups.get(parent).push(c);
+    if (!isCategory(c) && c.parentId && categories.has(c.parentId)) {
+      if (!children.has(c.parentId)) children.set(c.parentId, []);
+      children.get(c.parentId).push(c);
+    } else {
+      roots.push(c);
+    }
   }
-  for (const [parent, children] of groups) {
-    children
-      .sort(byPosition)
-      .forEach((c, i) => out.push({ id: c.id, parentId: parent || null, position: i }));
+  const top = [
+    ...roots.filter((c) => !isCategory(c)).sort(byLayout),
+    ...roots.filter(isCategory).sort(byPosition),
+  ];
+  const out = top.map((c, i) => ({ id: c.id, parentId: null, position: i }));
+  const groups = top
+    .filter(isCategory)
+    .map((cat) =>
+      (children.get(cat.id) ?? [])
+        .sort(byLayout)
+        .map((c, i) => ({ id: c.id, parentId: cat.id, position: i, voice: rank(c) === 1 }))
+    );
+  for (const group of groups) out.push(...group.filter((c) => !c.voice));
+  for (const group of groups) out.push(...group.filter((c) => c.voice));
+  return out;
+}
+
+/** Fluxer's voice channel type, and its category type: everything else sorts with the text channels. */
+const FLUXER_VOICE = 2;
+const FLUXER_CATEGORY = 4;
+
+/**
+ * The moves for PATCH /guilds/{id}/channels, from channelOrder(): the Discord ids turned into Fluxer ids, and every
+ * position counted among the channels that are really there. A channel that has no copy on Fluxer (it could not be
+ * made) is left out and counts for nobody's position, and so is a channel whose category has no copy; otherwise a
+ * text channel could be placed after a voice channel, which Fluxer refuses.
+ *
+ * Channels on Fluxer that are not the mirror's stay where they are; a voice channel of the mirror's goes after every
+ * text-like channel of its category, the server's own ones included, so it never lands above one of them.
+ * @param {ReturnType<typeof channelOrder>} layout
+ * @param {Map<string, string>} targetIdOf  Discord channel id -> Fluxer channel id
+ * @param {Array<{ id: string, type: number, parentId: string | null }>} fluxerChannels  what is on Fluxer now
+ * @returns {Array<{ id: string, position: number, parentId: string | null }>}
+ */
+export function channelPositionUpdates(layout, targetIdOf, fluxerChannels = []) {
+  const ours = new Set(targetIdOf.values());
+  const foreignText = new Map();
+  for (const c of fluxerChannels) {
+    if (ours.has(c.id) || !c.parentId || c.type === FLUXER_VOICE || c.type === FLUXER_CATEGORY) continue;
+    foreignText.set(c.parentId, (foreignText.get(c.parentId) ?? 0) + 1);
   }
-  // Categories are ordered among themselves like any top-level channel.
-  return out.sort((a, b) => (a.parentId ?? '').localeCompare(b.parentId ?? '') || a.position - b.position);
+  const placed = new Map(); // `${parent}|text` and `${parent}|voice` -> how many are placed
+  const count = (key) => placed.get(key) ?? 0;
+  const updates = [];
+  for (const item of layout) {
+    const id = targetIdOf.get(item.id);
+    if (!id) continue;
+    const parentId = item.parentId ? (targetIdOf.get(item.parentId) ?? null) : null;
+    if (item.parentId && !parentId) continue;
+    const group = parentId ?? '';
+    let position;
+    if (item.voice) {
+      position =
+        count(`${group}|text`) + (foreignText.get(parentId) ?? 0) + count(`${group}|voice`);
+      placed.set(`${group}|voice`, count(`${group}|voice`) + 1);
+    } else {
+      position = count(`${group}|text`);
+      placed.set(`${group}|text`, position + 1);
+    }
+    updates.push({ id, position, parentId });
+  }
+  return updates;
 }
 
 function slotsLeft(cap, targetCount, mapped) {
