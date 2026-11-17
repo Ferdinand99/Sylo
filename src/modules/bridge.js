@@ -1545,6 +1545,12 @@ export function linkView(link, key) {
     status: link.status,
     pausedByMe: link.status === 'paused' && link.pausedSide === side,
     pausedByThem: link.status === 'paused' && link.pausedSide === theirs,
+    // Whether this server's owner can press Resume: a stopped link, one this server paused, or one nobody holds
+    // (its server mirror ended). A link held by a running-state mirror comes back with the mirror.
+    resumable:
+      link.status === 'failed' ||
+      (link.status === 'paused' &&
+        (link.pausedSide === side || (!link.pausedSide && link.failReason !== 'mirror'))),
     problem: link.status === 'failed' ? { code: link.failReason, text: reasonText(link.failReason) } : null,
     // Why a paused link is paused beyond "a server paused it": its owner changed, or its channel is gone.
     pauseNote: link.status === 'paused' && link.failReason ? reasonText(link.failReason) : null,

@@ -405,6 +405,7 @@ test('a paused mirror pauses its links, nothing crosses, and they run again with
   assert.equal(fakes.transport.sends.length, 1, 'nothing crosses while the mirror is paused');
   assert.deepEqual(await bridgeProblems(D), [], 'the mirror has its own Health entry');
   assert.match(linkView(held, D).pauseNote, /server mirror/);
+  assert.equal(linkView(held, D).resumable, false, 'it comes back with the mirror, not by a button');
 
   // the bridge page cannot resume it on its own
   await assert.rejects(
@@ -471,6 +472,7 @@ test('removing a mirror releases its links: they stay, paused, and either owner 
   const link = (await bridgeDb.linkForChannel(D, d.id)).link;
   assert.deepEqual([link.status, link.pausedSide, link.failReason], ['paused', '', 'mirror-ended']);
   assert.match(linkView(link, F).pauseNote, /mirror that made this bridge ended/);
+  assert.deepEqual([linkView(link, D).resumable, linkView(link, F).resumable], [true, true]);
   await mdb.deletePair(pair.id);
   assert.equal((await mdb.listMirrorLinks(pair.id)).length, 0, 'the record goes with the pair');
   // the Fluxer owner resumes it on the Bridge page
