@@ -249,7 +249,10 @@ export async function linkMirroredChannels(
         full = true;
         const rest = todo.filter((t) => !tried.includes(t.sourceId) || t === item);
         for (const t of rest) skipped.push(limitSkip(t));
-        log.info('mirror', `pair ${pair.id}: ${rest.length} channels not linked, the bridge limit is reached`);
+        log.info(
+          'mirror',
+          `pair ${pair.id}: ${rest.length} channels not linked, the bridge limit is reached`
+        );
         continue;
       }
       log.info(

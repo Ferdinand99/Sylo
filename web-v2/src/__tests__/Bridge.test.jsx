@@ -91,7 +91,9 @@ describe('Bridge page', () => {
     renderAtGuild(<Bridge />, GUILD);
     expect(await screen.findByRole('heading', { name: 'Bridged channels (5)' })).toBeTruthy();
     expect(screen.queryByText(/5 of 3/)).toBeNull();
-    expect(screen.getByTestId('bridge-limit-note').textContent).toMatch(/more bridged channels than the limit of 3/);
+    expect(screen.getByTestId('bridge-limit-note').textContent).toMatch(
+      /more bridged channels than the limit of 3/
+    );
   });
 
   it('names the other platform, and explains that nothing pings and bots are off', async () => {

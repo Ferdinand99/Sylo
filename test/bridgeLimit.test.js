@@ -83,7 +83,7 @@ test('the configured ceiling is the default of 100 when the environment sets not
   assert.equal(config.bridgeMaxLinks, 100);
   assert.equal(getMaxLinks(), 100);
   capAt(3);
-  assert.equal(getMaxLinks(), 3, "tests can replace it");
+  assert.equal(getMaxLinks(), 3, 'tests can replace it');
   useBridgeParts();
   assert.equal(getMaxLinks(), 100, 'and it goes back');
 });

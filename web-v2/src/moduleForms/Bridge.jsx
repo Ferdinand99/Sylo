@@ -225,8 +225,8 @@ export default function Bridge() {
             {data.links.length > data.limits.links
               ? `This server has more bridged channels than the limit of ${data.limits.links}. No new link can be made until some are unlinked or the limit is raised. `
               : `This server has reached the limit of ${data.limits.links} bridged channels, so no new link can be made, and a server mirror stops linking channels. `}
-            The limit is set by whoever runs this Sylo instance (the <code>BRIDGE_MAX_LINKS</code> setting; see
-            the self-hosting guide); if that is not you, ask them.
+            The limit is set by whoever runs this Sylo instance (the <code>BRIDGE_MAX_LINKS</code> setting;
+            see the self-hosting guide); if that is not you, ask them.
           </p>
         ) : null}
         {data.links.length === 0 ? (

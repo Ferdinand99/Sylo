@@ -454,7 +454,7 @@ export async function acceptLink({ guildKey, channelId, code, options, actor }) 
   // The server that asked may have filled its limit since it made the request.
   if ((await store.linkCount(request.guildId)) >= maxLinks) {
     throw new BridgeError(
-      "The server that made this request has reached its limit of bridged channels, so it cannot take another. Ask the operator of this Sylo instance to raise BRIDGE_MAX_LINKS, or unlink a channel there.",
+      'The server that made this request has reached its limit of bridged channels, so it cannot take another. Ask the operator of this Sylo instance to raise BRIDGE_MAX_LINKS, or unlink a channel there.',
       409,
       'limit'
     );
