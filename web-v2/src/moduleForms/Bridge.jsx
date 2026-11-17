@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import {
   acceptBridgeLink,
   bridgeLinkAction,
@@ -12,6 +12,7 @@ import { notify } from '../notify.js';
 import { useApiData } from '../useApiData.js';
 import LoadError from '../components/LoadError.jsx';
 import HowItWorks from '../components/HowItWorks.jsx';
+import Callout from '../components/Callout.jsx';
 import CopyButton from '../components/CopyButton.jsx';
 import EmptyList from '../components/EmptyList.jsx';
 import RowActions from '../components/RowActions.jsx';
@@ -185,6 +186,13 @@ export default function Bridge() {
         write as they always do, and Sylo shows each message on the other side with the author&apos;s name and
         picture.
       </p>
+      {data.platform === 'discord' && data.bothPlatforms && owner ? (
+        <Callout tone="info" className="v2-bridge-mirror-hint">
+          <strong className="v2-callout-title">Setting up a whole Fluxer server?</strong> Use{' '}
+          <Link to={`/guilds/${guildId}/mirror`}>Mirror to Fluxer</Link> to copy channels, roles and emoji and
+          bridge every channel at once.
+        </Callout>
+      ) : null}
       <HowItWorks>
         <p>
           Both servers agree. One asks for a link and gets a code that works for 15 minutes; the owner of the

@@ -139,3 +139,75 @@
   gap: 4px;
   overflow-wrap: anywhere;
 }
+
+/* The picker of the Fluxer server to mirror to. */
+.v2-mirror-choices {
+  list-style: none;
+  margin: 8px 0 4px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  max-width: 560px;
+}
+.v2-mirror-choice {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md, 10px);
+}
+.v2-mirror-choice.is-selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.v2-mirror-choice.is-taken {
+  opacity: 0.7;
+}
+.v2-mirror-choice label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  min-width: 0;
+}
+.v2-mirror-choice-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--border-strong);
+  font-weight: 600;
+}
+.v2-mirror-choice-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.v2-mirror-choice-text {
+  display: grid;
+  min-width: 0;
+}
+.v2-mirror-choice-text strong {
+  overflow-wrap: anywhere;
+}
+.v2-mirror-choice-note {
+  grid-column: 2;
+  margin: 6px 0 0;
+}
+.v2-mirror-linkbtn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.v2-bridge-mirror-hint {
+  margin: 14px 0;
+}
