@@ -311,7 +311,7 @@ test('the automatic check and the manual refresh never both look in one request'
   const keys = joinMany(profiles.discord.id);
   const token = await csrf(b); // fetched first: a request of its own would carry the automatic check
   await tick();
-  noteGuildJoin('discord', keys.at(-1), null); // the join the automatic check reacts to
+  noteGuildJoin('discord', keys.at(-1), null, { now: Date.now() + 5000 }); // the join the automatic check reacts to (newest)
   const lookups = memberFetches.length;
   const res = await b.get('/api/v2/account/refresh-guilds', {
     method: 'POST',
