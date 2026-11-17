@@ -522,8 +522,8 @@ function PreviewResult({ preview, onStart, working }) {
           <li key={l.kind}>{l.text}</li>
         ))}
         <li>
-          Last, every copied text channel is linked through the bridge, if the channels allow it (the reasons are in the
-          report).
+          Last, every copied text channel is linked through the bridge, if the channels allow it (the reasons
+          are in the report).
         </li>
       </ul>
       <h3 className="v2-mirror-subtitle">What cannot be carried over{groups.length ? '' : ': nothing'}</h3>

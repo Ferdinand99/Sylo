@@ -29,14 +29,7 @@ import {
   unlinkLink,
   useBridgeParts,
 } from '../src/modules/bridge.js';
-import {
-  D,
-  F,
-  installPlatforms,
-  message,
-  removePlatforms,
-  useFakes,
-} from './helpers/fakeBridge.js';
+import { D, F, installPlatforms, message, removePlatforms, useFakes } from './helpers/fakeBridge.js';
 
 let p;
 let fakes;
@@ -112,7 +105,7 @@ test('every mirrored text channel pair is linked, voice channels and categories 
     );
     assert.equal((await mdb.getMirrorLink(pair.id, d.id)).linkId, found.link.id);
   }
-  assert.equal((await bridgeDb.linkCount(D)), 2);
+  assert.equal(await bridgeDb.linkCount(D), 2);
   assert.equal(fakes.transport.hooks.length, 4, 'a webhook in each of the four channels, none for voice');
 });
 
@@ -256,9 +249,7 @@ test('with sign-in on, each owner must be able to see, read and send in the chan
   // the Fluxer owner cannot read the history of one channel
   const real = hidden.f.permissionsFor;
   hidden.f.permissionsFor = (t) =>
-    t?.id === fluxerOwner.id
-      ? { has: (perm) => perm !== 'ReadMessageHistory' }
-      : real(t);
+    t?.id === fluxerOwner.id ? { has: (perm) => perm !== 'ReadMessageHistory' } : real(t);
   const res = await run(pair, { open: false });
   assert.equal(res.linked, 1);
   assert.deepEqual(

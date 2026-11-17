@@ -83,7 +83,10 @@ test('a step that links nothing says why', async () => {
   });
   await s.engine.startCopy(s.pair.id);
   await drain(s);
-  assert.equal((await s.engine.report(await db.getPair(s.pair.id))).bridge.detail, 'not linked: nothing-to-link');
+  assert.equal(
+    (await s.engine.report(await db.getPair(s.pair.id))).bridge.detail,
+    'not linked: nothing-to-link'
+  );
 });
 
 test('a channel made on Discord later is linked too: the bridge step is asked for again', async () => {
@@ -305,6 +308,9 @@ test('a new request keeps real deletion only for the same Fluxer owner who owns 
   );
   // The request brings its own options: the existing rules for them apply (asked, not on).
   const explicit = await ask({ targetOwner: false, options: { mirrorDeletes: true } });
-  assert.deepEqual([explicit.pair.options.mirrorDeletes, explicit.pair.options.mirrorDeletesRequested], [false, true]);
+  assert.deepEqual(
+    [explicit.pair.options.mirrorDeletes, explicit.pair.options.mirrorDeletesRequested],
+    [false, true]
+  );
   await db.deletePair(explicit.pair.id);
 });

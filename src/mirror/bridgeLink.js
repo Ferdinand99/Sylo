@@ -138,7 +138,8 @@ export async function linkMirroredChannels(
     if (skip.has(m.sourceId)) continue;
     const found = await linkForChannel(pair.sourceGuild, m.sourceId);
     if (found) {
-      const same = found.side === 'a' && found.link.guildB === pair.targetGuild && found.link.channelB === m.targetId;
+      const same =
+        found.side === 'a' && found.link.guildB === pair.targetGuild && found.link.channelB === m.targetId;
       if (same) {
         // A link of exactly this pair whose record was lost (a restart between the two writes): take it over.
         await putMirrorLink(pair.id, m.sourceId, m.targetId, found.link.id);
@@ -195,7 +196,10 @@ export async function linkMirroredChannels(
       linked += 1;
     } catch (err) {
       if (!(err instanceof BridgeError)) throw err;
-      log.info('mirror', `pair ${pair.id}: ${item.name} not linked (${err.code || err.status}): ${err.message}`);
+      log.info(
+        'mirror',
+        `pair ${pair.id}: ${item.name} not linked (${err.code || err.status}): ${err.message}`
+      );
       skipped.push({
         sourceId: item.sourceId,
         name: item.name,

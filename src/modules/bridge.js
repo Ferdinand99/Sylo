@@ -595,7 +595,10 @@ export async function resumeLink({ guildKey, id, actor }) {
   const { link, side } = await ownLink(guildKey, id);
   if (link.status === 'active') throw new BridgeError('That bridge is already running.', 409);
   if (link.status === 'paused' && link.failReason === 'mirror') {
-    throw new BridgeError('The server mirror made this bridge and paused it. It runs again when the mirror does.', 409);
+    throw new BridgeError(
+      'The server mirror made this bridge and paused it. It runs again when the mirror does.',
+      409
+    );
   }
   // A link nobody owns the pause of (the mirror that made it ended) can be resumed by either server.
   if (link.status === 'paused' && link.pausedSide && link.pausedSide !== side) {
@@ -1591,18 +1594,22 @@ export async function bridgeOverview(key) {
  * the bridge needs in its channels are checked by the generic channel check there.
  */
 export async function bridgeProblems(key) {
-  return (await store.linksOfGuild(key))
-    // A link the server mirror holds is covered by the mirror's own Health entry.
-    .filter((l) => l.status === 'failed' || (l.status === 'paused' && l.failReason && l.failReason !== 'mirror'))
-    .map((l) => {
-      const side = sideOf(l, key);
-      return {
-        linkId: l.id,
-        channelId: channelOf(l, side),
-        code: l.failReason,
-        text: reasonText(l.failReason),
-      };
-    });
+  return (
+    (await store.linksOfGuild(key))
+      // A link the server mirror holds is covered by the mirror's own Health entry.
+      .filter(
+        (l) => l.status === 'failed' || (l.status === 'paused' && l.failReason && l.failReason !== 'mirror')
+      )
+      .map((l) => {
+        const side = sideOf(l, key);
+        return {
+          linkId: l.id,
+          channelId: channelOf(l, side),
+          code: l.failReason,
+          text: reasonText(l.failReason),
+        };
+      })
+  );
 }
 
 /** The bridged channels of a server, with the permissions the bridge needs in each. */
