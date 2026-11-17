@@ -384,7 +384,6 @@ test('a webhook that cannot be made skips the pair and leaves nothing half made'
 test('when the clients are not both connected, nothing is linked and the reason says so', async () => {
   const pair = await livePair();
   await mirrored(pair, 'chat');
-  p.fluxer.user = p.fluxer.user; // still there
   removePlatforms();
   assert.equal((await run(pair)).reason, 'bridge-not-available');
   assert.equal((await linkMirroredChannels(999_999, { sleep: noSleep })).reason, 'no-such-mirror');

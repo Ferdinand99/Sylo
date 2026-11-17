@@ -653,6 +653,7 @@ const mirrorBy = (name) => `${String(name || 'server owner').slice(0, 60)} (serv
 function everyoneSees(key, channel) {
   const guild = guildByKey(key);
   try {
+    // eslint-disable-next-line no-restricted-syntax -- the @everyone role id is the platform guild id
     const perms = channel?.permissionsFor?.(String(guild?.id ?? ''));
     if (!perms || typeof perms.has !== 'function') return null;
     return perms.has('ViewChannel') === true;
