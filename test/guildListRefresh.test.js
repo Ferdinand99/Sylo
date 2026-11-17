@@ -313,7 +313,10 @@ test('the automatic check and the manual refresh never both look in one request'
   await tick();
   noteGuildJoin('discord', keys.at(-1), null); // the join the automatic check reacts to
   const lookups = memberFetches.length;
-  const res = await b.get('/api/v2/account/refresh-guilds', { method: 'POST', headers: { 'x-csrf-token': token } });
+  const res = await b.get('/api/v2/account/refresh-guilds', {
+    method: 'POST',
+    headers: { 'x-csrf-token': token },
+  });
   assert.equal(res.status, 200); // this one request carries the automatic check and the refresh
   assert.equal(memberFetches.length, lookups + 25, '25 for the pair, not 25 each');
   assert.ok((await findIdentity('discord', profiles.discord.id)).guildIds.includes(keys.at(-1)));
