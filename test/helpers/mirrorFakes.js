@@ -332,9 +332,7 @@ export function fluxerChannelList(channels) {
     out.push(root);
     if (root.type !== 4) continue;
     out.push(
-      ...all
-        .filter((c) => c.parentId === root.id)
-        .sort((a, b) => fRank(a) - fRank(b) || fByPosition(a, b))
+      ...all.filter((c) => c.parentId === root.id).sort((a, b) => fRank(a) - fRank(b) || fByPosition(a, b))
     );
   }
   out.push(...all.filter((c) => !out.includes(c)).sort(fByPosition));
@@ -353,7 +351,8 @@ function moveChannel(guild, u) {
   const target = guild.channels.get(u.id);
   if (!target) throw invalidForm('id', 'CHANNEL_NOT_FOUND');
   const parent = u.parentId === undefined ? (target.parentId ?? null) : u.parentId;
-  if (parent && guild.channels.get(parent)?.type !== 4) throw invalidForm('parent_id', 'INVALID_PARENT_CHANNEL');
+  if (parent && guild.channels.get(parent)?.type !== 4)
+    throw invalidForm('parent_id', 'INVALID_PARENT_CHANNEL');
   if (target.type === 4 && parent) throw invalidForm('parent_id', 'CATEGORIES_CANNOT_HAVE_PARENTS');
   const ordered = fluxerChannelList(guild.channels);
   const block = new Set([target.id]);

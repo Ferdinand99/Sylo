@@ -185,16 +185,16 @@ test('a role order Fluxer refuses with a 400 says what Fluxer said, and grants n
   const end = await drain(s);
   assert.equal(end.status, 'live', 'one refused step does not pause the mirror');
   const failed = (await s.engine.report(end)).failed.find((i) => i.name === 'Role order');
-  assert.match(failed.detail, /^Fluxer did not take the role order: Invalid form body\. \(id: Invalid role ID\)\./);
+  assert.match(
+    failed.detail,
+    /^Fluxer did not take the role order: Invalid form body\. \(id: Invalid role ID\)\./
+  );
   assert.equal(bitsOf(s, await mapped(s, 'role', s.k.mod)) & ELEVATED_FLUXER_MASK, 0n);
 });
 
 test('a failed channel order is reported plainly and Copy again tries it again', async () => {
   const s = await scenario({ withExpressions: false });
-  s.fluxer.failOn(
-    'setChannelPositions',
-    Object.assign(new Error('Invalid form body.'), { statusCode: 400 })
-  );
+  s.fluxer.failOn('setChannelPositions', Object.assign(new Error('Invalid form body.'), { statusCode: 400 }));
   await s.engine.startCopy(s.pair.id);
   let end = await drain(s);
   const failed = (await s.engine.report(end)).failed.find((i) => i.name === 'Channel order');
@@ -209,7 +209,10 @@ test('a failed channel order is reported plainly and Copy again tries it again',
 
 test('a rate limit on an order is waited out, not reported as a failure', async () => {
   const s = await scenario({ withExpressions: false });
-  s.fluxer.failOn('setChannelPositions', Object.assign(new Error('slow down'), { statusCode: 429, retryAfter: 2 }));
+  s.fluxer.failOn(
+    'setChannelPositions',
+    Object.assign(new Error('slow down'), { statusCode: 429, retryAfter: 2 })
+  );
   await s.engine.startCopy(s.pair.id);
   const end = await drain(s);
   assert.deepEqual((await s.engine.report(end)).failed, []);

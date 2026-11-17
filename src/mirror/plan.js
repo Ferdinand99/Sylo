@@ -492,8 +492,7 @@ export function channelPositionUpdates(layout, targetIdOf, fluxerChannels = []) 
     const group = parentId ?? '';
     let position;
     if (item.voice) {
-      position =
-        count(`${group}|text`) + (foreignText.get(parentId) ?? 0) + count(`${group}|voice`);
+      position = count(`${group}|text`) + (foreignText.get(parentId) ?? 0) + count(`${group}|voice`);
       placed.set(`${group}|voice`, count(`${group}|voice`) + 1);
     } else {
       position = count(`${group}|text`);
