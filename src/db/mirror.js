@@ -109,6 +109,9 @@ export const PAIR_STATUS = Object.freeze({
   STOPPED: 'stopped',
 });
 
+/** The states in which a mirror runs, and so do the bridge links it made. */
+export const PAIR_RUNNING = Object.freeze([PAIR_STATUS.COPYING, PAIR_STATUS.LIVE, PAIR_STATUS.DONE]);
+
 const num = (v) => Number(v ?? 0);
 
 const parseJson = (text, fallback) => {

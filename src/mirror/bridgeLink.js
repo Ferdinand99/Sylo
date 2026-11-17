@@ -26,13 +26,16 @@ import { runtime } from '../runtime.js';
 import { guildByKey } from '../platform/platformOf.js';
 import {
   PAIR_STATUS,
+  getMapping,
   getMirrorLink,
   getPair,
   listMappings,
   listMirrorLinks,
+  putMapping,
   putMirrorLink,
 } from '../db/mirror.js';
 import { linkForChannel } from '../db/bridge.js';
+import { isModuleEnabled } from '../db/modules.js';
 import {
   BridgeError,
   createMirrorLink,
@@ -53,6 +56,9 @@ const channelOf = (guild, id) => guild?.channels?.cache?.get?.(String(id)) ?? nu
 /** The states in which the mirror runs, and so do the links it made. */
 const RUNNING = new Set([PAIR_STATUS.COPYING, PAIR_STATUS.LIVE, PAIR_STATUS.DONE]);
 export const mirrorRuns = (pair) => Boolean(pair) && RUNNING.has(pair.status);
+
+/** The first linking of a pair is the one that may switch the Bridge module on; this id map entry says it happened. */
+const MODULE_MARKER = ['bridge', 'module'];
 
 const sleepReal = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -89,11 +95,16 @@ export async function syncMirrorLinks(pairOrId) {
   return out;
 }
 
-/** The mirror is being removed: its links stay, paused, and either owner can resume or unlink them on the Bridge page. */
-export async function releaseMirrorLinks(pairId) {
+/**
+ * The mirror is being removed by `side` ('source' the Discord server, 'target' the Fluxer server): its links stay,
+ * paused by that server, so only its owner can resume them on the Bridge page and the other server's owner can
+ * unlink them.
+ */
+export async function releaseMirrorLinks(pairId, side = '') {
+  const linkSide = side === 'source' ? 'a' : side === 'target' ? 'b' : '';
   let released = 0;
   for (const row of await listMirrorLinks(pairId)) {
-    if (await releaseMirrorLink(row.linkId)) released += 1;
+    if (await releaseMirrorLink(row.linkId, linkSide)) released += 1;
   }
   return released;
 }
@@ -140,16 +151,19 @@ export async function linkMirroredChannels(
     if (found) {
       const same =
         found.side === 'a' && found.link.guildB === pair.targetGuild && found.link.channelB === m.targetId;
-      if (same) {
-        // A link of exactly this pair whose record was lost (a restart between the two writes): take it over.
+      if (same && String(found.link.requestedBy).endsWith('(server mirror)')) {
+        // A link this mirror made whose record was lost (a restart between the two writes): take it over.
         await putMirrorLink(pair.id, m.sourceId, m.targetId, found.link.id);
         already += 1;
       } else {
+        // A link the owners made themselves is theirs: it is never taken over, and never changed.
         skipped.push({
           sourceId: m.sourceId,
           name: m.label || src.name,
           code: 'exists',
-          message: 'this channel is already bridged to another channel',
+          message: same
+            ? 'this pair is already bridged by hand, and the mirror leaves it as it is'
+            : 'this channel is already bridged to another channel',
         });
       }
       continue;
@@ -161,8 +175,36 @@ export async function linkMirroredChannels(
     return already || skipped.length ? out : { ...out, reason: 'nothing-to-link' };
   }
 
-  await enableBridgeForMirror(pair.sourceGuild);
-  await enableBridgeForMirror(pair.targetGuild);
+  // Only the first linking of a pair switches the Bridge module on. After that, a server that switched it off has
+  // decided so (it is the switch for every bridge in that server), and the mirror does not switch it on again.
+  if (await getMapping(pair.id, ...MODULE_MARKER)) {
+    const off = [];
+    for (const key of [pair.sourceGuild, pair.targetGuild]) {
+      if (!(await isModuleEnabled(key, 'bridge'))) off.push(key);
+    }
+    if (off.length > 0) {
+      for (const item of todo) {
+        skipped.push({
+          sourceId: item.sourceId,
+          name: item.name,
+          code: 'bridge-off',
+          message: 'the Bridge module is switched off in one of the servers, and the mirror does not switch it on again',
+        });
+      }
+      return { linked: 0, already, remaining: 0, tried: [], skipped, reason: 'bridge-off' };
+    }
+  } else {
+    await enableBridgeForMirror(pair.sourceGuild);
+    await enableBridgeForMirror(pair.targetGuild);
+    await putMapping({
+      pairId: pair.id,
+      kind: MODULE_MARKER[0],
+      sourceId: MODULE_MARKER[1],
+      targetId: '',
+      owned: false,
+      specHash: '',
+    });
+  }
 
   // The owners who agreed must be able to see, read and send in each channel themselves (as for a link made by
   // hand). With sign-in off there is no one to check.
@@ -173,8 +215,9 @@ export async function linkMirroredChannels(
   const consent = {
     sourceBy: pair.sourceConsentBy,
     targetBy: pair.targetConsentBy,
-    sourceOwner: String(sg.ownerId ?? ''),
-    targetOwner: String(tg.ownerId ?? ''),
+    // The people who agreed to the mirror (the bridge's own owner check then pauses the link if a server changes hands).
+    sourceOwner: pair.sourceConsentUser || String(sg.ownerId ?? ''),
+    targetOwner: pair.targetConsentUser || String(tg.ownerId ?? ''),
   };
 
   let linked = 0;

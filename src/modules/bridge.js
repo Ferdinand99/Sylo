@@ -27,6 +27,7 @@ import { every } from './schedule.js';
 import { getGuildModule, isModuleEnabled, setGuildModule } from '../db/modules.js';
 import { recordAudit } from '../db/audit.js';
 import { onBeforePurge } from '../db/purge.js';
+import { PAIR_RUNNING, getPair as getMirrorPair, mirrorPairOfLink } from '../db/mirror.js';
 import * as store from '../db/bridge.js';
 import { runtime } from '../runtime.js';
 import { splitPlatformGuildId } from '../lib/platformId.js';
@@ -257,7 +258,9 @@ const REASONS = {
   mirror:
     'This bridge was made by the server mirror and is paused with it. It runs again when the mirror does.',
   'mirror-ended':
-    'The server mirror that made this bridge ended. Either server owner can resume the bridge on the Bridge page, or unlink it.',
+    'The server mirror that made this bridge was removed, and the bridge was paused. Only the server that removed the mirror can resume it; either server can unlink it.',
+  visibility:
+    'The two channels are no longer open to the same people (one became private). A channel everyone can read is never bridged to a private one.',
 };
 /** The text a link's stored failure reason stands for. */
 export const reasonText = (code) => REASONS[code] ?? 'The bridge stopped working.';
@@ -594,13 +597,13 @@ async function revalidate(link) {
 export async function resumeLink({ guildKey, id, actor }) {
   const { link, side } = await ownLink(guildKey, id);
   if (link.status === 'active') throw new BridgeError('That bridge is already running.', 409);
-  if (link.status === 'paused' && link.failReason === 'mirror') {
+  if ((await mirrorHold(link)) === 'held') {
     throw new BridgeError(
-      'The server mirror made this bridge and paused it. It runs again when the mirror does.',
+      'The server mirror made this bridge and holds it while the mirror is not running. It runs again when the mirror does.',
       409
     );
   }
-  // A link nobody owns the pause of (the mirror that made it ended) can be resumed by either server.
+  // A link nobody owns the pause of (its mirror was removed by nobody in particular) can be resumed by either server.
   if (link.status === 'paused' && link.pausedSide && link.pausedSide !== side) {
     throw new BridgeError('The other server paused this bridge, so only they can resume it.', 403);
   }
@@ -665,6 +668,31 @@ function everyoneSees(key, channel) {
   }
 }
 
+/** Are the two channels equally open: both visible to @everyone or both not? Unknown counts as different. */
+function samePrivacy(keyA, channelA, keyB, channelB) {
+  const a = everyoneSees(keyA, channelA);
+  const b = everyoneSees(keyB, channelB);
+  return a !== null && b !== null && a === b;
+}
+
+/** A link the server mirror made records its two owners as "<name> (server mirror)". */
+const MIRROR_TAG = '(server mirror)';
+const madeByMirror = (link) => String(link?.requestedBy ?? '').endsWith(MIRROR_TAG);
+
+/**
+ * Who holds a link: 'held' while its server mirror is not running (or the link is paused by it), 'ended' when it
+ * says the mirror holds it but that mirror is gone (the pair was replaced), otherwise 'none'. A held link cannot
+ * be resumed on the Bridge page: it comes back with the mirror.
+ */
+export async function mirrorHold(link) {
+  const pairId = await mirrorPairOfLink(link.id);
+  if (!pairId) return link.status === 'paused' && link.failReason === 'mirror' ? 'ended' : 'none';
+  const pair = await getMirrorPair(pairId);
+  if (!pair) return link.status === 'paused' && link.failReason === 'mirror' ? 'ended' : 'none';
+  if (!PAIR_RUNNING.includes(pair.status)) return 'held';
+  return link.status === 'paused' && link.failReason === 'mirror' ? 'held' : 'none';
+}
+
 /**
  * Turn the Bridge module on in a server the mirror links channels in. The owner agreed to the mirror, which
  * links every copied channel, and the module has to be on for the links to carry anything.
@@ -712,9 +740,7 @@ export async function createMirrorLink({ source, target, members = {}, open = fa
   checkAge(source.guildKey, a.channel, target.guildKey, b.channel);
   // A channel only some members can see is linked only to a channel that is as closed: nothing private is
   // shared with a channel everyone can read, in either direction.
-  const seenA = everyoneSees(source.guildKey, a.channel);
-  const seenB = everyoneSees(target.guildKey, b.channel);
-  if (seenA === null || seenB === null || seenA !== seenB) {
+  if (!samePrivacy(source.guildKey, a.channel, target.guildKey, b.channel)) {
     throw new BridgeError(
       'The two channels are not open to the same people (one is private, or it cannot be told), so they are not bridged.',
       409,
@@ -810,6 +836,17 @@ export async function resumeMirrorLink(linkId) {
     if (err instanceof BridgeError) return { resumed: false, reason: err.message };
     throw err;
   }
+  // The channels must still be equally open: a channel can have turned private since the link was made.
+  if (
+    !samePrivacy(
+      link.guildA,
+      channelIn(link.guildA, link.channelA),
+      link.guildB,
+      channelIn(link.guildB, link.channelB)
+    )
+  ) {
+    return { resumed: false, reason: reasonText('visibility') };
+  }
   const changed = ownerChangedSide(link);
   if (changed) {
     await store.setLinkStatus(link.id, { status: 'paused', pausedSide: changed, reason: 'owner-changed' });
@@ -821,13 +858,21 @@ export async function resumeMirrorLink(linkId) {
   return { resumed: true };
 }
 
-/** The mirror that made a link ended: the link stays, paused, and either server owner can resume or unlink it. */
-export async function releaseMirrorLink(linkId) {
+/**
+ * The mirror that made a link was removed by `side` ('a' the Discord server, 'b' the Fluxer server): the link stays,
+ * paused by that server, so only its owner can resume it and the other server's owner can unlink it. Without a side
+ * (a removal nobody owns) either owner can resume it.
+ */
+export async function releaseMirrorLink(linkId, side = '') {
   const link = await store.getLink(linkId);
   if (!link) return false;
   const mine = link.status === 'active' || (link.status === 'paused' && link.failReason === 'mirror');
   if (!mine) return false;
-  await store.setLinkStatus(link.id, { status: 'paused', pausedSide: '', reason: 'mirror-ended' });
+  await store.setLinkStatus(link.id, {
+    status: 'paused',
+    pausedSide: side === 'a' || side === 'b' ? side : '',
+    reason: 'mirror-ended',
+  });
   dropBridgeCache();
   queue.clear(laneKey(link, 'a'));
   queue.clear(laneKey(link, 'b'));
@@ -1269,6 +1314,11 @@ async function allowed(message, link, side, key) {
     await failLink(link.id, 'age-restriction');
     return false;
   }
+  // A link the server mirror made also keeps the two channels equally open (a channel can turn private later).
+  if (madeByMirror(link) && !samePrivacy(key, mine, theirKey, theirs)) {
+    await failLink(link.id, 'visibility');
+    return false;
+  }
   return true;
 }
 
@@ -1537,7 +1587,7 @@ function endView(key, channelId) {
 }
 
 /** One link as the server `key` sees it (never a webhook token). */
-export function linkView(link, key) {
+export function linkView(link, key, hold = 'none') {
   const side = sideOf(link, key);
   const theirs = other(side);
   return {
@@ -1548,12 +1598,17 @@ export function linkView(link, key) {
     // Whether this server's owner can press Resume: a stopped link, one this server paused, or one nobody holds
     // (its server mirror ended). A link held by a running-state mirror comes back with the mirror.
     resumable:
-      link.status === 'failed' ||
-      (link.status === 'paused' &&
-        (link.pausedSide === side || (!link.pausedSide && link.failReason !== 'mirror'))),
+      hold !== 'held' &&
+      (link.status === 'failed' ||
+        (link.status === 'paused' && (link.pausedSide === side || !link.pausedSide))),
     problem: link.status === 'failed' ? { code: link.failReason, text: reasonText(link.failReason) } : null,
     // Why a paused link is paused beyond "a server paused it": its owner changed, or its channel is gone.
-    pauseNote: link.status === 'paused' && link.failReason ? reasonText(link.failReason) : null,
+    pauseNote:
+      hold === 'held' && link.status !== 'active'
+        ? reasonText('mirror')
+        : link.status === 'paused' && link.failReason
+          ? reasonText(hold === 'ended' ? 'mirror-ended' : link.failReason)
+          : null,
     mine: { channelId: channelOf(link, side), ...endView(key, channelOf(link, side)) },
     theirs: endView(guildOf(link, theirs), channelOf(link, theirs)),
     options: optionsOf(link, side),
@@ -1580,7 +1635,7 @@ export async function bridgeOverview(key) {
     bothPlatforms: Boolean(runtime.clients.discord && runtime.clients.fluxer),
     enabled: (await getGuildModule(key, 'bridge')).enabled,
     limits: { links: MAX_LINKS, requests: MAX_REQUESTS },
-    links: links.map((l) => linkView(l, key)),
+    links: await Promise.all(links.map(async (l) => linkView(l, key, await mirrorHold(l)))),
     requests: requests.map((r) => ({
       id: r.id,
       channelId: r.channelId,

@@ -25,6 +25,7 @@ import {
   dropBridgeCache,
   handleMessage,
   linkView,
+  mirrorHold,
   resumeLink,
   unlinkLink,
   useBridgeParts,
@@ -284,10 +285,11 @@ test('Sylo missing a permission in one channel skips only that pair', async () =
   assert.ok(await bridgeDb.linkForChannel(D, fine.d.id));
 });
 
-test('a channel already bridged by hand to another channel is left as it is; the pair itself is taken over', async () => {
+test('a channel already bridged by hand is left as it is, and a lost record of a mirror link is taken over', async () => {
   const pair = await livePair();
   const other = await mirrored(pair, 'other');
   const lost = await mirrored(pair, 'lost');
+  const handmade = await mirrored(pair, 'handmade');
   // somebody linked "other" to an unrelated Fluxer channel through the bridge page
   const stray = p.channel(p.fGuild, { name: 'stray' });
   await bridgeDb.createLink({
@@ -298,7 +300,7 @@ test('a channel already bridged by hand to another channel is left as it is; the
     hookA: { id: '1', token: 'a' },
     hookB: { id: '2', token: 'b' },
   });
-  // and a link of exactly the pair "lost" exists whose record was never written
+  // a link of exactly the pair "lost" that the mirror made exists, but its record was never written
   const made = await bridgeDb.createLink({
     guildA: D,
     channelA: lost.d.id,
@@ -306,14 +308,37 @@ test('a channel already bridged by hand to another channel is left as it is; the
     channelB: lost.f.id,
     hookA: { id: '3', token: 'c' },
     hookB: { id: '4', token: 'd' },
+    requestedBy: 'Anna (server mirror)',
+    acceptedBy: 'Bo (server mirror)',
+  });
+  // and the owners linked exactly the pair "handmade" themselves, with a code
+  const byHand = await bridgeDb.createLink({
+    guildA: D,
+    channelA: handmade.d.id,
+    guildB: F,
+    channelB: handmade.f.id,
+    hookA: { id: '5', token: 'e' },
+    hookB: { id: '6', token: 'f' },
+    requestedBy: 'Anna (dashboard)',
+    acceptedBy: 'Bo (dashboard)',
   });
   const res = await run(pair);
   assert.deepEqual([res.linked, res.already], [0, 1]);
   assert.deepEqual(
     res.skipped.map((s) => [s.sourceId, s.code]),
-    [[other.d.id, 'exists']]
+    [
+      [other.d.id, 'exists'],
+      [handmade.d.id, 'exists'],
+    ]
   );
-  assert.equal((await mdb.getMirrorLink(pair.id, lost.d.id)).linkId, made, 'taken over');
+  assert.match(res.skipped[1].message, /already bridged by hand/);
+  assert.equal((await mdb.getMirrorLink(pair.id, lost.d.id)).linkId, made, 'a lost mirror record is taken over');
+  assert.equal(await mdb.getMirrorLink(pair.id, handmade.d.id), null, 'a hand-made link is never taken over');
+  // so pausing the mirror leaves it alone
+  await mdb.updatePair(pair.id, { status: 'paused' });
+  await syncMirrorLinks(pair.id);
+  assert.equal((await bridgeDb.getLink(byHand)).status, 'active');
+  assert.equal((await bridgeDb.getLink(made)).status, 'paused');
   assert.equal(fakes.transport.hooks.length, 0, 'no new webhook');
 });
 
@@ -404,8 +429,9 @@ test('a paused mirror pauses its links, nothing crosses, and they run again with
   await send(f, F, { content: 'three' });
   assert.equal(fakes.transport.sends.length, 1, 'nothing crosses while the mirror is paused');
   assert.deepEqual(await bridgeProblems(D), [], 'the mirror has its own Health entry');
-  assert.match(linkView(held, D).pauseNote, /server mirror/);
-  assert.equal(linkView(held, D).resumable, false, 'it comes back with the mirror, not by a button');
+  assert.equal(await mirrorHold(held), 'held');
+  assert.match(linkView(held, D, 'held').pauseNote, /server mirror/);
+  assert.equal(linkView(held, D, 'held').resumable, false, 'it comes back with the mirror, not by a button');
 
   // the bridge page cannot resume it on its own
   await assert.rejects(
@@ -464,22 +490,164 @@ test('a link whose channel can no longer be used stays paused with the mirror an
   assert.equal((await bridgeDb.linkForChannel(D, d.id)).link.failReason, 'mirror');
 });
 
-test('removing a mirror releases its links: they stay, paused, and either owner can resume or unlink them', async () => {
+test('removing a mirror releases its links, paused by the server that removed it: only that owner can resume, the other can unlink', async () => {
+  const pair = await livePair();
+  const { d } = await mirrored(pair, 'chat');
+  const other = await mirrored(pair, 'rules');
+  await run(pair);
+  assert.equal(await releaseMirrorLinks(pair.id, 'target'), 2, 'removed from the Fluxer server');
+  const link = (await bridgeDb.linkForChannel(D, d.id)).link;
+  assert.deepEqual([link.status, link.pausedSide, link.failReason], ['paused', 'b', 'mirror-ended']);
+  await mdb.deletePair(pair.id);
+  assert.equal((await mdb.listMirrorLinks(pair.id)).length, 0, 'the record goes with the pair');
+  const view = async (key) => linkView(link, key, await mirrorHold(link));
+  assert.equal((await mirrorHold(link)), 'ended');
+  assert.match((await view(F)).pauseNote, /mirror that made this bridge was removed/);
+  assert.deepEqual([(await view(D)).resumable, (await view(F)).resumable], [false, true]);
+  assert.equal((await view(D)).pausedByThem, true);
+  // the Discord owner cannot start sharing again on their own...
+  await assert.rejects(
+    resumeLink({ guildKey: D, id: link.id, actor: 'Anna' }),
+    (err) => err instanceof BridgeError && err.status === 403
+  );
+  assert.equal((await bridgeDb.getLink(link.id)).status, 'paused');
+  // ...but can unlink; the Fluxer owner who removed the mirror can resume
+  await unlinkLink({ guildKey: D, id: (await bridgeDb.linkForChannel(D, other.d.id)).link.id, actor: 'Anna' });
+  await resumeLink({ guildKey: F, id: link.id, actor: 'Bo' });
+  assert.equal((await bridgeDb.getLink(link.id)).status, 'active');
+  // a second release does nothing to links that are no longer the mirror's to hold
+  assert.equal(await releaseMirrorLinks(pair.id, 'target'), 0);
+});
+
+test('a removal nobody owns (no side) leaves the links to either owner', async () => {
   const pair = await livePair();
   const { d } = await mirrored(pair, 'chat');
   await run(pair);
   assert.equal(await releaseMirrorLinks(pair.id), 1);
   const link = (await bridgeDb.linkForChannel(D, d.id)).link;
-  assert.deepEqual([link.status, link.pausedSide, link.failReason], ['paused', '', 'mirror-ended']);
-  assert.match(linkView(link, F).pauseNote, /mirror that made this bridge ended/);
-  assert.deepEqual([linkView(link, D).resumable, linkView(link, F).resumable], [true, true]);
-  await mdb.deletePair(pair.id);
-  assert.equal((await mdb.listMirrorLinks(pair.id)).length, 0, 'the record goes with the pair');
-  // the Fluxer owner resumes it on the Bridge page
-  await resumeLink({ guildKey: F, id: link.id, actor: 'Bo' });
+  assert.deepEqual([link.status, link.pausedSide], ['paused', '']);
+  await resumeLink({ guildKey: D, id: link.id, actor: 'Anna' });
   assert.equal((await bridgeDb.getLink(link.id)).status, 'active');
-  // a second release does nothing to a link that is no longer the mirror's to hold
-  assert.equal(await releaseMirrorLinks(pair.id), 0);
+});
+
+test('a link whose mirror pair was replaced is not stranded: it counts as ended and can be resumed', async () => {
+  const pair = await livePair();
+  const { d } = await mirrored(pair, 'chat');
+  await run(pair);
+  await mdb.updatePair(pair.id, { status: 'stopped' });
+  await syncMirrorLinks(pair.id);
+  const held = (await bridgeDb.linkForChannel(D, d.id)).link;
+  assert.deepEqual([held.failReason, await mirrorHold(held)], ['mirror', 'held']);
+  await mdb.deletePair(pair.id); // a new request for another Fluxer server replaced the stopped pair
+  assert.equal(await mirrorHold(held), 'ended');
+  assert.equal(linkView(held, D, 'ended').resumable, true);
+  assert.match(linkView(held, D, 'ended').pauseNote, /was removed/);
+  await resumeLink({ guildKey: D, id: held.id, actor: 'Anna' });
+  assert.equal((await bridgeDb.getLink(held.id)).status, 'active');
+});
+
+test('while the mirror is not running, even a stopped or hand-paused link of it cannot be resumed on the Bridge page', async () => {
+  const pair = await livePair();
+  const a = await mirrored(pair, 'chat');
+  const b = await mirrored(pair, 'rules');
+  await run(pair);
+  const failed = (await bridgeDb.linkForChannel(D, a.d.id)).link;
+  const byHand = (await bridgeDb.linkForChannel(D, b.d.id)).link;
+  await bridgeDb.setLinkStatus(failed.id, { status: 'failed', reason: 'permissions' });
+  await bridgeDb.setLinkStatus(byHand.id, { status: 'paused', pausedSide: 'a' });
+  await mdb.updatePair(pair.id, { status: 'stopped' });
+  for (const [guildKey, link] of [
+    [D, failed],
+    [D, byHand],
+  ]) {
+    await assert.rejects(
+      resumeLink({ guildKey, id: link.id, actor: 'Anna' }),
+      (err) => err instanceof BridgeError && err.status === 409 && /mirror/.test(err.message)
+    );
+  }
+  assert.equal(linkView(failed, D, await mirrorHold(failed)).resumable, false);
+  assert.equal(linkView(byHand, D, await mirrorHold(byHand)).resumable, false);
+  // once the mirror runs again they are the owners' to resume
+  await mdb.updatePair(pair.id, { status: 'live' });
+  assert.equal(linkView(byHand, D, await mirrorHold(byHand)).resumable, true);
+  await resumeLink({ guildKey: D, id: byHand.id, actor: 'Anna' });
+  assert.equal((await bridgeDb.getLink(byHand.id)).status, 'active');
+});
+
+// --- the module switch, privacy over time, recorded owners ---------------------------------------------------
+
+test('only the first linking switches the Bridge module on: a server that turned it off keeps it off', async () => {
+  const pair = await livePair();
+  await mirrored(pair, 'chat');
+  assert.equal((await run(pair)).linked, 1);
+  assert.equal((await getGuildModule(F, 'bridge')).enabled, true);
+
+  // the Fluxer server's owner switches the module off; a channel is made on Discord and the mirror copies it
+  await setGuildModule(F, 'bridge', { enabled: false });
+  const later = await mirrored(pair, 'offers');
+  const res = await run(pair);
+  assert.deepEqual([res.linked, res.reason], [0, 'bridge-off']);
+  assert.deepEqual(
+    res.skipped.map((s) => [s.sourceId, s.code]),
+    [[later.d.id, 'bridge-off']]
+  );
+  assert.equal((await getGuildModule(F, 'bridge')).enabled, false, 'still off');
+  assert.equal(await bridgeDb.linkForChannel(D, later.d.id), null);
+  assert.equal((await listAudit(F)).filter((e) => e.action === 'bridge:module').length, 1, 'switched on once');
+  // when the owner switches it on again, the missing pair is linked
+  await setGuildModule(F, 'bridge', { enabled: true });
+  assert.equal((await run(pair)).linked, 1);
+});
+
+test('a first linking where every pair is refused still counts: the module is not switched on again later', async () => {
+  const pair = await livePair();
+  await mirrored(pair, 'adult', { dOpts: { nsfw: true } });
+  assert.equal((await run(pair)).linked, 0);
+  assert.equal((await getGuildModule(D, 'bridge')).enabled, true);
+  await setGuildModule(D, 'bridge', { enabled: false });
+  assert.equal((await run(pair)).reason, 'bridge-off');
+  assert.equal((await getGuildModule(D, 'bridge')).enabled, false);
+});
+
+test('a channel that turns private later pauses the mirror link instead of leaking: on resume and on the next message', async () => {
+  const pair = await livePair();
+  const a = await mirrored(pair, 'chat');
+  const b = await mirrored(pair, 'rules');
+  await run(pair);
+  const closed = (guild) => (target) => ({
+    has: (perm) => !(perm === 'ViewChannel' && target === String(guild.id)),
+  });
+  // on the next message: the Discord channel became private while the Fluxer copy is still open
+  a.d.permissionsFor = closed(p.dGuild);
+  await send(a.d, D, { content: 'secret' });
+  assert.equal(fakes.transport.sends.length, 0, 'nothing crosses');
+  const stopped = (await bridgeDb.linkForChannel(D, a.d.id)).link;
+  assert.deepEqual([stopped.status, stopped.failReason], ['failed', 'visibility']);
+  assert.match((await bridgeProblems(D))[0].text, /no longer open to the same people/);
+
+  // on resume of a link held with the mirror
+  await mdb.updatePair(pair.id, { status: 'paused' });
+  await syncMirrorLinks(pair.id);
+  b.f.permissionsFor = closed(p.fGuild);
+  await mdb.updatePair(pair.id, { status: 'live' });
+  const res = await syncMirrorLinks(pair.id);
+  assert.equal(res.resumed, 0);
+  assert.match(res.waiting[0], /no longer open to the same people/);
+  assert.equal((await bridgeDb.linkForChannel(D, b.d.id)).link.status, 'paused');
+});
+
+test('the links record the people who agreed to the mirror as the owners the bridge checks', async () => {
+  const pair = await livePair();
+  const { d } = await mirrored(pair, 'chat');
+  await run(pair);
+  const link = (await bridgeDb.linkForChannel(D, d.id)).link;
+  assert.deepEqual([link.ownerA, link.ownerB], [pair.sourceConsentUser, pair.targetConsentUser]);
+  // when the Fluxer server has changed hands since, the bridge pauses the link by itself
+  p.fGuild.ownerId = 'someone-new';
+  await handleMessage(message({ channelId: d.id, client: p.discord, content: 'hi' }), {}, D);
+  await bridgeIdle();
+  assert.equal(fakes.transport.sends.length, 0);
+  assert.equal((await bridgeDb.linkForChannel(D, d.id)).link.failReason, 'owner-changed');
 });
 
 test('a link the mirror made can be unlinked by either owner, and leaving the server purges it with the pair', async () => {

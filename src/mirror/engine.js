@@ -1419,14 +1419,14 @@ export function createEngine(overrides = {}) {
   }
 
   /** Forget the mirror altogether: the pair, its id map and its queue. Nothing on either server is touched. */
-  async function removePair(pairId) {
+  async function removePair(pairId, side = '') {
     const pair = await store.getPair(pairId);
     if (!pair) return false;
     if ([PAIR_STATUS.COPYING, PAIR_STATUS.LIVE].includes(pair.status)) {
       throw new MirrorError('Stop the mirror before removing it.', 'item');
     }
     // The bridge links it made stay, paused: the owners decide on the Bridge page whether to resume or unlink them.
-    await deps.releaseLinks(pairId);
+    await deps.releaseLinks(pairId, side);
     await store.deletePair(pairId);
     state.delete(pairId);
     touchHealth(pair);

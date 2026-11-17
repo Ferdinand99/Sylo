@@ -127,8 +127,8 @@ test('the links of a mirror follow its state: paused, resumed, stopped and relea
       syncLinks: async (pair) => {
         states.push(pair.status);
       },
-      releaseLinks: async (id) => {
-        released.push(id);
+      releaseLinks: async (id, side) => {
+        released.push([id, side]);
       },
     },
   });
@@ -140,8 +140,8 @@ test('the links of a mirror follow its state: paused, resumed, stopped and relea
   await s.engine.stopPair(s.pair.id);
   assert.deepEqual(states, ['paused', 'live', 'stopped']);
   assert.deepEqual(released, []);
-  await s.engine.removePair(s.pair.id);
-  assert.deepEqual(released, [s.pair.id], 'released before the pair and its record are gone');
+  await s.engine.removePair(s.pair.id, 'target');
+  assert.deepEqual(released, [[s.pair.id, 'target']], 'released, with the remover side, before the pair is gone');
   assert.equal(await db.getPair(s.pair.id), null);
 });
 
