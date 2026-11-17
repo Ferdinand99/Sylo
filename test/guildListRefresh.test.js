@@ -153,7 +153,7 @@ test('a join on one platform leaves the other platform’s lists alone', async (
   assert.ok(!(await guildIds(b)).includes(fluxerGuild.key), 'a Discord join says nothing about Fluxer');
   noteGuildJoin('fluxer', fluxerGuild.key, fluxerGuild.guild);
   assert.ok((await guildIds(b)).includes(fluxerGuild.key));
-  assert.ok((await guildIds(b)).includes(F_GUILD));
+  assert.ok((await guildIds(b)).includes(`fluxer:${F_GUILD}`));
   assert.ok((await guildIds(b)).includes(D_GUILD));
 });
 
