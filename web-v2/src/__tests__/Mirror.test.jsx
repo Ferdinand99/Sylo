@@ -250,11 +250,22 @@ describe('Mirror: picking the Fluxer server', () => {
       choices([
         choice({
           notes: [
-            { code: 'target-permissions', message: "Sylo's role needs the Administrator permission on this server." },
-            { code: 'role-hierarchy', message: "Sylo's role is not the highest on this server (1 role ranks above or level with it)." },
+            {
+              code: 'target-permissions',
+              message: "Sylo's role needs the Administrator permission on this server.",
+            },
+            {
+              code: 'role-hierarchy',
+              message: "Sylo's role is not the highest on this server (1 role ranks above or level with it).",
+            },
           ],
         }),
-        choice({ id: 'fluxer:323456789012345678', name: 'Second', memberCount: 1204, icon: 'https://cdn.test/i.png' }),
+        choice({
+          id: 'fluxer:323456789012345678',
+          name: 'Second',
+          memberCount: 1204,
+          icon: 'https://cdn.test/i.png',
+        }),
         choice({ id: 'fluxer:423456789012345678', name: 'Busy', memberCount: null, inUse: true }),
       ])
     );
@@ -306,7 +317,9 @@ describe('Mirror: picking the Fluxer server', () => {
   it('says so when no Fluxer server is found, and falls back to the id field when the list fails', async () => {
     api.getMirror.mockResolvedValue(state());
     const { unmount } = renderAtGuild(<Mirror />, GUILD);
-    expect(await screen.findByText(/No Fluxer server was found where Sylo is a member and you are the owner/)).toBeTruthy();
+    expect(
+      await screen.findByText(/No Fluxer server was found where Sylo is a member and you are the owner/)
+    ).toBeTruthy();
     unmount();
     api.getMirrorFluxerServers.mockRejectedValue(new Error('boom'));
     renderAtGuild(<Mirror />, GUILD);

@@ -514,7 +514,14 @@ test('the picker never names a Fluxer server the person does not own', async () 
     const text = await (await get(`/guilds/${D_GUILD}/mirror/fluxer-servers`)).text();
     const body = JSON.parse(text);
     assert.deepEqual(body.servers, [], 'no server they own: an empty list');
-    for (const secret of ['F-main', 'Secret-other-server', 'Secret-unlisted-server', F_GUILD, F_OTHER_OWNER, F_NOT_LISTED]) {
+    for (const secret of [
+      'F-main',
+      'Secret-other-server',
+      'Secret-unlisted-server',
+      F_GUILD,
+      F_OTHER_OWNER,
+      F_NOT_LISTED,
+    ]) {
       assert.ok(!text.includes(secret), `${secret} is not in the answer`);
     }
 
@@ -550,8 +557,11 @@ test('the picker says when no Fluxer login is connected, and only the owner of t
   const out = own();
   assert.ok(
     [401, 403].includes(
-      (await out.get(`/api/v2/guilds/${D_GUILD}/mirror/fluxer-servers`, { headers: { accept: 'application/json' } }))
-        .status
+      (
+        await out.get(`/api/v2/guilds/${D_GUILD}/mirror/fluxer-servers`, {
+          headers: { accept: 'application/json' },
+        })
+      ).status
     ),
     'signed out'
   );

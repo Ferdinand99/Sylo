@@ -73,7 +73,9 @@ describe('Bridge page', () => {
   it('points the owner of a Discord server to Mirror to Fluxer, and shows it to nobody else', async () => {
     renderAtGuild(<Bridge />, GUILD);
     expect(await screen.findByText(/Setting up a whole Fluxer server\?/)).toBeTruthy();
-    expect(screen.getByText(/copy channels, roles and emoji and\s+bridge every channel at once/)).toBeTruthy();
+    expect(
+      screen.getByText(/copy channels, roles and emoji and\s+bridge every channel at once/)
+    ).toBeTruthy();
     const link = screen.getByRole('link', { name: 'Mirror to Fluxer' });
     expect(link.getAttribute('href')).toBe(`/guilds/${GUILD}/mirror`);
   });

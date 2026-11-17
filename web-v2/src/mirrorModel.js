@@ -140,4 +140,6 @@ export const validTargetId = (text) => /^(fluxer:)?\d{17,20}$/.test(String(text 
 
 /** "1 member", "1,204 members", or a plain note when Fluxer did not say. */
 export const memberCountText = (n) =>
-  Number.isFinite(n) && n > 0 ? `${n.toLocaleString('en-US')} ${n === 1 ? 'member' : 'members'}` : 'Members not known';
+  Number.isFinite(n) && n > 0
+    ? `${n.toLocaleString('en-US')} ${n === 1 ? 'member' : 'members'}`
+    : 'Members not known';

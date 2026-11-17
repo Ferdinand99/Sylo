@@ -358,7 +358,10 @@ function ServerPicker({ guildId, state, target, setTarget }) {
         {list.status === 'failed' && canList ? (
           <p className="v2-field-hint">Your Fluxer servers could not be listed just now.</p>
         ) : null}
-        <Field label="Fluxer server id" hint="Paste the id of the Fluxer server (copy it with Developer Mode on).">
+        <Field
+          label="Fluxer server id"
+          hint="Paste the id of the Fluxer server (copy it with Developer Mode on)."
+        >
           <input
             value={target}
             onChange={(e) => setTarget(e.target.value)}
