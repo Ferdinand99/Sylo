@@ -10,6 +10,12 @@ Sylo is) and that is a member of both servers.
 **Dashboard:** `/v2/guilds/<id>/m/bridge` - the linked channels, a form to ask for a link, a form to use a
 code, what this server shares, and pause, resume and unlink.
 
+**Setting up a whole Fluxer server?** Linking channels one by one is for single conversations. To copy a
+Discord server's channels, roles and emoji to a Fluxer server and bridge every channel at once, use
+[Mirror to Fluxer](../mirror.md). The Bridge page of a Discord server points to it with a short note and a
+link; the note is shown only to the server's owner and only when Sylo is connected to both platforms. It is not
+shown on a Fluxer server: the mirror's target is chosen from the Discord side.
+
 ## Who can use it: the server owner
 
 **Only the owner of a server can use the bridge** (the Discord server owner, the Fluxer server owner), on

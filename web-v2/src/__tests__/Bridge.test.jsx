@@ -70,6 +70,25 @@ describe('Bridge page', () => {
     expect(api.getBridge).toHaveBeenCalledWith(GUILD);
   });
 
+  it('points the owner of a Discord server to Mirror to Fluxer, and shows it to nobody else', async () => {
+    renderAtGuild(<Bridge />, GUILD);
+    expect(await screen.findByText(/Setting up a whole Fluxer server\?/)).toBeTruthy();
+    expect(screen.getByText(/copy channels, roles and emoji and\s+bridge every channel at once/)).toBeTruthy();
+    const link = screen.getByRole('link', { name: 'Mirror to Fluxer' });
+    expect(link.getAttribute('href')).toBe(`/guilds/${GUILD}/mirror`);
+  });
+
+  it('hides the Mirror hint from people who are not the owner, on a Fluxer server, and without both platforms', async () => {
+    for (const over of [{ owner: false }, { platform: 'fluxer' }, { bothPlatforms: false }]) {
+      api.getBridge.mockResolvedValue(overview(over));
+      const { unmount } = renderAtGuild(<Bridge />, GUILD);
+      await screen.findByRole('heading', { name: 'Bridge' });
+      expect(screen.queryByText(/Setting up a whole Fluxer server/)).toBeNull();
+      expect(screen.queryByRole('link', { name: 'Mirror to Fluxer' })).toBeNull();
+      unmount();
+    }
+  });
+
   it('names the other platform, and explains that nothing pings and bots are off', async () => {
     renderAtGuild(<Bridge />, GUILD);
     await screen.findByRole('heading', { name: 'Bridge' });
