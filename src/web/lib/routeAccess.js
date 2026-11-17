@@ -25,6 +25,7 @@ export const ROUTE_ACCESS = Object.freeze({
   'GET /guilds': 'self',
   'GET /account': 'self',
   'POST /account/devices/:id/revoke': 'self',
+  'POST /account/refresh-guilds': 'self',
   'POST /account/disconnect/:platform': 'self',
   'POST /account/delete': 'self',
   'GET /changelog': 'self',
