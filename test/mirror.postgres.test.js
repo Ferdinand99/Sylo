@@ -142,6 +142,26 @@ test(
       assert.deepEqual([next.pauseKind, next.pausedBy, next.sourceConsentUser], ['deletes', 'system', 'u1']);
     });
 
+    await t.test('the bridge links of a pair are kept once per channel and go with the pair', async () => {
+      const pair = await db.createPair({ sourceGuild: C, targetGuild: `${B}5`, now: 1_800_000_000_000 });
+      await db.putMirrorLink(pair.id, 'c1', 't1', 11, 1_800_000_000_100);
+      await db.putMirrorLink(pair.id, 'c1', 'x', 12);
+      await db.putMirrorLink(pair.id, 'c2', 't2', 13);
+      const links = await db.listMirrorLinks(pair.id);
+      assert.deepEqual(
+        links.map((l) => [l.sourceChannel, l.targetChannel, l.linkId]),
+        [
+          ['c1', 't1', 11],
+          ['c2', 't2', 13],
+        ]
+      );
+      assert.equal(typeof links[0].createdAt, 'number');
+      assert.equal(await db.mirrorPairOfLink(13), pair.id);
+      await assert.rejects(db.putMirrorLink(pair.id, 'c3', 't3', 13), 'a link belongs to one record');
+      await db.deletePair(pair.id);
+      assert.deepEqual(await db.listMirrorLinks(pair.id), []);
+    });
+
     await t.test('purging a server removes its pair, map and queue', async () => {
       const pair = await db.getPairBySource(A);
       await db.putMapping({ pairId: pair.id, kind: 'role', sourceId: '2', targetId: 't2' });

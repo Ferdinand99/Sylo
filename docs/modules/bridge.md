@@ -44,6 +44,13 @@ servers. Wrong codes are rate limited, and a few wrong ones in a row lock the at
 both channels are told. If Sylo is removed from a server, the server on the other end loses its webhook and
 is told too.
 
+**Links made by the server mirror.** A [server mirror](../mirror.md) links its copied text channels through the
+bridge without codes, because both owners already agreed to the mirror. Those links show "Name (server mirror)"
+as who made them, follow the mirror (paused with it, running again with it; the Bridge page cannot resume one on
+its own while the mirror is paused) and follow every rule on this page. A server can have 50 of them (10 when you
+link by hand). Unlink works for them as for any other link, and an unlinked channel is not linked again. If the
+mirror is removed, its links stay, paused, and either owner can resume or unlink them.
+
 **Pause** stops the bridge from either side. Only the server that paused it can resume it. A link that Sylo
 stopped itself (see below) can be resumed by either server once the cause is fixed.
 
