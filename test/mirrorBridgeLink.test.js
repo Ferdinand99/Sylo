@@ -501,7 +501,7 @@ test('removing a mirror releases its links, paused by the server that removed it
   await mdb.deletePair(pair.id);
   assert.equal((await mdb.listMirrorLinks(pair.id)).length, 0, 'the record goes with the pair');
   const view = async (key) => linkView(link, key, await mirrorHold(link));
-  assert.equal((await mirrorHold(link)), 'ended');
+  assert.equal(await mirrorHold(link), 'none', 'it is an ordinary paused link now');
   assert.match((await view(F)).pauseNote, /mirror that made this bridge was removed/);
   assert.deepEqual([(await view(D)).resumable, (await view(F)).resumable], [false, true]);
   assert.equal((await view(D)).pausedByThem, true);
@@ -565,11 +565,13 @@ test('while the mirror is not running, even a stopped or hand-paused link of it 
       (err) => err instanceof BridgeError && err.status === 409 && /mirror/.test(err.message)
     );
   }
-  assert.equal(linkView(failed, D, await mirrorHold(failed)).resumable, false);
-  assert.equal(linkView(byHand, D, await mirrorHold(byHand)).resumable, false);
+  const failedNow = await bridgeDb.getLink(failed.id);
+  const byHandNow = await bridgeDb.getLink(byHand.id);
+  assert.equal(linkView(failedNow, D, await mirrorHold(failedNow)).resumable, false);
+  assert.equal(linkView(byHandNow, D, await mirrorHold(byHandNow)).resumable, false);
   // once the mirror runs again they are the owners' to resume
   await mdb.updatePair(pair.id, { status: 'live' });
-  assert.equal(linkView(byHand, D, await mirrorHold(byHand)).resumable, true);
+  assert.equal(linkView(byHandNow, D, await mirrorHold(byHandNow)).resumable, true);
   await resumeLink({ guildKey: D, id: byHand.id, actor: 'Anna' });
   assert.equal((await bridgeDb.getLink(byHand.id)).status, 'active');
 });
