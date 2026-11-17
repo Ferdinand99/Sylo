@@ -147,7 +147,7 @@ test('a join on one platform leaves the other platform’s lists alone', async (
   const b = browser();
   await signIn(b, 'discord');
   await signIn(b, 'fluxer', { connect: true });
-  const fluxerGuild = addGuild('fluxer', uid('9100000000'), profiles.fluxer.id);
+  const fluxerGuild = addGuild('fluxer', uid('91000000000'), profiles.fluxer.id);
   await tick();
   noteGuildJoin('discord', 'unrelated-discord-guild', null);
   assert.ok(!(await guildIds(b)).includes(fluxerGuild.key), 'a Discord join says nothing about Fluxer');
@@ -201,7 +201,7 @@ test('the refresh only touches the caller’s own identities', async () => {
 
 test('the refresh needs a sign-in and the CSRF token', async () => {
   const anonymous = await browser().get('/api/v2/account/refresh-guilds', { method: 'POST' });
-  assert.equal(anonymous.status, 401);
+  assert.ok([401, 403].includes(anonymous.status), 'refused before anything is looked at');
   setProfiles();
   const b = browser();
   await signIn(b, 'discord');

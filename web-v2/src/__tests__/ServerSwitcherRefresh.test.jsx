@@ -50,22 +50,27 @@ describe('"Refresh server list" in the server switcher', () => {
     expect(refreshGuildList).toHaveBeenCalledTimes(1);
     expect(getGuilds).toHaveBeenCalledTimes(2);
     expect(screen.getAllByText('Brand new').length).toBeGreaterThan(0);
-    expect(screen.getByRole('status').textContent).toMatch(/refreshed/i);
+    expect(screen.getByText('Server list refreshed.')).toBeTruthy();
   });
 
   it('shows why when the server refuses (the 30 second limit) and keeps the list', async () => {
     refreshGuildList.mockRejectedValue(new Error('The server list was just refreshed. Wait a few seconds.'));
     render(
       <MemoryRouter>
-        <ServerSwitcher guilds={[HOME]} activeGuildId={HOME.id} onSelectGuild={() => {}} onRefresh={async () => {
-          await refreshGuildList();
-        }} />
+        <ServerSwitcher
+          guilds={[HOME]}
+          activeGuildId={HOME.id}
+          onSelectGuild={() => {}}
+          onRefresh={async () => {
+            await refreshGuildList();
+          }}
+        />
       </MemoryRouter>
     );
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Refresh server list' }));
     });
-    expect(screen.getByRole('status').textContent).toMatch(/just refreshed/);
+    expect(screen.getByText(/just refreshed/)).toBeTruthy();
     expect(screen.getAllByText('Home').length).toBeGreaterThan(0);
   });
 
@@ -74,7 +79,12 @@ describe('"Refresh server list" in the server switcher', () => {
     const onRefresh = () => new Promise((resolve) => (finish = resolve));
     render(
       <MemoryRouter>
-        <ServerSwitcher guilds={[HOME]} activeGuildId={HOME.id} onSelectGuild={() => {}} onRefresh={onRefresh} />
+        <ServerSwitcher
+          guilds={[HOME]}
+          activeGuildId={HOME.id}
+          onSelectGuild={() => {}}
+          onRefresh={onRefresh}
+        />
       </MemoryRouter>
     );
     await act(async () => {

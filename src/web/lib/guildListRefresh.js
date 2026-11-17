@@ -57,8 +57,10 @@ export async function refreshAfterJoins(account, check, now = Date.now()) {
     if (lastGuildJoin(identity.platform) <= (checkedAt.get(key) ?? 0)) continue;
     let work = running.get(key);
     if (!work) {
+      // Only servers joined since the last look (or since sign-in): the earlier ones were checked already.
+      const since = checkedAt.get(key) ?? identity.guildsFetchedAt;
       checkedAt.set(key, now);
-      work = addJoinedGuilds(identity, check)
+      work = addJoinedGuilds(identity, check, { since })
         .catch((err) => {
           log.warn('auth', `could not refresh the server list of ${key}: ${err.message}`);
           return 0;
