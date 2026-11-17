@@ -39,6 +39,7 @@ import { isModuleEnabled } from '../db/modules.js';
 import {
   BridgeError,
   createMirrorLink,
+  getMaxLinks,
   enableBridgeForMirror,
   holdMirrorLink,
   releaseMirrorLink,
@@ -223,8 +224,10 @@ export async function linkMirroredChannels(
 
   let linked = 0;
   let attempted = 0;
+  let full = false;
   const tried = [];
   for (const item of todo) {
+    if (full) break;
     if (attempted >= limit) break;
     attempted += 1;
     tried.push(item.sourceId);
@@ -240,6 +243,18 @@ export async function linkMirroredChannels(
       linked += 1;
     } catch (err) {
       if (!(err instanceof BridgeError)) throw err;
+      if (err.code === 'limit') {
+        // A server is at its bridge limit: this pair and every pair still waiting cannot be linked. They are
+        // reported (not "remaining": nothing more will be tried until the limit is raised or a link is removed).
+        full = true;
+        const rest = todo.filter((t) => !tried.includes(t.sourceId) || t === item);
+        for (const t of rest) skipped.push(limitSkip(t));
+        log.info(
+          'mirror',
+          `pair ${pair.id}: ${rest.length} channels not linked, the bridge limit is reached`
+        );
+        continue;
+      }
       log.info(
         'mirror',
         `pair ${pair.id}: ${item.name} not linked (${err.code || err.status}): ${err.message}`
@@ -253,5 +268,19 @@ export async function linkMirroredChannels(
     }
     if (attempted < limit && attempted < todo.length) await sleep(PAUSE_BETWEEN_MS);
   }
-  return { linked, already, remaining: Math.max(0, todo.length - attempted), tried, skipped };
+  return {
+    linked,
+    already,
+    remaining: full ? 0 : Math.max(0, todo.length - attempted),
+    tried,
+    skipped,
+  };
 }
+
+/** A pair that is not linked because a server is at its bridge limit (BRIDGE_MAX_LINKS). */
+const limitSkip = (item) => ({
+  sourceId: item.sourceId,
+  name: item.name,
+  code: 'limit',
+  message: `the server's bridge limit (${getMaxLinks()}) is reached`,
+});

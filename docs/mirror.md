@@ -73,8 +73,11 @@ so a message written on one side shows up on the other. Voice channels, categori
   is in the report ("Linking channels through the bridge" and the notes), and the rest are linked.
 - **Safe to run again.** "Copy again" links only the pairs that have no link yet. A channel that an owner
   unlinked on the Bridge page stays unlinked, and a pair the owners bridged by hand is never taken over or
-  changed (it is reported as skipped). A server can have at most 50 bridged channels this way (10 when
-  linking by hand), and a copy links 25 channels at a time. A channel made on Discord later (continuous mirroring)
+  changed (it is reported as skipped). A server can have at most 100 bridged channels, links made by hand
+  included (the operator can change this with `BRIDGE_MAX_LINKS`, 1 to 500). A mirror of a bigger server links
+  up to the limit and lists the rest in the report as "not linked: the server's bridge limit (100) is reached";
+  they are linked on a later "Copy again" once the limit is raised or links are removed. A copy links 25
+  channels at a time. A channel made on Discord later (continuous mirroring)
   is linked too.
 - **The links follow the mirror.** While the mirror is paused (by an owner, by Sylo after a failure, or because a
   server changed owner) or stopped, its links are paused, with no notice in each channel, and they run again when

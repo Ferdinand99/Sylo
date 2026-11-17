@@ -70,6 +70,32 @@ describe('Bridge page', () => {
     expect(api.getBridge).toHaveBeenCalledWith(GUILD);
   });
 
+  it('shows the count against the limit, and explains how to raise it once the limit is reached', async () => {
+    const many = (n) => Array.from({ length: n }, (_, i) => link({ id: i + 1 }));
+    api.getBridge.mockResolvedValue(overview({ limits: { links: 3, requests: 5 }, links: many(2) }));
+    const first = renderAtGuild(<Bridge />, GUILD);
+    expect(await screen.findByRole('heading', { name: 'Bridged channels (2 of 3)' })).toBeTruthy();
+    expect(screen.queryByTestId('bridge-limit-note')).toBeNull();
+    first.unmount();
+
+    api.getBridge.mockResolvedValue(overview({ limits: { links: 3, requests: 5 }, links: many(3) }));
+    const second = renderAtGuild(<Bridge />, GUILD);
+    expect(await screen.findByRole('heading', { name: 'Bridged channels (3 of 3)' })).toBeTruthy();
+    const note = screen.getByTestId('bridge-limit-note');
+    expect(note.textContent).toMatch(/reached the limit of 3/);
+    expect(note.textContent).toMatch(/BRIDGE_MAX_LINKS/);
+    second.unmount();
+
+    // an operator who lowered the limit below what exists: never "X of Y" with X above Y
+    api.getBridge.mockResolvedValue(overview({ limits: { links: 3, requests: 5 }, links: many(5) }));
+    renderAtGuild(<Bridge />, GUILD);
+    expect(await screen.findByRole('heading', { name: 'Bridged channels (5)' })).toBeTruthy();
+    expect(screen.queryByText(/5 of 3/)).toBeNull();
+    expect(screen.getByTestId('bridge-limit-note').textContent).toMatch(
+      /more bridged channels than the limit of 3/
+    );
+  });
+
   it('names the other platform, and explains that nothing pings and bots are off', async () => {
     renderAtGuild(<Bridge />, GUILD);
     await screen.findByRole('heading', { name: 'Bridge' });
