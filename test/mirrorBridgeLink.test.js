@@ -368,7 +368,7 @@ test('the ceiling of links per server is respected and reported', async () => {
 test('a webhook that cannot be made skips the pair and leaves nothing half made', async () => {
   const pair = await livePair();
   const a = await mirrored(pair, 'chat');
-  fakes.transport.hookFailures.push(new Error('boom'), new Error('boom'));
+  fakes.transport.hookFailures.push(new Error('boom'));
   const res = await run(pair);
   assert.equal(res.linked, 0);
   assert.deepEqual(
