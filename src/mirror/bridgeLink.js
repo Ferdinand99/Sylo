@@ -188,7 +188,8 @@ export async function linkMirroredChannels(
           sourceId: item.sourceId,
           name: item.name,
           code: 'bridge-off',
-          message: 'the Bridge module is switched off in one of the servers, and the mirror does not switch it on again',
+          message:
+            'the Bridge module is switched off in one of the servers, and the mirror does not switch it on again',
         });
       }
       return { linked: 0, already, remaining: 0, tried: [], skipped, reason: 'bridge-off' };

@@ -332,7 +332,11 @@ test('a channel already bridged by hand is left as it is, and a lost record of a
     ]
   );
   assert.match(res.skipped[1].message, /already bridged by hand/);
-  assert.equal((await mdb.getMirrorLink(pair.id, lost.d.id)).linkId, made, 'a lost mirror record is taken over');
+  assert.equal(
+    (await mdb.getMirrorLink(pair.id, lost.d.id)).linkId,
+    made,
+    'a lost mirror record is taken over'
+  );
   assert.equal(await mdb.getMirrorLink(pair.id, handmade.d.id), null, 'a hand-made link is never taken over');
   // so pausing the mirror leaves it alone
   await mdb.updatePair(pair.id, { status: 'paused' });
@@ -512,7 +516,11 @@ test('removing a mirror releases its links, paused by the server that removed it
   );
   assert.equal((await bridgeDb.getLink(link.id)).status, 'paused');
   // ...but can unlink; the Fluxer owner who removed the mirror can resume
-  await unlinkLink({ guildKey: D, id: (await bridgeDb.linkForChannel(D, other.d.id)).link.id, actor: 'Anna' });
+  await unlinkLink({
+    guildKey: D,
+    id: (await bridgeDb.linkForChannel(D, other.d.id)).link.id,
+    actor: 'Anna',
+  });
   await resumeLink({ guildKey: F, id: link.id, actor: 'Bo' });
   assert.equal((await bridgeDb.getLink(link.id)).status, 'active');
   // a second release does nothing to links that are no longer the mirror's to hold
@@ -595,7 +603,11 @@ test('only the first linking switches the Bridge module on: a server that turned
   );
   assert.equal((await getGuildModule(F, 'bridge')).enabled, false, 'still off');
   assert.equal(await bridgeDb.linkForChannel(D, later.d.id), null);
-  assert.equal((await listAudit(F)).filter((e) => e.action === 'bridge:module').length, 1, 'switched on once');
+  assert.equal(
+    (await listAudit(F)).filter((e) => e.action === 'bridge:module').length,
+    1,
+    'switched on once'
+  );
   // when the owner switches it on again, the missing pair is linked
   await setGuildModule(F, 'bridge', { enabled: true });
   assert.equal((await run(pair)).linked, 1);
