@@ -199,6 +199,16 @@ export const ROUTE_ACCESS = Object.freeze({
   'POST /apply/:guildId/:formId/submit': 'member',
   'POST /apply/:guildId/:formId/withdraw': 'member',
 
+  // v2Bridge.js
+  'GET /guilds/:guildId/modules/bridge/config': 'view',
+  'POST /guilds/:guildId/modules/bridge/request': 'edit',
+  'POST /guilds/:guildId/modules/bridge/requests/:id/cancel': 'edit',
+  'POST /guilds/:guildId/modules/bridge/accept': 'edit',
+  'POST /guilds/:guildId/modules/bridge/links/:id/options': 'edit',
+  'POST /guilds/:guildId/modules/bridge/links/:id/pause': 'edit',
+  'POST /guilds/:guildId/modules/bridge/links/:id/resume': 'edit',
+  'POST /guilds/:guildId/modules/bridge/links/:id/unlink': 'edit',
+
   // v2Economy.js
   'GET /guilds/:guildId/modules/economy/config': 'view',
   'POST /guilds/:guildId/modules/economy/config': 'edit',
@@ -313,6 +323,21 @@ export const ROUTE_ACCESS = Object.freeze({
   // v2Setup.js (the proposal is a read; applying creates channels and roles and saves modules)
   'GET /guilds/:guildId/setup/suggest': 'view',
   'POST /guilds/:guildId/setup/apply': 'edit',
+
+  // v2Mirror.js: the page and its preview and report are for looking; asking, agreeing, starting, pausing and
+  // stopping change what Sylo does to another server. They need Edit on the server the call is made on.
+  'GET /guilds/:guildId/mirror': 'view',
+  'GET /guilds/:guildId/mirror/preview': 'view',
+  'GET /guilds/:guildId/mirror/report': 'view',
+  'POST /guilds/:guildId/mirror/request': 'edit',
+  'POST /guilds/:guildId/mirror/accept': 'edit',
+  'POST /guilds/:guildId/mirror/options': 'edit',
+  'POST /guilds/:guildId/mirror/deletes': 'edit',
+  'POST /guilds/:guildId/mirror/start': 'edit',
+  'POST /guilds/:guildId/mirror/pause': 'edit',
+  'POST /guilds/:guildId/mirror/resume': 'edit',
+  'POST /guilds/:guildId/mirror/stop': 'edit',
+  'POST /guilds/:guildId/mirror/remove': 'edit',
 
   // v2Health.js (the re-check with ?refresh=1 has its own per-server limit)
   'GET /guilds/:guildId/health': 'view',

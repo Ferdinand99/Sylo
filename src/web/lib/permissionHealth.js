@@ -19,11 +19,13 @@ import { listCleanupSchedules } from '../../db/channelCleanup.js';
 import { listGithubWatches } from '../../db/githubWatches.js';
 import { listItems } from '../../db/economyShop.js';
 import { listForms } from '../../db/applications.js';
+import { bridgeProblems, bridgedChannels } from '../../modules/bridge.js';
 import { guildSupports, platformOfGuild, rawGuildId } from '../../platform/platformOf.js';
 import { healthFor } from '../../lib/healthCache.js';
 import { sourceLabel } from '../../modules/rss.js';
 import { v2CardHref } from './overviewSummary.js';
 import { log } from '../../lib/log.js';
+import { mirrorHealthChecks } from '../../mirror/health.js';
 
 const ERROR = 'error';
 const WARNING = 'warning';
@@ -44,6 +46,7 @@ const LABELS = {
   ManageRoles: 'Manage Roles',
   ManageChannels: 'Manage Channels',
   ManageNicknames: 'Manage Nicknames',
+  ManageWebhooks: 'Manage Webhooks',
   ManageGuild: 'Manage Server',
   ModerateMembers: 'Timeout Members',
   KickMembers: 'Kick Members',
@@ -240,6 +243,16 @@ export const NEEDS = {
     arr(cfg.boards).map((b) =>
       post(b?.channelId, `The channel of ${b?.name || 'a starboard'}`, { field: 'channelId' })
     ),
+  // The bridge makes and uses a webhook in each bridged channel, and says things in it.
+  // Manage Messages is optional: it lets Sylo remove a copy as the bot when the webhook that posted it is gone.
+  bridge: (_cfg, x) =>
+    arr(x.channels).flatMap((id) => [
+      post(id, 'A bridged channel', { embed: false, extra: ['ManageWebhooks'] }),
+      inChannel(id, 'A bridged channel (to remove copies when their webhook is gone)', ['ManageMessages'], {
+        severity: WARNING,
+        part: 'delete',
+      }),
+    ]),
   introductions: (cfg) => [
     post(cfg.channelId, 'The introductions channel', { extra: ['ReadMessageHistory'], field: 'channelId' }),
     post(cfg.promptChannelId, 'The prompt channel', { optional: true, field: 'promptChannelId' }),
@@ -423,6 +436,10 @@ const EXTRAS = {
   'channel-cleanup': async (guildId) => ({ cleanup: await listCleanupSchedules(guildId) }),
   reminders: async (guildId) => ({ reminders: await listScheduled(guildId) }),
   github: async (guildId) => ({ githubWatches: await listGithubWatches(guildId) }),
+  bridge: async (guildId) => ({
+    channels: await bridgedChannels(guildId),
+    problems: await bridgeProblems(guildId),
+  }),
 };
 
 // --- comparing a need with what Sylo can do ---------------------------------------------------
@@ -629,8 +646,9 @@ export async function buildHealthReport(guild, { modules } = {}) {
     const mod = getModule(def.id);
     const cfg = row?.config && typeof row.config === 'object' ? row.config : {};
     let needs;
+    let x;
     try {
-      const x = EXTRAS[def.id] ? await EXTRAS[def.id](guild.id) : {};
+      x = EXTRAS[def.id] ? await EXTRAS[def.id](guild.id) : {};
       needs = needsOf(cfg, x, guild).filter(Boolean);
     } catch (err) {
       log.warn('health', `could not read the settings of ${def.id} (${guild.id})`, err);
@@ -654,12 +672,34 @@ export async function buildHealthReport(guild, { modules } = {}) {
         checks.push(check);
       }
     }
+    // A bridged channel Sylo stopped (a lost permission, a webhook it could not remake, ...) is a problem to fix.
+    for (const problem of def.id === 'bridge' ? arr(x.problems) : []) {
+      const channel = guild.channels?.cache?.get(problem.channelId);
+      checks.push({
+        ...moduleBase,
+        severity: ERROR,
+        kind: 'bridge-stopped',
+        code: 'bridge-stopped',
+        targetKind: 'channel',
+        targetId: problem.channelId,
+        targetName: channel?.name ?? null,
+        message: `The bridge of ${channel ? channelName(channel) : 'a channel'} stopped: ${problem.text}`,
+        fix: 'Fix the cause, then press Resume for that channel on the Bridge page.',
+      });
+    }
     // A role to give or take away also needs Manage Roles, once per module, not once per role.
     if (needs.some((n) => n.type === 'role' && n.action !== 'ping')) {
       const missing = guildCheck(moduleBase, guildPerm('ManageRoles', 'give and take away roles'), me);
       if (missing && !checks.some((c) => c.module === def.id && c.permission === 'ManageRoles'))
         checks.push(missing);
     }
+  }
+  // The server mirror is not a module, so it is read from its own tables: a mirror that paused itself, or a copy
+  // with items that failed, on either side of the pair.
+  try {
+    checks.push(...(await mirrorHealthChecks(guild.id)));
+  } catch (err) {
+    log.warn('health', `could not read the mirror state of ${guild.id}`, err);
   }
   checks.sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9));
   return { ...base, available: true, checks, targets: pickerTargets(guild, me) };

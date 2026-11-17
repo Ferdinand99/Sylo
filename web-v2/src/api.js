@@ -15,6 +15,9 @@ export class ApiError extends Error {
     // A refusal the page can act on (the settings changed since an audit entry: confirm to undo anyway).
     this.code = body?.code;
     this.laterChanges = body?.laterChanges;
+    // What a mirror resume asks to confirm: the deletions that wait (src/web/routes/v2Mirror.js).
+    this.deletes = body?.deletes;
+    this.deleteCount = body?.deleteCount;
     this.token = body?.token;
   }
 }
@@ -157,6 +160,19 @@ export const moveSuggestionBack = (guildId, number) =>
 // { moved, remaining, failed, next, error? }; ask again with after = next while remaining > 0.
 export const moveAllSuggestionsBack = (guildId, after = 0) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/suggestions/move-all-back`, { after });
+// Bridge: the links of a server and what the page needs (GET), then the calls that change them. Every
+// answer to a change carries the fresh `overview`.
+export const getBridge = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/modules/bridge/config`);
+export const requestBridgeLink = (guildId, body) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/bridge/request`, body);
+export const cancelBridgeRequest = (guildId, id) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/bridge/requests/${Number(id)}/cancel`, {});
+export const acceptBridgeLink = (guildId, body) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/bridge/accept`, body);
+export const setBridgeOptions = (guildId, id, options) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/bridge/links/${Number(id)}/options`, { options });
+export const bridgeLinkAction = (guildId, id, action) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/bridge/links/${Number(id)}/${action}`, {});
 export const getQuotes = (guildId, { q = '' } = {}) =>
   apiFetch(`/api/v2/guilds/${gid(guildId)}/modules/quote-board/list?q=${encodeURIComponent(q)}`);
 export const deleteQuote = (guildId, number) =>
@@ -478,6 +494,27 @@ export const duplicateShopItem = (guildId, id) => duplicate(guildId, `modules/ec
 // The setup wizard: what Sylo proposes for this server, and applying the ticked items.
 export const getSetupSuggestion = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/setup/suggest`);
 export const applySetup = (guildId, body) => postJson(`/api/v2/guilds/${gid(guildId)}/setup/apply`, body);
+// Mirror to Fluxer (src/mirror/): the state of this server's mirror, the dry run and the report, and the
+// actions: ask, agree with the code, change options, start the copy, pause, resume, stop and remove.
+export const getMirror = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/mirror`);
+export const getMirrorPreview = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/mirror/preview`);
+export const getMirrorReport = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/mirror/report`);
+export const requestMirror = (guildId, targetGuildId, options) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/mirror/request`, {
+    targetGuildId,
+    ...(options ? { options } : {}),
+  });
+export const acceptMirror = (guildId, code) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/mirror/accept`, { code });
+export const setMirrorOptions = (guildId, options) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/mirror/options`, options);
+// The owner of the Fluxer server allows, or stops, real deletion (the Discord owner can only ask for it).
+export const allowMirrorDeletes = (guildId, allow) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/mirror/deletes`, { allow });
+export const startMirror = (guildId) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/mirror/start`, { confirm: true });
+export const mirrorAction = (guildId, action, body = {}) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/mirror/${action}`, body);
 export const getMemberData = (guildId, user) =>
   apiFetch(`/api/v2/guilds/${gid(guildId)}/member-data?user=${encodeURIComponent(user ?? '')}`);
 export const forgetMemberData = (guildId, userId, reason) =>

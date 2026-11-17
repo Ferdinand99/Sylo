@@ -64,8 +64,10 @@ import tempRolesRouter from './v2TempRoles.js';
 import quotesRouter from './v2Quotes.js';
 import searchRouter from './v2Search.js';
 import introRouter from './v2Intro.js';
+import bridgeRouter from './v2Bridge.js';
 import applicationsRouter from './v2Applications.js';
 import setupRouter from './v2Setup.js';
+import mirrorRouter from './v2Mirror.js';
 import applyMemberRouter from './v2Apply.js';
 import economyRouter from './v2Economy.js';
 import shopRouter from './v2Shop.js';
@@ -545,6 +547,8 @@ router.use('/guilds/:guildId', tempRolesRouter);
 router.use('/guilds/:guildId', quotesRouter);
 // Introductions: settings, publish the prompt message (v2Intro.js).
 router.use('/guilds/:guildId', introRouter);
+// Bridge: links to a channel on the other platform, requests and codes, options (v2Bridge.js).
+router.use('/guilds/:guildId', bridgeRouter);
 // Economy: settings, members and their ledger, staff changes, reset (v2Economy.js).
 router.use('/guilds/:guildId', economyRouter);
 // Economy shop: items, a member's inventory, the activity log (v2Shop.js).
@@ -553,6 +557,8 @@ router.use('/guilds/:guildId', shopRouter);
 router.use('/guilds/:guildId', applicationsRouter);
 // Setup wizard: the proposal for the server and applying it (v2Setup.js).
 router.use('/guilds/:guildId', setupRouter);
+// Mirror to Fluxer: ask, agree, preview, copy, pause and stop (v2Mirror.js).
+router.use('/guilds/:guildId', mirrorRouter);
 // The command palette's lookup of an inbox item by number (v2Search.js).
 router.use('/guilds/:guildId', searchRouter);
 

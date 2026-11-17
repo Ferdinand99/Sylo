@@ -20,7 +20,8 @@
 // dev-log notifications (src/lib/push.js notifyDevLogEvent), which are a dev-log sink, and a
 // warning or error from there would become a new dev-log entry and so another notification.
 // Only ensureRegistered(), which runs at start-up outside the sink, logs warnings and errors.
-import { createCipheriv, createDecipheriv, hkdfSync, randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
+import { open, seal } from './seal.js';
 import { log } from './log.js';
 import { solvePowInWorker } from './pigeonPow.js';
 
@@ -88,35 +89,8 @@ async function readJson(res, cap) {
 }
 
 // --- sealing the credential ----------------------------------------------------------------
-
-const sealKey = (secret) => Buffer.from(hkdfSync('sha256', String(secret), 'sylo', 'pigeon-credential', 32));
-
-function seal(secret, plain) {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', sealKey(secret), iv);
-  const data = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
-  return [
-    'v1',
-    iv.toString('base64url'),
-    cipher.getAuthTag().toString('base64url'),
-    data.toString('base64url'),
-  ].join('.');
-}
-
-/** The text a sealed value holds, or null when it cannot be opened (another secret, damage). */
-function open(secret, sealed) {
-  try {
-    const [version, iv, tag, data] = String(sealed).split('.');
-    if (version !== 'v1') return null;
-    const decipher = createDecipheriv('aes-256-gcm', sealKey(secret), Buffer.from(iv, 'base64url'));
-    decipher.setAuthTag(Buffer.from(tag, 'base64url'));
-    return Buffer.concat([decipher.update(Buffer.from(data, 'base64url')), decipher.final()]).toString(
-      'utf8'
-    );
-  } catch {
-    return null;
-  }
-}
+// (the shared helper in lib/seal.js; the purpose keeps the key the one this credential has always had)
+const PURPOSE = 'pigeon-credential';
 
 // --- the client ------------------------------------------------------------------------------
 
@@ -181,7 +155,7 @@ export function createPigeonClient({
     try {
       const [sealed, forUrl] = await Promise.all([store.get(SETTING_CREDENTIAL), store.get(SETTING_URL)]);
       if (!sealed || forUrl !== base) return null;
-      const credential = open(secret, sealed);
+      const credential = open(secret, PURPOSE, sealed);
       if (!credential)
         report(loud, 'warn', 'The stored Pigeon credential cannot be opened; registering again.');
       return credential;
@@ -224,7 +198,7 @@ export function createPigeonClient({
       throw new PigeonFailure('rejected', 'malformed_credential');
     }
     try {
-      await store.set(SETTING_CREDENTIAL, seal(secret, credential));
+      await store.set(SETTING_CREDENTIAL, seal(secret, PURPOSE, credential));
       await store.set(SETTING_URL, base);
     } catch {
       throw new PigeonFailure('rejected', 'storage_error');

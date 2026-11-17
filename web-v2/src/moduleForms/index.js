@@ -19,6 +19,7 @@ const Suggestions = lazy(() => import('./Suggestions.jsx'));
 const TempRoles = lazy(() => import('./TempRoles.jsx'));
 const QuoteBoard = lazy(() => import('./QuoteBoard.jsx'));
 const Introductions = lazy(() => import('./Introductions.jsx'));
+const Bridge = lazy(() => import('./Bridge.jsx'));
 const Applications = lazy(() => import('./Applications.jsx'));
 const Economy = lazy(() => import('./Economy.jsx'));
 const AutoThreads = lazy(() => import('./AutoThreads.jsx'));
@@ -86,6 +87,7 @@ export const MODULE_FORMS = {
   'temp-roles': TempRoles,
   'quote-board': QuoteBoard,
   introductions: Introductions,
+  bridge: Bridge,
   applications: Applications,
   economy: Economy,
   'auto-threads': AutoThreads,
@@ -104,6 +106,8 @@ export const SPECIAL_V2_PATHS = {
   insights: (guildId) => `/guilds/${guildId}/insights`,
   // The Commands overview card — V2's page is the Moderation hub's Commands tab.
   commands: (guildId) => `/guilds/${guildId}/moderation/commands`,
+  // The server mirror is a page of its own, not a module (src/mirror/).
+  mirror: (guildId) => `/guilds/${guildId}/mirror`,
 };
 
 export function v2Href(card, guildId) {

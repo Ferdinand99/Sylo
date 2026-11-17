@@ -34,6 +34,7 @@ export const MODULE_ICONS = {
   'temp-roles': 'hourglass',
   'auto-threads': 'threads',
   'quote-board': 'quote',
+  bridge: 'threads',
   introductions: 'id-card',
   applications: 'clipboard',
   economy: 'coins',

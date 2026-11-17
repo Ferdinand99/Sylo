@@ -19,9 +19,11 @@ import './styles/wp4-inbox.css';
 import './styles/wp5-lists.css';
 import './styles/p6-import.css';
 import './styles/setup-wizard.css';
+import './styles/mirror.css';
 import './styles/access.css';
 import './styles/history.css';
 import './styles/health.css';
+import './styles/bridge.css';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
