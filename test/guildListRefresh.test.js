@@ -2,6 +2,8 @@
 // again: the join marks the lists on that platform as due, and the next request looks once. The
 // "Refresh server list" action does the same on demand, for the caller's own identities only, at
 // most once per 30 seconds per account. See helpers/oauthApp.js for the harness.
+// Each person sends requests from their own address, so the per-client rate limits do not add up.
+import './helpers/trustLoopbackProxy.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
@@ -27,6 +29,17 @@ const { noteGuildJoin, lastGuildJoin, guildJoinedAt, resetGuildJoins } =
   await import('../src/bot/lib/guildJoins.js');
 const { register: registerDiscordSnapshot } = await import('../src/bot/events/adminSnapshot.js');
 const { registerFluxerModuleEvents } = await import('../src/bot/fluxerModuleEvents.js');
+
+let clients = 0;
+/** A browser that sends its requests from an address of its own. */
+function ownBrowser() {
+  const b = browser();
+  const ip = `10.8.${Math.floor(++clients / 250)}.${clients % 250}`;
+  return {
+    ...b,
+    get: (path, init = {}) => b.get(path, { ...init, headers: { ...init.headers, 'x-forwarded-for': ip } }),
+  };
+}
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
 
@@ -121,7 +134,7 @@ test('Fluxer guildCreate marks the Fluxer lists, keyed with the platform', async
 
 test('a server the bot joins after sign-in appears on the next request, once, without signing in again', async () => {
   setProfiles();
-  const b = browser();
+  const b = ownBrowser();
   await signIn(b, 'discord');
   const before = await guildIds(b);
 
@@ -136,7 +149,7 @@ test('a server the bot joins after sign-in appears on the next request, once, wi
 
 test('after a join each list is looked at once: later requests make no member lookups', async () => {
   setProfiles();
-  const b = browser();
+  const b = ownBrowser();
   await signIn(b, 'discord');
   const { guild, key } = addGuild('discord', uid('9000000000'), 'somebody-else');
   await tick();
@@ -159,7 +172,7 @@ test('after a join each list is looked at once: later requests make no member lo
 
 test('a join on one platform leaves the other platform’s lists alone', async () => {
   setProfiles();
-  const b = browser();
+  const b = ownBrowser();
   await signIn(b, 'discord');
   await signIn(b, 'fluxer', { connect: true });
   const fluxerGuild = addGuild('fluxer', uid('91000000000'), profiles.fluxer.id);
@@ -176,7 +189,7 @@ test('a join on one platform leaves the other platform’s lists alone', async (
 
 test('POST /account/refresh-guilds adds what the bot joined and is limited to once per 30 seconds', async () => {
   setProfiles();
-  const b = browser();
+  const b = ownBrowser();
   await signIn(b, 'discord');
   const { key } = addGuild('discord', uid('9000000000'), profiles.discord.id); // no join was noted (a restart)
 
@@ -193,11 +206,11 @@ test('POST /account/refresh-guilds adds what the bot joined and is limited to on
 
 test('the refresh only touches the caller’s own identities', async () => {
   setProfiles();
-  const a = browser();
+  const a = ownBrowser();
   await signIn(a, 'discord');
   const idA = profiles.discord.id;
   setProfiles();
-  const c = browser();
+  const c = ownBrowser();
   await signIn(c, 'discord');
   const idC = profiles.discord.id;
   assert.notEqual(idA, idC);
@@ -215,10 +228,10 @@ test('the refresh only touches the caller’s own identities', async () => {
 });
 
 test('the refresh needs a sign-in and the CSRF token', async () => {
-  const anonymous = await browser().get('/api/v2/account/refresh-guilds', { method: 'POST' });
+  const anonymous = await ownBrowser().get('/api/v2/account/refresh-guilds', { method: 'POST' });
   assert.ok([401, 403].includes(anonymous.status), 'refused before anything is looked at');
   setProfiles();
-  const b = browser();
+  const b = ownBrowser();
   await signIn(b, 'discord');
   const noToken = await b.get('/api/v2/account/refresh-guilds', { method: 'POST' });
   assert.equal(noToken.status, 403);
@@ -228,7 +241,7 @@ test('the refresh needs a sign-in and the CSRF token', async () => {
 
 test('a member of the new server without Manage Server is not added', async () => {
   setProfiles();
-  const b = browser();
+  const b = ownBrowser();
   await signIn(b, 'discord');
   const me = profiles.discord.id;
   const before = (await findIdentity('discord', me)).guildIds;
@@ -249,7 +262,7 @@ test('a member of the new server without Manage Server is not added', async () =
 for (const permission of ['ManageGuild', 'Administrator']) {
   test(`a member who is not the owner but has ${permission} is added`, async () => {
     setProfiles();
-    const b = browser();
+    const b = ownBrowser();
     await signIn(b, 'discord');
     const { guild, key } = addGuild('discord', uid('9000000000'), 'somebody-else', {
       members: { [profiles.discord.id]: [permission] },
@@ -281,7 +294,7 @@ function joinMany(me, count = 30) {
 
 test('a refresh makes at most 25 lookups, newest servers first, so the newest join is never left out', async () => {
   setProfiles();
-  const b = browser();
+  const b = ownBrowser();
   await signIn(b, 'discord');
   const keys = joinMany(profiles.discord.id);
   const lookups = memberFetches.length;
@@ -293,7 +306,7 @@ test('a refresh makes at most 25 lookups, newest servers first, so the newest jo
 
 test('the automatic check and the manual refresh never both look in one request', async () => {
   setProfiles();
-  const b = browser();
+  const b = ownBrowser();
   await signIn(b, 'discord');
   const keys = joinMany(profiles.discord.id);
   await tick();
@@ -308,7 +321,7 @@ test('the automatic check and the manual refresh never both look in one request'
 test('all refreshes together share a per-minute lookup budget', async () => {
   resetGuildListRefresh({ lookups: 3 });
   setProfiles();
-  const b = browser();
+  const b = ownBrowser();
   await signIn(b, 'discord');
   joinMany(profiles.discord.id, 10);
   const lookups = memberFetches.length;
@@ -316,7 +329,7 @@ test('all refreshes together share a per-minute lookup budget', async () => {
   assert.equal(memberFetches.length, lookups + 3, 'the budget ends the lookups');
   assert.equal(result.body.added, 1, 'the newest server is looked at first, so it is still found');
   setProfiles();
-  const other = browser();
+  const other = ownBrowser();
   await signIn(other, 'discord');
   const spent = memberFetches.length;
   await refresh(other);
