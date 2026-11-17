@@ -259,8 +259,10 @@ const rightsLive = (key, userId) => serverRightsLive(key, userId, fetchMemberFro
  * src/web/lib/guildListRefresh.js); the same account when nothing changed.
  */
 async function withJoinedServers(account) {
-  if (!(await refreshAfterJoins(account, rightsLive))) return account;
-  return { ...account, identities: await identitiesOf(account.id) };
+  const { changed, looked } = await refreshAfterJoins(account, rightsLive);
+  // `guildListLooked`: whom this request already looked at, so "Refresh server list" does not repeat it.
+  const base = changed ? { ...account, identities: await identitiesOf(account.id) } : account;
+  return looked.size ? { ...base, guildListLooked: looked } : base;
 }
 
 /** "Refresh server list": look at every server the bot joined for this account now. Resolves to the servers added. */

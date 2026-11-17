@@ -22,6 +22,7 @@ await startOAuthApp();
 
 const { runtime } = await import('../src/runtime.js');
 const { findIdentity } = await import('../src/db/accounts.js');
+const { resetGuildListRefresh } = await import('../src/web/lib/guildListRefresh.js');
 const { noteGuildJoin, lastGuildJoin, guildJoinedAt, resetGuildJoins } =
   await import('../src/bot/lib/guildJoins.js');
 const { register: registerDiscordSnapshot } = await import('../src/bot/events/adminSnapshot.js');
@@ -29,10 +30,15 @@ const { registerFluxerModuleEvents } = await import('../src/bot/fluxerModuleEven
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
 
-/** A server the bot is in, on one platform's fake client. `ownerId` is who owns it; others are not members. */
-function addGuild(platform, rawId, ownerId) {
+const added = [];
+/**
+ * A server the bot is in, on one platform's fake client. `ownerId` is who owns it. `members` maps a user id to
+ * the permissions that member holds there: the platform finds those members when asked, nobody else.
+ */
+function addGuild(platform, rawId, ownerId, { members = {}, joinedTimestamp } = {}) {
   const client = runtime.clients[platform];
   const guild = {
+    joinedTimestamp,
     id: rawId,
     name: `new-${rawId}`,
     client,
@@ -41,7 +47,9 @@ function addGuild(platform, rawId, ownerId) {
       cache: new Map(),
       fetch: async (arg) => {
         memberFetches.push(arg);
-        throw new Error('Unknown Member');
+        const id = typeof arg === 'object' ? arg.user : arg;
+        if (!(id in members)) throw new Error('Unknown Member');
+        return { id, permissions: { has: (p) => members[id].includes(p) }, roles: { cache: new Map() } };
       },
     },
     ownerId,
@@ -50,6 +58,7 @@ function addGuild(platform, rawId, ownerId) {
     emojis: { cache: new Map() },
   };
   client.guilds.cache.set(rawId, guild);
+  added.push({ client, rawId });
   return { guild, key: platform === 'discord' ? rawId : `fluxer:${rawId}` };
 }
 
@@ -62,7 +71,13 @@ const refresh = async (b) => {
   return { status: res.status, body: await res.json().catch(() => null) };
 };
 
-test.beforeEach(() => resetGuildJoins());
+test.beforeEach(() => {
+  resetGuildJoins();
+  resetGuildListRefresh();
+});
+test.afterEach(() => {
+  for (const { client, rawId } of added.splice(0)) client.guilds.cache.delete(rawId);
+});
 
 // --- the join event ------------------------------------------------------------------
 
@@ -207,4 +222,103 @@ test('the refresh needs a sign-in and the CSRF token', async () => {
   await signIn(b, 'discord');
   const noToken = await b.get('/api/v2/account/refresh-guilds', { method: 'POST' });
   assert.equal(noToken.status, 403);
+});
+
+// --- who is added -------------------------------------------------------------------------
+
+test('a member of the new server without Manage Server is not added', async () => {
+  setProfiles();
+  const b = browser();
+  await signIn(b, 'discord');
+  const me = profiles.discord.id;
+  const before = (await findIdentity('discord', me)).guildIds;
+  const { guild, key } = addGuild('discord', uid('9000000000'), 'somebody-else', {
+    members: { [me]: ['SendMessages'] },
+  });
+  await tick();
+  noteGuildJoin('discord', key, guild);
+  const lookups = memberFetches.length;
+  assert.ok(!(await guildIds(b)).includes(key));
+  assert.equal(memberFetches.length, lookups + 1, 'they were looked up, and that alone grants nothing');
+  assert.deepEqual((await findIdentity('discord', me)).guildIds, before, 'the stored list is unchanged');
+  const manual = await refresh(b);
+  assert.equal(manual.body.added, 0);
+  assert.ok(!(await findIdentity('discord', me)).guildIds.includes(key));
+});
+
+for (const permission of ['ManageGuild', 'Administrator']) {
+  test(`a member who is not the owner but has ${permission} is added`, async () => {
+    setProfiles();
+    const b = browser();
+    await signIn(b, 'discord');
+    const { guild, key } = addGuild('discord', uid('9000000000'), 'somebody-else', {
+      members: { [profiles.discord.id]: [permission] },
+    });
+    await tick();
+    noteGuildJoin('discord', key, guild);
+    assert.ok((await guildIds(b)).includes(key));
+    assert.ok((await findIdentity('discord', profiles.discord.id)).guildIds.includes(key));
+  });
+}
+
+// --- bounds -------------------------------------------------------------------------------
+
+/** Servers the bot joined after sign-in, the last one the newest, where the person has Manage Server. */
+function joinMany(me, count = 30) {
+  const base = Date.now() + 1000;
+  const keys = [];
+  for (let i = 0; i < count; i++) {
+    const last = i === count - 1;
+    keys.push(
+      addGuild('discord', uid('9200000000'), 'somebody-else', {
+        members: last ? { [me]: ['ManageGuild'] } : {},
+        joinedTimestamp: base + i * 10, // a join before this process saw it (a restart)
+      }).key
+    );
+  }
+  return keys;
+}
+
+test('a refresh makes at most 25 lookups, newest servers first, so the newest join is never left out', async () => {
+  setProfiles();
+  const b = browser();
+  await signIn(b, 'discord');
+  const keys = joinMany(profiles.discord.id);
+  const lookups = memberFetches.length;
+  const result = await refresh(b);
+  assert.equal(result.body.added, 1);
+  assert.equal(memberFetches.length, lookups + 25);
+  assert.ok((await guildIds(b)).includes(keys.at(-1)), 'the newest server was among the 25');
+});
+
+test('the automatic check and the manual refresh never both look in one request', async () => {
+  setProfiles();
+  const b = browser();
+  await signIn(b, 'discord');
+  const keys = joinMany(profiles.discord.id);
+  await tick();
+  noteGuildJoin('discord', keys.at(-1), null); // the join the automatic check reacts to
+  const lookups = memberFetches.length;
+  const result = await refresh(b); // this request carries the automatic check
+  assert.equal(result.status, 200);
+  assert.equal(memberFetches.length, lookups + 25, '25 for the pair, not 25 each');
+  assert.ok((await findIdentity('discord', profiles.discord.id)).guildIds.includes(keys.at(-1)));
+});
+
+test('all refreshes together share a per-minute lookup budget', async () => {
+  resetGuildListRefresh({ lookups: 3 });
+  setProfiles();
+  const b = browser();
+  await signIn(b, 'discord');
+  joinMany(profiles.discord.id, 10);
+  const lookups = memberFetches.length;
+  const result = await refresh(b);
+  assert.equal(memberFetches.length, lookups + 3, 'the budget ends the lookups');
+  assert.equal(result.body.added, 1, 'the newest server is looked at first, so it is still found');
+  setProfiles();
+  const other = browser();
+  await signIn(other, 'discord');
+  const spent = memberFetches.length;
+  await refresh(other);
+  assert.equal(memberFetches.length, spent, 'another account gets nothing more this minute');
 });
