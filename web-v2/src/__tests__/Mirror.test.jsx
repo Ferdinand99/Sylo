@@ -255,7 +255,7 @@ describe('Mirror: picking the Fluxer server', () => {
           ],
         }),
         choice({ id: 'fluxer:323456789012345678', name: 'Second', memberCount: 1204, icon: 'https://cdn.test/i.png' }),
-        choice({ id: 'fluxer:423456789012345678', name: 'Busy', inUse: true }),
+        choice({ id: 'fluxer:423456789012345678', name: 'Busy', memberCount: null, inUse: true }),
       ])
     );
     api.requestMirror.mockResolvedValue(state({ pair: pair({ status: 'pending', otherName: null }) }));
