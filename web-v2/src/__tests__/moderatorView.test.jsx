@@ -387,7 +387,10 @@ describe('the models of the focused view', () => {
     expect(n.top).toHaveLength(1);
     expect(n.people).toHaveLength(4);
     expect(n.modules.length).toBeGreaterThan(0);
-    expect(n.server).toHaveLength(2);
+    // The server group is whatever the nav model lists (other changes add pages to it), so it is not counted:
+    // it keeps the pages the focused view hides.
+    expect(n.server.map((i) => i.key)).toEqual(expect.arrayContaining(['settings', 'commands']));
+    expect(n.server).toEqual(navModel({ guildId: G, data: overview, operator: false }).server);
   });
 
   it('gives the palette no module pages and no setup pages', () => {
