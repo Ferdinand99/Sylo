@@ -1661,8 +1661,8 @@ export const MIGRATIONS = [
     `);
   },
 
-  // Migration 84 of the 5.3 line (it follows the bridge's 83 once both are merged; the entry is the next one
-  // in this list whichever migrations sit before it): the server mirror (src/db/mirror.js, which bootstraps
+  // Migration 84 of the 5.3 line (it follows the bridge's 83; the entry is the next one in this list whichever
+  // migrations sit before it): the server mirror (src/db/mirror.js, which bootstraps
   // the same tables on Postgres). Pairs of a Discord and a Fluxer server, the id map between their channels,
   // roles, emoji and stickers, and the queue of work that makes a copy resumable.
   (database) => {
@@ -1733,6 +1733,16 @@ export const MIGRATIONS = [
       );
       CREATE INDEX IF NOT EXISTS idx_mirror_jobs_pair ON mirror_jobs (pair_id, status, id);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_mirror_jobs_open ON mirror_jobs (pair_id, step_key) WHERE status = 'pending';
+
+      CREATE TABLE IF NOT EXISTS mirror_links (
+        pair_id        INTEGER NOT NULL,
+        source_channel TEXT NOT NULL,
+        target_channel TEXT NOT NULL,
+        link_id        INTEGER NOT NULL,
+        created_at     INTEGER NOT NULL,
+        PRIMARY KEY (pair_id, source_channel)
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_mirror_links_link ON mirror_links (link_id);
     `);
   },
 ];

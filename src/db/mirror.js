@@ -7,6 +7,10 @@
 //   mirror_ids    the id map of a pair: for each source id the id Sylo made (or adopted) on the target.
 //                 `owned` is 1 for what Sylo created, and only owned items are ever deleted on the target.
 //                 `spec_hash` is a fingerprint of what was last sent, so an unchanged item is not sent again.
+//   mirror_links  the bridge links the mirror made for the channel pairs of a pair (see src/mirror/bridgeLink.js):
+//                 which Discord channel and Fluxer channel, and the id of the bridge link. A row that stays after
+//                 its link is gone means somebody unlinked that channel on purpose, so the mirror does not link
+//                 it again.
 //   mirror_jobs   the queue: one row per piece of work (copy one channel, update one role, delete one
 //                 emoji ...). The queue is what makes a copy resumable: after a restart the unfinished rows
 //                 are still there. Event rows coalesce: one open row per item.
@@ -82,6 +86,16 @@ registerPostgresBootstrap(`
   );
   CREATE INDEX IF NOT EXISTS idx_mirror_jobs_pair ON mirror_jobs (pair_id, status, id);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_mirror_jobs_open ON mirror_jobs (pair_id, step_key) WHERE status = 'pending';
+
+  CREATE TABLE IF NOT EXISTS mirror_links (
+    pair_id        INTEGER NOT NULL,
+    source_channel TEXT NOT NULL,
+    target_channel TEXT NOT NULL,
+    link_id        INTEGER NOT NULL,
+    created_at     BIGINT NOT NULL,
+    PRIMARY KEY (pair_id, source_channel)
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_mirror_links_link ON mirror_links (link_id);
 `);
 
 /** Pair states. `pending`: waiting for both servers to agree. `ready`: agreed, not copied yet. */
@@ -177,6 +191,15 @@ const s = {
   deletePair: prepare('DELETE FROM mirror_pairs WHERE id = ?'),
   deleteIds: prepare('DELETE FROM mirror_ids WHERE pair_id = ?'),
   deleteJobs: prepare('DELETE FROM mirror_jobs WHERE pair_id = ?'),
+  deleteLinks: prepare('DELETE FROM mirror_links WHERE pair_id = ?'),
+  linksOfPair: prepare('SELECT * FROM mirror_links WHERE pair_id = ? ORDER BY source_channel'),
+  linkRow: prepare('SELECT * FROM mirror_links WHERE pair_id = ? AND source_channel = ?'),
+  putLink: prepare(
+    `INSERT INTO mirror_links (pair_id, source_channel, target_channel, link_id, created_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (pair_id, source_channel) DO NOTHING`
+  ),
+  pairOfLink: prepare('SELECT pair_id FROM mirror_links WHERE link_id = ?'),
 
   getId: prepare('SELECT * FROM mirror_ids WHERE pair_id = ? AND kind = ? AND source_id = ?'),
   getIdByTarget: prepare('SELECT * FROM mirror_ids WHERE pair_id = ? AND kind = ? AND target_id = ?'),
@@ -341,6 +364,7 @@ export async function updatePair(id, patch, now = Date.now()) {
 export async function deletePair(id) {
   await s.deleteIds.run(id);
   await s.deleteJobs.run(id);
+  await s.deleteLinks.run(id);
   await s.deletePair.run(id);
 }
 
@@ -349,6 +373,32 @@ export async function purgeMirrorOf(key) {
   const pairs = await pairsOfGuild(key);
   for (const p of pairs) await deletePair(p.id);
   return pairs;
+}
+
+// --- the bridge links of a pair ---------------------------------------------------------------------
+
+const toMirrorLink = (row) =>
+  row
+    ? {
+        pairId: num(row.pair_id),
+        sourceChannel: row.source_channel,
+        targetChannel: row.target_channel,
+        linkId: num(row.link_id),
+        createdAt: num(row.created_at),
+      }
+    : null;
+
+/** The bridge links the mirror of a pair made (or tried to make and then lost: see the file header). */
+export const listMirrorLinks = async (pairId) => (await s.linksOfPair.all(pairId)).map(toMirrorLink);
+export const getMirrorLink = async (pairId, sourceChannel) =>
+  toMirrorLink(await s.linkRow.get(pairId, sourceChannel));
+/** Remember that a bridge link belongs to a pair's mirror. A channel that already has a row keeps it. */
+export const putMirrorLink = (pairId, sourceChannel, targetChannel, linkId, now = Date.now()) =>
+  s.putLink.run(pairId, sourceChannel, targetChannel, Number(linkId), now);
+/** The pair a bridge link was made for, or null (a link somebody made by hand). */
+export async function mirrorPairOfLink(linkId) {
+  const row = await s.pairOfLink.get(Number(linkId));
+  return row ? num(row.pair_id) : null;
 }
 
 // --- the id map -----------------------------------------------------------------------------------
