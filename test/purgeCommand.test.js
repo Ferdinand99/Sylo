@@ -500,7 +500,11 @@ test('progress and summary texts', () => {
   assert.match(timedOut, /Timed out\. Deleted \*\*4\*\* messages of \*\*10\*\*; \*\*6\*\* left untouched/);
   assert.doesNotMatch(timedOut, /Stopped/);
   assert.match(
-    purge.summaryText({ deleted: 1, failed: 0, failures: {}, stopped: false, total: 1, remaining: 0 }, null, 2),
+    purge.summaryText(
+      { deleted: 1, failed: 0, failures: {}, stopped: false, total: 1, remaining: 0 },
+      null,
+      2
+    ),
     /\*\*2\*\* messages older than 14 days were pinned and kept/
   );
   assert.match(

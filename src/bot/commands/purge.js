@@ -84,10 +84,11 @@ export function summaryText(result, user, keptPinned = 0) {
     lines.push(`⚠️ ${plural(result.failed)} could not be deleted (${describeFailures(result.failures)}).`);
   }
   if (keptPinned) {
-    lines.push(`📌 ${plural(keptPinned)} older than 14 days ${keptPinned === 1 ? 'was' : 'were'} pinned and kept.`);
+    lines.push(
+      `📌 ${plural(keptPinned)} older than 14 days ${keptPinned === 1 ? 'was' : 'were'} pinned and kept.`
+    );
   }
-  return lines.join('
-');
+  return lines.join('\n');
 }
 
 function stopRow() {
@@ -120,8 +121,7 @@ export async function execute(interaction) {
   const release = acquirePurgeLock(`${guildKey(interaction.guild)}:${channel.id}`, interaction.user.id);
   if (!release) {
     await interaction.reply({
-      content:
-        '⚠️ A purge is already running in this channel. Wait for it to finish.',
+      content: '⚠️ A purge is already running in this channel. Wait for it to finish.',
       flags: MessageFlags.Ephemeral,
     });
     return;

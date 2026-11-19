@@ -172,7 +172,17 @@ export async function purgeMessages(channel, messages, opts = {}) {
   const targets = [...messages].slice(0, PURGE_CAP);
   const total = targets.length;
   const failures = emptyFailures();
-  const result = { total, deleted: 0, failed: 0, failures, stopped: false, timedOut: false, remaining: 0, bulk: 0, single: 0 };
+  const result = {
+    total,
+    deleted: 0,
+    failed: 0,
+    failures,
+    stopped: false,
+    timedOut: false,
+    remaining: 0,
+    bulk: 0,
+    single: 0,
+  };
 
   const progress = () => opts.onProgress?.({ deleted: result.deleted, failed: result.failed, total });
   const fail = (kind, n = 1) => {
