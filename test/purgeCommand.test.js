@@ -34,7 +34,7 @@ let seq = 0;
 function msg(ageMs, over = {}) {
   const ts = BigInt(Date.now() - ageMs);
   const id = String(((ts - EPOCH) << 22n) + BigInt(++seq));
-  return { id, author: { id: 'a1' }, delete: async () => {}, ...over };
+  return { id, createdTimestamp: Number(ts), author: { id: 'a1' }, delete: async () => {}, ...over };
 }
 const recent = (n, over) => Array.from({ length: n }, () => msg(DAY, over));
 const old = (n, over) => Array.from({ length: n }, () => msg(20 * DAY, over));
@@ -214,7 +214,11 @@ test('a 429 in the shape of either SDK is understood: discord.js timeToReset (ms
   const m = msg(20 * DAY, {
     delete: async () => {
       if (++tries === 1) {
-        throw Object.assign(new Error('slow down'), { name: 'RateLimitError', statusCode: 429, retryAfter: 1 });
+        throw Object.assign(new Error('slow down'), {
+          name: 'RateLimitError',
+          statusCode: 429,
+          retryAfter: 1,
+        });
       }
     },
   });
