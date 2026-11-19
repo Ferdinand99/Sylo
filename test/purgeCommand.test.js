@@ -23,6 +23,7 @@ import {
   purgeMessages,
   purgeTuning,
   retryAfterMs,
+  selectPurgeTargets,
   splitByAge,
 } from '../src/bot/lib/purgeMessages.js';
 
@@ -68,10 +69,11 @@ test('splitByAge: the 14-day cut is computed from the snowflake timestamp', () =
   const young = msg(13 * DAY);
   const edge = msg(14 * DAY - 60_000); // inside the 5-minute safety margin: counts as old
   const past = msg(15 * DAY);
+  const justInside = msg(14 * DAY - 6 * 60_000); // 6 minutes short of 14 days: outside the margin, still bulk-able
   // The SDK's own timestamp is ignored when the id is a snowflake.
   const liar = { ...msg(30 * DAY), createdTimestamp: now };
-  const { recent: r, old: o } = splitByAge([young, edge, past, liar], now);
-  assert.deepEqual(r, [young]);
+  const { recent: r, old: o } = splitByAge([young, edge, past, justInside, liar], now);
+  assert.deepEqual(r, [young, justInside]);
   assert.deepEqual(o, [edge, past, liar]);
   assert.ok(BULK_MAX_AGE_MS < 14 * DAY);
 });
@@ -293,6 +295,85 @@ test('a stop request ends the run between deletes and reports what is left', asy
   assert.equal(result.remaining, 4);
 });
 
+test('a 429 wait that would pass the deadline is not slept: the run ends as timed out with the rest untouched', async () => {
+  const m = msg(20 * DAY, {
+    delete: async () => {
+      throw Object.assign(new Error('rl'), { status: 429, retry_after: 60 });
+    },
+  });
+  const next = msg(20 * DAY);
+  const { waits, sleep } = recordSleeps();
+  const result = await purgeMessages(discordChannel(), [m, next], {
+    platform: 'discord',
+    sleep,
+    deadline: Date.now() + 30_000,
+  });
+  assert.deepEqual(waits, []); // 60 s would end past the 30 s left
+  assert.equal(result.timedOut, true);
+  assert.equal(result.stopped, false);
+  assert.equal(result.remaining, 2);
+  assert.equal(result.failed, 0);
+});
+
+test('a retry that fits before the deadline is still waited out', async () => {
+  let tries = 0;
+  const m = msg(20 * DAY, {
+    delete: async () => {
+      if (++tries === 1) throw Object.assign(new Error('rl'), { status: 429, retry_after: 2 });
+    },
+  });
+  const { waits, sleep } = recordSleeps();
+  const result = await purgeMessages(discordChannel(), [m], {
+    platform: 'discord',
+    sleep,
+    deadline: Date.now() + 60_000,
+  });
+  assert.deepEqual(waits, [2000]);
+  assert.equal(result.deleted, 1);
+  assert.equal(result.timedOut, false);
+});
+
+test('a deadline that has passed starts no single delete', async () => {
+  let deleted = 0;
+  const messages = old(3, { delete: async () => void deleted++ });
+  const result = await purgeMessages(discordChannel(), messages, {
+    platform: 'discord',
+    deadline: Date.now() - 1,
+    ...noSleep,
+  });
+  assert.equal(deleted, 0);
+  assert.equal(result.timedOut, true);
+  assert.equal(result.remaining, 3);
+});
+
+test('a stop that arrives while waiting out a 429 ends the run without another try', async () => {
+  let stopped = false;
+  let tries = 0;
+  const m = msg(20 * DAY, {
+    delete: async () => {
+      tries++;
+      throw Object.assign(new Error('rl'), { status: 429, retry_after: 1 });
+    },
+  });
+  const result = await purgeMessages(discordChannel(), [m], {
+    platform: 'discord',
+    isStopped: () => stopped,
+    sleep: async () => void (stopped = true),
+  });
+  assert.equal(tries, 1);
+  assert.equal(result.stopped, true);
+  assert.equal(result.remaining, 1);
+});
+
+test('selectPurgeTargets: old pinned messages are kept (as before), young pinned ones are deleted', () => {
+  const youngPinned = msg(DAY, { pinned: true });
+  const oldPinned = msg(20 * DAY, { pinned: true });
+  const oldPlain = msg(20 * DAY);
+  const { targets, keptPinned } = selectPurgeTargets([youngPinned, oldPinned, oldPlain]);
+  assert.deepEqual(targets, [youngPinned, oldPlain]);
+  assert.equal(keptPinned, 1);
+});
+
 test('progress is reported after the bulk call and after every single delete', async () => {
   const seen = [];
   await purgeMessages(discordChannel(), [...recent(2), ...old(2)], {
@@ -407,6 +488,21 @@ test('progress and summary texts', () => {
   });
   assert.match(text, /Deleted \*\*7\*\* messages/);
   assert.match(text, /\*\*3\*\* messages could not be deleted \(2 already gone, 1 missing permission\)/);
+  const timedOut = purge.summaryText({
+    deleted: 4,
+    failed: 0,
+    failures: {},
+    stopped: false,
+    timedOut: true,
+    total: 10,
+    remaining: 6,
+  });
+  assert.match(timedOut, /Timed out\. Deleted \*\*4\*\* messages of \*\*10\*\*; \*\*6\*\* left untouched/);
+  assert.doesNotMatch(timedOut, /Stopped/);
+  assert.match(
+    purge.summaryText({ deleted: 1, failed: 0, failures: {}, stopped: false, total: 1, remaining: 0 }, null, 2),
+    /\*\*2\*\* messages older than 14 days were pinned and kept/
+  );
   assert.match(
     purge.summaryText({ deleted: 4, failed: 0, failures: {}, stopped: true, total: 10, remaining: 6 }),
     /Stopped\. Deleted \*\*4\*\* messages of \*\*10\*\*; \*\*6\*\* left untouched/
@@ -494,7 +590,7 @@ function setup({ platform = 'discord', messages, amount = 100, user = null, star
     await new Promise((r) => setImmediate(r));
     return answers;
   };
-  return { interaction, channel, collector, replies, modlogSent, click };
+  return { interaction, channel, collector, reply, replies, modlogSent, click };
 }
 
 const lastEdit = (replies) => replies.filter((r) => r.kind === 'edit').at(-1);
@@ -561,7 +657,7 @@ test('command: the manage-messages check and the no-guild check are kept', async
   assert.equal(t2.channel.bulkCalls.length, 0);
 });
 
-test('command, Stop button: the starter and an admin may stop, another moderator may not', async () => {
+test('command, Stop button: the starter may stop, another moderator may not (an admin click is still honoured as defence in depth)', async () => {
   for (const [who, opts, mayStop] of [
     ['u2', {}, false],
     ['u1', {}, true],
@@ -587,7 +683,7 @@ test('command, Stop button: the starter and an admin may stop, another moderator
       assert.match(lastEdit(t.replies).content, /left untouched/);
     } else {
       assert.equal(answers[0].kind, 'reply', who);
-      assert.match(answers[0].content, /Only the person who ran this purge, or a server admin/);
+      assert.match(answers[0].content, /Only the person who ran this purge can stop it/);
       assert.equal(n, 6, 'a refused click does not stop the purge');
       assert.match(lastEdit(t.replies).content, /Deleted \*\*6\*\* messages\./);
     }
@@ -666,4 +762,52 @@ test('command: the lock is keyed by the guild key, so Fluxer and Discord channel
   await purge.execute(d.interaction);
   assert.match(lastEdit(d.replies).content, /Deleted/);
   releaseFluxerKey();
+});
+
+test('command: a final reply that fails still leaves the mod-log entry, and the command does not throw', async () => {
+  await setModlogChannel(guildId, 'modlog');
+  const t = setup({ messages: recent(3) });
+  t.interaction.editReply = async () => {
+    throw new Error('Unknown Webhook');
+  };
+  await purge.execute(t.interaction);
+  assert.equal(t.modlogSent.length, 1);
+  assert.ok(t.modlogSent[0].embeds[0].data.fields.some((f) => f.name === 'Count' && f.value === '3'));
+});
+
+test('command: the deadline comes from the interaction, so an old token ends the run as "Timed out"', async () => {
+  await setModlogChannel(guildId, 'modlog');
+  const t = setup({ messages: [...recent(2), ...old(4)] });
+  t.interaction.createdTimestamp = Date.now() - 14 * 60_000; // already past the 13-minute budget
+  await purge.execute(t.interaction);
+  const text = lastEdit(t.replies).content;
+  assert.match(text, /Timed out\. Deleted \*\*2\*\* messages of \*\*6\*\*; \*\*4\*\* left untouched/);
+  assert.doesNotMatch(text, /Stopped/);
+  assert.ok(t.modlogSent[0].embeds[0].data.fields.some((f) => f.name === 'Timed out'));
+});
+
+test('command: the collector lives only until the interaction deadline', async () => {
+  const t = setup({ messages: [...recent(2), ...old(2)] });
+  t.interaction.createdTimestamp = Date.now();
+  let time;
+  t.reply.createMessageComponentCollector = (o) => ((time = o.time), t.collector);
+  await purge.execute(t.interaction);
+  assert.ok(time <= 13 * 60_000 + 5000 && time > 12 * 60_000, `time ${time}`);
+});
+
+test('command: old pinned messages are kept and reported, young pinned ones are deleted', async () => {
+  const oldPinned = msg(20 * DAY, { pinned: true });
+  let oldPinnedDeleted = false;
+  oldPinned.delete = async () => void (oldPinnedDeleted = true);
+  const t = setup({ messages: [...recent(2, { pinned: true }), oldPinned, ...old(1)] });
+  await purge.execute(t.interaction);
+  assert.equal(oldPinnedDeleted, false);
+  const text = lastEdit(t.replies).content;
+  assert.match(text, /Deleted \*\*3\*\* messages\./);
+  assert.match(text, /\*\*1\*\* message older than 14 days was pinned and kept/);
+
+  const f = setup({ platform: 'fluxer', messages: [...old(2), oldPinned] });
+  await purge.execute(f.interaction);
+  assert.deepEqual(f.channel.bulkCalls[0], { n: 2, filterOld: false });
+  assert.match(lastEdit(f.replies).content, /pinned and kept/);
 });

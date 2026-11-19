@@ -66,11 +66,15 @@ purge that deletes something is written to the mod log.
 - **Discord:** messages younger than 14 days are deleted in bulk. Older messages cannot be bulk
   deleted, so Sylo deletes them one at a time at the pace Discord allows (about one per second, and
   it waits whenever Discord asks it to slow down). While that runs, the reply is updated
-  ("Deleted 40 of 100...") and has a **Stop** button. Only the person who ran the command and server
-  admins can press it.
+  ("Deleted 40 of 100...") and has a **Stop** button. The reply is private to the person who ran the
+  command, and only they can press Stop. A purge that would run past Discord's 15-minute reply limit
+  ends early with "Timed out"; run `/purge` again for the rest.
 - **Fluxer:** Fluxer's bulk delete has no age limit, so every message is deleted in one go and
   there is nothing to wait for.
 - Only one purge runs per channel at a time; a second `/purge` there is refused until the first has
   finished or been stopped.
+- Pinned messages: young pinned messages are deleted, as they always were. Pinned messages older than
+  14 days are kept (they were never deleted before either, and the reply says how many were kept).
+  Unpin them first if they should go too.
 - The final reply says how many messages were deleted and how many could not be (for example
   already deleted by someone else, or a missing permission).

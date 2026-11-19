@@ -25,8 +25,10 @@ export const MAX_RATE_LIMIT_RETRIES = 5;
 const MIN_RETRY_MS = 250;
 const MAX_RETRY_MS = 60_000;
 const DEFAULT_RETRY_MS = 2_000;
-/** A purge gives up after this long (a Discord interaction token lives 15 minutes). */
+/** Default longest run of one purge. */
 export const MAX_RUN_MS = 10 * 60_000;
+/** A Discord interaction token lives 15 minutes: stop using it 2 minutes before that. */
+export const INTERACTION_BUDGET_MS = 13 * 60_000;
 
 /** When a message was created, from its snowflake id (falls back to the SDK's timestamp). */
 export function messageTimestamp(message) {
@@ -48,6 +50,18 @@ export function splitByAge(messages, now = Date.now()) {
     (ts != null && now - ts < BULK_MAX_AGE_MS ? recent : old).push(m);
   }
   return { recent, old };
+}
+
+/**
+ * What a purge deletes out of `messages`: pinned messages that are too old for the bulk route are kept,
+ * as they always were (the old bulk-only purge skipped every old message, pinned or not). Younger pinned
+ * messages are deleted, as before.
+ * @returns {{ targets: any[], keptPinned: number }}
+ */
+export function selectPurgeTargets(messages, now = Date.now()) {
+  const old = new Set(splitByAge(messages, now).old);
+  const targets = messages.filter((m) => !(m.pinned && old.has(m)));
+  return { targets, keptPinned: messages.length - targets.length };
 }
 
 // --- error classification --------------------------------------------------------
@@ -141,8 +155,9 @@ const emptyFailures = () => ({ gone: 0, permission: 0, other: 0 });
  * @param {(ms: number) => Promise<void>} [opts.sleep]
  * @param {() => number} [opts.now]
  * @param {number} [opts.paceMs]
+ * @param {number} [opts.deadline]  epoch ms after which no more deletes are started or waited for (default: MAX_RUN_MS from now)
  * @returns {Promise<{ total: number, deleted: number, failed: number,
- *   failures: { gone: number, permission: number, other: number }, stopped: boolean, remaining: number,
+ *   failures: { gone: number, permission: number, other: number }, stopped: boolean, timedOut: boolean, remaining: number,
  *   bulk: number, single: number }>}
  */
 export async function purgeMessages(channel, messages, opts = {}) {
@@ -152,11 +167,12 @@ export async function purgeMessages(channel, messages, opts = {}) {
   const paceMs = opts.paceMs ?? SINGLE_DELETE_PACE_MS[platform] ?? SINGLE_DELETE_PACE_MS.discord;
   const isStopped = opts.isStopped ?? (() => false);
   const startedAt = now();
+  const deadline = opts.deadline ?? startedAt + MAX_RUN_MS;
 
   const targets = [...messages].slice(0, PURGE_CAP);
   const total = targets.length;
   const failures = emptyFailures();
-  const result = { total, deleted: 0, failed: 0, failures, stopped: false, remaining: 0, bulk: 0, single: 0 };
+  const result = { total, deleted: 0, failed: 0, failures, stopped: false, timedOut: false, remaining: 0, bulk: 0, single: 0 };
 
   const progress = () => opts.onProgress?.({ deleted: result.deleted, failed: result.failed, total });
   const fail = (kind, n = 1) => {
@@ -200,23 +216,18 @@ export async function purgeMessages(channel, messages, opts = {}) {
   }
 
   // 2. One by one, paced.
+  const halt = (i, why) => {
+    if (why === 'timeout') result.timedOut = true;
+    else result.stopped = true;
+    result.remaining = singles.length - i;
+    return result;
+  };
   for (let i = 0; i < singles.length; i++) {
-    if (isStopped()) {
-      result.stopped = true;
-      result.remaining = singles.length - i;
-      break;
-    }
-    if (now() - startedAt > MAX_RUN_MS) {
-      result.stopped = true;
-      result.remaining = singles.length - i;
-      break;
-    }
+    if (isStopped()) return halt(i, 'stop');
+    if (now() >= deadline) return halt(i, 'timeout');
     if (i > 0) await sleep(paceMs);
-    if (isStopped()) {
-      result.stopped = true;
-      result.remaining = singles.length - i;
-      break;
-    }
+    if (isStopped()) return halt(i, 'stop');
+    if (now() >= deadline) return halt(i, 'timeout');
     const message = singles[i];
     let attempt = 0;
     for (;;) {
@@ -226,9 +237,14 @@ export async function purgeMessages(channel, messages, opts = {}) {
         result.single += 1;
         break;
       } catch (err) {
-        if (isRateLimit(err) && attempt < MAX_RATE_LIMIT_RETRIES && !isStopped()) {
+        if (isRateLimit(err) && attempt < MAX_RATE_LIMIT_RETRIES) {
+          const wait = retryAfterMs(err);
+          // Never wait past the deadline (the interaction token expires): give up on the rest instead.
+          if (isStopped()) return halt(i, 'stop');
+          if (now() + wait >= deadline) return halt(i, 'timeout');
           attempt += 1;
-          await sleep(retryAfterMs(err));
+          await sleep(wait);
+          if (isStopped()) return halt(i, 'stop');
           continue;
         }
         fail(isRateLimit(err) ? 'other' : classifyError(err));
