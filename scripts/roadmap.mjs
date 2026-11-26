@@ -8,7 +8,8 @@
 //   GITHUB_TOKEN, GITHUB_REPOSITORY   set by GitHub Actions
 //   ROADMAP_WEBHOOK_URL               the Discord webhook (a secret, never printed)
 //   ROADMAP_MILESTONE                 milestone title, default "5.3"
-//   ROADMAP_MESSAGE_ID                this version's message to edit (repo variable ROADMAP_MESSAGE_ID_<version>)
+//   ROADMAP_VARS                      the repo variables as JSON; ROADMAP_MESSAGE_ID_<version> is this version's message
+//   ROADMAP_MESSAGE_ID                optional fallback when ROADMAP_VARS has no id (local runs)
 //   ROADMAP_ALLOW_POST                "true" on a manual run that ticked "post": may create the message
 //   GITHUB_STEP_SUMMARY               set by GitHub Actions; the new message id is written here
 import { appendFileSync } from 'node:fs';
@@ -274,7 +275,9 @@ async function main() {
   const stats = `${pct}%, ${items.filter((i) => stageOf(i) === 'done').length}/${items.length} done`;
 
   // The id of this version's message comes from the repo variable ROADMAP_MESSAGE_ID_<version>.
-  const result = await sendToDiscord(webhook, (env.ROADMAP_MESSAGE_ID || '').trim(), embed, {
+  const repoVars = JSON.parse(env.ROADMAP_VARS || '{}');
+  const messageId = String(repoVars[varName] ?? env.ROADMAP_MESSAGE_ID ?? '').trim();
+  const result = await sendToDiscord(webhook, messageId, embed, {
     allowPost: env.ROADMAP_ALLOW_POST === 'true',
   });
   if (result.action === 'skipped') {
