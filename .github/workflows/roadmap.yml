@@ -46,6 +46,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           ROADMAP_WEBHOOK_URL: ${{ secrets.ROADMAP_WEBHOOK_URL }}
           ROADMAP_MILESTONE: ${{ vars.ROADMAP_MILESTONE || '5.3' }}
-          ROADMAP_MESSAGE_ID: ${{ vars[format('ROADMAP_MESSAGE_ID_{0}', replace(vars.ROADMAP_MILESTONE || '5.3', '.', '_'))] }}
+          # The script picks ROADMAP_MESSAGE_ID_<version> out of the repo variables itself.
+          ROADMAP_VARS: ${{ toJSON(vars) }}
           # Only a manual run that ticked "post" may create a message; every other run only edits.
           ROADMAP_ALLOW_POST: ${{ github.event_name == 'workflow_dispatch' && inputs.post && 'true' || '' }}
