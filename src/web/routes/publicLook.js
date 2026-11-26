@@ -56,7 +56,9 @@ router.get('/:file', async (req, res, next) => {
     res.set({
       ...FILE_HEADERS,
       'Cache-Control': 'public, max-age=86400',
-      'Content-Type': image.mime,
+      // Sylo only ever stores WebP; the stored column is not trusted as a type (a restored or imported row could
+      // carry another one).
+      'Content-Type': 'image/webp',
       'Content-Length': String(image.data.length),
     });
     return res.end(image.data);

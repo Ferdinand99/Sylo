@@ -1,16 +1,9 @@
-import { useRef, useState } from 'react';
-import {
-  deletePublicLookImage,
-  getPublicLook,
-  refreshPublicLookSplash,
-  savePublicLook,
-  uploadPublicLookImage,
-} from '../api.js';
-import { useApiData } from '../useApiData.js';
+import { useRef } from 'react';
+import { deletePublicLookImage, refreshPublicLookSplash, uploadPublicLookImage } from '../api.js';
 import { notify } from '../notify.js';
-import { useAccess } from '../access.jsx';
+import Callout from './Callout.jsx';
 import Field from './Field.jsx';
-import { SYLO_ACCENT, accentNote, accentOutcome, normaliseAccent, onAccent } from '../publicLook.js';
+import { SYLO_ACCENT, accentAdvice, accentOutcome, onAccent } from '../publicLook.js';
 
 const MAX_BYTES = 2 * 1024 * 1024;
 
@@ -26,39 +19,17 @@ const currentTheme = () =>
  * the event pages carry no server address and take no look). Only
  * these two things change; the layout, the type, the light and dark themes and the "Powered by Sylo" link stay
  * Sylo's. The preview is the application form page. Edit level only (the section is not shown below it).
+ *
+ * The edits are kept by the page (`look` is usePublicLookForm's result) and saved with its save bar, so leaving the
+ * page with unsaved edits here is warned about like any other form. A picture is uploaded or removed at once.
  */
-export default function PublicPagesSettings({ guildId }) {
-  const { can } = useAccess();
-  const allowed = can('edit');
-  const { data, error, setData } = useApiData(
-    () => (allowed ? Promise.resolve().then(() => getPublicLook(guildId)) : Promise.resolve(null)),
-    [guildId, allowed]
-  );
-  // What the person has typed or chosen, on top of what is saved, for this server. It is cleared by a save and by
-  // another server. No effect copies the saved values in (a late copy would overwrite an edit), and every change
-  // is a functional update that touches only its own fields, so an answer that arrives later (an upload, a removal)
-  // never overwrites what was typed meanwhile.
-  const [draft, setDraft] = useState(null);
-  const [busy, setBusy] = useState(false);
+export default function PublicPagesSettings({ look }) {
   const fileInput = useRef(null);
-  const mine = draft && draft.for === guildId ? draft : null;
-  const accent = mine?.accent ?? data?.accent ?? '';
-  const background = mine?.background ?? data?.background ?? 'none';
-  const change = (fields) =>
-    setDraft((d) => {
-      const base =
-        d && d.for === guildId ? d : { for: guildId, accent: data.accent, background: data.background };
-      return { ...base, ...(typeof fields === 'function' ? fields(base) : fields) };
-    });
-  const setAccent = (value) => change({ accent: value });
-  const setBackground = (value) => change({ background: value });
+  const { ready, guildId, data, accent, background, normalised, invalid, busy, setAccent, setBackground } =
+    look;
+  if (!ready) return null;
 
-  if (!allowed || error || !data) return null;
-
-  const normalised = normaliseAccent(accent);
-  const invalid = normalised === null;
-  const dirty = !invalid && (normalised !== data.accent || background !== data.background);
-  const note = invalid ? null : accentNote(normalised);
+  const advice = invalid || !normalised ? null : accentAdvice(normalised);
   const theme = currentTheme();
   const outcome = accentOutcome(invalid ? '' : normalised);
   const shown = outcome[theme].color;
@@ -69,29 +40,6 @@ export default function PublicPagesSettings({ guildId }) {
     background === 'upload' ? data.upload?.url : background === 'discord-splash' ? splash.copied?.url : null;
   const waitingSplash = background === 'discord-splash' && !splash.copied;
 
-  async function run(fn, done) {
-    setBusy(true);
-    try {
-      const out = await fn();
-      if (out) setData(out);
-      if (done) notify(done, 'info');
-      return out;
-    } catch (err) {
-      notify(err.message);
-      return null;
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const onSave = (e) => {
-    e.preventDefault();
-    if (!dirty) return;
-    run(() => savePublicLook(guildId, { accent: normalised, background }), 'Public pages saved.').then(
-      (out) => out && setDraft(null)
-    );
-  };
-
   async function onFile(e) {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -100,7 +48,7 @@ export default function PublicPagesSettings({ guildId }) {
       notify('The picture is larger than 2 MB.');
       return;
     }
-    const out = await run(() => uploadPublicLookImage(guildId, file));
+    const out = await look.run(() => uploadPublicLookImage(guildId, file));
     if (out) {
       setBackground('upload');
       notify('Picture uploaded. Save to use it.', 'info');
@@ -108,9 +56,9 @@ export default function PublicPagesSettings({ guildId }) {
   }
 
   async function onRemove() {
-    const out = await run(() => deletePublicLookImage(guildId), 'Picture removed.');
+    const out = await look.run(() => deletePublicLookImage(guildId), 'Picture removed.');
     // a picture that is gone cannot stay chosen; whatever else was typed stays
-    if (out) change((d) => (d.background === 'upload' ? { background: 'none' } : {}));
+    if (out) look.change((d) => (d.background === 'upload' ? { background: 'none' } : {}));
   }
 
   const platformName = data.platform === 'fluxer' ? 'Fluxer' : 'Discord';
@@ -118,16 +66,21 @@ export default function PublicPagesSettings({ guildId }) {
     ? `This server has no invite background on ${platformName}. Set one there to use it here.`
     : `Sylo keeps its own copy of the server's ${platformName} invite background and checks it once a day, so visitors never load it from ${platformName}.`;
 
+  let readability = null;
+  if (advice?.readable) readability = 'Readable in both themes.';
+  else if (advice?.problems.length) readability = `${advice.problems.map((p) => p.label).join('. ')}.`;
+
   return (
     <div className="v2-group v2-section-gap" id="public-pages">
       <h2 className="v2-group-title">Public pages</h2>
-      <p className="v2-field-hint">
+      <p className="v2-field-hint v2-look-intro">
         Give the pages your members open without the dashboard (application forms, the web shop, ban appeals,
         the quote page and the leaderboards) your server&apos;s accent colour and a background. Only these two
         things change: the layout, the type, the light and dark themes and the &quot;Powered by Sylo&quot;
         link stay as they are.
       </p>
-      <form onSubmit={onSave} data-savebar>
+      {/* No submit button: the page's save bar saves (Enter in the colour field too). */}
+      <form onSubmit={(e) => e.preventDefault()} data-savebar>
         <div className="v2-field">
           <label htmlFor="look-accent">Accent colour</label>
           <div className="v2-field-row">
@@ -165,10 +118,10 @@ export default function PublicPagesSettings({ guildId }) {
               ? 'Use a colour like #5865f2.'
               : 'Used for buttons, links and highlights. Leave it empty for Sylo’s own colour.'}
           </p>
-          {note ? (
-            <p className="v2-note" role="status">
-              {note}
-            </p>
+          {advice?.warning ? (
+            <Callout tone="warning" className="v2-look-warning">
+              <p>{advice.warning}</p>
+            </Callout>
           ) : null}
         </div>
 
@@ -211,7 +164,7 @@ export default function PublicPagesSettings({ guildId }) {
                 type="button"
                 className="v2-btn-ghost"
                 disabled={busy}
-                onClick={() => run(() => refreshPublicLookSplash(guildId), 'Invite background checked.')}
+                onClick={() => look.run(() => refreshPublicLookSplash(guildId), 'Invite background checked.')}
               >
                 Check the invite background now
               </button>
@@ -256,23 +209,10 @@ export default function PublicPagesSettings({ guildId }) {
         {waitingSplash ? (
           <p className="v2-field-hint">The invite background is downloaded when you save.</p>
         ) : null}
-        <p className="v2-field-hint">
-          Shown in the {theme} theme.{' '}
-          {['dark', 'light'].map((t) => (
-            <span key={t} className="v2-look-ratio">
-              {t}:{' '}
-              {outcome[t].ratio == null
-                ? 'Sylo’s colour'
-                : `${outcome[t].ratio}:1${outcome[t].ok ? '' : ' (too low)'}`}{' '}
-            </span>
-          ))}
+        <p className="v2-field-hint" title={advice?.detail || undefined}>
+          Shown in the {theme} theme.
+          {readability ? ` ${readability}` : ''}
         </p>
-
-        <div className="v2-field-row">
-          <button type="submit" className="v2-btn-primary" disabled={!dirty || busy}>
-            Save public pages
-          </button>
-        </div>
       </form>
     </div>
   );

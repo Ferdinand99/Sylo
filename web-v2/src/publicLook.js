@@ -108,6 +108,42 @@ export function accentNote(accent) {
 }
 
 /**
+ * What the settings page tells a server admin about a colour, in plain words: `readable` when both themes use
+ * it, otherwise `problems` ("Too light for the light theme", with the way to go) and the `warning` sentence. A
+ * colour that is hard to read on the card is too dark for the dark theme or too light for the light one.
+ * (The server's own sentence, `accentNote`, stays the one the API and the apps get.)
+ */
+export function accentAdvice(accent) {
+  const out = accentOutcome(accent);
+  const problems = ['dark', 'light']
+    .filter((t) => !out[t].ok)
+    .map((theme) => {
+      const tooDark = theme === 'dark';
+      const word = tooDark ? 'dark' : 'light';
+      return {
+        theme,
+        word,
+        label: `Too ${word} for the ${theme} theme`,
+        advice: `Pick a ${tooDark ? 'lighter' : 'darker'} shade for the ${theme} theme.`,
+      };
+    });
+  const first = problems[0];
+  const warning = first
+    ? `This colour is too ${first.word} to read on the card in the ${first.theme} theme, so public pages use Sylo's own colour there. ${first.advice}`
+    : null;
+  return {
+    readable: Boolean(accent) && problems.length === 0,
+    problems,
+    warning,
+    // The exact contrast, for a tooltip: it is not something to read out to a server admin.
+    detail: ['dark', 'light']
+      .map((t) => (out[t].ratio == null ? null : `${t}: ${out[t].ratio}:1`))
+      .filter(Boolean)
+      .join(', '),
+  };
+}
+
+/**
  * Load the server's look for the page that is open: its style sheet and the marks on <body> that the dim
  * overlay and the panel hang on (styles/p3-look.css). `look` is `{ css, image }` from the page's data, or
  * null for plain Sylo. Undone when the page closes.

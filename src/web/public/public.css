@@ -632,6 +632,12 @@ body.has-look-image main {
 body.has-look-image .auth-wrap {
   min-height: 0;
 }
+/* On a phone the panel is not edge to edge: a margin all round lets the picture show on every side. */
+@media (max-width: 600px) {
+  body.has-look-image main {
+    margin: 12px;
+  }
+}
 @media (prefers-reduced-transparency: reduce) {
   body.has-look-image main {
     background: var(--bg-main);
@@ -643,6 +649,10 @@ body.has-look-image .auth-wrap {
 body.has-look main a:not(.btn) {
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+/* The period pills are not running text: they show their state with a border and a tint. */
+body.has-look main .lb-periods a {
+  text-decoration: none;
 }
 /* The "Powered by Sylo" line is the frame's: the same muted, underlined link on every page, whatever the accent. */
 body .lb-foot a,

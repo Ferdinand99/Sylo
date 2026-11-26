@@ -10,9 +10,14 @@ vi.mock('../api.js', () => ({
   exportGuildConfig: vi.fn(),
   getGuildAccess: vi.fn(),
   saveGuildAccess: vi.fn(),
+  getPublicLook: vi.fn(),
+  savePublicLook: vi.fn(),
+  uploadPublicLookImage: vi.fn(),
+  deletePublicLookImage: vi.fn(),
+  refreshPublicLookSplash: vi.fn(),
 }));
 vi.mock('../notify.js', () => ({ notify: vi.fn() }));
-const { getGuildSettings, saveGuildSettings } = await import('../api.js');
+const { getGuildSettings, saveGuildSettings, getPublicLook, savePublicLook } = await import('../api.js');
 const { notify } = await import('../notify.js');
 
 const GUILD = '123456789012345678';
@@ -35,6 +40,71 @@ const settings = (over = {}) => ({
 beforeEach(() => {
   vi.resetAllMocks();
   saveGuildSettings.mockResolvedValue({ ok: true });
+});
+
+const look = (over = {}) => ({
+  platform: 'discord',
+  accent: '',
+  background: 'none',
+  upload: null,
+  splash: { available: false, copied: null },
+  ...over,
+});
+
+describe('Settings: public pages share the page save bar', () => {
+  it('an edit in "Public pages" shows the bar, and Save writes only the public pages when nothing else changed', async () => {
+    getGuildSettings.mockResolvedValue(settings());
+    getPublicLook.mockResolvedValue(look());
+    savePublicLook.mockResolvedValue(look({ accent: '#5865f2' }));
+    renderAtGuild(<Settings />, GUILD);
+    const accent = await screen.findByLabelText('Accent colour');
+    expect(screen.queryByText('Unsaved changes')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save public pages' })).toBeNull();
+
+    fireEvent.change(accent, { target: { value: '#5865f2' } });
+    expect(await screen.findByText('Unsaved changes')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(savePublicLook).toHaveBeenCalledWith(GUILD, { accent: '#5865f2', background: 'none' })
+    );
+    expect(saveGuildSettings).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(true));
+  });
+
+  it('saves the settings first and then the public pages when both changed', async () => {
+    getGuildSettings.mockResolvedValue(settings({ platform: 'fluxer' }));
+    getPublicLook.mockResolvedValue(look());
+    savePublicLook.mockResolvedValue(look({ background: 'none', accent: '#5865f2' }));
+    renderAtGuild(<Settings />, GUILD);
+    fireEvent.change(await screen.findByLabelText(/Command prefix/), { target: { value: '>>' } });
+    fireEvent.change(await screen.findByLabelText('Accent colour'), { target: { value: '#5865f2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(savePublicLook).toHaveBeenCalledTimes(1));
+    expect(saveGuildSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not save the public pages when the settings are refused', async () => {
+    getGuildSettings.mockResolvedValue(settings({ platform: 'fluxer' }));
+    getPublicLook.mockResolvedValue(look());
+    renderAtGuild(<Settings />, GUILD);
+    fireEvent.change(await screen.findByLabelText(/Command prefix/), { target: { value: 'a b' } });
+    fireEvent.change(await screen.findByLabelText('Accent colour'), { target: { value: '#5865f2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith('The prefix can not contain spaces.'));
+    expect(savePublicLook).not.toHaveBeenCalled();
+  });
+
+  it('Reset drops the edit in "Public pages" too', async () => {
+    getGuildSettings.mockResolvedValue(settings());
+    getPublicLook.mockResolvedValue(look());
+    renderAtGuild(<Settings />, GUILD);
+    const accent = await screen.findByLabelText('Accent colour');
+    fireEvent.change(accent, { target: { value: '#5865f2' } });
+    expect(accent.value).toBe('#5865f2');
+    fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
+    await waitFor(() => expect(screen.getByLabelText('Accent colour').value).toBe(''));
+    expect(screen.getByRole('button', { name: 'Save' }).disabled).toBe(true);
+  });
 });
 
 describe('Settings: command prefix', () => {
