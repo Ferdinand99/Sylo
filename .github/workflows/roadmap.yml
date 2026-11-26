@@ -1,0 +1,41 @@
+name: Roadmap
+
+# Keeps one Discord message up to date with how far the next release is: the milestone named in the
+# repo variable ROADMAP_MILESTONE (default "5.3"). Merged pull requests and closed issues count as
+# done. The first run posts the message and prints its id in the job summary; set that id as the
+# repo variable ROADMAP_MESSAGE_ID and later runs edit the same message.
+on:
+  pull_request:
+    types: [closed]
+  issues:
+    types: [closed, reopened, milestoned, demilestoned]
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: read
+  pull-requests: read
+  contents: read
+
+# One update at a time, so two quick events cannot post the message twice.
+concurrency:
+  group: roadmap
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: Update the progress message
+        run: node scripts/roadmap.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ROADMAP_WEBHOOK_URL: ${{ secrets.ROADMAP_WEBHOOK_URL }}
+          ROADMAP_MILESTONE: ${{ vars.ROADMAP_MILESTONE || '5.3' }}
+          ROADMAP_MESSAGE_ID: ${{ vars.ROADMAP_MESSAGE_ID }}
