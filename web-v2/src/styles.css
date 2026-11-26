@@ -2404,6 +2404,11 @@ textarea:disabled {
   text-wrap: pretty;
   margin: 4px 0 0;
 }
+/* Text a server admin typed with line breaks (a form's description, a question, its help): the breaks
+   are kept, runs of spaces still collapse. pages/Apply.jsx and the forms editor's preview. */
+.v2-pre-line {
+  white-space: pre-line;
+}
 /* ChipPicker.jsx — replaces a native <select multiple> (needs ctrl/cmd-
    click to pick more than one, not discoverable) with removable chips
    plus a single-select "add" dropdown. */
