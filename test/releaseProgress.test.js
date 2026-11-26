@@ -5,9 +5,15 @@ import {
   percent,
   parseTitle,
   shortName,
+  roadmapName,
+  checklistRows,
   groupOf,
   toItems,
   buildEmbed,
+  messageVarName,
+  stageOf,
+  progressOf,
+  sendToDiscord,
 } from '../scripts/roadmap.mjs';
 
 test('release progress: bar and percentage round down so 100 % only shows when everything is done', () => {
@@ -34,7 +40,7 @@ test('release progress: parseTitle strips the commit prefix, a trailing aside an
   assert.deepEqual(parseTitle('Release Sylo 5.3'), { type: null, scope: '', text: 'Release Sylo 5.3' });
 });
 
-test('release progress: shortName is plain, capitalised and short; fixes keep their area', () => {
+test('release progress: shortName falls back to a plain title; fixes keep their area; no cutting', () => {
   const pr = (title) => ({ kind: 'pr', number: 1, title, done: false });
   assert.equal(
     shortName(pr('feat(bridge): link a Discord channel to a Fluxer channel')),
@@ -49,7 +55,39 @@ test('release progress: shortName is plain, capitalised and short; fixes keep th
     'Test 5.3 on the test bot'
   );
   const long = shortName(pr('feat(x): ' + 'word '.repeat(40)));
-  assert.ok(long.length <= 72 && long.endsWith('…'));
+  assert.ok(long.length > 150 && !long.includes('…'));
+});
+
+test('release progress: a "Roadmap:" line in the body gives the member-friendly name', () => {
+  assert.equal(roadmapName('Some text\n\nRoadmap: Focused moderator view\n'), 'Focused moderator view');
+  assert.equal(roadmapName('roadmap:   Lower case line  \r\nmore'), 'Lower case line');
+  assert.equal(roadmapName('Roadmap: internal'), 'Smaller fixes and improvements');
+  assert.equal(roadmapName('Mentions Roadmap: in the middle of a line'), '');
+  assert.equal(roadmapName(null), '');
+  assert.equal(
+    shortName({ kind: 'pr', number: 1, title: 'feat: x', name: 'Nice name', done: true }),
+    'Nice name'
+  );
+});
+
+test('release progress: items with the same name share one line; internal ones collapse last', () => {
+  const pr = (number, name, done) => ({ kind: 'pr', number, title: 'fix: x', name, done });
+  assert.deepEqual(
+    checklistRows([
+      pr(1, 'Smaller fixes and improvements', true),
+      pr(2, 'Alerts fix', true),
+      pr(3, 'Smaller fixes and improvements', false),
+      pr(4, 'Alerts fix', false),
+      pr(5, 'Smaller fixes and improvements', true),
+      pr(6, 'Done thing', true),
+    ]),
+    ['🔨 Alerts fix (1 of 2)', '✅ Done thing', '🔨 Smaller fixes and improvements (2 of 3)']
+  );
+  // Internal items count in the "fix" group even when their title says feat.
+  assert.equal(
+    groupOf({ kind: 'pr', title: 'feat(db): index', name: 'Smaller fixes and improvements' }),
+    'fix'
+  );
 });
 
 test('release progress: toItems counts merged PRs and closed issues, and drops abandoned PRs', () => {
@@ -58,15 +96,15 @@ test('release progress: toItems counts merged PRs and closed issues, and drops a
     { number: 2, title: 'feat: b', state: 'open', pull_request: { merged_at: null } },
     { number: 3, title: 'feat: c', state: 'closed', pull_request: { merged_at: null } },
     { number: 4, title: 'Test it', state: 'closed' },
-    { number: 5, title: 'Release it', state: 'open' },
+    { number: 5, title: 'Release it', state: 'open', body: 'Roadmap: Ship it' },
   ]);
   assert.deepEqual(
-    items.map((i) => [i.number, i.kind, i.done]),
+    items.map((i) => [i.number, i.kind, i.done, i.name]),
     [
-      [1, 'pr', true],
-      [2, 'pr', false],
-      [4, 'issue', true],
-      [5, 'issue', false],
+      [1, 'pr', true, ''],
+      [2, 'pr', false, ''],
+      [4, 'issue', true, ''],
+      [5, 'issue', false, 'Ship it'],
     ]
   );
 });
@@ -94,17 +132,18 @@ test('release progress: buildEmbed groups the checklist, non-code steps last, wi
     embed.description,
     [
       '▰▰▰▰▱▱▱▱▱▱ **40%** · 2 of 5 done',
+      '✅ done · 🧪 built, waiting for test · 🔨 in progress',
       '',
       '**New features**',
-      '🔄 Link a channel',
+      '🔨 Link a channel',
       '✅ Mirror a server',
       '',
       '**Fixes**',
       '✅ Honeypot: count every catch',
       '',
       '**Still to do**',
-      '🔄 Test 5.3 on the test bot',
-      '🔄 Release Sylo 5.3',
+      '🔨 Test 5.3 on the test bot',
+      '🔨 Release Sylo 5.3',
     ].join('\n')
   );
 
@@ -116,4 +155,60 @@ test('release progress: buildEmbed groups the checklist, non-code steps last, wi
   }));
   assert.ok(buildEmbed('5.3', many).description.length <= 4096);
   assert.match(buildEmbed('5.3', []).description, /Nothing is planned yet/);
+});
+
+test('release progress: stages - ready label means waiting for test and counts two thirds', () => {
+  const api = (number, state, labels, merged) => ({
+    number,
+    title: 'feat: x' + number,
+    state,
+    labels,
+    pull_request: { merged_at: merged ? '2026-11-26T10:00:00Z' : null },
+  });
+  const items = toItems([
+    api(1, 'closed', [], true),
+    api(2, 'open', [{ name: 'ready-for-test' }], false),
+    api(3, 'open', [{ name: 'enhancement' }], false),
+    { number: 4, title: 'Release it', state: 'open', labels: [] },
+  ]);
+  assert.deepEqual(items.map(stageOf), ['done', 'test', 'progress', 'progress']);
+  assert.deepEqual(progressOf(items), { points: 5, max: 12 });
+  assert.deepEqual(progressOf([]), { points: 0, max: 0 });
+  const lines = buildEmbed('5.3', items).description.split('\n');
+  assert.equal(lines[0], '▰▰▰▰▱▱▱▱▱▱ **41%** · 1 of 4 done');
+  assert.ok(lines.includes('🧪 X2'));
+  const waiting = [{ kind: 'pr', number: 1, title: 'feat: a', stage: 'test' }];
+  assert.equal(buildEmbed('5.3', waiting).description.split('\n')[0], '▰▰▰▰▰▰▱▱▱▱ **66%** · 0 of 1 done');
+});
+
+test('release progress: a closed milestone is shown as released', () => {
+  assert.equal(buildEmbed('5.3', [], { released: true }).title, 'Sylo 5.3 — released');
+});
+
+test('release progress: each version has its own message id variable', () => {
+  assert.equal(messageVarName('5.3'), 'ROADMAP_MESSAGE_ID_5_3');
+  assert.equal(messageVarName('5.10'), 'ROADMAP_MESSAGE_ID_5_10');
+});
+
+test('release progress: a new message is only posted when explicitly allowed', async () => {
+  const realFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push([String(url), init.method]);
+    return init.method === 'POST'
+      ? { ok: true, status: 200, json: async () => ({ id: '123' }) }
+      : { ok: false, status: 404 };
+  };
+  try {
+    const hook = 'https://discord.example/api/webhooks/1/token';
+    assert.deepEqual(await sendToDiscord(hook, '', {}), { action: 'skipped' });
+    assert.equal(calls.length, 0);
+    assert.deepEqual(await sendToDiscord(hook, '42', {}), { action: 'missing', id: '42' });
+    assert.equal(calls.at(-1)[1], 'PATCH');
+    assert.equal(calls.length, 1);
+    assert.deepEqual(await sendToDiscord(hook, '', {}, { allowPost: true }), { action: 'posted', id: '123' });
+    assert.equal(calls.at(-1)[0], `${hook}?wait=true`);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

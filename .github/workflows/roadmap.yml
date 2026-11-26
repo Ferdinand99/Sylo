@@ -2,16 +2,24 @@ name: Roadmap
 
 # Keeps one Discord message up to date with how far the next release is: the milestone named in the
 # repo variable ROADMAP_MILESTONE (default "5.3"). Merged pull requests and closed issues count as
-# done. The first run posts the message and prints its id in the job summary; set that id as the
-# repo variable ROADMAP_MESSAGE_ID and later runs edit the same message.
+# done; an open pull request with the "ready-for-test" label counts for two thirds. Every version has
+# its own message: its id is the repo variable ROADMAP_MESSAGE_ID_<version> (5.3 -> ROADMAP_MESSAGE_ID_5_3).
+# Only a manual run with "post" ticked creates a message (its id is in the job log and the summary);
+# every other run only edits the saved one. To start the next version, change ROADMAP_MILESTONE and
+# run once with "post" ticked.
 on:
   pull_request:
-    types: [closed]
+    types: [closed, labeled, unlabeled, milestoned, demilestoned]
   issues:
     types: [closed, reopened, milestoned, demilestoned]
   schedule:
     - cron: '17 * * * *'
   workflow_dispatch:
+    inputs:
+      post:
+        description: 'Post a NEW progress message for ROADMAP_MILESTONE (only used when its message id variable is empty)'
+        type: boolean
+        default: false
 
 permissions:
   issues: read
@@ -38,4 +46,6 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           ROADMAP_WEBHOOK_URL: ${{ secrets.ROADMAP_WEBHOOK_URL }}
           ROADMAP_MILESTONE: ${{ vars.ROADMAP_MILESTONE || '5.3' }}
-          ROADMAP_MESSAGE_ID: ${{ vars.ROADMAP_MESSAGE_ID }}
+          ROADMAP_MESSAGE_ID: ${{ vars[format('ROADMAP_MESSAGE_ID_{0}', replace(vars.ROADMAP_MILESTONE || '5.3', '.', '_'))] }}
+          # Only a manual run that ticked "post" may create a message; every other run only edits.
+          ROADMAP_ALLOW_POST: ${{ github.event_name == 'workflow_dispatch' && inputs.post && 'true' || '' }}
