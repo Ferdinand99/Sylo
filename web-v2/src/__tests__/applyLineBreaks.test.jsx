@@ -61,11 +61,13 @@ describe('line breaks on the web form of an application', () => {
     const description = await screen.findByText(exact('Join the team.\nWe meet on Fridays.'));
     expect(hasPreLine(description)).toBe(true);
 
+    // The questions come once the answers are set up (an effect after the data arrives).
+    const help = await screen.findByText(exact('Be honest.\nNo wrong answers.'));
+    expect(hasPreLine(help)).toBe(true);
+
     const label = document.getElementById('q-q_text-label');
     expect(label.textContent).toContain('Why do you want to join?\nTell us about yourself.');
     expect(hasPreLine(label)).toBe(true);
-
-    expect(hasPreLine(screen.getByText(exact('Be honest.\nNo wrong answers.')))).toBe(true);
   });
 
   it('the stylesheet keeps line breaks for .v2-pre-line', () => {
