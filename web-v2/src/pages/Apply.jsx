@@ -154,7 +154,7 @@ export default function Apply() {
       {!problem && !pending && answers ? (
         <form onSubmit={onSubmit} className="v2-section-gap" noValidate>
           {form.intro ? (
-            <p className="v2-field-hint">
+            <p className="v2-field-hint" style={{ whiteSpace: 'pre-line' }}>
               <InlineMarkdown text={form.intro} />
             </p>
           ) : null}
