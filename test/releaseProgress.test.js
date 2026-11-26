@@ -131,7 +131,7 @@ test('release progress: buildEmbed groups the checklist, non-code steps last, wi
   assert.equal(
     embed.description,
     [
-      '▰▰▰▰▱▱▱▱▱▱ **40%** · 2 of 5 done',
+      '▰▰▰▰▱▱▱▱▱▱ **40%** · 2 done · 3 to go',
       '✅ done · 🧪 built, waiting for test · 🔨 in progress',
       '',
       '**New features**',
@@ -175,10 +175,13 @@ test('release progress: stages - ready label means waiting for test and counts t
   assert.deepEqual(progressOf(items), { points: 5, max: 12 });
   assert.deepEqual(progressOf([]), { points: 0, max: 0 });
   const lines = buildEmbed('5.3', items).description.split('\n');
-  assert.equal(lines[0], '▰▰▰▰▱▱▱▱▱▱ **41%** · 1 of 4 done');
+  assert.equal(lines[0], '▰▰▰▰▱▱▱▱▱▱ **41%** · 1 done · 1 waiting for test · 2 to go');
   assert.ok(lines.includes('🧪 X2'));
   const waiting = [{ kind: 'pr', number: 1, title: 'feat: a', stage: 'test' }];
-  assert.equal(buildEmbed('5.3', waiting).description.split('\n')[0], '▰▰▰▰▰▰▱▱▱▱ **66%** · 0 of 1 done');
+  assert.equal(
+    buildEmbed('5.3', waiting).description.split('\n')[0],
+    '▰▰▰▰▰▰▱▱▱▱ **66%** · 0 done · 1 waiting for test'
+  );
 });
 
 test('release progress: a closed milestone is shown as released', () => {

@@ -164,12 +164,20 @@ export function messageVarName(milestoneTitle) {
     .toUpperCase()}`;
 }
 
+// "2 done · 15 waiting for test · 7 to go" (a part with nothing in it is left out, except "done").
+export function countsLine(items) {
+  const n = (stage) => items.filter((i) => stageOf(i) === stage).length;
+  const parts = [`${n('done')} done`];
+  if (n('test')) parts.push(`${n('test')} waiting for test`);
+  if (n('progress')) parts.push(`${n('progress')} to go`);
+  return parts.join(' · ');
+}
+
 export function buildEmbed(milestoneTitle, items, { released = false } = {}) {
   const total = items.length;
-  const done = items.filter((i) => stageOf(i) === 'done').length;
   const { points, max } = progressOf(items);
   const pct = percent(points, max);
-  const lines = [`${buildBar(points, max)} **${pct}%** · ${done} of ${total} done`, LEGEND, ''];
+  const lines = [`${buildBar(points, max)} **${pct}%** · ${countsLine(items)}`, LEGEND, ''];
 
   for (const { key, heading } of GROUPS) {
     const rows = checklistRows(items.filter((i) => groupOf(i) === key));
