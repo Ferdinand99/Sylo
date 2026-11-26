@@ -203,7 +203,7 @@ async function main() {
   const result = await sendToDiscord(webhook, (env.ROADMAP_MESSAGE_ID || '').trim(), embed);
   const pct = percent(done, items.length);
   if (result.action === 'posted') {
-    console.log(`Posted a new progress message (${pct}%, ${done}/${items.length}).`);
+    console.log(`Posted a new progress message ${result.id} (${pct}%, ${done}/${items.length}).`);
     summary(
       `### Progress message posted\n\nMessage id: \`${result.id}\`\n\n` +
         'Save it as the repository variable `ROADMAP_MESSAGE_ID` so later runs edit this message ' +
