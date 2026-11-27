@@ -2,6 +2,7 @@
 // picker, the "Needs attention" items (one per module), a module page's list, and the shared read.
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AccessProvider } from '../access.jsx';
 import { HealthProvider } from '../HealthContext.jsx';
 import PickerHealth from '../components/PickerHealth.jsx';
 import ChipPicker from '../components/ChipPicker.jsx';
@@ -17,11 +18,12 @@ vi.mock('../api.js', () => ({
   setModuleEnabled: vi.fn(),
   setModulesEnabledBulk: vi.fn(),
   getAccount: vi.fn(),
+  getGuildAccess: vi.fn(),
 }));
 vi.mock('../notify.js', () => ({ notify: vi.fn() }));
 vi.mock('../moduleForms/index.js', () => ({ v2Href: (card, guildId) => `/guilds/${guildId}/m/${card.id}` }));
 vi.mock('../OverviewContext.jsx', () => ({ useOverview: vi.fn() }));
-const { getGuildHealth } = await import('../api.js');
+const { getGuildHealth, getGuildAccess } = await import('../api.js');
 const { useOverview } = await import('../OverviewContext.jsx');
 
 const GUILD = '123456789012345678';
@@ -198,7 +200,7 @@ describe('Needs attention', () => {
     expect(attentionItems({ groups: [], attention: { problems: [], waiting: {} } }, GUILD)).toEqual([]);
   });
 
-  it('shows the module with its problems and a Fix link', () => {
+  const mockProblemOverview = () =>
     useOverview.mockReturnValue({
       data: {
         guild: { name: 'Hedgerow', icon: null, memberCount: 12 },
@@ -240,6 +242,9 @@ describe('Needs attention', () => {
       error: null,
       setData: vi.fn(),
     });
+
+  it('shows the module with its problems and a Fix link', () => {
+    mockProblemOverview();
     renderAtGuild(<Overview />, GUILD);
     expect(screen.getByText("Verification: Sylo can't do everything it needs")).toBeTruthy();
     expect(screen.getByText(/Sylo's role is not above it\./)).toBeTruthy();
@@ -247,6 +252,21 @@ describe('Needs attention', () => {
     expect(
       screen.getByRole('link', { name: /^Fix Verification: Sylo can't do everything it needs/ })
     ).toBeTruthy();
+  });
+
+  it('gives someone with Inbox access no Fix link to a settings page they cannot open', async () => {
+    getGuildAccess.mockResolvedValue({ level: 'inbox' });
+    mockProblemOverview();
+    renderAtGuild(
+      <AccessProvider guildId={GUILD} hint="inbox">
+        <Overview />
+      </AccessProvider>,
+      GUILD
+    );
+    expect(await screen.findByText('Ask a server admin')).toBeTruthy();
+    expect(screen.getByText("Verification: Sylo can't do everything it needs")).toBeTruthy();
+    await waitFor(() => expect(getGuildAccess).toHaveBeenCalled());
+    expect(screen.queryByRole('link', { name: /^Fix / })).toBeNull();
   });
 });
 

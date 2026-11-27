@@ -2,16 +2,20 @@
 // classic dashboard chrome: no htmx, Alpine, sidebar, retirement banner or inline script. They are
 // standalone pages in the new dashboard's look (/public.css, /theme.js). This file runs with login
 // enabled; test/publicPagesOpen.test.js covers open mode.
-import { browser, setProfiles, signIn, startOAuthApp } from './helpers/oauthApp.js';
+import { D_GUILD, browser, setProfiles, signIn, startOAuthApp } from './helpers/oauthApp.js';
 import { SAMPLES, capture, plainProblems, renderError, renderSample } from './helpers/publicViews.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
+import express from 'express';
 
 await startOAuthApp();
 const { pkceChallenge } = await import('../src/db/apiTokens.js');
-const { createApp } = await import('../src/web/server.js');
+const { createApp, centralErrorHandler } = await import('../src/web/server.js');
 const { forbidOwner } = await import('../src/web/middleware/auth.js');
+const { ticketAccessLevel } = await import('../src/web/middleware/ticketAccess.js');
+const { ticketsRouter } = await import('../src/web/routes/v2Staff.js');
+const { log } = await import('../src/lib/log.js');
 const { LimitError } = await import('../src/lib/limits.js');
 const { RoleGrantError } = await import('../src/web/middleware/roleGrants.js');
 
@@ -132,8 +136,7 @@ test('the error page from the operator guard (auth.js) is plain', async () => {
 });
 
 test('the error page from the server error handler (server.js) is plain', async () => {
-  const handler = app.router.stack.map((l) => l.handle).find((h) => h.length === 4);
-  assert.ok(handler, 'the central error handler');
+  const handler = centralErrorHandler;
   for (const err of [
     new LimitError('You reached the limit.'),
     new RoleGrantError('That role is above yours.'),
@@ -155,4 +158,81 @@ test('the error page from the server error handler (server.js) is plain', async 
 test('the error page renders with and without a title, heading and message', async () => {
   assertPlain(await renderError({}), 'bare error');
   assertPlain(await renderError({ title: 'x', heading: 'y', message: 'z' }, { authEnabled: false }), 'error');
+});
+
+// The ticket access guard (ticketAccess.js) is the first thing the tickets router of the v2 API runs
+// (v2Staff.js). This mounts that router behind the server's own central error handler, with a
+// signed-in account chosen per request, to test what the guard answers.
+async function withTicketsRouter(run, { seen = [] } = {}) {
+  const mini = express();
+  mini.use((req, _res, next) => {
+    req.account =
+      req.get('x-lookup') === 'fails'
+        ? {
+            id: 'acc-1',
+            get identities() {
+              throw new Error('lookup failed: secret detail');
+            },
+          }
+        : { id: 'acc-1', identities: [] };
+    next();
+  });
+  mini.use('/guilds/:guildId/tickets', ticketsRouter);
+  mini.use((err, req, res, next) => {
+    seen.push(err);
+    centralErrorHandler(err, req, res, next);
+  });
+  const server = await new Promise((resolve) => {
+    const srv = mini.listen(0, () => resolve(srv));
+  });
+  try {
+    return await run(`http://127.0.0.1:${server.address().port}/guilds/${D_GUILD}/tickets`);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
+test('the ticket access guard refuses a person without access with a plain answer: no page, no data', async () => {
+  await withTicketsRouter(async (url) => {
+    for (const accept of ['text/html', 'application/json']) {
+      const res = await fetch(url, { headers: { accept } });
+      assert.equal(res.status, 403);
+      assert.match(res.headers.get('content-type') ?? '', /application\/json/);
+      const body = await res.text();
+      assert.deepEqual(JSON.parse(body), {
+        error: 'You need Manage Server, or a configured staff role, to view tickets here.',
+      });
+      assert.doesNotMatch(body, /<|htmx|alpine|sidebar/i);
+    }
+  });
+});
+
+test('a failed ticket access lookup goes to the error handler instead of hanging the request', async (t) => {
+  const logged = t.mock.method(log, 'error', () => {});
+  const failing = {
+    id: 'acc-1',
+    get identities() {
+      throw new Error('lookup failed: secret detail');
+    },
+  };
+  await assert.rejects(
+    ticketAccessLevel({ account: failing, params: { guildId: D_GUILD }, method: 'GET' }),
+    /lookup failed/,
+    'the lookup rejects: a failure is not swallowed into a level'
+  );
+  const seen = [];
+  await withTicketsRouter(
+    async (url) => {
+      const res = await fetch(url, {
+        headers: { accept: 'text/html', 'x-lookup': 'fails' },
+        signal: AbortSignal.timeout(5000),
+      });
+      assert.equal(res.status, 500, 'answered, not hung');
+      assert.deepEqual(await res.json(), { error: 'Internal server error' }, 'no detail of the failure');
+    },
+    { seen }
+  );
+  assert.equal(seen.length, 1, 'the error reached the central error handler');
+  assert.match(seen[0].message, /lookup failed/);
+  assert.equal(logged.mock.callCount(), 1, 'recorded once, with the route pattern');
 });

@@ -9,6 +9,7 @@ import { runtime } from './runtime.js';
 // Importing db/index.js opens the SQLite connection and runs migrations.
 import { closeDb } from './db/index.js';
 import { startBackupSchedule } from './db/backup.js';
+import { checkDatabaseRole } from './db/dbRole.js';
 import { startRetentionSchedule } from './db/retention.js';
 import { startBot } from './bot/index.js';
 import { startFluxerBot } from './bot/fluxerBot.js';
@@ -105,6 +106,8 @@ async function main() {
     );
   }
   warnIfDataFolderIsNotAVolume();
+  // Postgres: one warning when the database role is stronger than Sylo needs (see db/dbRole.js).
+  await checkDatabaseRole(log);
   // Every configured platform starts in parallel; one that is not configured is never loaded.
   await Promise.all([config.discordEnabled && startBot(), config.fluxerEnabled && startFluxerBot()]);
   httpServer = await startWeb(config.webPort);

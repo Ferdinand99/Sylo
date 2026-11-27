@@ -1620,6 +1620,13 @@ export const MIGRATIONS = [
       );
     `);
   },
+  // 82: the open tickets of one user across servers (the DM ticket lookup asks for them first). Postgres
+  // creates the same index in its bootstrap (db/tickets.js).
+  (database) => {
+    database.exec(
+      `CREATE INDEX IF NOT EXISTS idx_tickets_user_open ON tickets (user_id) WHERE status = 'open';`
+    );
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

@@ -181,8 +181,8 @@ router.get('/:token', async (req, res, next) => {
     const [going, maybe, icon, image] = await Promise.all([
       eventStatusCount(ev.id, 'join'),
       eventStatusCount(ev.id, 'maybe'),
-      loadImage(iconLink(guild)),
-      loadImage(ev.image_url),
+      loadImage(iconLink(guild), ev.guild_id),
+      loadImage(ev.image_url, ev.guild_id),
     ]);
     const status = eventStatus(ev);
     // The posted time changes as people edit; the page must not be served from a cache after the
@@ -221,7 +221,10 @@ router.get('/:token/:asset', async (req, res, next) => {
     if (asset !== 'icon' && asset !== 'image') return notFound(res);
     const open = await openEvent(req);
     if (open.type !== 'page') return refuse(res, open, token);
-    const image = await loadImage(asset === 'icon' ? iconLink(open.guild) : open.ev.image_url);
+    const image = await loadImage(
+      asset === 'icon' ? iconLink(open.guild) : open.ev.image_url,
+      open.ev.guild_id
+    );
     if (!image) return notFound(res);
     res.set({
       'Content-Type': image.type,

@@ -100,7 +100,7 @@ reset in progress, try again shortly." at once.
 ## The shop
 
 Staff build the shop on the **Shop** tab; nothing needs a Discord command. An item has a name (up to 60
-characters), a description (up to 300), an optional emoji, a **price** (1 or more), a **stock** (unlimited, or a
+characters), a description (up to 300, over several lines if you like: the line breaks show in /shop and on the web shop), an optional emoji, a **price** (1 or more), a **stock** (unlimited, or a
 number), optional **required roles** (a member needs any one of them), an optional **limit per member**, a
 paused/for-sale switch and a place in the list (move it up or down). There are four kinds:
 
