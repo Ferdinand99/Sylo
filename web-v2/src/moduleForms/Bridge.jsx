@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import {
   acceptBridgeLink,
   bridgeLinkAction,
@@ -12,6 +12,7 @@ import { notify } from '../notify.js';
 import { useApiData } from '../useApiData.js';
 import LoadError from '../components/LoadError.jsx';
 import HowItWorks from '../components/HowItWorks.jsx';
+import Callout from '../components/Callout.jsx';
 import CopyButton from '../components/CopyButton.jsx';
 import EmptyList from '../components/EmptyList.jsx';
 import RowActions from '../components/RowActions.jsx';
@@ -185,6 +186,13 @@ export default function Bridge() {
         write as they always do, and Sylo shows each message on the other side with the author&apos;s name and
         picture.
       </p>
+      {data.platform === 'discord' && data.bothPlatforms && owner ? (
+        <Callout tone="info" className="v2-bridge-mirror-hint">
+          <strong className="v2-callout-title">Setting up a whole Fluxer server?</strong> Use{' '}
+          <Link to={`/guilds/${guildId}/mirror`}>Mirror to Fluxer</Link> to copy channels, roles and emoji and
+          bridge every channel at once.
+        </Callout>
+      ) : null}
       <HowItWorks>
         <p>
           Both servers agree. One asks for a link and gets a code that works for 15 minutes; the owner of the
@@ -216,8 +224,19 @@ export default function Bridge() {
 
       <div className="v2-group v2-section-gap">
         <h2 className="v2-group-title">
-          Bridged channels ({data.links.length} of {data.limits.links})
+          {data.links.length <= data.limits.links
+            ? `Bridged channels (${data.links.length} of ${data.limits.links})`
+            : `Bridged channels (${data.links.length})`}
         </h2>
+        {data.links.length >= data.limits.links ? (
+          <p className="v2-note v2-row-warn" data-testid="bridge-limit-note">
+            {data.links.length > data.limits.links
+              ? `This server has more bridged channels than the limit of ${data.limits.links}. No new link can be made until some are unlinked or the limit is raised. `
+              : `This server has reached the limit of ${data.limits.links} bridged channels, so no new link can be made, and a server mirror stops linking channels. `}
+            The limit is set by whoever runs this Sylo instance (the <code>BRIDGE_MAX_LINKS</code> setting;
+            see the self-hosting guide); if that is not you, ask them.
+          </p>
+        ) : null}
         {data.links.length === 0 ? (
           <EmptyList>
             No channel is bridged yet. Ask for a link below, or use a code from the other server.

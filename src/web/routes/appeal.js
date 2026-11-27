@@ -4,6 +4,7 @@
 // later shows the decision — notification never depends on a DM getting through.
 import { guildByKey } from '../../platform/platformOf.js';
 import { Router } from 'express';
+import { lookFor } from '../lib/publicLook.js';
 import { isModuleEnabled, getGuildModule } from '../../db/modules.js';
 import { log } from '../../lib/log.js';
 import {
@@ -126,9 +127,16 @@ async function resolve(req) {
 
 const inviteOf = (r) => r.cfg?.appealServerInvite || null;
 
+// The server's own look (accent colour, background) once the link and the server are known to be real: an
+// invalid link gets the plain Sylo page, so nothing about a server is shown to someone who only guessed an id.
+async function applyLook(req, res, r) {
+  res.locals.look = r.guild ? await lookFor(req.params.guildId) : null;
+}
+
 router.get('/:guildId', async (req, res, next) => {
   try {
     const r = await resolve(req);
+    await applyLook(req, res, r);
     if (r.error) return render(res, 'error', { heading: r.heading, message: r.error });
     if (r.state !== 'form') {
       return render(res, r.state, {
@@ -156,6 +164,7 @@ router.get('/:guildId', async (req, res, next) => {
 router.post('/:guildId', async (req, res, next) => {
   try {
     const r = await resolve(req);
+    await applyLook(req, res, r);
     if (r.error) return render(res, 'error', { heading: r.heading, message: r.error });
     if (r.state !== 'form') {
       return render(res, r.state, {

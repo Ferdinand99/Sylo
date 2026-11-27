@@ -10,6 +10,12 @@ Sylo is) and that is a member of both servers.
 **Dashboard:** `/v2/guilds/<id>/m/bridge` - the linked channels, a form to ask for a link, a form to use a
 code, what this server shares, and pause, resume and unlink.
 
+**Setting up a whole Fluxer server?** Linking channels one by one is for single conversations. To copy a
+Discord server's channels, roles and emoji to a Fluxer server and bridge every channel at once, use
+[Mirror to Fluxer](../mirror.md). The Bridge page of a Discord server points to it with a short note and a
+link; the note is shown only to the server's owner and only when Sylo is connected to both platforms. It is not
+shown on a Fluxer server: the mirror's target is chosen from the Discord side.
+
 ## Who can use it: the server owner
 
 **Only the owner of a server can use the bridge** (the Discord server owner, the Fluxer server owner), on
@@ -37,7 +43,7 @@ A link is never made from one side alone.
    shared with #chat in Fluxer Home on Fluxer ...".
 
 A link joins a Discord channel to a Fluxer channel, never two on the same platform. A channel is in one link
-at a time, and a server has at most 10 links and 5 waiting requests. The Bridge module must be on in both
+at a time, and a server has at most 100 links (the operator can change this, see below) and 5 waiting requests. The Bridge module must be on in both
 servers. Wrong codes are rate limited, and a few wrong ones in a row lock the attempts for a while.
 
 **Either side can unlink at any time** (the owner). Both webhooks are deleted, the message map goes, and
@@ -47,8 +53,8 @@ is told too.
 **Links made by the server mirror.** A [server mirror](../mirror.md) links its copied text channels through the
 bridge without codes, because both owners already agreed to the mirror. Those links show "Name (server mirror)"
 as who made them, follow the mirror (paused with it, running again with it; the Bridge page cannot resume one on
-its own while the mirror is paused) and follow every rule on this page. A server can have 50 of them (10 when you
-link by hand). Unlink works for them as for any other link, and an unlinked channel is not linked again. If the
+its own while the mirror is paused) and follow every rule on this page. They count toward the same limit as links
+made by hand. Unlink works for them as for any other link, and an unlinked channel is not linked again. If the
 mirror is removed, its links stay, paused by the server that removed it: only that server's owner can resume
 them, and either owner can unlink them. The mirror switches this module on only the first time it links, and a
 server that switches it off keeps it off.
@@ -92,7 +98,17 @@ stopped itself (see below) can be resumed by either server once the cause is fix
 - **Rate limits.** Each webhook has its own queue: sends are spaced out, a rate limit from the platform is
   waited out, a short outage is retried with growing pauses, and a message that waited more than five
   minutes is dropped. A queue holds at most 100 messages; a flooded channel drops the newest and counts it.
-  One server's queue never slows another's.
+  One server's queue never slows another's. The spacing follows what each platform allows for one webhook:
+  Fluxer allows 60 sends and 30 edits or deletes a minute (Sylo waits 1 second between sends and 2 between
+  edits and deletes), Discord does not publish its figures and answers with a retry time, which Sylo waits out
+  (it spaces sends about half a second apart).
+- **How many links.** A server can have **100** bridged channels by default, made by hand or by a server
+  mirror together. The people who run the Sylo instance can change the number with `BRIDGE_MAX_LINKS` (1 to
+  500, see [self-hosting](../self-hosting.md)). The limit is about Sylo's own work, not the platforms'
+  webhook limits: each link uses one webhook in each channel (a channel can hold 15 webhooks on Discord and on
+  Fluxer, a Fluxer server 1000), and each webhook has its own queue. When a server is at the limit, new
+  requests are refused and a mirror reports the channels it could not link; the Bridge page says so and how to
+  raise it.
 - **A failing link stops.** No permission, a webhook Sylo cannot make again, a deleted channel, or five
   failed deliveries in a row stop the link. Sylo says so in both channels, the **Health** page shows it as a
   problem with the reason, and it is not retried until someone presses **Resume**.

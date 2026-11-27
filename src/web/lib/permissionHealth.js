@@ -24,6 +24,7 @@ import { guildSupports, platformOfGuild, rawGuildId } from '../../platform/platf
 import { healthFor } from '../../lib/healthCache.js';
 import { sourceLabel } from '../../modules/rss.js';
 import { v2CardHref } from './overviewSummary.js';
+import { deadFeedFor } from '../../modules/lib/youtubeFeedHealth.js';
 import { log } from '../../lib/log.js';
 import { mirrorHealthChecks } from '../../mirror/health.js';
 
@@ -70,6 +71,7 @@ const ids = (v) => [...new Set(arr(v).map(String).filter(isId))];
 //   { type: 'channel', id, label, perms, severity, ... }    permissions in one channel
 //   { type: 'role',    id, label, action, channelId? }      a role Sylo gives ('give'), takes away
 //                                                           ('remove') or pings ('ping')
+//   { type: 'feed',    id, label, severity }                a YouTube feed that has been missing for a day
 
 const guildPerm = (perm, why, severity = ERROR) => ({ type: 'guild', perm, why, severity });
 // `part` keeps two needs on the same channel apart when they must not merge (an image that may be
@@ -98,6 +100,17 @@ const alertNeeds = (rows, { channelKey, nameOf, embedOf = () => true }) =>
     post(a?.[channelKey], `The channel for ${nameOf(a)}`, { embed: embedOf(a), field: channelKey }),
     ping(a?.roleId, `The ping role for ${nameOf(a)}`, a?.[channelKey], 'roleId'),
   ]);
+
+/** A YouTube channel whose feed has answered 404 for a day (kept in memory by the poll), or null. */
+const deadFeed = (a) =>
+  a && a.onVideo !== false && deadFeedFor(String(a.ytChannelId ?? ''))
+    ? {
+        type: 'feed',
+        id: String(a.ytChannelId),
+        label: a.name || String(a.ytChannelId),
+        severity: WARNING,
+      }
+    : null;
 
 const ACTION_PERM = {
   timeout: ['ModerateMembers', 'time members out'],
@@ -401,8 +414,13 @@ export const NEEDS = {
       nameOf: (a) => a?.slug || 'a streamer',
       embedOf: (a) => !a?.plainText,
     }),
-  'youtube-alerts': (cfg) =>
-    alertNeeds(cfg.alerts, { channelKey: 'discordChannelId', nameOf: (a) => a?.name || 'a YouTube channel' }),
+  'youtube-alerts': (cfg) => [
+    ...alertNeeds(cfg.alerts, {
+      channelKey: 'discordChannelId',
+      nameOf: (a) => a?.name || 'a YouTube channel',
+    }),
+    ...arr(cfg.alerts).map(deadFeed),
+  ],
   // The report is cached and shown to every access level, and a feed URL can carry a token: label a feed by
   // its name or its host, never its full address.
   rss: (cfg) =>
@@ -509,6 +527,20 @@ function channelCheck(base, need, guild, me) {
     permissions: missing,
     message: `${need.label} (${where}): Sylo is missing ${list(missing)}.`,
     fix: `In ${where}'s permissions, allow Sylo's role ${list(missing)}, or pick another channel.`,
+  };
+}
+
+function feedCheck(base, need) {
+  return {
+    ...base,
+    severity: need.severity,
+    kind: 'feed-unavailable',
+    code: 'youtube-feed-not-found',
+    targetKind: 'youtube-channel',
+    targetId: need.id,
+    targetName: need.label,
+    message: `YouTube can't find the feed for ${need.label}.`,
+    fix: 'Check that the channel still exists, or update its id.',
   };
 }
 
@@ -666,7 +698,9 @@ export async function buildHealthReport(guild, { modules } = {}) {
           ? guildCheck(moduleBase, need, me)
           : need.type === 'channel'
             ? channelCheck(moduleBase, need, guild, me)
-            : roleCheck(moduleBase, need, guild, me);
+            : need.type === 'feed'
+              ? feedCheck(moduleBase, need)
+              : roleCheck(moduleBase, need, guild, me);
       if (check) {
         if (need.field) check.field = need.field;
         checks.push(check);

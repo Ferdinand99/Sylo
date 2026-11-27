@@ -66,6 +66,7 @@ import './welcomeSent.js';
 import './applications.js';
 import './economy.js';
 import './economyShop.js';
+import './publicLook.js';
 import { purgeBridgeGuild } from './bridge.js';
 import { purgeMirrorOf } from './mirror.js';
 
@@ -124,6 +125,8 @@ export const GUILD_TABLES = [
   'economy_items',
   'economy_inventory',
   'collectible_images',
+  'guild_public_look',
+  'public_look_images',
   // The requests nobody has accepted yet. The links name two servers (guild_a, guild_b), so they go
   // through purgeBridgeGuild() in purgeGuild() below.
   'bridge_codes',
@@ -174,10 +177,10 @@ export async function purgeGuild(guildId) {
   await eventParticipantStmt.run(guildId); // before `guild_events`, which the subquery reads
   await suggestionVoteStmt.run(guildId); // before `guild_suggestions`, which the subquery reads
   for (const stmt of simpleStmts) await stmt.run(guildId);
+  await purgeBridgeGuild(guildId); // the links this server is in (on either side) and their message maps
   // A mirror pair belongs to two servers, so it has no guild_id column: every pair this server is part of
   // goes, with its id map and queue (the server on the other side keeps what Sylo made there).
   await purgeMirrorOf(guildId);
-  await purgeBridgeGuild(guildId); // the links this server is in (on either side) and their message maps
   clearCommandPrefixCache(guildId);
 }
 
