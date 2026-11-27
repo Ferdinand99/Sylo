@@ -10,7 +10,8 @@
 // Everything that wants to know whether a mirror may go ahead asks requirePairConsent(). It asks the current
 // consent provider, so the check can later be replaced by the bridge's own link codes (setConsentProvider)
 // without touching the engine or the routes.
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { randomCode } from '../lib/randomCode.js';
 import {
   PAIR_STATUS,
   createPair,
@@ -40,9 +41,7 @@ const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 /** A new code like "K7QW-H2NP". */
 export function newCode() {
-  const bytes = randomBytes(8);
-  const chars = [...bytes].map((b) => ALPHABET[b % ALPHABET.length]);
-  return `${chars.slice(0, 4).join('')}-${chars.slice(4).join('')}`;
+  return randomCode(ALPHABET, 8, 4);
 }
 
 const normaliseCode = (code) =>

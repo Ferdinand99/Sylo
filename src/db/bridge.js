@@ -22,7 +22,8 @@
 // The server keys are in `guild_a` / `guild_b`, not `guild_id`, so purgeBridgeGuild() below deletes by
 // either side (the guild-leave purge in purge.js calls it). bridge_codes has a plain guild_id and is in
 // GUILD_TABLES.
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
+import { randomCode } from '../lib/randomCode.js';
 import { prepare, registerPostgresBootstrap } from './driver.js';
 import { config } from '../config.js';
 import { isSealed, open, seal } from '../lib/seal.js';
@@ -350,13 +351,7 @@ export const CODE_TTL_MS = 15 * 60_000;
 
 /** A new random code, shown as XXXX-XXXX-XXXX (12 characters of a 31-letter alphabet: about 59 bits). */
 export function newCode() {
-  const bytes = randomBytes(CODE_LENGTH);
-  let out = '';
-  for (let i = 0; i < CODE_LENGTH; i += 1) {
-    out += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length];
-    if (i % 4 === 3 && i < CODE_LENGTH - 1) out += '-';
-  }
-  return out;
+  return randomCode(CODE_ALPHABET, CODE_LENGTH, 4);
 }
 
 /** The text of a code as typed: upper-case, without dashes or spaces. */
