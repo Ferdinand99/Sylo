@@ -182,7 +182,7 @@ describe('navModel', () => {
       'Leaderboard',
       'Audit log',
     ]);
-    expect(nav.server.map((i) => i.label)).toEqual(['Server settings', 'Commands']);
+    expect(nav.server.map((i) => i.label)).toEqual(['Server settings', 'Commands', 'Mirror to Fluxer']);
   });
 
   it('opens the Applications entry on the queue when applications wait, and on the page default when none do', () => {

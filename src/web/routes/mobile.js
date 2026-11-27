@@ -340,6 +340,7 @@ const FEATURES = Object.freeze([
   'update-notice',
   'public-page-look',
   'bridge',
+  'mirror',
 ]);
 
 // Public and ahead of the open-mode guard: the app calls it before anyone signs in, and an open-mode

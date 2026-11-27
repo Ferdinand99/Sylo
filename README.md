@@ -376,6 +376,7 @@ are in [CONTRIBUTING.md](CONTRIBUTING.md).
 | [docs/modules/](docs/modules/README.md) | One page per module: settings, commands, permissions, intents |
 | [docs/self-hosting.md](docs/self-hosting.md) | Install, environment variables, reverse proxy, Docker, Unraid, backups, upgrades, troubleshooting |
 | [docs/fluxer.md](docs/fluxer.md) | Running on Fluxer, alone or next to Discord |
+| [docs/mirror.md](docs/mirror.md) | Mirroring a Discord server to a Fluxer server and keeping it in step |
 | [docs/mobile-app.md](docs/mobile-app.md) | The iOS app: what an instance needs, sign-in, endpoints, notifications |
 | [docs/dashboard-v2.md](docs/dashboard-v2.md) | The React dashboard (beta) |
 | [docs/postgres.md](docs/postgres.md) | Optional Postgres backend and moving an SQLite install over |

@@ -58,6 +58,7 @@ test('GET /api/mobile/info describes a server with login on, without a cookie or
     info.features.includes('bridge'),
     'the Bridge module: GET /api/v2/guilds/:id/modules/bridge/config'
   );
+  assert.ok(info.features.includes('mirror'), 'a Discord server can be mirrored to Fluxer');
   assert.ok(info.features.every((f) => typeof f === 'string'));
 });
 

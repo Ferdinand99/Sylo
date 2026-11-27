@@ -106,6 +106,8 @@ export const SPECIAL_V2_PATHS = {
   insights: (guildId) => `/guilds/${guildId}/insights`,
   // The Commands overview card — V2's page is the Moderation hub's Commands tab.
   commands: (guildId) => `/guilds/${guildId}/moderation/commands`,
+  // The server mirror is a page of its own, not a module (src/mirror/).
+  mirror: (guildId) => `/guilds/${guildId}/mirror`,
 };
 
 export function v2Href(card, guildId) {

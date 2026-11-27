@@ -26,6 +26,7 @@ import { sourceLabel } from '../../modules/rss.js';
 import { v2CardHref } from './overviewSummary.js';
 import { deadFeedFor } from '../../modules/lib/youtubeFeedHealth.js';
 import { log } from '../../lib/log.js';
+import { mirrorHealthChecks } from '../../mirror/health.js';
 
 const ERROR = 'error';
 const WARNING = 'warning';
@@ -726,6 +727,13 @@ export async function buildHealthReport(guild, { modules } = {}) {
       if (missing && !checks.some((c) => c.module === def.id && c.permission === 'ManageRoles'))
         checks.push(missing);
     }
+  }
+  // The server mirror is not a module, so it is read from its own tables: a mirror that paused itself, or a copy
+  // with items that failed, on either side of the pair.
+  try {
+    checks.push(...(await mirrorHealthChecks(guild.id)));
+  } catch (err) {
+    log.warn('health', `could not read the mirror state of ${guild.id}`, err);
   }
   checks.sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9));
   return { ...base, available: true, checks, targets: pickerTargets(guild, me) };
