@@ -132,7 +132,7 @@ test('release progress: buildEmbed groups the checklist, non-code steps last, wi
     embed.description,
     [
       '▰▰▰▰▱▱▱▱▱▱ **40%** · 2 done · 3 to go',
-      '✅ done · 🧪 built, waiting for test · 🔨 in progress',
+      '✅ done · ☑️ tested · 🧪 waiting for test · 🔨 in progress',
       '',
       '**New features**',
       '🔨 Link a channel',
@@ -157,7 +157,7 @@ test('release progress: buildEmbed groups the checklist, non-code steps last, wi
   assert.match(buildEmbed('5.3', []).description, /Nothing is planned yet/);
 });
 
-test('release progress: stages - ready label means waiting for test and counts two thirds', () => {
+test('release progress: stages - tested counts three quarters, ready two, and tested wins over ready', () => {
   const api = (number, state, labels, merged) => ({
     number,
     title: 'feat: x' + number,
@@ -169,19 +169,36 @@ test('release progress: stages - ready label means waiting for test and counts t
     api(1, 'closed', [], true),
     api(2, 'open', [{ name: 'ready-for-test' }], false),
     api(3, 'open', [{ name: 'enhancement' }], false),
+    api(5, 'open', [{ name: 'tested' }], false),
+    api(6, 'open', [{ name: 'ready-for-test' }, { name: 'tested' }], false),
+    api(7, 'closed', [{ name: 'tested' }], true),
     { number: 4, title: 'Release it', state: 'open', labels: [] },
   ]);
-  assert.deepEqual(items.map(stageOf), ['done', 'test', 'progress', 'progress']);
-  assert.deepEqual(progressOf(items), { points: 5, max: 12 });
+  assert.deepEqual(items.map(stageOf), ['done', 'test', 'progress', 'tested', 'tested', 'done', 'progress']);
+  assert.deepEqual(progressOf(items), { points: 4 + 2 + 0 + 3 + 3 + 4 + 0, max: 28 });
   assert.deepEqual(progressOf([]), { points: 0, max: 0 });
   const lines = buildEmbed('5.3', items).description.split('\n');
-  assert.equal(lines[0], '▰▰▰▰▱▱▱▱▱▱ **41%** · 1 done · 1 waiting for test · 2 to go');
+  assert.equal(lines[0], '▰▰▰▰▰▱▱▱▱▱ **57%** · 2 done · 2 tested · 1 waiting for test · 2 to go');
   assert.ok(lines.includes('🧪 X2'));
+  assert.ok(lines.includes('☑️ X5'));
   const waiting = [{ kind: 'pr', number: 1, title: 'feat: a', stage: 'test' }];
   assert.equal(
     buildEmbed('5.3', waiting).description.split('\n')[0],
-    '▰▰▰▰▰▰▱▱▱▱ **66%** · 0 done · 1 waiting for test'
+    '▰▰▰▰▰▱▱▱▱▱ **50%** · 0 done · 1 waiting for test'
   );
+  const tested = [{ kind: 'pr', number: 1, title: 'feat: a', stage: 'tested' }];
+  assert.equal(
+    buildEmbed('5.3', tested).description.split('\n')[0],
+    '▰▰▰▰▰▰▰▱▱▱ **75%** · 0 done · 1 tested'
+  );
+});
+
+test('release progress: a group row shows its least advanced stage', () => {
+  const pr = (number, stage) => ({ kind: 'pr', number, title: 'fix: x', name: 'Thing', stage });
+  assert.deepEqual(checklistRows([pr(1, 'done'), pr(2, 'tested')]), ['☑️ Thing (1 of 2)']);
+  assert.deepEqual(checklistRows([pr(1, 'tested'), pr(2, 'test')]), ['🧪 Thing (0 of 2)']);
+  assert.deepEqual(checklistRows([pr(1, 'tested'), pr(2, 'tested')]), ['☑️ Thing (0 of 2)']);
+  assert.deepEqual(checklistRows([pr(1, 'tested'), pr(2, 'progress')]), ['🔨 Thing (0 of 2)']);
 });
 
 test('release progress: a closed milestone is shown as released', () => {
