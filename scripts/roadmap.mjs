@@ -87,12 +87,15 @@ export function shortName(item) {
     : capitalise(text);
 }
 
-// Where an item is: 'done' (PR merged, issue closed), 'test' (built and reviewed, waiting for a test:
-// an open PR with the ready label) or 'progress'. Counted in thirds: done 3, test 2, progress 0.
+// Where an item is: 'done' (PR merged, issue closed), 'tested' (an open PR with the tested label: tried
+// on the test bot, waiting for merge), 'test' (built and reviewed, waiting for a test: an open PR with
+// the ready label) or 'progress'. Counted in sixths: done 6, tested 5, test 4, progress 0. When a PR
+// carries both labels, tested wins.
 export const READY_LABEL = 'ready-for-test';
-export const STAGE_POINTS = { done: 3, test: 2, progress: 0 };
-export const STAGE_ICON = { done: '✅', test: '🧪', progress: '🔨' };
-export const LEGEND = '✅ done · 🧪 built, waiting for test · 🔨 in progress';
+export const TESTED_LABEL = 'tested';
+export const STAGE_POINTS = { done: 6, tested: 5, test: 4, progress: 0 };
+export const STAGE_ICON = { done: '✅', tested: '☑️', test: '🧪', progress: '🔨' };
+export const LEGEND = '✅ done · ☑️ tested · 🧪 waiting for test · 🔨 in progress';
 
 export function stageOf(item) {
   return item.stage ?? (item.done ? 'done' : 'progress');
@@ -131,8 +134,14 @@ export function toItems(apiItems) {
     if (it.pull_request) {
       const merged = Boolean(it.pull_request.merged_at);
       if (it.state === 'closed' && !merged) continue;
-      const ready = (it.labels ?? []).some((l) => (typeof l === 'string' ? l : l.name) === READY_LABEL);
-      const stage = merged ? 'done' : ready ? 'test' : 'progress';
+      const labels = (it.labels ?? []).map((l) => (typeof l === 'string' ? l : l.name));
+      const stage = merged
+        ? 'done'
+        : labels.includes(TESTED_LABEL)
+          ? 'tested'
+          : labels.includes(READY_LABEL)
+            ? 'test'
+            : 'progress';
       items.push({
         kind: 'pr',
         number: it.number,
@@ -164,10 +173,11 @@ export function messageVarName(milestoneTitle) {
     .toUpperCase()}`;
 }
 
-// "2 done · 15 waiting for test · 7 to go" (a part with nothing in it is left out, except "done").
+// "2 done · 3 tested · 15 waiting for test · 7 to go" (a part with nothing in it is left out, except "done").
 export function countsLine(items) {
   const n = (stage) => items.filter((i) => stageOf(i) === stage).length;
   const parts = [`${n('done')} done`];
+  if (n('tested')) parts.push(`${n('tested')} tested`);
   if (n('test')) parts.push(`${n('test')} waiting for test`);
   if (n('progress')) parts.push(`${n('progress')} to go`);
   return parts.join(' · ');
