@@ -118,7 +118,7 @@ test('the real SDK: its error for a refused connect is recognised, and the reque
   assert.equal(resets, 1, 'the pool was dropped once before the second try');
 });
 
-test("the patched RequestManager is the one the Fluxer client uses (no second copy of @fluxerjs/rest)", () => {
+test('the patched RequestManager is the one the Fluxer client uses (no second copy of @fluxerjs/rest)', () => {
   const client = new Client({});
   assert.ok(client.rest.requestManager instanceof RequestManager);
 });

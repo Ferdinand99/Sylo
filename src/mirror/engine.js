@@ -344,7 +344,14 @@ export function createEngine(overrides = {}) {
     state.delete(pair.id);
     pair = await store.updatePair(
       pair.id,
-      { status: PAIR_STATUS.COPYING, copyRun: run, lastError: '', lastErrorAt: 0, failures: 0, resumeStatus: '' },
+      {
+        status: PAIR_STATUS.COPYING,
+        copyRun: run,
+        lastError: '',
+        lastErrorAt: 0,
+        failures: 0,
+        resumeStatus: '',
+      },
       deps.now()
     );
     touchHealth(pair);

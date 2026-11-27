@@ -267,7 +267,11 @@ test('the last_error_at migration adds the column once and can run twice', () =>
 test('a pair keeps when its last error happened', async () => {
   const pair = await db.createPair({ sourceGuild: C, targetGuild: D, now: 1000 });
   assert.equal(pair.lastErrorAt, 0);
-  const failed = await db.updatePair(pair.id, { lastError: 'Fluxer could not be reached', lastErrorAt: 4200 }, 4200);
+  const failed = await db.updatePair(
+    pair.id,
+    { lastError: 'Fluxer could not be reached', lastErrorAt: 4200 },
+    4200
+  );
   assert.deepEqual([failed.lastError, failed.lastErrorAt], ['Fluxer could not be reached', 4200]);
   const cleared = await db.updatePair(pair.id, { lastError: '', lastErrorAt: 0 }, 5000);
   assert.deepEqual([cleared.lastError, cleared.lastErrorAt], ['', 0]);

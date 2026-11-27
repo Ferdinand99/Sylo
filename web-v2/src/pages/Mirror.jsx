@@ -234,7 +234,8 @@ function PauseBlock({ guildId, pair, onState }) {
         ) : null}
         {kind === 'unreachable' ? (
           <p className="v2-field-hint">
-            Sylo checks every few minutes and goes on by itself once Fluxer answers again. You can also resume now.
+            Sylo checks every few minutes and goes on by itself once Fluxer answers again. You can also resume
+            now.
           </p>
         ) : null}
       </Callout>

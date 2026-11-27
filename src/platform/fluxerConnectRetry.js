@@ -31,7 +31,10 @@ export function connectErrorCode(err) {
     if (!e || typeof e !== 'object' || seen.has(e) || seen.size > 20) continue;
     seen.add(e);
     if (e.code === 'UND_ERR_CONNECT_TIMEOUT') return e.code;
-    if (CONNECT_ERROR_CODES.has(e.code) && (e.syscall === 'connect' || /\bconnect\b/.test(String(e.message)))) {
+    if (
+      CONNECT_ERROR_CODES.has(e.code) &&
+      (e.syscall === 'connect' || /\bconnect\b/.test(String(e.message)))
+    ) {
       return e.code;
     }
     if (e.cause) queue.push(e.cause);

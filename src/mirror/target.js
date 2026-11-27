@@ -93,7 +93,8 @@ export function createFluxerTarget(guild) {
 
     /** A small request to Fluxer, to see whether it answers at all (a paused mirror checks this before it goes on). */
     async ping() {
-      if (typeof guild.client?.rest?.get !== 'function') throw new MirrorError('The Fluxer client is not connected.', 'transient');
+      if (typeof guild.client?.rest?.get !== 'function')
+        throw new MirrorError('The Fluxer client is not connected.', 'transient');
       await guild.client.rest.get(`/guilds/${guild.id}`);
     },
 
