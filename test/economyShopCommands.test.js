@@ -457,3 +457,49 @@ test('the shop commands are loaded, listed in help under Shop, and parse from ch
   );
   assert.equal(schema('buy').options[0].autocomplete, true);
 });
+
+test('an item description keeps its line breaks, with at most one blank line in a row', () => {
+  const item = normaliseItem({
+    name: 'Shout-out',
+    price: 1,
+    description: '  On stream\r\nFor ten minutes  \n\n\n\nThanks\u0007!\t ',
+  });
+  assert.equal(item.description, 'On stream\nFor ten minutes\n\nThanks!');
+  assert.equal(normaliseItem({ name: 'A', price: 1, description: 'x'.repeat(500) }).description.length, 300);
+  assert.equal(
+    normaliseItem({ name: 'A', price: 1, description: 'a\nb\n' + 'c'.repeat(400) }).description.length,
+    300
+  );
+});
+
+test('/shop keeps the line breaks of a description, but not as a gap between two items', async () => {
+  const m = await member(U);
+  await mk({ name: 'Shout-out', description: 'On stream\nFor ten minutes\n\nThanks' });
+  await mk({ name: 'Second' });
+  const i = interaction(m);
+  await shop.execute(i);
+  const text = i.replies[0].embeds[0].data.description;
+  assert.match(
+    text,
+    /\*\*1\.\*\* Shout-out — 🪙 100 coins\nOn stream\nFor ten minutes\nThanks\n\n\*\*2\.\*\* Second/
+  );
+});
+
+test('/shop cuts long descriptions by length so a full page stays inside an embed', async () => {
+  const m = await member(U);
+  const long = Array.from({ length: 30 }, (_, k) => `Line ${k} of the text`)
+    .join('\n')
+    .slice(0, 300);
+  for (let k = 1; k <= 10; k++)
+    await mk({ name: `Item ${k} ${'n'.repeat(50)}`, emoji: '🎤'.repeat(30), description: long });
+  const i = interaction(m);
+  await shop.execute(i);
+  const text = i.replies[0].embeds[0].data.description;
+  assert.ok(text.length <= 4096, `${text.length} characters`);
+  assert.equal(text.split('\n\n').length, 10, 'ten items, none lost');
+  assert.match(text, /…\n\n\*\*2\./, 'a long description ends with an ellipsis');
+  assert.ok(text.includes('\n'), 'and still has line breaks');
+  assert.equal(shop.descriptionText('a\n\n\nb'), 'a\nb');
+  assert.equal(shop.descriptionText('abcdef', 4), 'abc…');
+  assert.equal(shop.descriptionText('  \n '), '');
+});

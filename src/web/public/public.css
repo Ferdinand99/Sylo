@@ -156,6 +156,10 @@ a:hover {
 .u-mt-4 {
   margin-top: 16px;
 }
+/* Text a server admin or moderator typed with line breaks (appeal questions, a decision note). */
+.u-pre-line {
+  white-space: pre-line;
+}
 
 /* A page of its own: the brand, then the content, then a footer line. */
 .pub-brand {

@@ -1,0 +1,55 @@
+/* The focused moderator view (Sidebar.jsx): the switch at the top of the sidebar, which says which view it is
+   and changes to the other one. It stays at the top so the way back is never below a long list of links. */
+.v2-sidebar-viewswitch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px 8px;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+}
+.v2-sidebar-viewswitch-label {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+.v2-sidebar-focus-toggle {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+/* A touch screen gets a full-size tap target; the look stays the same. */
+@media (pointer: coarse) {
+  .v2-sidebar-focus-toggle {
+    min-height: 44px;
+  }
+}
+.v2-sidebar-focus-toggle:hover {
+  color: var(--text);
+}
+.v2-sidebar-focus-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* The Overview's "Needs attention" for someone who cannot change settings: no Fix link to a locked page. */
+.v2-attention-ask {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}

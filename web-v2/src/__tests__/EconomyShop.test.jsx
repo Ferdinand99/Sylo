@@ -714,3 +714,13 @@ describe('Economy: the Activity tab', () => {
     expect(await screen.findByText('No purchases match.')).toBeTruthy();
   });
 });
+
+describe('Economy: line breaks in an item description', () => {
+  it('shows the whole description in the shop list, with the line breaks the admin typed', async () => {
+    api.getShopItems.mockResolvedValue(shopData([item({ description: 'On stream\nFor ten minutes' })]));
+    await openTab('Shop');
+    const text = await screen.findByText((_, el) => el.tagName === 'P' && /On stream/.test(el.textContent));
+    expect(text.textContent).toBe('On stream\nFor ten minutes');
+    expect(text.classList.contains('v2-shop-text')).toBe(true);
+  });
+});

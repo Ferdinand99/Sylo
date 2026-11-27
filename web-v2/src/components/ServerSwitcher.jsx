@@ -1,8 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import PlatformBadge from './PlatformBadge.jsx';
 import { getInvites } from '../api.js';
 import { useApiData } from '../useApiData.js';
+import { useAccess } from '../access.jsx';
+import { switchSubpath } from '../overviewModel.js';
 import { initial } from '../util.js';
 
 // Matches /guilds/:id or /guilds/:id/<subpath> — captures the subpath (or ''
@@ -14,11 +16,13 @@ const GUILD_PAGE = /^\/guilds\/[^/]+(\/.*)?$/;
 // the FAQ accordion on sylobot.com. `activeGuildId` is Shell's "sticky"
 // selection (persists onto guild-agnostic pages like Personalizer/Health),
 // not necessarily the URL's own :guildId.
-export default function ServerSwitcher({ guilds, activeGuildId, onSelectGuild }) {
+export default function ServerSwitcher({ guilds, activeGuildId, onSelectGuild, onRefresh }) {
+  const [refresh, setRefresh] = useState({ busy: false, message: '' });
   const current = guilds.find((g) => g.id === activeGuildId) ?? null;
   const multiPlatform = new Set(guilds.map((g) => g.platform)).size > 1;
   const { data: invites } = useApiData(() => getInvites(), []);
   const addLinks = invites ?? [];
+  const { showEverything } = useAccess();
   const detailsRef = useRef(null);
   const { pathname } = useLocation();
   const guildPageMatch = pathname.match(GUILD_PAGE);
@@ -30,6 +34,17 @@ export default function ServerSwitcher({ guilds, activeGuildId, onSelectGuild })
   // outside or Escape.
   function closeMenu() {
     if (detailsRef.current) detailsRef.current.open = false;
+  }
+
+  // A server the bot joined after sign-in is not in the list yet: ask the server to look again, then reload it.
+  async function refreshList() {
+    setRefresh({ busy: true, message: '' });
+    try {
+      await onRefresh();
+      setRefresh({ busy: false, message: 'Server list refreshed.' });
+    } catch (err) {
+      setRefresh({ busy: false, message: err?.message || 'Could not refresh the server list.' });
+    }
   }
 
   useEffect(() => {
@@ -83,7 +98,12 @@ export default function ServerSwitcher({ guilds, activeGuildId, onSelectGuild })
           // picker) there's no guild-scoped page to jump to, so just update
           // the selection in place — no navigation.
           return subpath !== null ? (
-            <Link key={g.id} to={`/guilds/${g.id}${subpath}`} className={className} onClick={closeMenu}>
+            <Link
+              key={g.id}
+              to={`/guilds/${g.id}${switchSubpath(subpath, { access: g.access, showEverything })}`}
+              className={className}
+              onClick={closeMenu}
+            >
               {inner}
             </Link>
           ) : (
@@ -115,6 +135,18 @@ export default function ServerSwitcher({ guilds, activeGuildId, onSelectGuild })
             <span>{addLinks.length > 1 ? `Add a server on ${inv.label}` : 'Add new server'}</span>
           </a>
         ))}
+        {onRefresh ? (
+          <div className="v2-switch-refresh">
+            <button type="button" disabled={refresh.busy} onClick={refreshList}>
+              {refresh.busy ? 'Refreshing…' : 'Refresh server list'}
+            </button>
+            {refresh.message ? (
+              <p role="status" className="v2-switch-refresh-note">
+                {refresh.message}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </details>
   );
