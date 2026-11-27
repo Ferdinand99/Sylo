@@ -51,6 +51,7 @@ struct BridgeView: View {
     private var content: some View {
         if let overview = model.overview {
             Form {
+                BetaNote(moduleID: "bridge")
                 intro(overview)
                 if let message = model.errorMessage {
                     Section { StatusMessage(message, kind: .error) }

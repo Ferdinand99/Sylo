@@ -76,6 +76,7 @@ struct MirrorView: View {
     private var content: some View {
         if let state = model.state {
             Form {
+                BetaNote(moduleID: "mirror")
                 if let message = model.errorMessage {
                     Section { StatusMessage(message, kind: .error) }
                 }

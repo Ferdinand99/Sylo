@@ -78,6 +78,9 @@ hidden on an older Sylo, and the app never sends a key the server did not send):
   agrees with the code and may allow real deletion. Pause, resume (with the
   deletions to confirm), stop, copy again and the report are there too. Controls
   are switched off unless the state's `isOwner` is true.
+- The bridge and the mirror are Beta: their rows carry a Beta badge and their
+  screens a one-line Beta note. The app reads `beta` from the overview cards and,
+  when a server does not send it, treats `bridge` and `mirror` as Beta.
 - Pulling the server list (or Refresh on iPad) first calls
   `POST /api/v2/account/refresh-guilds`, so a server the bot joined after sign-in
   shows up. An older Sylo answers 404 and the list simply loads, as before.

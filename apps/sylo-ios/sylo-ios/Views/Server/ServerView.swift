@@ -258,6 +258,7 @@ struct ServerView: View {
             .environment(health)
             .environment(\.serverPlatform, summary.platform)
             .environment(\.dashboardAccess, summary.effectiveAccess)
+            .environment(\.serverOverview, overview.overview)
     }
 
     /// What the search lists for modules: all of them, or in the focused view only the two queues that are modules.

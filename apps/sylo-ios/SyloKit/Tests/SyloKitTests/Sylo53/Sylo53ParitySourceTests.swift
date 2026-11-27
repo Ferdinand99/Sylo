@@ -63,6 +63,15 @@ struct Sylo53ParitySourceTests {
         #expect(prompt.contains("LimitedTextField(title: reasonLabel, text: $reason, limit: limit, lines: 3...10)"))
     }
 
+    @Test("The bridge and the mirror show the Beta note on their screens, and the mirror's row the badge")
+    func beta() throws {
+        #expect(try Self.code("sylo-ios/Views/ModuleSettings/Modules/BridgeView.swift").contains(#"BetaNote(moduleID: "bridge")"#))
+        #expect(try Self.code("sylo-ios/Views/Server/Mirror/MirrorView.swift").contains(#"BetaNote(moduleID: "mirror")"#))
+        #expect(try Self.code("sylo-ios/Views/Server/ServerToolsSection.swift").contains(#"ModuleBeta.isBeta("mirror", in: overview)"#))
+        #expect(try Self.code("sylo-ios/Views/Server/ServerView.swift").contains(#".environment(\.serverOverview, overview.overview)"#))
+        #expect(try Self.code("sylo-ios/Views/Servers/ModuleRow.swift").contains("if card.isBeta"))
+    }
+
     @Test("The shop list shows an item's description in full, with its line breaks")
     func shopDescription() throws {
         let shop = try Self.code("sylo-ios/Views/ModuleSettings/Modules/Shop/ShopItemsView.swift")

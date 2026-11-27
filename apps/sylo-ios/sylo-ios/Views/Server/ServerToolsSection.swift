@@ -10,6 +10,7 @@ struct ServerToolsSection: View {
     var selectModules: (() -> Void)?
 
     @Environment(AppSession.self) private var session
+    @Environment(\.serverOverview) private var overview
     @ScaledMetric(relativeTo: .body) private var iconWidth = 28
 
     var body: some View {
@@ -30,7 +31,8 @@ struct ServerToolsSection: View {
                 NavigationLink {
                     MirrorView(server: server, session: session)
                 } label: {
-                    row("Mirror to Fluxer", symbol: "square.on.square", detail: "Copy this server to Fluxer and keep it in step")
+                    row("Mirror to Fluxer", symbol: "square.on.square", detail: "Copy this server to Fluxer and keep it in step",
+                        beta: ModuleBeta.isBeta("mirror", in: overview))
                 }
             }
             if let selectModules {
@@ -42,10 +44,15 @@ struct ServerToolsSection: View {
         }
     }
 
-    private func row(_ title: LocalizedStringKey, symbol: String, detail: LocalizedStringKey) -> some View {
+    private func row(
+        _ title: LocalizedStringKey, symbol: String, detail: LocalizedStringKey, beta: Bool = false
+    ) -> some View {
         Label {
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                HStack(spacing: 6) {
+                    Text(title)
+                    if beta { BetaBadge() }
+                }
                 Text(detail)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
