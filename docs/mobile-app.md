@@ -317,7 +317,7 @@ in there:
 | `login` | Whether sign-in is available (false in open mode) |
 | `loginProviders` | The configured logins, for example `["discord", "fluxer"]`; empty when `login` is false |
 | `platforms` | The platforms the bot runs on, for example `["discord"]` |
-| `features` | What this version's app API supports, so the app can hide what an older Sylo lacks. Today: `app-login`, `live-access`, `changelog`, `collectibles`, `welcome-trigger`, `member-search`, `access-levels`, `health`, `app-connect`, `setup-wizard`, `config-history`, `inbox-search`, `config-import`, `duplicate`, `message-templates` and `message-move`, plus `push` and `push-pigeon` when this instance can send notifications. See the list below |
+| `features` | What this version's app API supports, so the app can hide what an older Sylo lacks. Today: `app-login`, `live-access`, `changelog`, `collectibles`, `welcome-trigger`, `member-search`, `access-levels`, `health`, `app-connect`, `setup-wizard`, `config-history`, `inbox-search`, `config-import`, `duplicate`, `message-templates`, `message-move` and `moderator-view`, plus `push` and `push-pigeon` when this instance can send notifications. See the list below |
 
 The feature strings:
 
@@ -338,6 +338,7 @@ The feature strings:
 - `duplicate`: the `duplicate` routes for reminders, embed messages, reaction-role sets, custom commands and shop items.
 - `message-templates`: the built-in message templates and the raw message JSON import and export.
 - `message-move`: when the channel of a posted **embed message**, the **Welcome channel** message or a **role panel** changes and is published, the server posts a fresh message in the new channel, stores it and then deletes the old one, so the app must not unpublish first. Other bot posts (verification, honeypot traps, applications and so on) are not covered. A publish that loses a race with another publish of the same embed message answers `409` with the current record.
+- `moderator-view`: the web dashboard gives a person whose level in a server is `inbox` a focused view: the server opens on the inbox, and the navigation lists only the moderation tools (Tickets, Appeals, Applications, Suggestions, Moderation hub, Member data; only the inboxes that are switched on), with a "Show everything" switch for the full, still locked, navigation. Nothing changes on the server side: the level is the `access` of each `GET /api/v2/guilds` entry (and `level` of `GET /api/v2/guilds/:id/access`). The app can follow the same rules for that level and keeps the full read-only app for `view`.
 - `app-connect`: [adding the other login](#adding-the-other-login). Only where sign-in is on and both Discord and Fluxer logins are set up.
 - `push`, `push-pigeon`: this instance can send notifications to signed-in apps.
 
