@@ -70,25 +70,30 @@ describe('Bridge page', () => {
     expect(api.getBridge).toHaveBeenCalledWith(GUILD);
   });
 
-  it('points the owner of a Discord server to Mirror to Fluxer, and shows it to nobody else', async () => {
-    renderAtGuild(<Bridge />, GUILD);
-    expect(await screen.findByText(/Setting up a whole Fluxer server\?/)).toBeTruthy();
-    expect(
-      screen.getByText(/copy channels, roles and emoji and\s+bridge every channel at once/)
-    ).toBeTruthy();
-    const link = screen.getByRole('link', { name: 'Mirror to Fluxer' });
-    expect(link.getAttribute('href')).toBe(`/guilds/${GUILD}/mirror`);
-  });
+  it('shows the count against the limit, and explains how to raise it once the limit is reached', async () => {
+    const many = (n) => Array.from({ length: n }, (_, i) => link({ id: i + 1 }));
+    api.getBridge.mockResolvedValue(overview({ limits: { links: 3, requests: 5 }, links: many(2) }));
+    const first = renderAtGuild(<Bridge />, GUILD);
+    expect(await screen.findByRole('heading', { name: 'Bridged channels (2 of 3)' })).toBeTruthy();
+    expect(screen.queryByTestId('bridge-limit-note')).toBeNull();
+    first.unmount();
 
-  it('hides the Mirror hint from people who are not the owner, on a Fluxer server, and without both platforms', async () => {
-    for (const over of [{ owner: false }, { platform: 'fluxer' }, { bothPlatforms: false }]) {
-      api.getBridge.mockResolvedValue(overview(over));
-      const { unmount } = renderAtGuild(<Bridge />, GUILD);
-      await screen.findByRole('heading', { name: 'Bridge' });
-      expect(screen.queryByText(/Setting up a whole Fluxer server/)).toBeNull();
-      expect(screen.queryByRole('link', { name: 'Mirror to Fluxer' })).toBeNull();
-      unmount();
-    }
+    api.getBridge.mockResolvedValue(overview({ limits: { links: 3, requests: 5 }, links: many(3) }));
+    const second = renderAtGuild(<Bridge />, GUILD);
+    expect(await screen.findByRole('heading', { name: 'Bridged channels (3 of 3)' })).toBeTruthy();
+    const note = screen.getByTestId('bridge-limit-note');
+    expect(note.textContent).toMatch(/reached the limit of 3/);
+    expect(note.textContent).toMatch(/BRIDGE_MAX_LINKS/);
+    second.unmount();
+
+    // an operator who lowered the limit below what exists: never "X of Y" with X above Y
+    api.getBridge.mockResolvedValue(overview({ limits: { links: 3, requests: 5 }, links: many(5) }));
+    renderAtGuild(<Bridge />, GUILD);
+    expect(await screen.findByRole('heading', { name: 'Bridged channels (5)' })).toBeTruthy();
+    expect(screen.queryByText(/5 of 3/)).toBeNull();
+    expect(screen.getByTestId('bridge-limit-note').textContent).toMatch(
+      /more bridged channels than the limit of 3/
+    );
   });
 
   it('names the other platform, and explains that nothing pings and bots are off', async () => {
