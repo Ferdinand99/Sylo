@@ -34,7 +34,14 @@ import {
 } from './bridgeLink.js';
 import { MirrorError, MirrorPause, classifyError } from './errors.js';
 import { checkOwnership } from './ownership.js';
-import { NOT_COPIED_MODULES, buildModuleSpec, buildPlan, channelOrder, copiedSets } from './plan.js';
+import {
+  NOT_COPIED_MODULES,
+  buildModuleSpec,
+  buildPlan,
+  channelOrder,
+  channelPositionUpdates,
+  copiedSets,
+} from './plan.js';
 import { snapshotDiscordGuild, snapshotFluxerGuild } from './snapshot.js';
 import { createFluxerTarget } from './target.js';
 import {
@@ -882,6 +889,19 @@ export function createEngine(overrides = {}) {
     return done('copied', { notes: built.notes });
   }
 
+  /**
+   * An order Fluxer refused, said plainly. Only a refusal of this one step is reworded: a rate limit, a network
+   * failure or a permission error goes on as it is (waited for, retried, or counted toward a pause).
+   */
+  function orderRefused(err, what, after) {
+    const c = classifyError(err);
+    if (c.kind !== 'item' || err instanceof MirrorError) return err;
+    return new MirrorError(
+      `Fluxer did not take the ${what}: ${c.message.replace(/[.\s]+$/, '')}.${after}`,
+      'item'
+    );
+  }
+
   async function reorder(ctx, which) {
     if (which === 'roles') {
       const order = roleOrderOf(ctx);
@@ -902,7 +922,19 @@ export function createEngine(overrides = {}) {
         updates.push({ id: mapping.targetId, position: i + 1 });
       }
       const notes = [];
-      if (updates.length > 0) await ctx.target.setRolePositions(updates);
+      // A failed order sets nothing: no mapping, no grants. The roles stay without their powerful permissions, and the
+      // step is planned again by "Copy again" (or the next role change on Discord).
+      if (updates.length > 0) {
+        try {
+          await ctx.target.setRolePositions(updates);
+        } catch (err) {
+          throw orderRefused(
+            err,
+            'role order',
+            ' The copied roles stay without their powerful permissions until the order is set. Copy again tries it once more.'
+          );
+        }
+      }
       await store.putMapping({
         pairId: ctx.pair.id,
         kind: 'order',
@@ -919,14 +951,19 @@ export function createEngine(overrides = {}) {
     const hash = specHash(layout);
     const m = await store.getMapping(ctx.pair.id, 'order', 'channels');
     if (m && m.specHash === hash) return done('unchanged');
-    const updates = [];
+    const targetIdOf = new Map();
     for (const item of layout) {
       const mapping = await store.getMapping(ctx.pair.id, 'channel', item.id);
-      if (!mapping) continue;
-      const parent = item.parentId ? await store.getMapping(ctx.pair.id, 'channel', item.parentId) : null;
-      updates.push({ id: mapping.targetId, position: item.position, parentId: parent?.targetId ?? null });
+      if (mapping?.targetId) targetIdOf.set(item.id, mapping.targetId);
     }
-    if (updates.length > 1) await ctx.target.setChannelPositions(updates);
+    const updates = channelPositionUpdates(layout, targetIdOf, ctx.target.listChannels());
+    if (updates.length > 1) {
+      try {
+        await ctx.target.setChannelPositions(updates);
+      } catch (err) {
+        throw orderRefused(err, 'channel order', ' Copy again tries it once more.');
+      }
+    }
     await store.putMapping({
       pairId: ctx.pair.id,
       kind: 'order',
@@ -1009,7 +1046,17 @@ export function createEngine(overrides = {}) {
   async function linkChannels(ctx, job) {
     const tried = new Set(job.payload?.tried ?? []);
     const res = await deps.linkMirroredChannels(ctx.pair.id, { skip: tried });
-    const skippedPairs = res.skipped ?? [];
+    // The step can take several batches; each one says where the whole step stands, in one sentence. `tally` carries
+    // the counts from batch to batch: what this step linked, what was linked before it began (a later batch counts
+    // the links of the earlier ones as "already"), and the channels it could not link (each reported once).
+    const prev = job.payload?.tally ?? null;
+    const reported = new Set(prev?.notLinked ?? []);
+    const skippedPairs = (res.skipped ?? []).filter((s) => !reported.has(s.sourceId));
+    const tally = {
+      linked: (prev?.linked ?? 0) + (res.linked ?? 0),
+      before: prev ? prev.before : (res.already ?? 0),
+      notLinked: [...reported, ...skippedPairs.map((s) => s.sourceId)],
+    };
     const notes = skippedPairs.map((s) => ({
       code: `bridge-${s.code}`,
       scope: 'channel',
@@ -1025,19 +1072,24 @@ export function createEngine(overrides = {}) {
         kind: 'bridge',
         sourceId: job.sourceId,
         stepKey: job.stepKey,
-        payload: { ...job.payload, tried: [...tried, ...(res.tried ?? [])] },
+        payload: { ...job.payload, tried: [...tried, ...(res.tried ?? [])], tally },
         now: deps.now(),
       });
     }
+    return done(linkSentence(tally, res), { notes, remote: res.linked > 0 });
+  }
+
+  /** The bridge step in one sentence: "35 channels linked, 2 were linked already, 1 not linked (see the notes)". */
+  function linkSentence(tally, res) {
+    const channels = (n) => `${n} ${n === 1 ? 'channel' : 'channels'}`;
+    const following = res.remaining ?? 0;
     const parts = [];
-    if (res.linked > 0) parts.push(`${res.linked} channels linked`);
-    if ((res.already ?? 0) > 0) parts.push(`${res.already} already linked`);
-    if (skippedPairs.length > 0) parts.push(`${skippedPairs.length} not linked (see the notes)`);
-    if ((res.remaining ?? 0) > 0) parts.push(`${res.remaining} more follow`);
-    return done(parts.length ? parts.join(', ') : `not linked: ${res.reason ?? 'nothing to link'}`, {
-      notes,
-      remote: res.linked > 0,
-    });
+    if (tally.linked > 0 || following > 0)
+      parts.push(`${channels(tally.linked)} linked${following > 0 ? ' so far' : ''}`);
+    if (tally.before > 0) parts.push(`${tally.before} ${tally.before === 1 ? 'was' : 'were'} linked already`);
+    if (tally.notLinked.length > 0) parts.push(`${tally.notLinked.length} not linked (see the notes)`);
+    if (following > 0) parts.push(`${following} more follow`);
+    return parts.length ? parts.join(', ') : `not linked: ${res.reason ?? 'nothing to link'}`;
   }
 
   async function perform(ctx, job) {
@@ -1483,16 +1535,18 @@ export function createEngine(overrides = {}) {
       detail: j.detail,
     }));
     const notes = jobs.flatMap((j) => j.notes);
-    // The bridge step can take several runs (a batch of channels each): show them as one.
+    // The bridge step can take several runs (a batch of channels each): show them as one. Each batch's detail already
+    // sums up the whole step so far, so the latest one is the sentence to show.
     const links = jobs.filter((j) => j.op === 'link');
     const open = links.find((j) => ['pending', 'running', 'failed'].includes(j.status));
     const bridge = links.length
       ? {
           status: open ? open.status : links[links.length - 1].status,
-          detail: links
-            .map((j) => j.detail)
-            .filter(Boolean)
-            .join('; '),
+          detail:
+            links
+              .map((j) => j.detail)
+              .filter(Boolean)
+              .at(-1) ?? '',
         }
       : null;
     return {

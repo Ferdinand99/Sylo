@@ -81,7 +81,9 @@ so a message written on one side shows up on the other. Voice channels, categori
   Send Messages in both; bots are off; nobody is pinged across. The privacy rule is checked again whenever a
   paused link resumes and on every message: a channel that turns private later stops the link ("no longer open
   to the same people"). A pair that fails a rule is skipped, the reason
-  is in the report ("Linking channels through the bridge" and the notes), and the rest are linked.
+  is in the report ("Linking channels through the bridge" and the notes), and the rest are linked. The report sums
+  up the whole step in one sentence, for example "35 channels linked, 2 were linked already, 1 not linked (see the
+  notes)", also when the channels were linked in several batches.
 - **Safe to run again.** "Copy again" links only the pairs that have no link yet. A channel that an owner
   unlinked on the Bridge page stays unlinked, and a pair the owners bridged by hand is never taken over or
   changed (it is reported as skipped). A server can have at most 100 bridged channels, links made by hand
@@ -190,7 +192,14 @@ update, and a drag that moves many channels becomes one reorder.
   (Administrator, Manage Roles and the like), because a new role starts at the bottom where a member with Manage Roles
   could hand it out; only after the order is set does Sylo give it its permissions. If a role ranks above Sylo's (the
   order cannot be set) the mirror pauses with the roles named, and the new role stays without its permissions until the
-  Fluxer owner has fixed it and the mirror is resumed.
+  Fluxer owner has fixed it and the mirror is resumed. If Fluxer refuses the order itself, the report shows "Role
+  order" as failed with Fluxer's reason, the roles stay without their powerful permissions, and **Copy again** sends
+  the order again (and then grants them).
+- **The channel order is the one Discord shows.** Inside a category the text, announcement, forum and media channels
+  come first and the voice channels after them (Discord numbers the two kinds separately, and Fluxer does not allow a
+  voice channel above a text channel); at the top, the channels without a category come before the categories.
+  Channels made on the Fluxer server by its own people stay where they are. A refused channel order is reported with
+  Fluxer's reason, and **Copy again** tries it again.
 - **Limits.** Sylo plans with Fluxer's defaults (500 emoji and 500 stickers per server, 512 KB per emoji and per
   sticker). If Fluxer refuses more because of its own limit, Sylo stops that kind and lists the rest in the report.
 
