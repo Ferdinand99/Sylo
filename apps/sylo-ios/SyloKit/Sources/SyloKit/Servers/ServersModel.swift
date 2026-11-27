@@ -43,6 +43,35 @@ public final class ServersModel {
         servers.first { $0.id == id }
     }
 
+    /// What the last refresh said, when there is something to say (a server was added, or the server asks to
+    /// wait); nil otherwise.
+    public var refreshNote: String?
+
+    /// The person asked for a fresh list (pull to refresh, the Refresh button): first the server looks again
+    /// through the bot for servers it joined since sign-in (Sylo 5.3, `POST /api/v2/account/refresh-guilds`), then
+    /// the list is loaded. An older Sylo has no such call (404) and a refresh within 30 seconds is refused (429):
+    /// either way the list is still loaded, as before.
+    public func refresh() async {
+        refreshNote = nil
+        do {
+            let answer = try await session.send(Endpoints.RefreshServerList())
+            if answer.added > 0 {
+                refreshNote = answer.added == 1
+                    ? String(localized: "1 new server was found.")
+                    : String(localized: "\(answer.added) new servers were found.")
+            }
+        } catch {
+            switch NetworkError(error) {
+            case .rateLimited:
+                refreshNote = String(localized: "The server list was just refreshed. Wait a few seconds and try again.")
+            default:
+                // 404 on a Sylo before 5.3, or offline: the load below says what is wrong, if anything.
+                break
+            }
+        }
+        await load()
+    }
+
     /// Loads the list. On failure the servers already shown stay; a 401 is the session's to show.
     public func load() async {
         isLoading = true
@@ -56,5 +85,31 @@ public final class ServersModel {
         } catch {
             errorMessage = NetworkError(error).userMessage
         }
+    }
+}
+
+/// The answer to a refresh of the server list: how many servers were added to the person's list.
+public struct ServerListRefresh: Decodable, Sendable, Equatable {
+    public let added: Int
+
+    public init(added: Int = 0) { self.added = added }
+
+    private enum CodingKeys: String, CodingKey { case added }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        added = max(0, (try? c.decodeIfPresent(Int.self, forKey: .added)) ?? 0)
+    }
+}
+
+extension Endpoints {
+    /// `POST /api/v2/account/refresh-guilds` (Sylo 5.3): look through the bot for servers the bot joined after
+    /// sign-in, for the signed-in person's own logins. Once per 30 seconds per account.
+    public struct RefreshServerList: APIEndpoint {
+        public typealias Response = ServerListRefresh
+        public init() {}
+        public var path: String { "/api/v2/account/refresh-guilds" }
+        public var method: HTTPMethod { .post }
+        public var body: (any Encodable & Sendable)? { CommunityEmptyBody() }
     }
 }

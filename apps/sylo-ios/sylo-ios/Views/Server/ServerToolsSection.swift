@@ -1,7 +1,7 @@
 import SwiftUI
 import SyloKit
 
-/// The server pages that are not modules: Insights and the Leaderboard, and a way into select mode
+/// The server pages that are not modules: Insights, the Leaderboard and Mirror to Fluxer, and a way into select mode
 /// to switch several modules at once. A section for the Modules tab's list, right below the
 /// server header.
 struct ServerToolsSection: View {
@@ -23,6 +23,15 @@ struct ServerToolsSection: View {
                 LeaderboardView(server: server, session: session)
             } label: {
                 row("Leaderboard", symbol: "trophy", detail: "XP ranking and its public page")
+            }
+            // Sylo 5.3: copy a Discord server to a Fluxer server and keep it in step. The same screen serves the
+            // Fluxer server of a pair (agreeing with the code, pausing, stopping).
+            if session.has(.mirror) {
+                NavigationLink {
+                    MirrorView(server: server, session: session)
+                } label: {
+                    row("Mirror to Fluxer", symbol: "square.on.square", detail: "Copy this server to Fluxer and keep it in step")
+                }
             }
             if let selectModules {
                 Button(action: selectModules) {

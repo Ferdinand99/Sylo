@@ -67,6 +67,23 @@ hidden on an older Sylo, and the app never sends a key the server did not send):
   report has `db.roleRisks` (5.3) is sent `confirm` and, for a dump that was
   uploaded, `acknowledgeSql: true`, after the app explains that the SQL runs with
   the rights of the database role. An older server is sent no body.
+- `bridge`: the Bridge module has its own screen (Modules, then Bridge): the
+  bridged channels with their state and what this server shares, the requests
+  that wait, asking the other server for a link (the one-time code to copy) and
+  using a code. Everyone with access reads it; only the server owner changes
+  anything (the page's `owner`), as on the web.
+- `mirror`: Server tools, then Mirror to Fluxer, on both servers of a pair. The
+  owner of the Discord server picks one of their Fluxer servers (or types an id),
+  asks, looks at the preview and starts the copy; the owner of the Fluxer server
+  agrees with the code and may allow real deletion. Pause, resume (with the
+  deletions to confirm), stop, copy again and the report are there too. Controls
+  are switched off unless the state's `isOwner` is true.
+- Pulling the server list (or Refresh on iPad) first calls
+  `POST /api/v2/account/refresh-guilds`, so a server the bot joined after sign-in
+  shows up. An older Sylo answers 404 and the list simply loads, as before.
+- A note on an appeal and an application's reason are typed in a field of
+  several lines, and a shop item's description is shown in full in the shop
+  list; their line breaks reach the member as typed.
 
 What stays on the web is only what is not an administrator's job: the public
 pages (the web shop, the application forms, event and quote pages) that members
