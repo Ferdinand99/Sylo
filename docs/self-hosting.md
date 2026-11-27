@@ -73,6 +73,7 @@ At least one platform must be configured.
 | `APPLE_PRIVATE_KEY`       | —                               | The key's `.p8` file: PEM text, PEM on one line with literal `\n`, or base64 |
 | `APPLE_VENDOR_NUMBER`     | —                               | Optional vendor number for a planned daily downloads digest |
 | `TRUST_PROXY`             | one private hop with `DASHBOARD_URL` | Which proxies may set `X-Forwarded-For`: `false`, a hop count, or addresses/subnets. See [Behind a reverse proxy](#behind-a-reverse-proxy) |
+| `BRIDGE_MAX_LINKS`        | `100`                           | The most bridged channels one server can have, links by hand and links made by a [server mirror](mirror.md) together (1 to 500; Sylo does not start with another value). Each link uses a webhook in each of its two channels |
 | `ALLOW_PRIVATE_URLS`      | `false`                         | Let server admins use feed and image URLs on private, loopback or link-local addresses (your own network). Off by default: those URLs are fetched by the server |
 | `PUSH_RELAY_URL`          | `https://app.sylobot.com`       | Where this instance sends [Sylo app notifications](mobile-app.md#notifications); empty turns them off |
 | `APNS_KEY_ID`             | —                               | Only for the instance that talks to Apple itself (the hosted Sylo): APNs auth key id |

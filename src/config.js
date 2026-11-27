@@ -7,6 +7,7 @@ import { normalisePrivateKey } from './lib/appStoreConnect.js';
 import { checkPigeonUrl } from './lib/pigeonUrl.js';
 import { readWrenSettings } from './lib/wiseWren.js';
 import { commandPrefixError } from './lib/commandPrefix.js';
+import { parseBridgeMaxLinks } from './lib/bridgeLimit.js';
 
 /**
  * Read a required string env var, or exit with a clear message.
@@ -293,6 +294,13 @@ if (commandPrefixProblem) {
   process.exit(1);
 }
 
+// The most bridged channels one server can have (the Bridge module and the server mirror share it).
+const bridgeMaxLinks = parseBridgeMaxLinks(process.env.BRIDGE_MAX_LINKS);
+if (bridgeMaxLinks.error) {
+  console.error(`[config] ${bridgeMaxLinks.error}`);
+  process.exit(1);
+}
+
 export const config = Object.freeze({
   // Discord (null when this install does not run on Discord)
   discordToken,
@@ -305,6 +313,7 @@ export const config = Object.freeze({
   fluxerWebUrl,
   fluxerApiUrl,
   commandPrefix,
+  bridgeMaxLinks: bridgeMaxLinks.value,
   // Optional: register slash commands to these guild(s) for instant availability
   // during development (one id, or a comma/space-separated list). When empty,
   // commands are registered globally (can take up to ~1 hour to propagate).

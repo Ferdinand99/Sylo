@@ -19,7 +19,6 @@ import {
 } from '../src/mirror/bridgeLink.js';
 import {
   BridgeError,
-  MAX_MIRROR_LINKS,
   bridgeIdle,
   bridgeProblems,
   dropBridgeCache,
@@ -367,7 +366,8 @@ test('a batch links at most the limit, and the next run carries on without tryin
 test('the ceiling of links per server is respected and reported', async () => {
   const pair = await livePair();
   const one = await mirrored(pair, 'chat');
-  for (let i = 0; i < MAX_MIRROR_LINKS; i += 1) {
+  useBridgeParts({ transport: fakes.transport, queue: fakes.queue, maxLinks: 4 });
+  for (let i = 0; i < 4; i += 1) {
     await bridgeDb.createLink({
       guildA: D,
       channelA: `filler-${i}`,
@@ -380,9 +380,39 @@ test('the ceiling of links per server is respected and reported', async () => {
   const res = await run(pair);
   assert.equal(res.linked, 0);
   assert.deepEqual(
-    res.skipped.map((s) => [s.sourceId, s.code]),
-    [[one.d.id, 'limit']]
+    res.skipped.map((s) => [s.sourceId, s.code, s.message]),
+    [[one.d.id, 'limit', "the server's bridge limit (4) is reached"]]
   );
+});
+
+test('a mirror of more channels than the ceiling links up to it, reports the rest, and stops trying', async () => {
+  useBridgeParts({ transport: fakes.transport, queue: fakes.queue, maxLinks: 3 });
+  const pair = await livePair();
+  const chans = [];
+  for (let i = 0; i < 5; i += 1) chans.push(await mirrored(pair, `c${i}`));
+  // a hand-made link counts toward the same ceiling
+  await bridgeDb.createLink({
+    guildA: D,
+    channelA: 'by-hand',
+    guildB: F,
+    channelB: 'by-hand-f',
+    hookA: { id: 'ha', token: 'a' },
+    hookB: { id: 'hb', token: 'b' },
+  });
+  const res = await run(pair);
+  assert.deepEqual([res.linked, res.remaining], [2, 0], 'two fit next to the one made by hand');
+  assert.deepEqual(
+    res.skipped.map((s) => [s.sourceId, s.code, s.message]),
+    chans.slice(2).map((c) => [c.d.id, 'limit', "the server's bridge limit (3) is reached"])
+  );
+  assert.equal(await bridgeDb.linkCount(D), 3, 'never above the ceiling');
+  assert.equal(await bridgeDb.linkCount(F), 3);
+  // running it again links nothing more and reports the same pairs, until the limit is raised
+  const again = await run(pair);
+  assert.deepEqual([again.linked, again.already, again.remaining, again.skipped.length], [0, 2, 0, 3]);
+  useBridgeParts({ transport: fakes.transport, queue: fakes.queue, maxLinks: 100 });
+  const raised = await run(pair);
+  assert.deepEqual([raised.linked, raised.skipped.length], [3, 0]);
 });
 
 test('a webhook that cannot be made skips the pair and leaves nothing half made', async () => {

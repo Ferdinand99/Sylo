@@ -72,6 +72,21 @@ export function classifyError(err, op = 'send') {
   return { kind: 'transient' };
 }
 
+/**
+ * How long to wait between two calls to one webhook, by the platform that owns it. Fluxer publishes its limits:
+ * 60 sends, 30 edits and 30 deletes per webhook per minute, so a send is spaced 1 s apart and an edit or a delete
+ * 2 s apart (a little more than the exact figure). Discord does not publish webhook figures and reports them in
+ * its answers (a send is commonly 5 per 2 s per webhook), so it is spaced 450 ms apart and a "retry after" from
+ * the platform is still waited out. A bridged channel has one webhook of Sylo's on each side (a platform allows
+ * 15 per channel, Fluxer 1000 per server), so a server's links never share a webhook, and so never a queue.
+ * @param {'discord' | 'fluxer'} platform
+ * @param {'send' | 'edit' | 'delete'} [op]
+ */
+export function relayGapMs(platform, op = 'send') {
+  if (platform === 'fluxer') return op === 'send' ? 1050 : 2050;
+  return 450;
+}
+
 const defaultSleep = (ms) =>
   new Promise((resolve) => {
     setTimeout(resolve, ms).unref?.();
@@ -79,6 +94,7 @@ const defaultSleep = (ms) =>
 
 /**
  * @param {{ minGapMs?: number, maxQueued?: number, maxAgeMs?: number, maxAttempts?: number,
+ *   platformGaps?: boolean (space each call by the `gapMs` it was queued with, see relayGapMs, instead of `minGapMs`),
  *   sleep?: (ms: number) => Promise<void>, now?: () => number }} [opts]
  */
 export function createRelayQueue({
@@ -86,11 +102,14 @@ export function createRelayQueue({
   maxQueued = 100,
   maxAgeMs = 5 * 60_000,
   maxAttempts = 4,
+  platformGaps = false,
   sleep = defaultSleep,
   now = Date.now,
 } = {}) {
   /** @type {Map<string, { tasks: any[], running: boolean, dropped: number }>} */
   const lanes = new Map();
+
+  const gapOf = (task) => (platformGaps && task.gapMs != null ? task.gapMs : minGapMs);
 
   async function drain(key, lane) {
     lane.running = true;
@@ -117,7 +136,7 @@ export function createRelayQueue({
           lane.tasks.shift();
           task.reject(Object.assign(err instanceof Error ? err : new Error(String(err)), { failure }));
         }
-        if (lane.tasks.length) await sleep(minGapMs);
+        if (lane.tasks.length) await sleep(Math.max(gapOf(task), gapOf(lane.tasks[0])));
       }
     } finally {
       lane.running = false;
@@ -131,10 +150,11 @@ export function createRelayQueue({
      * @template T
      * @param {string} key  the target webhook (one lane per webhook)
      * @param {() => Promise<T>} run
-     * @param {{ op?: 'send' | 'edit' | 'delete' }} [opts]
+     * @param {{ op?: 'send' | 'edit' | 'delete', gapMs?: number }} [opts]  `gapMs`: the pause this call needs
+     *   from its neighbours on the webhook (see relayGapMs); the queue's own `minGapMs` when not given
      * @returns {Promise<T>}
      */
-    enqueue(key, run, { op = 'send' } = {}) {
+    enqueue(key, run, { op = 'send', gapMs } = {}) {
       let lane = lanes.get(key);
       if (!lane) {
         lane = { tasks: [], running: false, dropped: 0 };
@@ -145,7 +165,7 @@ export function createRelayQueue({
         return Promise.reject(new BridgeQueueError('overflow'));
       }
       const result = new Promise((resolve, reject) => {
-        lane.tasks.push({ run, op, keep: op === 'delete', at: now(), attempts: 0, resolve, reject });
+        lane.tasks.push({ run, op, gapMs, keep: op === 'delete', at: now(), attempts: 0, resolve, reject });
       });
       if (!lane.running) void drain(key, lane);
       return result;
