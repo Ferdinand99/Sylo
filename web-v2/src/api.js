@@ -159,6 +159,19 @@ export const moveSuggestionBack = (guildId, number) =>
 // { moved, remaining, failed, next, error? }; ask again with after = next while remaining > 0.
 export const moveAllSuggestionsBack = (guildId, after = 0) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/modules/suggestions/move-all-back`, { after });
+// Bridge: the links of a server and what the page needs (GET), then the calls that change them. Every
+// answer to a change carries the fresh `overview`.
+export const getBridge = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/modules/bridge/config`);
+export const requestBridgeLink = (guildId, body) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/bridge/request`, body);
+export const cancelBridgeRequest = (guildId, id) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/bridge/requests/${Number(id)}/cancel`, {});
+export const acceptBridgeLink = (guildId, body) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/bridge/accept`, body);
+export const setBridgeOptions = (guildId, id, options) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/bridge/links/${Number(id)}/options`, { options });
+export const bridgeLinkAction = (guildId, id, action) =>
+  postJson(`/api/v2/guilds/${gid(guildId)}/modules/bridge/links/${Number(id)}/${action}`, {});
 export const getQuotes = (guildId, { q = '' } = {}) =>
   apiFetch(`/api/v2/guilds/${gid(guildId)}/modules/quote-board/list?q=${encodeURIComponent(q)}`);
 export const deleteQuote = (guildId, number) =>

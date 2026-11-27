@@ -318,7 +318,7 @@ in there:
 | `login` | Whether sign-in is available (false in open mode) |
 | `loginProviders` | The configured logins, for example `["discord", "fluxer"]`; empty when `login` is false |
 | `platforms` | The platforms the bot runs on, for example `["discord"]` |
-| `features` | What this version's app API supports, so the app can hide what an older Sylo lacks. Today: `app-login`, `live-access`, `changelog`, `collectibles`, `welcome-trigger`, `member-search`, `access-levels`, `health`, `app-connect`, `setup-wizard`, `config-history`, `inbox-search`, `config-import`, `duplicate`, `message-templates`, `message-move`, `moderator-view`, `update-notice` and `public-page-look`, plus `push` and `push-pigeon` when this instance can send notifications. See the list below |
+| `features` | What this version's app API supports, so the app can hide what an older Sylo lacks. Today: `app-login`, `live-access`, `changelog`, `collectibles`, `welcome-trigger`, `member-search`, `access-levels`, `health`, `app-connect`, `setup-wizard`, `config-history`, `inbox-search`, `config-import`, `duplicate`, `message-templates`, `message-move`, `moderator-view`, `update-notice`, `public-page-look` and `bridge`, plus `push` and `push-pigeon` when this instance can send notifications. See the list below |
 
 The feature strings:
 
@@ -342,6 +342,7 @@ The feature strings:
 - `moderator-view`: the web dashboard gives a person whose level in a server is `inbox` a focused view: the server opens on the inbox, and the navigation lists only the moderation tools (Tickets, Appeals, Applications, Suggestions, Moderation hub, Member data; only the inboxes that are switched on), with a "Show everything" switch for the full, still locked, navigation. Nothing changes on the server side: the level is the `access` of each `GET /api/v2/guilds` entry (and `level` of `GET /api/v2/guilds/:id/access`). The app can follow the same rules for that level and keeps the full read-only app for `view`.
 - `update-notice`: the operators' [update notice](#update-notice-operators): `GET /api/v2/update`, and with Wise Wren set up `POST /api/v2/update/wren/approve` and `GET /api/v2/update/wren/runs/:id`. Operators only.
 - `public-page-look`: the server's [look on its public pages](#public-page-look): `GET` and `POST /api/v2/guilds/:id/public-page-look`, the background upload and the invite-background check.
+- `bridge`: the [Bridge module](modules/bridge.md): `GET /api/v2/guilds/:id/modules/bridge/config` (the links, waiting requests and channels of the server; View level, with `owner` saying whether the caller may change anything) and, for the server owner only (Edit access is not enough: a `403` otherwise), `POST` to `…/modules/bridge/request` (a code for another server), `…/modules/bridge/accept` (use a code), `…/modules/bridge/requests/:id/cancel`, and `…/modules/bridge/links/:id/options`, `…/pause`, `…/resume` and `…/unlink`. Every answer carries the fresh `overview`.
 - `app-connect`: [adding the other login](#adding-the-other-login). Only where sign-in is on and both Discord and Fluxer logins are set up.
 - `push`, `push-pigeon`: this instance can send notifications to signed-in apps.
 

@@ -10,6 +10,7 @@
 // deleted on the next attempt — self-healing, not a race. So both run as a
 // plain sequence of awaited statements instead of a transaction.
 import { prepare } from './driver.js';
+import { log } from '../lib/log.js';
 import { clearCommandPrefixCache } from './guildSettings.js';
 import { eraseMember } from './economy.js';
 import { eraseInventory } from './economyShop.js';
@@ -66,6 +67,7 @@ import './applications.js';
 import './economy.js';
 import './economyShop.js';
 import './publicLook.js';
+import { purgeBridgeGuild } from './bridge.js';
 
 // Tables keyed directly by guild_id. A test in test/guildTables.test.js checks
 // this stays in sync with the schema so new guild data can't escape /forget or
@@ -124,6 +126,9 @@ export const GUILD_TABLES = [
   'collectible_images',
   'guild_public_look',
   'public_look_images',
+  // The requests nobody has accepted yet. The links name two servers (guild_a, guild_b), so they go
+  // through purgeBridgeGuild() in purgeGuild() below.
+  'bridge_codes',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => prepare(`DELETE FROM ${t} WHERE guild_id = ?`));
@@ -144,14 +149,34 @@ const suggestionVoteStmt = prepare(
   'DELETE FROM guild_suggestion_votes WHERE suggestion_id IN (SELECT id FROM guild_suggestions WHERE guild_id = ?)'
 );
 
+/** Work a module must do before the server's rows go (the bridge tells the server on its other end). */
+const beforePurge = [];
+
+/**
+ * Register something to run first when a server is purged, while its rows can still be read. A failing
+ * hook never stops the purge.
+ * @param {(guildId: string) => Promise<void>} fn
+ */
+export function onBeforePurge(fn) {
+  beforePurge.push(fn);
+}
+
 /** Remove all of a guild's stored data. */
 export async function purgeGuild(guildId) {
+  for (const fn of beforePurge) {
+    try {
+      await fn(guildId);
+    } catch (err) {
+      log.warn('purge', `a clean-up before the purge of ${guildId} failed:`, err);
+    }
+  }
   await ticketMsgStmt.run(guildId); // before `tickets`, which the subquery reads
   await giveawayEntryStmt.run(guildId); // before `giveaways`, which the subquery reads
   await giveawayPrizeStmt.run(guildId);
   await eventParticipantStmt.run(guildId); // before `guild_events`, which the subquery reads
   await suggestionVoteStmt.run(guildId); // before `guild_suggestions`, which the subquery reads
   for (const stmt of simpleStmts) await stmt.run(guildId);
+  await purgeBridgeGuild(guildId); // the links this server is in (on either side) and their message maps
   clearCommandPrefixCache(guildId);
 }
 

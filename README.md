@@ -89,14 +89,14 @@ tier.
   iOS app with push notifications for new tickets.
 
 <details>
-<summary><b>All 43 modules</b></summary>
+<summary><b>All 44 modules</b></summary>
 
 | Area | Modules |
 |---|---|
 | **Moderation & safety** | [Moderation](docs/modules/moderation.md) (case log, warnings, auto-actions) · [Auto-moderation](docs/modules/automod.md) (can sync to Discord's native AutoMod) · [Server logging](docs/modules/logging.md) · [Verification](docs/modules/verification.md) (button or Turnstile captcha) · [Ban appeals](docs/modules/appeals.md) · [Tickets / modmail](docs/modules/tickets.md) · [Applications](docs/modules/applications.md) (forms for staff to accept or deny) · [Channel cleanup](docs/modules/channel-cleanup.md) · Honeypot (beta) |
 | **Welcome & roles** | [Welcome & leave](docs/modules/welcome.md) · [Welcome channel](docs/modules/welcome-channel.md) · [Introductions](docs/modules/introductions.md) (membership cards) · [Reaction roles & autoroles](docs/modules/roles.md) (emoji, buttons or dropdown) · [Temporary roles](docs/modules/temp-roles.md) (beta) · [Birthdays](docs/modules/birthdays.md) |
 | **Engagement** | [Leveling](docs/modules/leveling.md) (image rank cards, public leaderboard) · [Economy](docs/modules/economy.md) (currency and shop, beta) · [Invite tracker](docs/modules/invite-tracker.md) · [Starboard](docs/modules/starboard.md) · [Quote board](docs/modules/quote-board.md) (beta, optional public page) · [Polls](docs/modules/polls.md) · [Giveaways](docs/modules/giveaways.md) · [Events](docs/modules/events.md) (beta) · [Suggestions](docs/modules/suggestions.md) (beta) · [Counting](docs/modules/counting.md) · [Game stats](docs/modules/game-stats.md) (Battlefield, OSRS, RS3) |
-| **Automation** | [Custom commands](docs/modules/custom-commands.md) · [Autoresponder](docs/modules/autoresponder.md) · [Auto-react](docs/modules/auto-react.md) · [Auto threads](docs/modules/auto-threads.md) (beta, Discord only) · [Reminders](docs/modules/reminders.md) · [Sticky messages](docs/modules/sticky.md) · [AFK](docs/modules/afk.md) · [Temporary voice channels](docs/modules/temp-voice.md) |
+| **Automation** | [Custom commands](docs/modules/custom-commands.md) · [Autoresponder](docs/modules/autoresponder.md) · [Auto-react](docs/modules/auto-react.md) · [Auto threads](docs/modules/auto-threads.md) (beta, Discord only) · [Bridge](docs/modules/bridge.md) (Discord ↔ Fluxer, beta) · [Reminders](docs/modules/reminders.md) · [Sticky messages](docs/modules/sticky.md) · [AFK](docs/modules/afk.md) · [Temporary voice channels](docs/modules/temp-voice.md) |
 | **Alerts** | [Twitch](docs/modules/twitch-alerts.md) · [YouTube](docs/modules/youtube-alerts.md) · [Kick](docs/modules/kick-alerts.md) · [RSS / Atom](docs/modules/rss.md) (also Reddit, Mastodon, Bluesky) · [GitHub](docs/modules/github.md) · [Free games](docs/modules/free-games.md) · [App Store Connect](docs/modules/apple-connect.md) (instance operator only) |
 | **Insights** | [Server statistics](docs/modules/server-stats.md) (live counter channels) · [Server insights](docs/modules/insights.md) (activity charts, aggregate counts only) |
 

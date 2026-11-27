@@ -126,6 +126,7 @@ const READS = [
   '/settings',
   '/access',
   '/modules/afk/config',
+  '/modules/bridge/config',
   '/audit',
   '/tickets',
   '/appeals',

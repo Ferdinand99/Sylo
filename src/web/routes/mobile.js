@@ -318,6 +318,8 @@ export const mobileApiRouter = Router();
 // and, with Wise Wren set up, POST /api/v2/update/wren/approve and GET /api/v2/update/wren/runs/:id.
 // `public-page-look`: GET/POST /api/v2/guilds/:id/public-page-look (the server's accent colour and background
 // on its public member pages), its picture upload and the invite-background check.
+// `bridge`: the Bridge module (GET /api/v2/guilds/:id/modules/bridge/config and the request, accept, options,
+// pause, resume and unlink calls under /modules/bridge/), which joins a Discord and a Fluxer channel.
 const FEATURES = Object.freeze([
   'app-login',
   'live-access',
@@ -337,6 +339,7 @@ const FEATURES = Object.freeze([
   'moderator-view',
   'update-notice',
   'public-page-look',
+  'bridge',
 ]);
 
 // Public and ahead of the open-mode guard: the app calls it before anyone signs in, and an open-mode
