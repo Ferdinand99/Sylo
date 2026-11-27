@@ -93,6 +93,8 @@ const postJson = (path, body) =>
   });
 
 export const getGuilds = () => apiFetch('/api/v2/guilds').then((d) => d.guilds);
+// Look again for servers the bot joined since sign-in (the server switcher's "Refresh server list").
+export const refreshGuildList = () => postJson('/api/v2/account/refresh-guilds', {});
 export const getOverview = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/overview`);
 // The permission and role-hierarchy health check; `refresh` asks the server to look again now.
 export const getGuildHealth = (guildId, { refresh = false } = {}) =>
@@ -295,6 +297,11 @@ export const clearPersonalizerAnnouncement = () => postJson('/api/v2/personalize
 
 export const getHealth = () => apiFetch('/api/v2/health');
 export const getStats = () => apiFetch('/api/v2/stats');
+// The operators' update notice (GET /api/v2/update): a newer Sylo release, and what Wise Wren sees when it is set up.
+export const getUpdate = ({ refresh = false } = {}) =>
+  apiFetch(`/api/v2/update${refresh ? '?refresh=1' : ''}`);
+export const approveUpdate = () => postJson('/api/v2/update/wren/approve', {});
+export const getUpdateRun = (id) => apiFetch(`/api/v2/update/wren/runs/${encodeURIComponent(id)}`);
 // A snapshot download is a plain link (the browser saves the file), not a fetch.
 export const backupDownloadUrl = (name) => `/api/v2/health/backups/${encodeURIComponent(name)}`;
 export const sendDevLogTest = () => postJson('/api/v2/health/dev-log-test', {});
@@ -302,8 +309,13 @@ export const sendDevLogErrorTest = () => postJson('/api/v2/health/dev-log-error-
 export const createBackup = () => postJson('/api/v2/health/backups', {});
 export const deleteBackup = (name) =>
   postJson(`/api/v2/health/backups/${encodeURIComponent(name)}/delete`, {});
-export const restoreBackup = (name) =>
-  postJson(`/api/v2/health/backups/${encodeURIComponent(name)}/restore`, {});
+// `acknowledgeSql`: the person was told that an uploaded Postgres dump runs its SQL with the rights
+// of the database role (the server requires it for those). `confirm` names the snapshot.
+export const restoreBackup = (name, { acknowledgeSql = false } = {}) =>
+  postJson(`/api/v2/health/backups/${encodeURIComponent(name)}/restore`, {
+    confirm: name,
+    ...(acknowledgeSql ? { acknowledgeSql: true } : {}),
+  });
 export const importBackup = (file) =>
   apiFetch('/api/v2/health/backups/import', {
     method: 'POST',

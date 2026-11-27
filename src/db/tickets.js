@@ -15,6 +15,7 @@ registerPostgresBootstrap(`
   );
   CREATE INDEX IF NOT EXISTS idx_tickets_guild_status ON tickets (guild_id, status, last_at DESC);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_tickets_open_user ON tickets (guild_id, user_id) WHERE status = 'open';
+  CREATE INDEX IF NOT EXISTS idx_tickets_user_open ON tickets (user_id) WHERE status = 'open';
 
   CREATE TABLE IF NOT EXISTS ticket_messages (
     id          SERIAL PRIMARY KEY,
@@ -33,6 +34,7 @@ const openByUserStmt = prepare(
   "SELECT * FROM tickets WHERE guild_id = ? AND user_id = ? AND status = 'open'"
 );
 const getStmt = prepare('SELECT * FROM tickets WHERE id = ?');
+const openGuildsStmt = prepare("SELECT guild_id FROM tickets WHERE user_id = ? AND status = 'open'");
 const createStmt = prepare(
   `
   INSERT INTO tickets (guild_id, user_id, status, created_at, last_at)
@@ -86,6 +88,11 @@ function toMsg(row) {
 /** The user's open ticket in a guild, or undefined. */
 export async function getOpenTicket(guildId, userId) {
   return toTicket(await openByUserStmt.get(guildId, userId));
+}
+
+/** The servers where the user has an open ticket (a DM to the bot continues one of them). */
+export async function openTicketGuildKeys(userId) {
+  return (await openGuildsStmt.all(userId)).map((r) => r.guild_id);
 }
 
 export async function getTicket(id) {

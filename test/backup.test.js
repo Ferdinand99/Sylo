@@ -112,3 +112,45 @@ test('importBuffer stores a valid upload as a snapshot and rejects bad input', a
   assert.equal((await importBuffer(Buffer.alloc(2000))).ok, false); // right size, wrong magic
   assert.equal((await importBuffer('not a buffer')).ok, false);
 });
+
+// --- what a restore request must confirm -----------------------------------------------------
+
+test('restoreConfirmationError: an uploaded Postgres dump needs the name and the acknowledgement', async () => {
+  const { restoreConfirmationError, isImportedBackup } = await import('../src/db/backup.js');
+  const imported = 'sylo-imported-2026-11-16-10-00-00-000.dump';
+  const own = 'sylo-manual-2026-11-16-10-00-00-000.dump';
+  assert.equal(isImportedBackup(imported), true);
+  assert.equal(isImportedBackup(own), false);
+
+  // Postgres, uploaded: both fields, each checked.
+  assert.match(restoreConfirmationError(imported, undefined, { postgres: true }), /needs/);
+  assert.match(restoreConfirmationError(imported, {}, { postgres: true }), /needs/);
+  assert.match(
+    restoreConfirmationError(imported, { confirm: imported }, { postgres: true }),
+    /acknowledgeSql/
+  );
+  assert.match(
+    restoreConfirmationError(imported, { confirm: imported, acknowledgeSql: 'true' }, { postgres: true }),
+    /acknowledgeSql/,
+    'only a real true'
+  );
+  assert.match(
+    restoreConfirmationError(imported, { confirm: 'other', acknowledgeSql: true }, { postgres: true }),
+    /name of the snapshot/
+  );
+  assert.equal(
+    restoreConfirmationError(imported, { confirm: imported, acknowledgeSql: true }, { postgres: true }),
+    null
+  );
+
+  // Not uploaded, or SQLite: no body needed (the app sends none), but a wrong confirm is refused.
+  for (const postgres of [true, false]) {
+    assert.equal(restoreConfirmationError(own, undefined, { postgres }), null);
+    assert.equal(restoreConfirmationError(own, { confirm: own }, { postgres }), null);
+    assert.match(restoreConfirmationError(own, { confirm: imported }, { postgres }), /name of the snapshot/);
+  }
+  assert.equal(
+    restoreConfirmationError(imported.replace('.dump', '.db'), undefined, { postgres: false }),
+    null
+  );
+});
