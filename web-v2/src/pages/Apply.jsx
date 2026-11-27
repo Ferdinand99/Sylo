@@ -130,7 +130,7 @@ export default function Apply() {
     <>
       <h1 className="v2-section-title">{form.name}</h1>
       <p className="v2-field-hint">in {data.guild.name}</p>
-      {form.description ? <p>{form.description}</p> : null}
+      {form.description ? <p className="v2-pre-line">{form.description}</p> : null}
 
       {pending ? (
         <div className="v2-group v2-section-gap">

@@ -236,6 +236,35 @@ export async function inspectDbFile(filePath) {
   return { ok: false, error: 'not a recognised Sylo backup file (SQLite snapshot or Postgres dump)' };
 }
 
+/** Was this snapshot uploaded (Health page import) rather than made by Sylo? */
+export const isImportedBackup = (name) => /^sylo-imported-/.test(String(name));
+
+/**
+ * What a restore request must say before it is carried out, or null when it said enough. A
+ * `confirm` that is sent has to be the snapshot's name. An uploaded dump on Postgres is restored by
+ * running the SQL in it with the rights of the database role, so that one needs `confirm` and
+ * `acknowledgeSql: true`. Other snapshots need no body (the app sends none).
+ * @param {string} name
+ * @param {{ confirm?: unknown, acknowledgeSql?: unknown } | undefined} body
+ * @param {{ postgres: boolean }} o
+ * @returns {string | null}
+ */
+export function restoreConfirmationError(name, body, { postgres }) {
+  const { confirm, acknowledgeSql } = body ?? {};
+  if (confirm !== undefined && confirm !== name) {
+    return 'confirm must be the name of the snapshot to restore';
+  }
+  if (postgres && isImportedBackup(name)) {
+    if (confirm !== name) {
+      return 'Restoring an uploaded dump needs { "confirm": "<snapshot name>", "acknowledgeSql": true }';
+    }
+    if (acknowledgeSql !== true) {
+      return 'An uploaded Postgres dump runs its SQL with the rights of the database role: send "acknowledgeSql": true to restore it';
+    }
+  }
+  return null;
+}
+
 /**
  * Validate an uploaded database and, if good, store it as a normal snapshot the
  * operator can then restore. Returns `{ ok, name?, error? }`.
