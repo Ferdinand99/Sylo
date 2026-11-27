@@ -52,9 +52,36 @@ the new owner has confirmed it on that server's page.
 5. **Report.** Every step and what became of it, the items that failed, and the list of what could not be
    carried over.
 
-The last step of a copy is linking every copied channel through the bridge, so a message written on one side
-shows up on the other. Until the bridge module is installed that step reports "not available yet" and the copy
-still finishes.
+## Linking the channels through the bridge
+
+The last step of a copy links every copied text and announcement channel through the [Bridge](modules/bridge.md),
+so a message written on one side shows up on the other. Voice channels, categories and forums are not linked.
+
+- **Both owners already agreed.** The mirror is the consent: no link code is used. Each link records the two
+  people who agreed to the mirror (shown as "Name (server mirror)" on the Bridge page and in both audit logs), and
+  both channels get the usual notice, which says the link was made by the server mirror.
+- **The Bridge module is switched on in both servers** if it was off, but only the first time the mirror links
+  channels (it has to be on for a link to carry anything). Both audit logs say so. If a server's owner switches it
+  off afterwards, that stays off: the mirror reports the pairs it could not link ("the Bridge module is switched
+  off") and does not switch it on again, and the links carry nothing.
+- **Every rule of the bridge holds.** An age-restricted channel is linked only to an age-restricted channel; a
+  private channel only to a private one (a channel everyone can read is never linked to one that only some can);
+  each owner must be able to see, read and send in the channel, and Sylo needs Manage Webhooks, View Channel and
+  Send Messages in both; bots are off; nobody is pinged across. The privacy rule is checked again whenever a
+  paused link resumes and on every message: a channel that turns private later stops the link ("no longer open
+  to the same people"). A pair that fails a rule is skipped, the reason
+  is in the report ("Linking channels through the bridge" and the notes), and the rest are linked.
+- **Safe to run again.** "Copy again" links only the pairs that have no link yet. A channel that an owner
+  unlinked on the Bridge page stays unlinked, and a pair the owners bridged by hand is never taken over or
+  changed (it is reported as skipped). A server can have at most 50 bridged channels this way (10 when
+  linking by hand), and a copy links 25 channels at a time. A channel made on Discord later (continuous mirroring)
+  is linked too.
+- **The links follow the mirror.** While the mirror is paused (by an owner, by Sylo after a failure, or because a
+  server changed owner) or stopped, its links are paused, with no notice in each channel, and they run again when
+  the mirror does. If a server changed owner, its link stays paused until the new owner confirms it on the Bridge
+  page. **Removing** a mirror pauses its links and leaves them, paused by the server that removed it: only that
+  server's owner can resume them on the Bridge page, and the other server's owner can unlink them. While the
+  mirror is not running, none of its links can be resumed on the Bridge page.
 
 ## What is copied
 

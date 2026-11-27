@@ -180,6 +180,37 @@ describe('Bridge page', () => {
     expect(screen.getByRole('button', { name: 'Resume' })).toBeTruthy();
   });
 
+  it('a bridge the server mirror holds has no Resume button; one whose mirror ended has', async () => {
+    api.getBridge.mockResolvedValue(
+      overview({
+        links: [
+          link({
+            id: 7,
+            status: 'paused',
+            resumable: false,
+            pauseNote: 'This bridge was made by the server mirror and is paused with it.',
+          }),
+          link({
+            id: 8,
+            status: 'paused',
+            resumable: true,
+            mine: {
+              channelId: TWO,
+              platform: 'discord',
+              server: 'Home',
+              channel: 'rules',
+              ageRestricted: false,
+            },
+            pauseNote: 'The server mirror that made this bridge ended.',
+          }),
+        ],
+      })
+    );
+    renderAtGuild(<Bridge />, GUILD);
+    expect(await screen.findByText(/paused with it/)).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Resume' })).toHaveLength(1);
+  });
+
   it('changes a switch of this side through the server', async () => {
     api.getBridge.mockResolvedValue(overview({ links: [link()] }));
     api.setBridgeOptions.mockResolvedValue({

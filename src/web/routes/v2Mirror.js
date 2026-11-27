@@ -441,6 +441,6 @@ control(
   'mirror resumed'
 );
 control('stop', (pair) => mirror.stopPair(pair.id), 'mirror stopped');
-control('remove', (pair) => mirror.removePair(pair.id), 'mirror removed');
+control('remove', (pair, side) => mirror.removePair(pair.id, side), 'mirror removed');
 
 export default router;

@@ -226,7 +226,7 @@ export default function Bridge() {
         <div className="v2-list">
           {data.links.map((link) => {
             const status = statusOf(link);
-            const canResume = link.status === 'failed' || link.pausedByMe;
+            const canResume = link.resumable ?? (link.status === 'failed' || link.pausedByMe);
             return (
               <div className="v2-row v2-bridge-row" key={link.id}>
                 <div className="v2-row-main">

@@ -24,9 +24,10 @@
 import { ChannelType } from 'discord.js';
 import { on } from './dispatch.js';
 import { every } from './schedule.js';
-import { getGuildModule, isModuleEnabled } from '../db/modules.js';
+import { getGuildModule, isModuleEnabled, setGuildModule } from '../db/modules.js';
 import { recordAudit } from '../db/audit.js';
 import { onBeforePurge } from '../db/purge.js';
+import { PAIR_RUNNING, getPair as getMirrorPair, mirrorPairOfLink } from '../db/mirror.js';
 import * as store from '../db/bridge.js';
 import { runtime } from '../runtime.js';
 import { splitPlatformGuildId } from '../lib/platformId.js';
@@ -62,6 +63,8 @@ import {
 /** The most links a server can have, and the most requests it can have waiting. */
 export const MAX_LINKS = 10;
 export const MAX_REQUESTS = 5;
+/** The ceiling for a server that is mirrored (src/mirror/bridgeLink.js links every copied text channel). */
+export const MAX_MIRROR_LINKS = 50;
 
 /** How many failed deliveries in a row stop a link. */
 export const FAIL_THRESHOLD = 5;
@@ -70,10 +73,12 @@ const CACHE_MS = 60_000;
 
 /** A refusal the dashboard shows as it is. `status` is the HTTP answer. */
 export class BridgeError extends Error {
-  constructor(message, status = 400) {
+  /** `code` names the refusal for code that has to tell them apart (the server mirror's report). */
+  constructor(message, status = 400, code = '') {
     super(message);
     this.name = 'BridgeError';
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -250,6 +255,12 @@ const REASONS = {
     'The owner of one of the servers changed. The bridge is paused until the new owner confirms it: as the owner, open the Bridge page and press Resume.',
   'age-restriction':
     'One channel changed its age restriction, so the two no longer match. An age-restricted channel can only be bridged with an age-restricted one.',
+  mirror:
+    'This bridge was made by the server mirror and is paused with it. It runs again when the mirror does.',
+  'mirror-ended':
+    'The server mirror that made this bridge was removed, and the bridge was paused. Only the server that removed the mirror can resume it; either server can unlink it.',
+  visibility:
+    'The two channels are no longer open to the same people (one became private). A channel everyone can read is never bridged to a private one.',
 };
 /** The text a link's stored failure reason stands for. */
 export const reasonText = (code) => REASONS[code] ?? 'The bridge stopped working.';
@@ -279,7 +290,8 @@ export function assertActorMayUse(key, channelId, member, { open = false } = {})
   if (!perms || missing.length) {
     throw new BridgeError(
       `You need to be able to view, read and send in #${channel?.name ?? 'that channel'} yourself to bridge it.`,
-      403
+      403,
+      'visibility'
     );
   }
 }
@@ -291,15 +303,19 @@ export function assertActorMayUse(key, channelId, member, { open = false } = {})
  */
 function checkChannel(key, channelId) {
   const guild = guildByKey(key);
-  if (!guild) throw new BridgeError('Sylo is not in that server.', 404);
+  if (!guild) throw new BridgeError('Sylo is not in that server.', 404, 'no-guild');
   const channel = guild.channels?.cache?.get?.(channelId);
-  if (!isTextChannel(channel)) throw new BridgeError('Pick a normal text channel of this server.');
+  if (!isTextChannel(channel)) {
+    throw new BridgeError('Pick a normal text channel of this server.', 400, 'not-text');
+  }
   const perms = channel.permissionsFor?.(guild.members?.me);
   // Sylo's own rights: when they cannot be read, they count as missing.
   const missing = ['ViewChannel', 'SendMessages', 'ManageWebhooks'].filter((p) => lacks(perms, p));
   if (missing.length) {
     throw new BridgeError(
-      `Sylo needs ${missing.join(', ')} in #${channel.name}. Give Sylo's role those permissions there first.`
+      `Sylo needs ${missing.join(', ')} in #${channel.name}. Give Sylo's role those permissions there first.`,
+      400,
+      'permissions'
     );
   }
   return { guild, channel };
@@ -315,7 +331,8 @@ function requireBothPlatforms() {
   if (!runtime.clients.discord || !runtime.clients.fluxer) {
     throw new BridgeError(
       'A bridge needs this Sylo to be connected to both Discord and Fluxer, and it is not.',
-      409
+      409,
+      'platform'
     );
   }
 }
@@ -324,7 +341,9 @@ function requireBothPlatforms() {
 function checkAge(keyA, a, keyB, b) {
   if (ageRestricted(keyA, a) !== ageRestricted(keyB, b)) {
     throw new BridgeError(
-      'An age-restricted channel can only be bridged with another age-restricted channel.'
+      'An age-restricted channel can only be bridged with another age-restricted channel.',
+      400,
+      'age-restriction'
     );
   }
 }
@@ -538,19 +557,10 @@ export async function pauseLink({ guildKey, id, actor }) {
 }
 
 /**
- * Resume a link. A link a server paused can only be resumed by that server; one Sylo stopped (a failure)
- * can be resumed by either, after the cause is fixed: the channels, permissions, webhooks and the age rule
- * are checked again first.
+ * Everything that has to hold before a stopped or paused link runs again: both platforms connected, the module on
+ * on both servers, both channels usable by Sylo, the age rule, and a working webhook on each side.
  */
-export async function resumeLink({ guildKey, id, actor }) {
-  const { link, side } = await ownLink(guildKey, id);
-  if (link.status === 'active') throw new BridgeError('That bridge is already running.', 409);
-  if (link.status === 'paused' && link.pausedSide !== side) {
-    throw new BridgeError('The other server paused this bridge, so only they can resume it.', 403);
-  }
-  // The one pressing Resume is the owner of this server (the route checks): this is the confirmation a new owner gives.
-  await store.setLinkOwner(link.id, side, ownerOf(guildKey));
-  link[side === 'a' ? 'ownerA' : 'ownerB'] = ownerOf(guildKey);
+async function revalidate(link) {
   requireBothPlatforms();
   await requireModule(link.guildA);
   await requireModule(link.guildB);
@@ -577,6 +587,30 @@ export async function resumeLink({ guildKey, id, actor }) {
     }
   }
   failures.delete(link.id);
+}
+
+/**
+ * Resume a link. A link a server paused can only be resumed by that server; one Sylo stopped (a failure)
+ * can be resumed by either, after the cause is fixed: the channels, permissions, webhooks and the age rule
+ * are checked again first.
+ */
+export async function resumeLink({ guildKey, id, actor }) {
+  const { link, side } = await ownLink(guildKey, id);
+  if (link.status === 'active') throw new BridgeError('That bridge is already running.', 409);
+  if ((await mirrorHold(link)) === 'held') {
+    throw new BridgeError(
+      'The server mirror made this bridge and holds it while the mirror is not running. It runs again when the mirror does.',
+      409
+    );
+  }
+  // A link nobody owns the pause of (its mirror was removed by nobody in particular) can be resumed by either server.
+  if (link.status === 'paused' && link.pausedSide && link.pausedSide !== side) {
+    throw new BridgeError('The other server paused this bridge, so only they can resume it.', 403);
+  }
+  // The one pressing Resume is the owner of this server (the route checks): this is the confirmation a new owner gives.
+  await store.setLinkOwner(link.id, side, ownerOf(guildKey));
+  link[side === 'a' ? 'ownerA' : 'ownerB'] = ownerOf(guildKey);
+  await revalidate(link);
   // The other server's owner may have changed too: it has to confirm as well before anything is shared.
   const stillChanged = ownerChangedSide(link);
   if (stillChanged) {
@@ -605,6 +639,244 @@ export async function resumeLink({ guildKey, id, actor }) {
   await say(link.guildA, link.channelA, onNotice(link.guildA, link.guildB, link.channelB));
   await say(link.guildB, link.channelB, onNotice(link.guildB, link.guildA, link.channelA));
   return { active: true };
+}
+
+// --- links made by the server mirror ------------------------------------------------------------------
+//
+// The server mirror (src/mirror/) copies a Discord server's channels onto a Fluxer server and then links each
+// pair of text channels through the bridge, so one conversation runs through both. Both server owners agreed
+// to the mirror, which is the consent a link code carries for a link made by hand, so these links are made
+// without a code. Everything else of the bridge holds for them: the age rule, the visibility rules, Sylo's and
+// the owners' own rights in the channels, a visible notice in both channels, bots off by default, the owners
+// recorded for the ownership check, and either owner can unlink a channel at any time. A link the mirror made
+// is held with the mirror: while the mirror is paused or stopped, its links are paused (reason `mirror`), and
+// they run again when the mirror does.
+
+/** What a mirror-made link records as the people who agreed to it. */
+const mirrorBy = (name) => `${String(name || 'server owner').slice(0, 60)} (server mirror)`.slice(0, 100);
+
+/** Can @everyone see this channel? null when that cannot be worked out (it then counts as not matching). */
+function everyoneSees(key, channel) {
+  const guild = guildByKey(key);
+  try {
+    // eslint-disable-next-line no-restricted-syntax -- the @everyone role id is the platform guild id
+    const perms = channel?.permissionsFor?.(String(guild?.id ?? ''));
+    if (!perms || typeof perms.has !== 'function') return null;
+    return perms.has('ViewChannel') === true;
+  } catch {
+    return null;
+  }
+}
+
+/** Are the two channels equally open: both visible to @everyone or both not? Unknown counts as different. */
+function samePrivacy(keyA, channelA, keyB, channelB) {
+  const a = everyoneSees(keyA, channelA);
+  const b = everyoneSees(keyB, channelB);
+  return a !== null && b !== null && a === b;
+}
+
+/** A link the server mirror made records its two owners as "<name> (server mirror)". */
+const MIRROR_TAG = '(server mirror)';
+const madeByMirror = (link) => String(link?.requestedBy ?? '').endsWith(MIRROR_TAG);
+
+/**
+ * Who holds a link: 'held' while its server mirror is not running (or the link is paused by it), 'ended' when it
+ * says the mirror holds it but that mirror is gone (the pair was replaced), otherwise 'none'. A held link cannot
+ * be resumed on the Bridge page: it comes back with the mirror.
+ */
+export async function mirrorHold(link) {
+  const pairId = await mirrorPairOfLink(link.id);
+  if (!pairId) return link.status === 'paused' && link.failReason === 'mirror' ? 'ended' : 'none';
+  const pair = await getMirrorPair(pairId);
+  if (!pair) return link.status === 'paused' && link.failReason === 'mirror' ? 'ended' : 'none';
+  if (!PAIR_RUNNING.includes(pair.status)) return 'held';
+  return link.status === 'paused' && link.failReason === 'mirror' ? 'held' : 'none';
+}
+
+/**
+ * Turn the Bridge module on in a server the mirror links channels in. The owner agreed to the mirror, which
+ * links every copied channel, and the module has to be on for the links to carry anything.
+ * @returns {Promise<boolean>} whether it was switched on now
+ */
+export async function enableBridgeForMirror(key, actor = 'Server mirror') {
+  if (await isModuleEnabled(key, 'bridge')) return false;
+  await setGuildModule(key, 'bridge', { enabled: true });
+  await recordAudit(key, {
+    actor,
+    action: 'bridge:module',
+    detail: 'turned the Bridge module on because the server mirror links the channels of this server',
+    change: null,
+  });
+  return true;
+}
+
+/**
+ * Link a mirrored channel pair (the Discord channel is side a, the Fluxer copy side b). Throws a BridgeError
+ * with a `code` when the pair cannot be linked (`not-text`, `permissions`, `age-restriction`, `visibility`,
+ * `exists`, `limit`, `webhook`, `no-guild`, `platform`); the caller reports it and goes on with the next pair.
+ * `members` are the two owners' members in their own servers, to check that each can see, read and send in
+ * the channel; `open` says sign-in is off, so there is no one to check.
+ * @param {{
+ *   source: { guildKey: string, channelId: string }, target: { guildKey: string, channelId: string },
+ *   members?: { source?: any, target?: any }, open?: boolean,
+ *   consent?: { sourceBy?: string, targetBy?: string, sourceOwner?: string, targetOwner?: string }
+ * }} req
+ */
+export async function createMirrorLink({ source, target, members = {}, open = false, consent = {} }) {
+  requireBothPlatforms();
+  const a = checkChannel(source.guildKey, source.channelId);
+  const b = checkChannel(target.guildKey, target.channelId);
+  if (
+    (await store.linkForChannel(source.guildKey, source.channelId)) ||
+    (await store.linkForChannel(target.guildKey, target.channelId))
+  ) {
+    throw new BridgeError('One of the channels is already bridged.', 409, 'exists');
+  }
+  for (const key of [source.guildKey, target.guildKey]) {
+    if ((await store.linkCount(key)) >= MAX_MIRROR_LINKS) {
+      throw new BridgeError(`A server can have at most ${MAX_MIRROR_LINKS} bridged channels.`, 409, 'limit');
+    }
+  }
+  checkAge(source.guildKey, a.channel, target.guildKey, b.channel);
+  // A channel only some members can see is linked only to a channel that is as closed: nothing private is
+  // shared with a channel everyone can read, in either direction.
+  if (!samePrivacy(source.guildKey, a.channel, target.guildKey, b.channel)) {
+    throw new BridgeError(
+      'The two channels are not open to the same people (one is private, or it cannot be told), so they are not bridged.',
+      409,
+      'visibility'
+    );
+  }
+  assertActorMayUse(source.guildKey, source.channelId, members.source, { open });
+  assertActorMayUse(target.guildKey, target.channelId, members.target, { open });
+
+  const made = [];
+  const dropMade = async () => {
+    for (const [key, hook] of made) await transport.deleteHook(key, hook).catch(() => {});
+  };
+  let hookA;
+  let hookB;
+  try {
+    hookA = await transport.createHook(source.guildKey, source.channelId, HOOK_NAME);
+    made.push([source.guildKey, hookA]);
+    hookB = await transport.createHook(target.guildKey, target.channelId, HOOK_NAME);
+    made.push([target.guildKey, hookB]);
+  } catch (err) {
+    await dropMade();
+    log.warn('bridge', `could not make the webhooks for a mirrored link: ${err?.message ?? err}`);
+    throw new BridgeError('Sylo could not make a webhook in one of the channels.', 502, 'webhook');
+  }
+  const id = await store.createLink({
+    guildA: source.guildKey,
+    channelA: source.channelId,
+    guildB: target.guildKey,
+    channelB: target.channelId,
+    optionsA: normaliseOptions({}),
+    optionsB: normaliseOptions({}),
+    hookA,
+    hookB,
+    requestedBy: mirrorBy(consent.sourceBy),
+    acceptedBy: mirrorBy(consent.targetBy),
+    ownerA: consent.sourceOwner || ownerOf(source.guildKey),
+    ownerB: consent.targetOwner || ownerOf(target.guildKey),
+  });
+  if (!id) {
+    await dropMade();
+    throw new BridgeError('One of the channels was bridged in the meantime.', 409, 'exists');
+  }
+  dropBridgeCache();
+  const link = await store.getLink(id);
+  for (const [mine, theirs, by] of [
+    [source, target, consent.sourceBy],
+    [target, source, consent.targetBy],
+  ]) {
+    await recordAudit(mine.guildKey, {
+      actor: by || 'Server mirror',
+      action: 'bridge:link',
+      detail: `bridged #${channelName(mine.guildKey, mine.channelId)} with #${channelName(theirs.guildKey, theirs.channelId)} in ${serverName(theirs.guildKey)} (${platformName(theirs.guildKey)}) through the server mirror`,
+      change: null,
+    });
+  }
+  const note = ' This link was made by the server mirror that both servers’ owners agreed to.';
+  await say(
+    source.guildKey,
+    source.channelId,
+    onNotice(source.guildKey, target.guildKey, target.channelId) + note
+  );
+  await say(
+    target.guildKey,
+    target.channelId,
+    onNotice(target.guildKey, source.guildKey, source.channelId) + note
+  );
+  return link;
+}
+
+/** Pause a running link because its mirror is not running. No notice per channel: nothing is shared while it is paused. */
+export async function holdMirrorLink(linkId) {
+  const link = await store.getLink(linkId);
+  if (!link || link.status !== 'active') return false;
+  await store.setLinkStatus(link.id, { status: 'paused', pausedSide: '', reason: 'mirror' });
+  dropBridgeCache();
+  queue.clear(laneKey(link, 'a'));
+  queue.clear(laneKey(link, 'b'));
+  return true;
+}
+
+/**
+ * Run a link again that is paused with its mirror. The checks of a resume are made again (channels, rights, age
+ * rule, webhooks), and a server that changed hands since keeps the link paused until its new owner confirms.
+ * @returns {Promise<{ resumed: boolean, reason?: string }>}
+ */
+export async function resumeMirrorLink(linkId) {
+  const link = await store.getLink(linkId);
+  if (!link || link.status !== 'paused' || link.failReason !== 'mirror') return { resumed: false };
+  try {
+    await revalidate(link);
+  } catch (err) {
+    if (err instanceof BridgeError) return { resumed: false, reason: err.message };
+    throw err;
+  }
+  // The channels must still be equally open: a channel can have turned private since the link was made.
+  if (
+    !samePrivacy(
+      link.guildA,
+      channelIn(link.guildA, link.channelA),
+      link.guildB,
+      channelIn(link.guildB, link.channelB)
+    )
+  ) {
+    return { resumed: false, reason: reasonText('visibility') };
+  }
+  const changed = ownerChangedSide(link);
+  if (changed) {
+    await store.setLinkStatus(link.id, { status: 'paused', pausedSide: changed, reason: 'owner-changed' });
+    dropBridgeCache();
+    return { resumed: false, reason: 'owner-changed' };
+  }
+  await store.setLinkStatus(link.id, { status: 'active' });
+  dropBridgeCache();
+  return { resumed: true };
+}
+
+/**
+ * The mirror that made a link was removed by `side` ('a' the Discord server, 'b' the Fluxer server): the link stays,
+ * paused by that server, so only its owner can resume it and the other server's owner can unlink it. Without a side
+ * (a removal nobody owns) either owner can resume it.
+ */
+export async function releaseMirrorLink(linkId, side = '') {
+  const link = await store.getLink(linkId);
+  if (!link) return false;
+  const mine = link.status === 'active' || (link.status === 'paused' && link.failReason === 'mirror');
+  if (!mine) return false;
+  await store.setLinkStatus(link.id, {
+    status: 'paused',
+    pausedSide: side === 'a' || side === 'b' ? side : '',
+    reason: 'mirror-ended',
+  });
+  dropBridgeCache();
+  queue.clear(laneKey(link, 'a'));
+  queue.clear(laneKey(link, 'b'));
+  return true;
 }
 
 /** Unlink: either side may, at any time. The webhooks are deleted and the message map with the link. */
@@ -1042,6 +1314,11 @@ async function allowed(message, link, side, key) {
     await failLink(link.id, 'age-restriction');
     return false;
   }
+  // A link the server mirror made also keeps the two channels equally open (a channel can turn private later).
+  if (madeByMirror(link) && !samePrivacy(key, mine, theirKey, theirs)) {
+    await failLink(link.id, 'visibility');
+    return false;
+  }
   return true;
 }
 
@@ -1310,7 +1587,7 @@ function endView(key, channelId) {
 }
 
 /** One link as the server `key` sees it (never a webhook token). */
-export function linkView(link, key) {
+export function linkView(link, key, hold = 'none') {
   const side = sideOf(link, key);
   const theirs = other(side);
   return {
@@ -1318,9 +1595,20 @@ export function linkView(link, key) {
     status: link.status,
     pausedByMe: link.status === 'paused' && link.pausedSide === side,
     pausedByThem: link.status === 'paused' && link.pausedSide === theirs,
+    // Whether this server's owner can press Resume: a stopped link, one this server paused, or one nobody holds
+    // (its server mirror ended). A link held by a running-state mirror comes back with the mirror.
+    resumable:
+      hold !== 'held' &&
+      (link.status === 'failed' ||
+        (link.status === 'paused' && (link.pausedSide === side || !link.pausedSide))),
     problem: link.status === 'failed' ? { code: link.failReason, text: reasonText(link.failReason) } : null,
     // Why a paused link is paused beyond "a server paused it": its owner changed, or its channel is gone.
-    pauseNote: link.status === 'paused' && link.failReason ? reasonText(link.failReason) : null,
+    pauseNote:
+      hold === 'held' && link.status !== 'active'
+        ? reasonText('mirror')
+        : link.status === 'paused' && link.failReason
+          ? reasonText(hold === 'ended' ? 'mirror-ended' : link.failReason)
+          : null,
     mine: { channelId: channelOf(link, side), ...endView(key, channelOf(link, side)) },
     theirs: endView(guildOf(link, theirs), channelOf(link, theirs)),
     options: optionsOf(link, side),
@@ -1347,7 +1635,7 @@ export async function bridgeOverview(key) {
     bothPlatforms: Boolean(runtime.clients.discord && runtime.clients.fluxer),
     enabled: (await getGuildModule(key, 'bridge')).enabled,
     limits: { links: MAX_LINKS, requests: MAX_REQUESTS },
-    links: links.map((l) => linkView(l, key)),
+    links: await Promise.all(links.map(async (l) => linkView(l, key, await mirrorHold(l)))),
     requests: requests.map((r) => ({
       id: r.id,
       channelId: r.channelId,
@@ -1367,17 +1655,22 @@ export async function bridgeOverview(key) {
  * the bridge needs in its channels are checked by the generic channel check there.
  */
 export async function bridgeProblems(key) {
-  return (await store.linksOfGuild(key))
-    .filter((l) => l.status === 'failed' || (l.status === 'paused' && l.failReason))
-    .map((l) => {
-      const side = sideOf(l, key);
-      return {
-        linkId: l.id,
-        channelId: channelOf(l, side),
-        code: l.failReason,
-        text: reasonText(l.failReason),
-      };
-    });
+  return (
+    (await store.linksOfGuild(key))
+      // A link the server mirror holds is covered by the mirror's own Health entry.
+      .filter(
+        (l) => l.status === 'failed' || (l.status === 'paused' && l.failReason && l.failReason !== 'mirror')
+      )
+      .map((l) => {
+        const side = sideOf(l, key);
+        return {
+          linkId: l.id,
+          channelId: channelOf(l, side),
+          code: l.failReason,
+          text: reasonText(l.failReason),
+        };
+      })
+  );
 }
 
 /** The bridged channels of a server, with the permissions the bridge needs in each. */

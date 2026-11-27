@@ -27,7 +27,11 @@ import { log } from '../lib/log.js';
 import { allClientsReady, guildByKey } from '../platform/platformOf.js';
 import { safeFetch } from '../lib/safeFetch.js';
 import { requirePairConsent } from './consent.js';
-import { linkMirroredChannels as defaultLink } from './bridgeLink.js';
+import {
+  linkMirroredChannels as defaultLink,
+  releaseMirrorLinks as defaultRelease,
+  syncMirrorLinks as defaultSync,
+} from './bridgeLink.js';
 import { MirrorError, MirrorPause, classifyError } from './errors.js';
 import { checkOwnership } from './ownership.js';
 import { NOT_COPIED_MODULES, buildModuleSpec, buildPlan, channelOrder, copiedSets } from './plan.js';
@@ -54,6 +58,7 @@ const SOURCE_LIST = { role: 'roles', channel: 'channels', emoji: 'emojis', stick
 /** After a reorder-worthy change, wait a little so one drag of many channels is one reorder. */
 const REORDER_DELAY_MS = 3000;
 const PRUNE_EVERY_MS = 60 * 60_000;
+const LINK_SWEEP_MS = 60_000;
 const KEEP_FINISHED_MS = 7 * 86_400_000;
 const ADOPT_SKEW_MS = 5000;
 // Fluxer ids are snowflakes: the time they were made is in the high bits.
@@ -110,6 +115,9 @@ export function createEngine(overrides = {}) {
     fetchImage: fetchImageReal,
     clientsReady: allClientsReady,
     linkMirroredChannels: defaultLink,
+    // The bridge links a mirror made follow its state: paused with it, running again with it, released when it goes.
+    syncLinks: defaultSync,
+    releaseLinks: defaultRelease,
     // Only a server's owner may run a mirror: with sign-in on, the owners who agreed must still own the servers.
     enforceOwnership: () => config.authEnabled,
     // More than this many deletes on Discord in this many ms pause the mirror until its owner confirms them.
@@ -123,6 +131,7 @@ export function createEngine(overrides = {}) {
   /** Per pair: kinds Fluxer refused as over a limit this run, and when it asked to wait. */
   const state = new Map();
   let lastPrune = 0;
+  let lastLinkSweep = 0;
   let stopped = false;
 
   const stateOf = (pairId) => {
@@ -597,18 +606,23 @@ export function createEngine(overrides = {}) {
 
   /**
    * A role was made (or adopted, or made again) on Fluxer: its place in the order is not set yet. Forget that the order
-   * was set, so the order step really runs; in continuous mode, ask for it now (in a copy the plan's order step follows).
+   * was set, so the order step really runs, and ask for it now. Inside a copy run the request is a copy job with the key
+   * of the plan's own order step, so it joins that step when it is still waiting; "copy again" leaves the step out when
+   * the order did not change on Discord, and a role that was deleted on Fluxer and is made again would otherwise stay at
+   * the bottom without its powerful permissions. An order that is already set is a no-op.
    */
   async function roleMadeOnFluxer(ctx) {
     await store.deleteMapping(ctx.pair.id, 'order', 'roles');
-    if (ctx.job?.phase === 'copy') return;
+    const inCopy = ctx.job?.phase === 'copy';
     await store.enqueueJob({
       pairId: ctx.pair.id,
-      phase: 'sync',
+      run: inCopy ? ctx.job.run : 0,
+      phase: inCopy ? 'copy' : 'sync',
       op: 'reorder',
       kind: 'roles',
       sourceId: 'roles',
-      stepKey: 'reorder:roles',
+      stepKey: inCopy ? `copy:${ctx.job.run}:order-roles:roles` : 'reorder:roles',
+      payload: inCopy ? { name: 'Role order', planned: 'update' } : {},
       now: deps.now(),
     });
   }
@@ -689,7 +703,23 @@ export function createEngine(overrides = {}) {
       }
     }
     await put(await ctx.target.createChannel(value), true);
+    // A channel made while the mirror runs is linked through the bridge too (the step links only what is missing).
+    if (ctx.job?.phase !== 'copy') await enqueueLinkStep(ctx.pair.id);
     return done('created', { notes, remote: true });
+  }
+
+  /** Ask for the bridge step: link the mirrored channels that have no link yet. One open request at a time. */
+  async function enqueueLinkStep(pairId) {
+    await store.enqueueJob({
+      pairId,
+      phase: 'sync',
+      op: 'link',
+      kind: 'bridge',
+      sourceId: 'link',
+      stepKey: 'bridge:link',
+      payload: { name: 'Link new channels through the bridge', planned: 'create' },
+      now: deps.now(),
+    });
   }
 
   /** Download an image for an emoji or sticker; null (with a note) when it is too big. */
@@ -972,6 +1002,44 @@ export function createEngine(overrides = {}) {
     });
   }
 
+  /**
+   * The last step of a copy: link the mirrored text channels through the bridge (src/mirror/bridgeLink.js). A pair the
+   * bridge refuses is skipped and listed in the notes; when more pairs wait than one run links, another run is queued.
+   */
+  async function linkChannels(ctx, job) {
+    const tried = new Set(job.payload?.tried ?? []);
+    const res = await deps.linkMirroredChannels(ctx.pair.id, { skip: tried });
+    const skippedPairs = res.skipped ?? [];
+    const notes = skippedPairs.map((s) => ({
+      code: `bridge-${s.code}`,
+      scope: 'channel',
+      ref: { kind: 'channel', id: s.sourceId, name: s.name },
+      message: `${s.name}: not linked through the bridge, ${s.message}`,
+    }));
+    if ((res.remaining ?? 0) > 0) {
+      await store.enqueueJob({
+        pairId: ctx.pair.id,
+        run: job.run,
+        phase: job.phase,
+        op: 'link',
+        kind: 'bridge',
+        sourceId: job.sourceId,
+        stepKey: job.stepKey,
+        payload: { ...job.payload, tried: [...tried, ...(res.tried ?? [])] },
+        now: deps.now(),
+      });
+    }
+    const parts = [];
+    if (res.linked > 0) parts.push(`${res.linked} channels linked`);
+    if ((res.already ?? 0) > 0) parts.push(`${res.already} already linked`);
+    if (skippedPairs.length > 0) parts.push(`${skippedPairs.length} not linked (see the notes)`);
+    if ((res.remaining ?? 0) > 0) parts.push(`${res.remaining} more follow`);
+    return done(parts.length ? parts.join(', ') : `not linked: ${res.reason ?? 'nothing to link'}`, {
+      notes,
+      remote: res.linked > 0,
+    });
+  }
+
   async function perform(ctx, job) {
     if (job.payload?.skip) return skipped(String(job.payload.skip), { notes: job.payload.notes ?? [] });
     if (job.op === 'delete') {
@@ -980,12 +1048,7 @@ export function createEngine(overrides = {}) {
         : lockCopy(ctx, job.kind, job.sourceId);
     }
     if (job.op === 'reorder') return reorder(ctx, job.kind);
-    if (job.op === 'link') {
-      const res = await deps.linkMirroredChannels(ctx.pair.id);
-      return done(
-        res.linked > 0 ? `${res.linked} channels linked` : `not linked: ${res.reason ?? 'nothing to link'}`
-      );
-    }
+    if (job.op === 'link') return linkChannels(ctx, job);
     switch (job.kind) {
       case 'guild':
         return syncIdentity(ctx);
@@ -1023,7 +1086,17 @@ export function createEngine(overrides = {}) {
     );
     touchHealth(next);
     log.warn('mirror', `pair ${pair.id} paused: ${message}`);
+    await linksFollow(next);
     return next;
+  }
+
+  /** The bridge links of a pair follow its state. A failure is logged and put right by the next sweep of the timer. */
+  async function linksFollow(pair) {
+    try {
+      await deps.syncLinks(pair);
+    } catch (err) {
+      log.warn('mirror', `could not update the bridge links of pair ${pair.id}: ${err?.message ?? err}`);
+    }
   }
 
   const backoffMs = (attempts) =>
@@ -1166,6 +1239,11 @@ export function createEngine(overrides = {}) {
       lastPrune = now;
       await store.pruneMirrorJobs({ before: now - KEEP_FINISHED_MS });
     }
+    // Keep the bridge links in step with their mirrors: a pause or resume that could not reach them is put right here.
+    if (now - lastLinkSweep > LINK_SWEEP_MS) {
+      lastLinkSweep = now;
+      for (const pair of await store.listAllPairs()) await linksFollow(pair);
+    }
     for (const status of [PAIR_STATUS.COPYING, PAIR_STATUS.LIVE]) {
       for (const pair of await store.listPairsIn(status)) {
         if (active.has(pair.id)) continue;
@@ -1209,6 +1287,7 @@ export function createEngine(overrides = {}) {
       deps.now()
     );
     touchHealth(next);
+    await linksFollow(next);
     return next;
   }
 
@@ -1261,13 +1340,16 @@ export function createEngine(overrides = {}) {
     if (pair.pauseKind === 'ownership' && ['source', 'target'].includes(side)) {
       const guild = side === 'source' ? sg : tg;
       if (guild?.ownerId) {
-        pair = await store.updatePair(
-          pairId,
+        const patch =
           side === 'source'
             ? { sourceConsentUser: String(guild.ownerId) }
-            : { targetConsentUser: String(guild.ownerId) },
-          deps.now()
-        );
+            : { targetConsentUser: String(guild.ownerId) };
+        // Real deletion on Fluxer is the Fluxer owner's own switch: a new owner starts with it off (the request stays,
+        // so they can switch it on themselves).
+        if (side === 'target' && String(guild.ownerId) !== pair.targetConsentUser) {
+          patch.options = { ...normaliseOptions(pair.options), mirrorDeletes: false };
+        }
+        pair = await store.updatePair(pairId, patch, deps.now());
       }
     }
     await requirePairConsent(pair);
@@ -1303,6 +1385,7 @@ export function createEngine(overrides = {}) {
       deps.now()
     );
     touchHealth(next);
+    await linksFollow(next);
     return next;
   }
 
@@ -1331,16 +1414,19 @@ export function createEngine(overrides = {}) {
     );
     state.delete(pairId);
     touchHealth(next);
+    await linksFollow(next);
     return next;
   }
 
   /** Forget the mirror altogether: the pair, its id map and its queue. Nothing on either server is touched. */
-  async function removePair(pairId) {
+  async function removePair(pairId, side = '') {
     const pair = await store.getPair(pairId);
     if (!pair) return false;
     if ([PAIR_STATUS.COPYING, PAIR_STATUS.LIVE].includes(pair.status)) {
       throw new MirrorError('Stop the mirror before removing it.', 'item');
     }
+    // The bridge links it made stay, paused: the owners decide on the Bridge page whether to resume or unlink them.
+    await deps.releaseLinks(pairId, side);
     await store.deletePair(pairId);
     state.delete(pairId);
     touchHealth(pair);
@@ -1397,13 +1483,24 @@ export function createEngine(overrides = {}) {
       detail: j.detail,
     }));
     const notes = jobs.flatMap((j) => j.notes);
-    const link = jobs.find((j) => j.op === 'link');
+    // The bridge step can take several runs (a batch of channels each): show them as one.
+    const links = jobs.filter((j) => j.op === 'link');
+    const open = links.find((j) => ['pending', 'running', 'failed'].includes(j.status));
+    const bridge = links.length
+      ? {
+          status: open ? open.status : links[links.length - 1].status,
+          detail: links
+            .map((j) => j.detail)
+            .filter(Boolean)
+            .join('; '),
+        }
+      : null;
     return {
       run: pair.copyRun,
       items,
       notes,
       failed: items.filter((i) => i.status === 'failed'),
-      bridge: link ? { status: link.status, detail: link.detail } : null,
+      bridge,
       summary: summariseJobs(jobs),
     };
   }

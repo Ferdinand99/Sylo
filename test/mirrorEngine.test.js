@@ -166,8 +166,8 @@ test('a copy sends what the server has: ids remapped, @everyone adopted, setting
   assert.equal(s.fluxer.ops('setChannelPositions').length, 1);
 });
 
-test('the last step, linking through the bridge, reports that the bridge is not there yet', async () => {
-  assert.deepEqual(await linkMirroredChannels(1), { linked: 0, reason: 'bridge-not-available' });
+test('the last step, linking through the bridge, says why it linked nothing when the platforms are not both up', async () => {
+  assert.equal((await linkMirroredChannels(999_999)).reason, 'no-such-mirror');
   const s = await scenario({ withExpressions: false });
   await s.engine.startCopy(s.pair.id);
   const end = await drain(s);

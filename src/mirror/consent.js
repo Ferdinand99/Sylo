@@ -104,6 +104,22 @@ function askedOptions(options, targetOwner) {
   return out;
 }
 
+/**
+ * The options a new request keeps when it brings none of its own. Real deletion on Fluxer is the Fluxer owner's own
+ * switch, so it is kept only when the same person who switched it on (the Fluxer owner recorded on the pair) now owns
+ * both servers; a new Fluxer owner, or a request from someone who is not the Fluxer owner, starts with it off (the
+ * request for it stays, so the owner can switch it on themselves).
+ */
+function inheritedOptions(pair, targetOwner, targetUser) {
+  const out = normaliseOptions(pair.options);
+  out.mirrorDeletes =
+    out.mirrorDeletes &&
+    Boolean(targetOwner) &&
+    Boolean(pair.targetConsentUser) &&
+    pair.targetConsentUser === targetUser;
+  return out;
+}
+
 /** A pair that has never copied anything may be replaced by a new request; one that has, may not. */
 const replaceable = (pair) =>
   pair.status === PAIR_STATUS.PENDING ||
@@ -175,7 +191,11 @@ export async function requestMirror({
     codeAttempts: 0,
     lastError: '',
     failures: 0,
-    ...(options ? { options: askedOptions(options, targetOwner) } : {}),
+    ...(options
+      ? { options: askedOptions(options, targetOwner) }
+      : pair
+        ? { options: inheritedOptions(pair, targetOwner, targetUser) }
+        : {}),
   };
   if (pair) {
     pair = await updatePair(pair.id, fields, now);

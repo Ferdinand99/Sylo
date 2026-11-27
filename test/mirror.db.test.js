@@ -249,5 +249,27 @@ test('the SQLite migration can run twice without failing (IF NOT EXISTS)', () =>
     .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'mirror_%' ORDER BY name")
     .all()
     .map((r) => r.name);
-  assert.deepEqual(tables, ['mirror_ids', 'mirror_jobs', 'mirror_pairs']);
+  assert.deepEqual(tables, ['mirror_ids', 'mirror_jobs', 'mirror_links', 'mirror_pairs']);
+});
+
+test('the bridge links of a pair: one per Discord channel, found again by link, gone with the pair', async () => {
+  const pair = await db.createPair({ sourceGuild: C, targetGuild: D, now: 1000 });
+  await db.putMirrorLink(pair.id, 'c1', 't1', 11, 2000);
+  await db.putMirrorLink(pair.id, 'c2', 't2', 12, 2100);
+  await db.putMirrorLink(pair.id, 'c1', 'other', 99, 2200); // the first record of a channel stays
+  const links = await db.listMirrorLinks(pair.id);
+  assert.deepEqual(
+    links.map((l) => [l.sourceChannel, l.targetChannel, l.linkId, l.createdAt]),
+    [
+      ['c1', 't1', 11, 2000],
+      ['c2', 't2', 12, 2100],
+    ]
+  );
+  assert.equal((await db.getMirrorLink(pair.id, 'c2')).linkId, 12);
+  assert.equal(await db.getMirrorLink(pair.id, 'nope'), null);
+  assert.equal(await db.mirrorPairOfLink(12), pair.id);
+  assert.equal(await db.mirrorPairOfLink(404), null, 'a link made by hand belongs to no mirror');
+  await db.deletePair(pair.id);
+  assert.deepEqual(await db.listMirrorLinks(pair.id), []);
+  assert.equal(await db.mirrorPairOfLink(12), null);
 });
