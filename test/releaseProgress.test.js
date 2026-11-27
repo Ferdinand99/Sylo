@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import {
   buildBar,
   percent,
@@ -11,6 +12,8 @@ import {
   toItems,
   buildEmbed,
   messageVarName,
+  parseMilestones,
+  milestoneHeading,
   stageOf,
   progressOf,
   sendToDiscord,
@@ -208,6 +211,24 @@ test('release progress: a closed milestone is shown as released', () => {
 test('release progress: each version has its own message id variable', () => {
   assert.equal(messageVarName('5.3'), 'ROADMAP_MESSAGE_ID_5_3');
   assert.equal(messageVarName('5.10'), 'ROADMAP_MESSAGE_ID_5_10');
+  assert.equal(messageVarName('iOS 1.3'), 'ROADMAP_MESSAGE_ID_IOS_1_3');
+});
+
+test('release progress: ROADMAP_MILESTONE may list several milestones', () => {
+  assert.deepEqual(parseMilestones(undefined), ['5.3']);
+  assert.deepEqual(parseMilestones(''), ['5.3']);
+  assert.deepEqual(parseMilestones(' , '), ['5.3']);
+  assert.deepEqual(parseMilestones('5.3'), ['5.3']);
+  assert.deepEqual(parseMilestones('5.3, iOS 1.3'), ['5.3', 'iOS 1.3']);
+  assert.deepEqual(parseMilestones('iOS 1.3,,5.3, iOS 1.3'), ['iOS 1.3', '5.3']);
+});
+
+test('release progress: iOS milestones are titled as the iOS app', () => {
+  assert.equal(milestoneHeading('5.3'), 'Sylo 5.3');
+  assert.equal(milestoneHeading('iOS 1.3'), 'Sylo iOS app 1.3');
+  assert.equal(buildEmbed('iOS 1.3', []).title, 'Sylo iOS app 1.3 — progress');
+  assert.equal(buildEmbed('iOS 1.3', [], { released: true }).title, 'Sylo iOS app 1.3 — released');
+  assert.equal(buildEmbed('5.3', []).title, 'Sylo 5.3 — progress');
 });
 
 test('release progress: a new message is only posted when explicitly allowed', async () => {
@@ -231,4 +252,77 @@ test('release progress: a new message is only posted when explicitly allowed', a
   } finally {
     globalThis.fetch = realFetch;
   }
+});
+
+// Runs the real script with a fake fetch, so the per-milestone loop is covered end to end.
+function runRoadmap(env, { failIssuesFor } = {}) {
+  const preload = `
+    globalThis.fetch = async (url, init = {}) => {
+      const u = new URL(String(url));
+      const json = (status, body) => ({ ok: status < 400, status, json: async () => body });
+      if (u.hostname === 'api.github.com') {
+        if (u.pathname.endsWith('/milestones')) {
+          return json(200, u.searchParams.get('page') === '1'
+            ? [{ number: 1, title: '5.3', state: 'open' }, { number: 2, title: 'iOS 1.3', state: 'open' }]
+            : []);
+        }
+        if (u.searchParams.get('milestone') === ${JSON.stringify(failIssuesFor ?? '')}) return json(500, {});
+        return json(200, []);
+      }
+      console.log('DISCORD ' + (init.method || 'GET') + ' ' + u.pathname + ' ' + JSON.parse(init.body).embeds[0].title);
+      return json(200, { id: 'new-id' });
+    };`;
+  return spawnSync(
+    process.execPath,
+    ['--import', `data:text/javascript,${encodeURIComponent(preload)}`, 'scripts/roadmap.mjs'],
+    {
+      encoding: 'utf8',
+      env: {
+        PATH: process.env.PATH,
+        GITHUB_REPOSITORY: 'o/r',
+        GITHUB_TOKEN: 't',
+        ROADMAP_WEBHOOK_URL: 'https://discord.example/api/webhooks/1/secret-token',
+        ...env,
+      },
+    }
+  );
+}
+
+test('release progress: every listed milestone is updated, each with its own message id', () => {
+  const r = runRoadmap({
+    ROADMAP_MILESTONE: '5.3, iOS 1.3',
+    ROADMAP_VARS: JSON.stringify({ ROADMAP_MESSAGE_ID_5_3: '11', ROADMAP_MESSAGE_ID_IOS_1_3: '22' }),
+  });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /DISCORD PATCH \/api\/webhooks\/1\/secret-token\/messages\/11 Sylo 5\.3 — progress/);
+  assert.match(
+    r.stdout,
+    /DISCORD PATCH \/api\/webhooks\/1\/secret-token\/messages\/22 Sylo iOS app 1\.3 — progress/
+  );
+});
+
+test('release progress: post only creates a message where the id variable is empty', () => {
+  const r = runRoadmap({
+    ROADMAP_MILESTONE: '5.3, iOS 1.3',
+    ROADMAP_ALLOW_POST: 'true',
+    ROADMAP_VARS: JSON.stringify({ ROADMAP_MESSAGE_ID_5_3: '11', ROADMAP_MESSAGE_ID_IOS_1_3: '' }),
+  });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /DISCORD PATCH .*\/messages\/11 Sylo 5\.3/);
+  assert.match(r.stdout, /DISCORD POST \/api\/webhooks\/1\/secret-token Sylo iOS app 1\.3/);
+  assert.equal(r.stdout.match(/DISCORD POST/g).length, 1);
+});
+
+test('release progress: one failing milestone does not stop the others, but the run fails', () => {
+  const r = runRoadmap(
+    {
+      ROADMAP_MILESTONE: '5.3, iOS 1.3',
+      ROADMAP_VARS: JSON.stringify({ ROADMAP_MESSAGE_ID_5_3: '11', ROADMAP_MESSAGE_ID_IOS_1_3: '22' }),
+    },
+    { failIssuesFor: '1' }
+  );
+  assert.equal(r.status, 1);
+  assert.doesNotMatch(r.stdout, /Sylo 5\.3/);
+  assert.match(r.stdout, /messages\/22 Sylo iOS app 1\.3/);
+  assert.match(r.stderr, /failed for 5\.3/);
 });

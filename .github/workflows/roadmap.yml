@@ -1,13 +1,16 @@
 name: Roadmap
 
-# Keeps one Discord message up to date with how far the next release is: the milestone named in the
-# repo variable ROADMAP_MILESTONE (default "5.3"). Merged pull requests and closed issues count as
-# done; an open pull request with the "tested" label counts for five sixths, one with the
-# "ready-for-test" label for four sixths (any label change re-runs it). Every version has
-# its own message: its id is the repo variable ROADMAP_MESSAGE_ID_<version> (5.3 -> ROADMAP_MESSAGE_ID_5_3).
-# Only a manual run with "post" ticked creates a message (its id is in the job log and the summary);
-# every other run only edits the saved one. To start the next version, change ROADMAP_MILESTONE and
-# run once with "post" ticked.
+# Keeps Discord messages up to date with how far the next releases are: one message per milestone in
+# the repo variable ROADMAP_MILESTONE, a comma-separated list (for example "5.3, iOS 1.3"; default
+# "5.3"). Merged pull requests and closed issues count as done; an open pull request with the "tested"
+# label counts for five sixths, one with the "ready-for-test" label for four sixths (any label change
+# re-runs it). Every milestone has its own message: its id is the repo variable
+# ROADMAP_MESSAGE_ID_<slug> (5.3 -> ROADMAP_MESSAGE_ID_5_3, iOS 1.3 -> ROADMAP_MESSAGE_ID_IOS_1_3).
+# The milestones are updated in turn; one failing does not stop the others, but the run then fails.
+# Only a manual run with "post" ticked creates a message (its id is in the job log and the summary),
+# and only for a milestone whose id variable is empty; an existing message is only ever edited. Every
+# other run only edits the saved messages. To start a new milestone, add it to ROADMAP_MILESTONE and run
+# once with "post" ticked and "milestone" set to its title.
 on:
   pull_request:
     types: [closed, labeled, unlabeled, milestoned, demilestoned]
@@ -18,9 +21,13 @@ on:
   workflow_dispatch:
     inputs:
       post:
-        description: 'Post a NEW progress message for ROADMAP_MILESTONE (only used when its message id variable is empty)'
+        description: 'Post a NEW progress message (only for milestones whose message id variable is empty; existing messages are just edited)'
         type: boolean
         default: false
+      milestone:
+        description: 'Only handle this one milestone (for example "iOS 1.3"); empty = every milestone in ROADMAP_MILESTONE'
+        type: string
+        default: ''
 
 permissions:
   issues: read
@@ -46,8 +53,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           ROADMAP_WEBHOOK_URL: ${{ secrets.ROADMAP_WEBHOOK_URL }}
-          ROADMAP_MILESTONE: ${{ vars.ROADMAP_MILESTONE || '5.3' }}
-          # The script picks ROADMAP_MESSAGE_ID_<version> out of the repo variables itself.
+          # A manual run can name one milestone; otherwise every milestone in the repo variable is updated.
+          ROADMAP_MILESTONE: ${{ github.event_name == 'workflow_dispatch' && inputs.milestone || vars.ROADMAP_MILESTONE || '5.3' }}
+          # The script picks ROADMAP_MESSAGE_ID_<slug> out of the repo variables itself.
           ROADMAP_VARS: ${{ toJSON(vars) }}
-          # Only a manual run that ticked "post" may create a message; every other run only edits.
+          # Only a manual run that ticked "post" may create a message, and only for a milestone without a
+          # saved id (the script edits whenever an id is saved, so a message is never posted twice).
           ROADMAP_ALLOW_POST: ${{ github.event_name == 'workflow_dispatch' && inputs.post && 'true' || '' }}
