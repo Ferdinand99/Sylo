@@ -17,6 +17,7 @@ import { settleEndedPost } from './lib/liveAlerts.js';
 import { encodeLiveValue, decodeLiveValue, normaliseOnEnd } from '../lib/liveValue.js';
 import { log } from '../lib/log.js';
 import { every } from './schedule.js';
+import { createPollHealth, httpError, tokenError, withRetry } from './lib/pollErrors.js';
 
 const API = 'https://api.kick.com/public/v1';
 const TOKEN_URL = 'https://id.kick.com/oauth/token';
@@ -69,6 +70,11 @@ export function normaliseKickConfig(raw = {}) {
 
 let token = { value: null, expiresAt: 0 };
 
+/** Forget the cached app token. For tests. */
+export function _resetToken() {
+  token = { value: null, expiresAt: 0 };
+}
+
 async function appToken() {
   if (token.value && Date.now() < token.expiresAt - 60_000) return token.value;
   const body = new URLSearchParams({
@@ -77,28 +83,32 @@ async function appToken() {
     client_secret: config.kickClientSecret,
   });
   const res = await fetch(TOKEN_URL, { method: 'POST', body, signal: AbortSignal.timeout(10_000) });
-  if (!res.ok) throw new Error(`Kick token ${res.status}`);
+  if (!res.ok) throw tokenError('Kick token', res);
   const json = await res.json();
   token = { value: json.access_token, expiresAt: Date.now() + (json.expires_in ?? 3600) * 1000 };
   return token.value;
 }
 
-async function getChannels(slugs) {
+/** One channels request; a network error, 5xx or 429 is retried once (see lib/pollErrors.js). */
+function getChannels(slugs) {
   const url = new URL(`${API}/channels`);
   for (const s of slugs) url.searchParams.append('slug', s);
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${await appToken()}`,
-      'Content-Type': 'application/json',
-    },
-    signal: AbortSignal.timeout(10_000),
+  return withRetry(async () => {
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${await appToken()}`,
+        'Content-Type': 'application/json',
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.status === 401) {
+      token = { value: null, expiresAt: 0 }; // force a refresh next call
+      // A rejected token: it was just cleared, so one retry at once gets a fresh one.
+      throw Object.assign(httpError('Kick', res), { retryNow: true });
+    }
+    if (!res.ok) throw httpError('Kick /channels', res);
+    return (await res.json()).data ?? [];
   });
-  if (res.status === 401) {
-    token = { value: null, expiresAt: 0 }; // force a refresh next call
-    throw new Error('Kick 401');
-  }
-  if (!res.ok) throw new Error(`Kick /channels ${res.status}`);
-  return (await res.json()).data ?? [];
 }
 
 /**
@@ -133,7 +143,8 @@ export function streamKey(channel) {
 
 export function buildPayload(channel, alert) {
   const slug = String(channel.slug).toLowerCase();
-  const url = channel.stream?.url || `https://kick.com/${slug}`;
+  // Always the public channel page: Kick's stream.url is the ingest address, not a watch link.
+  const url = `https://kick.com/${slug}`;
   const name = channel.slug;
   const title = channel.stream_title || 'Live now';
   const game = channel.category?.name || 'something';
@@ -166,7 +177,11 @@ export function buildPayload(channel, alert) {
 
 // --- poll loop -------------------------------------------------------
 
-async function tick() {
+/** Consecutive failed polls: logged once after a few in a row, see lib/pollErrors.js. */
+export const pollHealth = createPollHealth('kick-alerts');
+
+/** One poll; exported for tests. */
+export async function tick() {
   if (!allClientsReady() || !config.kickEnabled) return;
 
   const jobs = [];
@@ -182,9 +197,10 @@ async function tick() {
   try {
     live = await fetchLiveChannels(slugs);
   } catch (err) {
-    log.error('kick-alerts', 'poll failed:', err.message);
+    pollHealth.failed(err);
     return;
   }
+  pollHealth.ok();
 
   for (const { guildId, alert } of jobs) {
     const channel = live.get(alert.slug);
@@ -217,8 +233,6 @@ async function tick() {
 every(
   'kick-alerts',
   POLL_MS,
-  () => {
-    tick().catch((err) => log.error('kick-alerts', 'tick failed:', err.message));
-  },
+  () => tick().catch((err) => log.error('kick-alerts', 'tick failed:', err.message)),
   { firstDelayMs: 30_000 }
 );

@@ -86,11 +86,10 @@ test('resolveYtChannel: a 200 with no recognisable channel id logs a warning', a
   });
 });
 
-test('checkLive: an HTTP error logs a warning and reports not live', async () => {
+test('checkLive: an HTTP error is "unknown" (live: null), not "not live", and is not logged per call', async () => {
   await withMockedFetch({ ok: false, status: 503 }, async (warnings) => {
-    assert.deepEqual(await checkLive(UC), { live: false });
-    assert.equal(warnings.length, 1);
-    assert.match(warnings[0].join(' '), /HTTP 503/);
+    assert.deepEqual(await checkLive(UC), { live: null, status: 503, reason: 'HTTP 503' });
+    assert.equal(warnings.length, 0, 'the poll counts it and warns once per streak');
   });
 });
 
@@ -116,8 +115,8 @@ test('resolveYtChannel: a channel id past the old 300 KB scan cap is still found
   });
 });
 
-test('checkLive: a videoId past the old 300 KB scan cap is still found', async () => {
-  const html = `<html>"isLive":true${PAST_OLD_CAP}<script>"videoId":"abcdefghijk"</script></html>`;
+test('checkLive: a video id and owner past the old 300 KB scan cap is still found', async () => {
+  const html = `<html>"isLive":true${PAST_OLD_CAP}<link rel="canonical" href="https://www.youtube.com/watch?v=abcdefghijk">"pageOwnerDetails":{"name":"x","externalChannelId":"${UC}"}</html>`;
   await withMockedFetch(new Response(html), async (warnings) => {
     assert.deepEqual(await checkLive(UC), { live: true, videoId: 'abcdefghijk', title: 'Live now' });
     assert.equal(warnings.length, 0);
