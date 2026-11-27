@@ -33,10 +33,21 @@ the new owner has confirmed it on that server's page.
    Settings, then Roles, and drags Sylo's role to the very top (Sylo cannot move its own role), and you look again.
    (Without this, a mirrored role with Manage Roles could end up above the mirrored Administrator role.)
 3. To be the owner of the Discord server, and the owner of the Fluxer server to agree (or to own both).
+   The Fluxer server shows up in the picker only if you are its owner.
 
 ## The steps
 
-1. **Ask.** The Discord server's owner opens the Mirror page and enters the id of the Fluxer server.
+1. **Ask.** The Discord server's owner opens the Mirror page and **picks the Fluxer server from a list**. The
+   list holds the Fluxer servers where Sylo is a member and where you are the owner, going by the Fluxer login
+   you connected under Account. Each entry shows the server's name, icon and member count, and a note when Sylo's
+   role there lacks the Administrator permission or is not the top role (the same checks the preview makes; they
+   do not stop you from picking, the preview does). A server that is already part of a mirror is shown but cannot
+   be picked. Picking one fills in the request. If you own the Fluxer server too, both sides agree at once (next
+   step).
+   - **No Fluxer login connected?** The page says "Connect Fluxer under Account to pick your Fluxer servers" and
+     links to Account.
+   - **The Fluxer server belongs to someone else?** Choose **Enter an id instead** and paste the server's id
+     (copy it on Fluxer with Developer Mode on). Its owner then agrees with the code, as below.
 2. **Agree.** Nothing is created until the owner of the Fluxer server has agreed:
    - If you own both servers with your own account (you signed in with Discord and also connected Fluxer under
      Account), both sides agree at once.
@@ -188,6 +199,12 @@ update, and a drag that moves many channels becomes one reorder.
 Looking at the page, the preview and the report needs View access. Everything that changes anything needs the
 server's owner (see the top), on the server the action is made on. Every action looks only at the mirror the server
 is part of, so a code or an id of another server reaches nothing.
+
+The list of Fluxer servers on the Ask step (`GET /api/v2/guilds/<id>/mirror/fluxer-servers`) is asked for only by
+the owner of the Discord server, is rate limited, and names only Fluxer servers that the caller's own Fluxer login
+lists and that Fluxer reports the caller as the owner of. A server somebody else owns is never named, even to its
+Administrators. On an instance with sign-in switched off there is no account to compare, so every Fluxer server Sylo
+is in is listed, as with the other access checks.
 
 ## For the app
 

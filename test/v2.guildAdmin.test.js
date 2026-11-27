@@ -253,6 +253,20 @@ test('snapshot names that are not snapshot file names are refused, and nothing o
   }
 });
 
+test('a restore that sends a confirmation must name the snapshot: a wrong one is refused and nothing is restored', async () => {
+  const name = 'sylo-manual-2026-01-01-00-00-00-000.db';
+  const file = join(backupDir(), name);
+  writeFileSync(file, 'not a database');
+  try {
+    const wrong = await api.postRoot(`/health/backups/${name}/restore`, { confirm: 'sylo-manual-other.db' });
+    assert.equal(wrong.status, 400);
+    assert.match((await wrong.json()).error, /name of the snapshot/);
+    assert.ok(existsSync(file), 'still there, and this process is still running');
+  } finally {
+    rmSync(file, { force: true });
+  }
+});
+
 // --- composed messages and tickets ------------------------------------------------------------
 
 // replaces routes.misc.test.js: "POST /guilds/:id/messages/new saves a draft"

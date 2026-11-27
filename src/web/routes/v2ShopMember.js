@@ -17,6 +17,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { guildByKey, guildKey } from '../../platform/platformOf.js';
 import { isPlatformGuildId, splitPlatformGuildId } from '../../lib/platformId.js';
 import { identityFor } from '../lib/accountAuth.js';
+import { lookRef } from '../lib/publicLook.js';
 import { getGuildModule } from '../../db/modules.js';
 import { collectionPage, listInventory, listItems } from '../../db/economyShop.js';
 import { rarityLabel } from '../../modules/lib/collectibles.js';
@@ -120,6 +121,8 @@ async function shopView({ guild, key, member, config }) {
   }
   return {
     guild: { name: guild.name, id: key },
+    // the server's own look (accent colour, background), see lib/publicLook.js
+    look: await lookRef(key),
     currency: { name: config.currencyName, emoji: config.currencyEmoji },
     balance: { cash: bal.cash, bank: bal.bank, total: bal.total },
     items: items.map((i) => {

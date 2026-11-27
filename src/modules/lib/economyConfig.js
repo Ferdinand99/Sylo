@@ -107,6 +107,20 @@ const cleanText = (v, max) =>
     .trim()
     .slice(0, max);
 
+// Text that may run over several lines (an item's description): the line breaks stay, as a plain \n with at
+// most one blank line in a row; every other control character goes.
+// eslint-disable-next-line no-control-regex
+const CONTROL_KEEP_NEWLINE = /[\u0000-\u0009\u000b-\u001f\u007f]/g;
+const cleanMultiline = (v, max) =>
+  String(v ?? '')
+    .replace(/\r\n?/g, '\n')
+    .replace(CONTROL_KEEP_NEWLINE, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(0, max)
+    .trim();
+
 const isId = (v) => /^\d{17,20}$/.test(String(v ?? ''));
 
 /**
@@ -128,7 +142,7 @@ export function normaliseItem(raw = {}) {
   const collectible = type === 'collectible';
   return {
     name: cleanText(raw.name, LIMITS.itemName.maxLength),
-    description: cleanText(raw.description, LIMITS.itemDescription.maxLength),
+    description: cleanMultiline(raw.description, LIMITS.itemDescription.maxLength),
     emoji: cleanText(raw.emoji, LIMITS.itemEmoji.maxLength),
     type,
     roleId: roleType && isId(raw.roleId) ? String(raw.roleId) : null,

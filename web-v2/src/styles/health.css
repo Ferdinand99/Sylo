@@ -75,3 +75,30 @@
 .v2-module-health-notice:empty {
   display: none;
 }
+
+/* ---- Database role: the warning at the top of "Database & backups" and in the restore dialog ---------- */
+.v2-role-warning {
+  margin: 0 0 16px;
+}
+.v2-role-warning .v2-callout-title {
+  color: var(--text);
+}
+.v2-role-details {
+  margin-top: 6px;
+  color: var(--text-muted);
+}
+.v2-role-details summary {
+  display: inline-block;
+  cursor: pointer;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.v2-role-details p {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+/* The warning in the dialog sits between the question and the type-to-confirm field. */
+.v2-restore-warning {
+  margin: 12px 0 0;
+}

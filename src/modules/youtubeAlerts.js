@@ -25,12 +25,26 @@ import { settleEndedPost } from './lib/liveAlerts.js';
 import { normaliseOnEnd } from '../lib/liveValue.js';
 import { parseFeed as parseGenericFeed, grab, decodeEntities } from '../bot/lib/feed.js';
 import { log } from '../lib/log.js';
-import { readTextCapped } from '../lib/safeFetch.js';
+import { readTextCapped, SafeFetchError } from '../lib/safeFetch.js';
 import { every } from './schedule.js';
+import {
+  FeedUnavailableError,
+  feedDue,
+  recordFeedFailure,
+  recordFeedSuccess,
+  pruneFeedHealth,
+  liveDue,
+  liveNotFoundFor,
+  recordLiveFailure,
+  recordLiveSuccess,
+  pruneLiveHealth,
+} from './lib/youtubeFeedHealth.js';
 
 const FEED = 'https://www.youtube.com/feeds/videos.xml?channel_id=';
 const COLOR = 0xff0000;
 const POLL_MS = 3 * 60_000;
+/** A live page that has answered 404 this long without a break is gone for good: the stream is over. */
+const LIVE_GIVE_UP_MS = 6 * 60 * 60_000;
 const UA = 'Mozilla/5.0 (compatible; Sylo-Discord-Bot/1.0; +https://github.com/Ferdinand99/Sylo)';
 
 // feed.js's grab() defaults to a 300 KB scan cap, sized for RSS/Atom feed
@@ -185,13 +199,34 @@ export function parseFeed(xml) {
     .filter(Boolean);
 }
 
+/**
+ * Fetch and parse a channel's feed. A failure that is not ours (an HTTP error status, a timeout, a
+ * dropped connection) throws FeedUnavailableError, which the poll counts quietly (see
+ * lib/youtubeFeedHealth.js); anything else, such as a parser bug, throws as it is and is logged.
+ */
 async function fetchFeed(ytChannelId) {
-  const res = await fetch(FEED + ytChannelId, {
-    headers: { 'User-Agent': UA },
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!res.ok) throw new Error(`YT feed ${res.status}`);
-  return parseFeed(await readTextCapped(res, MAX_PAGE_BYTES));
+  let res;
+  try {
+    res = await fetch(FEED + ytChannelId, {
+      headers: { 'User-Agent': UA },
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (err) {
+    const timedOut = err?.name === 'TimeoutError' || err?.name === 'AbortError';
+    throw new FeedUnavailableError(timedOut ? 'timeout' : `network error: ${err?.message ?? err}`);
+  }
+  if (!res.ok) {
+    await res.body?.cancel?.().catch(() => {});
+    throw new FeedUnavailableError(`YT feed ${res.status}`, res.status);
+  }
+  let xml;
+  try {
+    xml = await readTextCapped(res, MAX_PAGE_BYTES);
+  } catch (err) {
+    if (err instanceof SafeFetchError) throw err; // a body past our cap is not a transient failure
+    throw new FeedUnavailableError(`network error: ${err?.message ?? err}`);
+  }
+  return parseFeed(xml);
 }
 
 // --- live check ------------------------------------------------------
@@ -313,9 +348,12 @@ function readLivePage(html, ytChannelId) {
 }
 
 /**
- * Is the channel live? `live: null` means unknown: the page does not say whose video it shows, so
- * nothing is announced and a running live post is left alone.
- * @returns {Promise<{ live: boolean|null, videoId?: string, title?: string, reason?: string }>}
+ * Is the channel live? `live: null` means unknown: the page could not be read (an HTTP error, a
+ * timeout, a body past the cap), which is not the same as "not live" and must not end a live post.
+ * It is also unknown when the page does not say whose video it shows (issue #377): nothing is
+ * announced then either.
+ * The caller counts it (lib/youtubeFeedHealth.js) instead of a log line per failure.
+ * @returns {Promise<{ live: boolean|null, videoId?: string, title?: string, status?: number, reason?: string }>}
  */
 export async function checkLive(ytChannelId) {
   try {
@@ -324,18 +362,17 @@ export async function checkLive(ytChannelId) {
       signal: AbortSignal.timeout(10_000),
       redirect: 'follow',
     });
-    // Not-ok is a real fetch problem (blocked/rate-limited/etc.) — worth a
-    // log, unlike "not currently live", which is the normal, frequent
-    // outcome of this poll and would just be noise.
+    // Not-ok is a real fetch problem (blocked/rate-limited/etc.), unlike "not currently live",
+    // which is the normal, frequent outcome of this poll. Unknown, never "not live".
     if (!res.ok) {
-      log.warn('youtube-alerts', `live check ${ytChannelId}: HTTP ${res.status}`);
-      return { live: false };
+      await res.body?.cancel?.().catch(() => {});
+      return { live: null, status: res.status, reason: `HTTP ${res.status}` };
     }
     const html = await readTextCapped(res, MAX_PAGE_BYTES);
     return readLivePage(html, ytChannelId);
   } catch (err) {
-    log.warn('youtube-alerts', `live check ${ytChannelId}: ${err.message}`);
-    return { live: false };
+    const timedOut = err?.name === 'TimeoutError' || err?.name === 'AbortError';
+    return { live: null, reason: timedOut ? 'timeout' : String(err?.message ?? err) };
   }
 }
 
@@ -412,44 +449,110 @@ async function tick() {
   if (!allClientsReady()) return;
   await pruneYoutube();
 
+  // One clock for the whole pass: the backoff compares it with the clock of the last pass, so a slow
+  // earlier alert must not push a later one past its slot.
+  const now = Date.now();
+  const watchedFeeds = new Set();
+  const watchedLive = new Set();
   for (const guild of allGuilds()) {
     if (!(await isModuleEnabled(guildKey(guild), 'youtube-alerts'))) continue;
     const cfg = normaliseYoutubeConfig((await getGuildModule(guildKey(guild), 'youtube-alerts')).config);
     for (const alert of cfg.alerts) {
+      if (alert.onVideo) watchedFeeds.add(alert.ytChannelId);
+      if (alert.onLive) watchedLive.add(alert.ytChannelId);
       try {
-        await runAlert(guildKey(guild), alert);
+        await runAlert(guildKey(guild), alert, now);
       } catch (err) {
         log.error('youtube-alerts', `${alert.ytChannelId}:`, err.message);
       }
     }
   }
+  // Only after a whole pass: a channel nobody watches any more must not keep its failure count.
+  pruneFeedHealth(watchedFeeds);
+  pruneLiveHealth(watchedLive);
 }
 
-export async function runAlert(guildId, alert) {
+/**
+ * Poll one channel's feed and announce what is new. A feed that cannot be reached is counted, not
+ * logged (lib/youtubeFeedHealth.js), and polled less often until it answers. Nothing is marked
+ * seen meanwhile, so the poll that gets an answer announces whatever was missed.
+ * @returns {Promise<boolean>} whether the feed was read (false: backing off, or it failed)
+ */
+async function pollFeed(guildId, alert, now) {
   const c = alert.ytChannelId;
-
-  if (alert.onVideo) {
-    const entries = await fetchFeed(c);
-    if (!(await hasSeenAny(guildId, c))) {
-      // First poll for this channel — seed everything without alerting.
-      for (const e of entries) await markVideoSeen(guildId, c, e.videoId);
-    } else {
-      // Alert oldest-first for anything new. Only marked seen once the send
-      // actually succeeds, so a failed delivery (missing permissions, a
-      // deleted channel, a transient API error, …) retries on the next poll
-      // instead of being silently and permanently dropped.
-      for (const e of [...entries].reverse()) {
-        await announceVideo(guildId, alert, e);
-      }
+  if (!feedDue(c, now)) return false;
+  let entries;
+  try {
+    entries = await fetchFeed(c);
+  } catch (err) {
+    if (!(err instanceof FeedUnavailableError)) throw err;
+    recordFeedFailure(c, err, POLL_MS, now);
+    return false;
+  }
+  recordFeedSuccess(c);
+  if (!(await hasSeenAny(guildId, c))) {
+    // First poll for this channel — seed everything without alerting.
+    for (const e of entries) await markVideoSeen(guildId, c, e.videoId);
+  } else {
+    // Alert oldest-first for anything new. Only marked seen once the send
+    // actually succeeds, so a failed delivery (missing permissions, a
+    // deleted channel, a transient API error, …) retries on the next poll
+    // instead of being silently and permanently dropped.
+    for (const e of [...entries].reverse()) {
+      await announceVideo(guildId, alert, e);
     }
   }
+  return true;
+}
+
+/** The stream is over: forget it and settle its "is live" post the way the alert is set up to. */
+async function endLivePost(guildId, alert, c) {
+  const post = await livePost(guildId, c);
+  await markNotLive(guildId, c);
+  await settleEndedPost({
+    guildId,
+    onEnd: alert.onEnd,
+    post,
+    name: alert.name || 'A channel',
+    url: post?.videoId ? `https://www.youtube.com/watch?v=${post.videoId}` : undefined,
+  });
+}
+
+/** @param {number} [now]  for tests: the clock the feed backoff reads */
+export async function runAlert(guildId, alert, now = Date.now()) {
+  const c = alert.ytChannelId;
+
+  // A dead feed does not stop the live check below: that reads another page.
+  const feedRead = alert.onVideo ? await pollFeed(guildId, alert, now) : true;
 
   if (alert.onLive) {
+    // The live branch marks the stream as seen, which would make an alert whose feed was never read
+    // look seeded: the first good feed poll would then announce every old upload. Wait for the seed.
+    if (!feedRead && !(await hasSeenAny(guildId, c))) return;
+    // A page that cannot be read leaves a running live post alone (below), but not for ever: once it
+    // has answered 404 without a break for hours, the channel is gone and the stream with it. Checked
+    // before the backoff gate, so every server that watches the channel ends its own post.
+    if (liveNotFoundFor(c, now, LIVE_GIVE_UP_MS) && (await liveVideoId(guildId, c))) {
+      await endLivePost(guildId, alert, c);
+    }
+    if (!liveDue(c, now)) return;
     const state = await checkLive(c);
-    // Unknown, not "not live": leave a running live post alone and do not announce again.
-    if (state.live === null) return;
+    if (state.live === null) {
+      // Unknown, not "not live": leave a running live post alone and do not announce again.
+      recordLiveFailure(
+        c,
+        new FeedUnavailableError(state.reason ?? 'unknown', state.status ?? null),
+        POLL_MS,
+        now
+      );
+      return;
+    }
+    recordLiveSuccess(c);
     const known = await liveVideoId(guildId, c);
     if (state.live && state.videoId !== known) {
+      // A new stream replaces a known one (it was restarted while the page could not be read): the
+      // earlier post is over and is settled once the new one is out.
+      const earlier = known ? await livePost(guildId, c) : null;
       const name = alert.name || 'A channel';
       const url = `https://www.youtube.com/watch?v=${state.videoId}`;
       const posted = await postToChannel(
@@ -471,17 +574,18 @@ export async function runAlert(guildId, alert) {
       if (posted) {
         await markVideoSeen(guildId, c, state.videoId); // don't also fire a "new video" for the same stream
         await markLive(guildId, c, state.videoId, posted);
+        if (earlier) {
+          await settleEndedPost({
+            guildId,
+            onEnd: alert.onEnd,
+            post: earlier,
+            name,
+            url: earlier.videoId ? `https://www.youtube.com/watch?v=${earlier.videoId}` : undefined,
+          });
+        }
       }
     } else if (!state.live && known) {
-      const post = await livePost(guildId, c);
-      await markNotLive(guildId, c);
-      await settleEndedPost({
-        guildId,
-        onEnd: alert.onEnd,
-        post,
-        name: alert.name || 'A channel',
-        url: post?.videoId ? `https://www.youtube.com/watch?v=${post.videoId}` : undefined,
-      });
+      await endLivePost(guildId, alert, c);
     }
   }
 }
@@ -489,8 +593,7 @@ export async function runAlert(guildId, alert) {
 every(
   'youtube-alerts',
   POLL_MS,
-  () => {
-    tick().catch((err) => log.error('youtube-alerts', 'tick failed:', err.message));
-  },
+  // Returned, so the scheduler sees a tick that is still running and skips the next one.
+  () => tick().catch((err) => log.error('youtube-alerts', 'tick failed:', err.message)),
   { firstDelayMs: 40_000 }
 );

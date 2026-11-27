@@ -59,7 +59,8 @@ test('fetchChangelogBlock: a huge file gives null, not a huge read', async () =>
 
 test('YouTube pages: a huge page is dropped (live check and channel lookup)', async () => {
   const live = hugeResponse(50);
-  assert.deepEqual(await withFetch(live.response, () => checkLive('UC' + 'a'.repeat(22))), { live: false });
+  const state = await withFetch(live.response, () => checkLive('UC' + 'a'.repeat(22)));
+  assert.equal(state.live, null, 'a page past the cap is unknown, not "not live"');
   assert.ok(live.pulled.count < 10, `live check stopped early (read ${live.pulled.count} MB)`);
 
   const page = hugeResponse(50);
