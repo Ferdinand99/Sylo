@@ -23,6 +23,7 @@ import { log } from '../lib/log.js';
 // Owners of the tables swept below, for their Postgres bootstrap.
 import './tickets.js';
 import './cache.js';
+import { sweepCodes, sweepMappings } from './bridge.js';
 
 const DAY_MS = 86_400_000;
 const MAX_DAYS = 3650; // 10 years — matches the dashboard input cap
@@ -87,6 +88,12 @@ export async function sweepRetention(now = Date.now()) {
 
   const orphanedTicketMessages = (await delOrphanedTicketMsgs.run()).changes;
   const staleStats = (await delStaleStats.run(now - STATS_KEEP_MS)).changes;
+
+  // The bridge's message map keeps a message for 30 days (edits, deletes and replies follow it that
+  // long), and a request nobody accepted is gone after its 15 minutes. Not part of the result: this
+  // is housekeeping of a table the bridge owns.
+  await sweepMappings(now);
+  await sweepCodes(now);
 
   const result = { closedTickets, ticketMessages, inactiveCases, orphanedTicketMessages, staleStats };
   if (result.closedTickets || result.inactiveCases) {

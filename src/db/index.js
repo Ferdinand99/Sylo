@@ -1595,6 +1595,99 @@ export const MIGRATIONS = [
       database.exec('ALTER TABLE appeals ADD COLUMN decided_by_user_id TEXT;');
   },
 
+  // The server's own look on the public member pages (src/db/publicLook.js, which bootstraps the same tables
+  // on Postgres): an accent colour and a background choice per server, and the picture of the background
+  // (an upload, or a copy of the server's invite splash that Sylo keeps itself). One picture per source.
+  (database) => {
+    database.exec(`
+      CREATE TABLE guild_public_look (
+        guild_id   TEXT PRIMARY KEY,
+        accent     TEXT NOT NULL DEFAULT '',
+        background TEXT NOT NULL DEFAULT 'none',
+        updated_at INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE public_look_images (
+        guild_id   TEXT NOT NULL,
+        source     TEXT NOT NULL,
+        hash       TEXT NOT NULL,
+        mime       TEXT NOT NULL,
+        bytes      INTEGER NOT NULL,
+        data       BLOB NOT NULL,
+        origin     TEXT NOT NULL DEFAULT '',
+        checked_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, source)
+      );
+    `);
+  },
+  // 82: the open tickets of one user across servers (the DM ticket lookup asks for them first). Postgres
+  // creates the same index in its bootstrap (db/tickets.js).
+  (database) => {
+    database.exec(
+      `CREATE INDEX IF NOT EXISTS idx_tickets_user_open ON tickets (user_id) WHERE status = 'open';`
+    );
+  },
+
+  // Bridge (src/db/bridge.js, which bootstraps the same tables on Postgres): the links between a Discord
+  // channel and a Fluxer channel, the one-time codes that start one (only the hash is kept) and the map
+  // from a message to its copy on the other side (swept after 30 days by the retention job).
+  (database) => {
+    database.exec(`
+      CREATE TABLE bridge_links (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_a           TEXT NOT NULL,
+        channel_a         TEXT NOT NULL,
+        guild_b           TEXT NOT NULL,
+        channel_b         TEXT NOT NULL,
+        status            TEXT NOT NULL DEFAULT 'active',
+        paused_side       TEXT NOT NULL DEFAULT '',
+        fail_reason       TEXT NOT NULL DEFAULT '',
+        failure_count     INTEGER NOT NULL DEFAULT 0,
+        options_a         TEXT NOT NULL DEFAULT '{}',
+        options_b         TEXT NOT NULL DEFAULT '{}',
+        hook_a_id         TEXT NOT NULL DEFAULT '',
+        hook_a_token      TEXT NOT NULL DEFAULT '',
+        hook_b_id         TEXT NOT NULL DEFAULT '',
+        hook_b_token      TEXT NOT NULL DEFAULT '',
+        requested_by_name TEXT NOT NULL DEFAULT '',
+        accepted_by_name  TEXT NOT NULL DEFAULT '',
+        owner_a           TEXT NOT NULL DEFAULT '',
+        owner_b           TEXT NOT NULL DEFAULT '',
+        created_at        INTEGER NOT NULL,
+        updated_at        INTEGER NOT NULL
+      );
+      CREATE UNIQUE INDEX idx_bridge_links_a ON bridge_links (guild_a, channel_a);
+      CREATE UNIQUE INDEX idx_bridge_links_b ON bridge_links (guild_b, channel_b);
+      CREATE INDEX idx_bridge_links_guild_b ON bridge_links (guild_b);
+      CREATE TABLE bridge_codes (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id          TEXT NOT NULL,
+        channel_id        TEXT NOT NULL,
+        code_hash         TEXT NOT NULL,
+        options           TEXT NOT NULL DEFAULT '{}',
+        requested_by_name TEXT NOT NULL DEFAULT '',
+        guild_owner       TEXT NOT NULL DEFAULT '',
+        expires_at        INTEGER NOT NULL,
+        created_at        INTEGER NOT NULL
+      );
+      CREATE UNIQUE INDEX idx_bridge_codes_hash ON bridge_codes (code_hash);
+      CREATE INDEX idx_bridge_codes_guild ON bridge_codes (guild_id);
+      CREATE TABLE bridge_messages (
+        link_id       INTEGER NOT NULL,
+        origin        TEXT NOT NULL,
+        a_message_id  TEXT NOT NULL,
+        b_message_id  TEXT NOT NULL,
+        copy_hook_id  TEXT NOT NULL DEFAULT '',
+        content_hash  TEXT NOT NULL DEFAULT '',
+        extra         TEXT NOT NULL DEFAULT '{}',
+        created_at    INTEGER NOT NULL,
+        PRIMARY KEY (link_id, a_message_id)
+      );
+      CREATE UNIQUE INDEX idx_bridge_messages_b ON bridge_messages (link_id, b_message_id);
+      CREATE INDEX idx_bridge_messages_created ON bridge_messages (created_at);
+    `);
+  },
+
   // Migration 84 of the 5.3 line (it follows the bridge's 83 once both are merged; the entry is the next one
   // in this list whichever migrations sit before it): the server mirror (src/db/mirror.js, which bootstraps
   // the same tables on Postgres). Pairs of a Discord and a Fluxer server, the id map between their channels,

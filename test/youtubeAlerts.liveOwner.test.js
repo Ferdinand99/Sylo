@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { checkLive, runAlert } from '../src/modules/youtubeAlerts.js';
 import { markLive, liveVideoId } from '../src/db/youtubeAlerts.js';
 import { runtime } from '../src/runtime.js';
+import { _resetFeedHealthForTests } from '../src/modules/lib/youtubeFeedHealth.js';
 
 const OWN = 'UC' + 'o'.repeat(22);
 const OTHER = 'UC' + 'z'.repeat(22);
@@ -169,6 +170,7 @@ let sends = [];
 let nextGuild = 900000000000000500n;
 let GUILD_ID = '';
 beforeEach(() => {
+  _resetFeedHealthForTests();
   sends = [];
   GUILD_ID = String((nextGuild += 1n));
   const channel = {

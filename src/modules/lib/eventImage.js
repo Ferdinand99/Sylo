@@ -15,7 +15,17 @@
 //
 // Answers are kept in memory for a short while so a page that is opened often does not make Sylo
 // fetch the same image every time. The memory is bounded: at most MAX_ENTRIES entries and
-// MAX_TOTAL_BYTES of image data, oldest out first; a failure is remembered for a shorter time.
+// MAX_TOTAL_BYTES of image data; a failure is remembered for a shorter time.
+//
+// One server must not be able to use all of it, or to make Sylo download over and over. Every entry
+// belongs to the server (the `owner`) whose page asked for it:
+//  - a server may hold at most MAX_OWNER_BYTES and MAX_OWNER_ENTRIES; past that its own oldest
+//    entries go, never another server's;
+//  - when the whole memory is full, the entries of the server that holds the most go first;
+//  - a server may start at most OWNER_FETCHES_PER_MINUTE downloads a minute (a failure counts), and
+//    the whole instance at most MAX_CONCURRENT_DOWNLOADS at once. A request over those limits
+//    gets no image (the page leaves it out) and starts no download.
+// So a server with more large images than its share only ever refetches its own, at a bounded rate.
 // An entry that has passed its time is also removed, not just ignored: a sweep runs every
 // SWEEP_MS (and on every use), so nothing stays in memory more than about a minute past its time.
 import { safeFetch } from '../../lib/safeFetch.js';
@@ -29,6 +39,12 @@ export const FAILED_TTL_MS = 60_000;
 export const SWEEP_MS = 60_000;
 export const MAX_ENTRIES = 64;
 export const MAX_TOTAL_BYTES = 16 * 1024 * 1024;
+/** One server's share of the memory. */
+export const MAX_OWNER_BYTES = 4 * 1024 * 1024;
+export const MAX_OWNER_ENTRIES = 16;
+/** Downloads one server may start per minute, and downloads running at once for all servers. */
+export const OWNER_FETCHES_PER_MINUTE = 20;
+export const MAX_CONCURRENT_DOWNLOADS = 8;
 
 /** The types Sylo serves: what the bytes of the file must show. */
 const SIGNATURES = [
@@ -61,8 +77,11 @@ export function _setImageFetcher(fn) {
   fetcher = fn ?? safeFetch;
 }
 
-/** @type {Map<string, { at: number, type: string | null, body: Buffer | null }>} */
+/** @type {Map<string, { at: number, owner: string | null, type: string | null, body: Buffer | null }>} */
 const cache = new Map();
+/** owner -> { start, count }: downloads started in the current minute. */
+const fetchWindows = new Map();
+let running = 0;
 /** @type {Map<string, Promise<{ type: string, body: Buffer } | null>>} */
 const inflight = new Map();
 let cachedBytes = 0;
@@ -71,6 +90,7 @@ let cachedBytes = 0;
 export function _clearImageCache() {
   cache.clear();
   inflight.clear();
+  fetchWindows.clear();
   cachedBytes = 0;
 }
 /** Tests only: how much is held. */
@@ -85,25 +105,82 @@ export function sweepImageCache(now = Date.now()) {
     cachedBytes -= entry.body?.length ?? 0;
     cache.delete(key);
   }
+  for (const [owner, w] of fetchWindows) if (now - w.start >= 60_000) fetchWindows.delete(owner);
 }
 every('events', SWEEP_MS, () => sweepImageCache());
 
+/** What one owner holds. */
+function usage(owner) {
+  let entries = 0;
+  let bytes = 0;
+  for (const e of cache.values()) {
+    if (e.owner !== owner) continue;
+    entries += 1;
+    bytes += e.body?.length ?? 0;
+  }
+  return { entries, bytes };
+}
+
+function evict(key) {
+  cachedBytes -= cache.get(key)?.body?.length ?? 0;
+  cache.delete(key);
+}
+
+/** The oldest entry of an owner other than `keep`, or undefined. */
+function oldestOf(owner, keep) {
+  for (const [key, e] of cache) if (e.owner === owner && key !== keep) return key;
+  return undefined;
+}
+
 function remember(url, entry) {
   sweepImageCache();
-  const old = cache.get(url);
-  if (old) {
-    cachedBytes -= old.body?.length ?? 0;
-    cache.delete(url);
-  }
+  if (cache.has(url)) evict(url);
   cache.set(url, entry);
   cachedBytes += entry.body?.length ?? 0;
-  // Oldest out first (a Map keeps insertion order) until both bounds hold.
-  for (const key of cache.keys()) {
-    if (cache.size <= MAX_ENTRIES && cachedBytes <= MAX_TOTAL_BYTES) break;
-    if (key === url) continue;
-    cachedBytes -= cache.get(key).body?.length ?? 0;
-    cache.delete(key);
+  // The owner's own share first: its oldest entries go (a Map keeps insertion order).
+  for (;;) {
+    const u = usage(entry.owner);
+    if (u.entries <= MAX_OWNER_ENTRIES && u.bytes <= MAX_OWNER_BYTES) break;
+    const victim = oldestOf(entry.owner, url);
+    if (victim === undefined) break;
+    evict(victim);
   }
+  // Then the whole memory: the holder with the most of whatever limit was hit gives up its oldest
+  // entry first. Too many entries: the one with the most entries (tiny images and remembered
+  // failures count there). Too many bytes: the one with the most bytes. Ranking by bytes when it
+  // is the entry limit that was hit would let tiny entries push out the one real image of another
+  // server.
+  while (cache.size > MAX_ENTRIES || cachedBytes > MAX_TOTAL_BYTES) {
+    const byEntries = cache.size > MAX_ENTRIES;
+    const held = new Map();
+    for (const e of cache.values()) {
+      const h = held.get(e.owner) ?? { bytes: 0, entries: 0 };
+      h.bytes += e.body?.length ?? 0;
+      h.entries += 1;
+      held.set(e.owner, h);
+    }
+    const key = byEntries ? 'entries' : 'bytes';
+    const other = byEntries ? 'bytes' : 'entries';
+    const order = [...held].sort((x, y) => y[1][key] - x[1][key] || y[1][other] - x[1][other]);
+    const victim = order.map(([owner]) => oldestOf(owner, url)).find((k) => k !== undefined);
+    if (victim === undefined) break;
+    evict(victim);
+  }
+}
+
+/** May this owner start another download now? Counts it when yes. */
+function mayDownload(owner) {
+  if (running >= MAX_CONCURRENT_DOWNLOADS) return false;
+  if (owner === null) return true;
+  const now = Date.now();
+  let w = fetchWindows.get(owner);
+  if (!w || now - w.start >= 60_000) {
+    w = { start: now, count: 0 };
+    fetchWindows.set(owner, w);
+  }
+  if (w.count >= OWNER_FETCHES_PER_MINUTE) return false;
+  w.count += 1;
+  return true;
 }
 
 async function download(url) {
@@ -131,21 +208,28 @@ async function download(url) {
 /**
  * The image behind a link, or null when it may not be fetched or the fetch fails.
  * @param {unknown} link  an address from the event or the server, never from a visitor
+ * @param {string | null} [owner]  the server the page belongs to: its share of the memory and
+ *   its download budget (see the top of the file); null for none
  * @returns {Promise<{ type: string, body: Buffer } | null>}
  */
-export async function loadImage(link) {
+export async function loadImage(link, owner = null) {
   const url = trustedImageUrl(link);
   if (!url) return null;
   sweepImageCache();
   const hit = cache.get(url);
   if (hit) return hit.body ? { type: hit.type, body: hit.body } : null;
   if (inflight.has(url)) return inflight.get(url);
+  if (!mayDownload(owner)) return null; // over the limits: no image now, and nothing is started
+  running += 1;
   const pending = download(url)
     .then((image) => {
-      remember(url, { at: Date.now(), type: image?.type ?? null, body: image?.body ?? null });
+      remember(url, { at: Date.now(), owner, type: image?.type ?? null, body: image?.body ?? null });
       return image;
     })
-    .finally(() => inflight.delete(url));
+    .finally(() => {
+      running -= 1;
+      inflight.delete(url);
+    });
   inflight.set(url, pending);
   return pending;
 }

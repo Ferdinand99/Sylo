@@ -11,6 +11,7 @@ import { fluxerReactionAdd } from '../platform/fluxerEvents.js';
 import { beginModeration } from '../modules/lib/messageModeration.js';
 import { log } from '../lib/log.js';
 import { syncAdminSnapshot, syncNewOwner } from './lib/adminSnapshot.js';
+import { noteGuildJoin } from './lib/guildJoins.js';
 import { restoreOldRoles } from '../platform/compat.js';
 
 const keyOf = (rawGuildId) => (rawGuildId ? makePlatformGuildId('fluxer', rawGuildId) : null);
@@ -117,7 +118,11 @@ export function registerFluxerModuleEvents(
 
   on('inviteCreate', (invite) => send('inviteCreate', invite.guildSnapshot?.id, invite));
   on('inviteDelete', (payload) => send('inviteDelete', payload.guildId, payload));
-  on('guildCreate', (guild) => send('guildCreate', guild.id, guild));
+  on('guildCreate', (guild) => {
+    // The dashboard looks for the new server on the lists of the people who run it (src/web/lib/guildListRefresh.js).
+    noteGuildJoin('fluxer', keyOf(guild.id), guild, { ready: client.isReady?.() !== false });
+    return send('guildCreate', guild.id, guild);
+  });
   on('guildDelete', async (guild) => {
     // Also fires when a guild merely becomes unavailable; don't wipe data then.
     if (guild.available === false) return;

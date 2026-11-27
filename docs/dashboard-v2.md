@@ -26,7 +26,7 @@ note.
 
 ## What the dashboard shows
 
-- **Sidebar shows only what's turned on.** Instead of listing all 43 modules
+- **Sidebar shows only what's turned on.** Instead of listing all 44 modules
   with an on/off dot, the sidebar lists just the modules enabled for whichever
   server you're looking at, grouped the same way the Dashboard/Overview page
   groups them. Turn a module on from Overview and it appears in the sidebar
@@ -81,6 +81,31 @@ imported yet; embed messages, the shop and member data are not in the file at
 all. A step that posts a message (verification, honeypot) or updates AutoMod is
 named in the preview before you confirm. Each import is written to the audit
 log.
+
+## Public pages
+
+Server settings → **Public pages** (Edit access only) gives the pages your members open without the dashboard their
+own look: the application form (and the web shop), the ban appeal, the quote page and the two leaderboards. Two
+things change and nothing else: the **accent colour** (buttons, links and highlights) and a **background**. The
+background is none, a picture you upload (PNG, JPEG or WebP, at most 2 MB; Sylo stores a re-encoded copy without
+metadata, at most 1920 pixels wide, and serves it itself), or the server's **invite background** on Discord or
+Fluxer: Sylo downloads it once, keeps its own copy, checks it once a day and serves it itself, so a visitor's
+browser never talks to Discord or Fluxer. The settings show a live preview of the application form page. The section
+is saved with the Settings page's own Save bar, so leaving the page with unsaved changes here asks first, like any other
+form. On a phone the page keeps a margin around its panel so the picture shows on every side.
+
+What stays Sylo's: the layout, the type, the components, the light and dark themes, the readability and the small
+"Powered by Sylo" link (to sylobot.com) at the bottom of every public page, which cannot be turned off. The page always
+sits on a semi-opaque card over a dim overlay (a light veil in the light theme, and an all but opaque panel, so Sylo's
+own text stays readable on any picture; fully opaque for visitors who ask for reduced transparency). The accent is held
+to 3:1 against the card for fills, borders and focus rings: below that it is not used in that theme (the light or the
+dark one), Sylo's own colour stays there, and the settings say so. Where the accent is used as text (links, the active
+pill, top ranks) the pages use a text colour made from it: the accent itself when it reaches 4.5:1 on the card and the
+page, otherwise the same hue lightened (dark theme) or darkened (light theme) until it does. The text on a button
+fill is black or white, whichever reads better, also when hovered. The dashboard and the Sylo app are never restyled.
+The event pages take no server look, because they carry no server address on purpose. The file addresses are
+`/look/<server>.<hash>.css` and `.webp`; the style sheet is kept by caches for a year (its address is its content),
+a picture for a day. The content security policy is unchanged (styles and images from Sylo only).
 
 ## Duplicate and templates
 

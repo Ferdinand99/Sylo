@@ -19,10 +19,12 @@ import { listCleanupSchedules } from '../../db/channelCleanup.js';
 import { listGithubWatches } from '../../db/githubWatches.js';
 import { listItems } from '../../db/economyShop.js';
 import { listForms } from '../../db/applications.js';
+import { bridgeProblems, bridgedChannels } from '../../modules/bridge.js';
 import { guildSupports, platformOfGuild, rawGuildId } from '../../platform/platformOf.js';
 import { healthFor } from '../../lib/healthCache.js';
 import { sourceLabel } from '../../modules/rss.js';
 import { v2CardHref } from './overviewSummary.js';
+import { deadFeedFor } from '../../modules/lib/youtubeFeedHealth.js';
 import { log } from '../../lib/log.js';
 import { mirrorHealthChecks } from '../../mirror/health.js';
 
@@ -45,6 +47,7 @@ const LABELS = {
   ManageRoles: 'Manage Roles',
   ManageChannels: 'Manage Channels',
   ManageNicknames: 'Manage Nicknames',
+  ManageWebhooks: 'Manage Webhooks',
   ManageGuild: 'Manage Server',
   ModerateMembers: 'Timeout Members',
   KickMembers: 'Kick Members',
@@ -68,6 +71,7 @@ const ids = (v) => [...new Set(arr(v).map(String).filter(isId))];
 //   { type: 'channel', id, label, perms, severity, ... }    permissions in one channel
 //   { type: 'role',    id, label, action, channelId? }      a role Sylo gives ('give'), takes away
 //                                                           ('remove') or pings ('ping')
+//   { type: 'feed',    id, label, severity }                a YouTube feed that has been missing for a day
 
 const guildPerm = (perm, why, severity = ERROR) => ({ type: 'guild', perm, why, severity });
 // `part` keeps two needs on the same channel apart when they must not merge (an image that may be
@@ -96,6 +100,17 @@ const alertNeeds = (rows, { channelKey, nameOf, embedOf = () => true }) =>
     post(a?.[channelKey], `The channel for ${nameOf(a)}`, { embed: embedOf(a), field: channelKey }),
     ping(a?.roleId, `The ping role for ${nameOf(a)}`, a?.[channelKey], 'roleId'),
   ]);
+
+/** A YouTube channel whose feed has answered 404 for a day (kept in memory by the poll), or null. */
+const deadFeed = (a) =>
+  a && a.onVideo !== false && deadFeedFor(String(a.ytChannelId ?? ''))
+    ? {
+        type: 'feed',
+        id: String(a.ytChannelId),
+        label: a.name || String(a.ytChannelId),
+        severity: WARNING,
+      }
+    : null;
 
 const ACTION_PERM = {
   timeout: ['ModerateMembers', 'time members out'],
@@ -241,6 +256,16 @@ export const NEEDS = {
     arr(cfg.boards).map((b) =>
       post(b?.channelId, `The channel of ${b?.name || 'a starboard'}`, { field: 'channelId' })
     ),
+  // The bridge makes and uses a webhook in each bridged channel, and says things in it.
+  // Manage Messages is optional: it lets Sylo remove a copy as the bot when the webhook that posted it is gone.
+  bridge: (_cfg, x) =>
+    arr(x.channels).flatMap((id) => [
+      post(id, 'A bridged channel', { embed: false, extra: ['ManageWebhooks'] }),
+      inChannel(id, 'A bridged channel (to remove copies when their webhook is gone)', ['ManageMessages'], {
+        severity: WARNING,
+        part: 'delete',
+      }),
+    ]),
   introductions: (cfg) => [
     post(cfg.channelId, 'The introductions channel', { extra: ['ReadMessageHistory'], field: 'channelId' }),
     post(cfg.promptChannelId, 'The prompt channel', { optional: true, field: 'promptChannelId' }),
@@ -389,8 +414,13 @@ export const NEEDS = {
       nameOf: (a) => a?.slug || 'a streamer',
       embedOf: (a) => !a?.plainText,
     }),
-  'youtube-alerts': (cfg) =>
-    alertNeeds(cfg.alerts, { channelKey: 'discordChannelId', nameOf: (a) => a?.name || 'a YouTube channel' }),
+  'youtube-alerts': (cfg) => [
+    ...alertNeeds(cfg.alerts, {
+      channelKey: 'discordChannelId',
+      nameOf: (a) => a?.name || 'a YouTube channel',
+    }),
+    ...arr(cfg.alerts).map(deadFeed),
+  ],
   // The report is cached and shown to every access level, and a feed URL can carry a token: label a feed by
   // its name or its host, never its full address.
   rss: (cfg) =>
@@ -424,6 +454,10 @@ const EXTRAS = {
   'channel-cleanup': async (guildId) => ({ cleanup: await listCleanupSchedules(guildId) }),
   reminders: async (guildId) => ({ reminders: await listScheduled(guildId) }),
   github: async (guildId) => ({ githubWatches: await listGithubWatches(guildId) }),
+  bridge: async (guildId) => ({
+    channels: await bridgedChannels(guildId),
+    problems: await bridgeProblems(guildId),
+  }),
 };
 
 // --- comparing a need with what Sylo can do ---------------------------------------------------
@@ -493,6 +527,20 @@ function channelCheck(base, need, guild, me) {
     permissions: missing,
     message: `${need.label} (${where}): Sylo is missing ${list(missing)}.`,
     fix: `In ${where}'s permissions, allow Sylo's role ${list(missing)}, or pick another channel.`,
+  };
+}
+
+function feedCheck(base, need) {
+  return {
+    ...base,
+    severity: need.severity,
+    kind: 'feed-unavailable',
+    code: 'youtube-feed-not-found',
+    targetKind: 'youtube-channel',
+    targetId: need.id,
+    targetName: need.label,
+    message: `YouTube can't find the feed for ${need.label}.`,
+    fix: 'Check that the channel still exists, or update its id.',
   };
 }
 
@@ -630,8 +678,9 @@ export async function buildHealthReport(guild, { modules } = {}) {
     const mod = getModule(def.id);
     const cfg = row?.config && typeof row.config === 'object' ? row.config : {};
     let needs;
+    let x;
     try {
-      const x = EXTRAS[def.id] ? await EXTRAS[def.id](guild.id) : {};
+      x = EXTRAS[def.id] ? await EXTRAS[def.id](guild.id) : {};
       needs = needsOf(cfg, x, guild).filter(Boolean);
     } catch (err) {
       log.warn('health', `could not read the settings of ${def.id} (${guild.id})`, err);
@@ -649,11 +698,28 @@ export async function buildHealthReport(guild, { modules } = {}) {
           ? guildCheck(moduleBase, need, me)
           : need.type === 'channel'
             ? channelCheck(moduleBase, need, guild, me)
-            : roleCheck(moduleBase, need, guild, me);
+            : need.type === 'feed'
+              ? feedCheck(moduleBase, need)
+              : roleCheck(moduleBase, need, guild, me);
       if (check) {
         if (need.field) check.field = need.field;
         checks.push(check);
       }
+    }
+    // A bridged channel Sylo stopped (a lost permission, a webhook it could not remake, ...) is a problem to fix.
+    for (const problem of def.id === 'bridge' ? arr(x.problems) : []) {
+      const channel = guild.channels?.cache?.get(problem.channelId);
+      checks.push({
+        ...moduleBase,
+        severity: ERROR,
+        kind: 'bridge-stopped',
+        code: 'bridge-stopped',
+        targetKind: 'channel',
+        targetId: problem.channelId,
+        targetName: channel?.name ?? null,
+        message: `The bridge of ${channel ? channelName(channel) : 'a channel'} stopped: ${problem.text}`,
+        fix: 'Fix the cause, then press Resume for that channel on the Bridge page.',
+      });
     }
     // A role to give or take away also needs Manage Roles, once per module, not once per role.
     if (needs.some((n) => n.type === 'role' && n.action !== 'ping')) {

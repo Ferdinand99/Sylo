@@ -195,12 +195,17 @@ const INBOX_SAME_PAGE = new Set(['applications', 'suggestions']);
 // Inbox entries whose queue is another page than the module's settings: the settings keep an entry.
 const SETTINGS_SUFFIX = new Set(['tickets', 'appeals']);
 
+// What the focused moderator view keeps of "Members & moderation": every page here only needs View to
+// read, and its actions are guarded by the server; the leaderboard is not a moderation tool.
+const FOCUSED_PEOPLE = new Set(['moderation', 'member-data']);
+
 /**
  * The sidebar as groups. `guildId` is null before a server is picked (links are then null and shown
  * disabled). `operator` is whether the server marks the viewer as the bot owner (OWNER_IDS): the bot
- * pages (Bot personalizer, Health, Roadmap admin, Stats cache) only exist for them.
+ * pages (Bot personalizer, Health, Roadmap admin, Stats cache) only exist for them. `focused` is the
+ * moderator view for an Inbox-level person (see useAccess in access.jsx).
  */
-export function navModel({ guildId, data, operator }) {
+export function navModel({ guildId, data, operator, focused = false }) {
   const g = (path) => (guildId ? `/guilds/${guildId}${path}` : null);
   const waiting = data?.attention?.waiting ?? {};
   const count = (n) => (Number(n) > 0 ? Number(n) : 0);
@@ -283,5 +288,55 @@ export function navModel({ guildId, data, operator }) {
         { key: 'stats', label: 'Game stats cache', icon: 'chart', href: '/stats' },
       ]
     : [];
+  if (focused) {
+    // The focused moderator view (an Inbox-level person): the inboxes whose module is on and the moderation
+    // tools, nothing about setting the server up. A card the overview does not list counts as on. Operators
+    // keep their bot pages.
+    const cards = new Map((data?.groups ?? []).flatMap((grp) => grp.cards ?? []).map((c) => [c.id, c]));
+    const off = (key) => Boolean(cards.get(key)?.hasToggle && !cards.get(key).enabled);
+    return {
+      top: [],
+      inbox: inbox.filter((it) => !off(it.key)),
+      people: people.filter((it) => FOCUSED_PEOPLE.has(it.key)),
+      modules: [],
+      server: [],
+      more: [],
+      bot,
+    };
+  }
   return { top, inbox, people, modules, server, more, bot };
+}
+
+/**
+ * Where a server opens for a person in the focused moderator view: the first inbox whose module is on
+ * (tickets, appeals, applications, suggestions); the Moderation hub when none is; the tickets while the
+ * overview is not known (it did not load), as the default.
+ * @returns {string} an address relative to the dashboard base
+ */
+export function focusedLanding(guildId, data) {
+  const first = navModel({ guildId, data, operator: false, focused: true }).inbox[0];
+  if (first) return first.href;
+  return `/guilds/${guildId}${data ? '/moderation' : '/tickets'}`;
+}
+
+// The pages of the focused view; a server switch keeps the page only when the focused view lists it.
+const FOCUSED_SUBPATHS = [
+  '/tickets',
+  '/appeals',
+  '/applications',
+  '/m/applications',
+  '/m/suggestions',
+  '/moderation',
+  '/member-data',
+];
+
+/**
+ * The page to open in another server when switching from a server page: the same page, except in a
+ * server where the person is in the focused view and that view does not list it (then the server opens
+ * on its own landing).
+ */
+export function switchSubpath(subpath, { access, showEverything = false } = {}) {
+  if (!subpath || access !== 'inbox' || showEverything) return subpath ?? '';
+  const ok = FOCUSED_SUBPATHS.some((p) => subpath === p || subpath.startsWith(`${p}/`));
+  return ok ? subpath : '';
 }

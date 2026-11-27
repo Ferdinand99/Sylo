@@ -9,6 +9,7 @@
 // from a channel that has become private since (re-checked when the page is drawn, see
 // nowPrivateChannels).
 import { Router } from 'express';
+import { lookFor } from '../lib/publicLook.js';
 import { guildByKey } from '../../platform/platformOf.js';
 import { isPlatformGuildId } from '../../lib/platformId.js';
 import { getGuildModule } from '../../db/modules.js';
@@ -86,6 +87,7 @@ router.get('/:guildId', async (req, res, next) => {
       limit: PAGE_SIZE,
     });
 
+    res.locals.look = await lookFor(guildId);
     res.render('quotes', {
       guild: { name: guild.name, icon: guild.iconURL?.({ size: 64 }) ?? null },
       quotes: rows.map((r) => ({

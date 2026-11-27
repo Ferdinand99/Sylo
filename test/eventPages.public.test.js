@@ -264,6 +264,10 @@ test('an event past its end is ended even before the clock tick has closed it', 
   assert.match(await page(running), /ev-badge ev-upcoming">Upcoming</);
 });
 
+// The one outward link every public page has: "Powered by Sylo", with rel="noreferrer" so the address of the page
+// (and the token in it) is never sent on. The event page takes no server look: it has no server id in it.
+const POWERED_BY = /<a href="https:\/\/sylobot\.com" rel="noopener noreferrer">Powered by Sylo<\/a>/;
+
 test('no host, no member, no role, no channel and no id of any kind', async () => {
   const html = await page(ev);
   for (const secret of [HOST, ...MEMBERS, '100000000000000700', CH.general, GID]) {
@@ -272,7 +276,8 @@ test('no host, no member, no role, no channel and no id of any kind', async () =
   assert.doesNotMatch(html, /\b\d{17,20}\b/, 'nothing that looks like a snowflake');
   assert.doesNotMatch(html, /user-\d{4}/, 'no display names or tags');
   assert.doesNotMatch(html, /<@|<#|host|Host|participant|Participant/i);
-  assert.doesNotMatch(html, /<a [^>]*href="https?:/i, 'no outward links');
+  assert.match(html, POWERED_BY);
+  assert.doesNotMatch(html.replace(POWERED_BY, ''), /<a [^>]*href="https?:/i, 'no outward links but one');
   assert.doesNotMatch(html, new RegExp(`#${ev.id}\\b`), 'not even the event number');
 });
 
@@ -313,7 +318,7 @@ test('the page holds no third-party address and no id: the icon and the image ar
   const html = await page(withImage);
   assert.ok(html.includes(`src="/events/${withImage.public_token}/icon"`), 'the icon through Sylo');
   assert.ok(html.includes(`src="/events/${withImage.public_token}/image"`), 'the image through Sylo');
-  assert.doesNotMatch(html, /https?:\/\//, 'no address of anyone else');
+  assert.doesNotMatch(html.replace(POWERED_BY, ''), /https?:\/\//, 'no address of anyone else');
   assert.doesNotMatch(html, /discordapp/);
   assert.doesNotMatch(html, /\b\d{17,20}\b/, 'none of the ids in the image links');
   assert.ok(!html.includes(GID) && !html.includes(CH.general) && !html.includes('100000000000000042'));

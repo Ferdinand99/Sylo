@@ -25,6 +25,7 @@ export const ROUTE_ACCESS = Object.freeze({
   'GET /guilds': 'self',
   'GET /account': 'self',
   'POST /account/devices/:id/revoke': 'self',
+  'POST /account/refresh-guilds': 'self',
   'POST /account/disconnect/:platform': 'self',
   'POST /account/delete': 'self',
   'GET /changelog': 'self',
@@ -134,6 +135,9 @@ export const ROUTE_ACCESS = Object.freeze({
   'POST /health/backups/:name/delete': 'operator',
   'POST /health/backups/import': 'operator',
   'POST /health/backups/:name/restore': 'operator',
+  'GET /update': 'operator',
+  'POST /update/wren/approve': 'operator',
+  'GET /update/wren/runs/:id': 'operator',
   'GET /roadmap': 'self',
   'POST /roadmap/:id/vote': 'self',
   'POST /roadmap/suggest': 'self',
@@ -199,6 +203,16 @@ export const ROUTE_ACCESS = Object.freeze({
   'POST /apply/:guildId/:formId/submit': 'member',
   'POST /apply/:guildId/:formId/withdraw': 'member',
 
+  // v2Bridge.js
+  'GET /guilds/:guildId/modules/bridge/config': 'view',
+  'POST /guilds/:guildId/modules/bridge/request': 'edit',
+  'POST /guilds/:guildId/modules/bridge/requests/:id/cancel': 'edit',
+  'POST /guilds/:guildId/modules/bridge/accept': 'edit',
+  'POST /guilds/:guildId/modules/bridge/links/:id/options': 'edit',
+  'POST /guilds/:guildId/modules/bridge/links/:id/pause': 'edit',
+  'POST /guilds/:guildId/modules/bridge/links/:id/resume': 'edit',
+  'POST /guilds/:guildId/modules/bridge/links/:id/unlink': 'edit',
+
   // v2Economy.js
   'GET /guilds/:guildId/modules/economy/config': 'view',
   'POST /guilds/:guildId/modules/economy/config': 'edit',
@@ -258,6 +272,12 @@ export const ROUTE_ACCESS = Object.freeze({
   'POST /guilds/:guildId/modules/economy/shop/items/:id/delete': 'edit',
   'POST /guilds/:guildId/modules/economy/shop/items/:id/image': 'edit',
   'POST /guilds/:guildId/modules/economy/shop/items/:id/image/delete': 'edit',
+  // v2PublicLook.js: the server's look on its public pages. Edit only, the read too.
+  'GET /guilds/:guildId/public-page-look': 'edit',
+  'POST /guilds/:guildId/public-page-look': 'edit',
+  'POST /guilds/:guildId/public-page-look/image': 'edit',
+  'POST /guilds/:guildId/public-page-look/image/delete': 'edit',
+  'POST /guilds/:guildId/public-page-look/splash/refresh': 'edit',
   'GET /guilds/:guildId/modules/economy/members/:userId/inventory': 'view',
   'POST /guilds/:guildId/modules/economy/members/:userId/inventory/grant': 'edit',
   'POST /guilds/:guildId/modules/economy/members/:userId/inventory/:rowId/revoke': 'edit',

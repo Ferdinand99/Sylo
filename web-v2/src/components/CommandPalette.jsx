@@ -1,8 +1,10 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { searchInbox, searchMembers } from '../api.js';
+import { useAccess } from '../access.jsx';
 import { useOverview } from '../OverviewContext.jsx';
 import { useOperator } from '../useOperator.js';
+import { switchSubpath } from '../overviewModel.js';
 import { groupItems, paletteItems, rankItems, readRecent, rememberRecent } from '../paletteModel.js';
 import { parseMemberIds } from './MemberPicker.jsx';
 import { Icon } from './icons.jsx';
@@ -105,6 +107,7 @@ function PaletteDialog({ onClose, guildId, guilds }) {
   const { data: shared, dataGuildId } = useOverview();
   const data = dataGuildId === guildId ? shared : null;
   const operator = useOperator();
+  const { focused, showEverything } = useAccess();
   const dialogRef = useRef(null);
   const settled = useRef(false);
   const closeTimer = useRef(null);
@@ -116,8 +119,8 @@ function PaletteDialog({ onClose, guildId, guilds }) {
   const [recent] = useState(readRecent);
 
   const items = useMemo(
-    () => paletteItems({ guildId, data, operator, guilds }),
-    [guildId, data, operator, guilds]
+    () => paletteItems({ guildId, data, operator, guilds, focused }),
+    [guildId, data, operator, guilds, focused]
   );
   const found = useServerMatches(guildId, text);
   // A pasted member id (or a mention) is a place to open without asking the server.
@@ -182,7 +185,7 @@ function PaletteDialog({ onClose, guildId, guilds }) {
     let href = item.href;
     if (item.key.startsWith('guild:')) {
       const m = pathname.match(GUILD_PAGE);
-      if (m) href = `${item.href}${m[1] ?? ''}`;
+      if (m) href = `${item.href}${switchSubpath(m[1], { access: item.access, showEverything })}`;
     }
     navigate(href);
     finish();

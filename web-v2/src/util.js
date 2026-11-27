@@ -24,6 +24,27 @@ export function writeLastGuildId(guildId) {
   }
 }
 
+// An Inbox person's choice to see the whole dashboard instead of the focused moderator view. One choice
+// for this browser, which belongs to one person.
+const SHOW_EVERYTHING_KEY = 'sylo:v2:showEverything';
+
+export function readShowEverything() {
+  try {
+    return localStorage.getItem(SHOW_EVERYTHING_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function writeShowEverything(on) {
+  try {
+    if (on) localStorage.setItem(SHOW_EVERYTHING_KEY, '1');
+    else localStorage.removeItem(SHOW_EVERYTHING_KEY);
+  } catch {
+    // ignore — this is just a convenience
+  }
+}
+
 const THEME_KEY = 'sylo:v2:theme';
 
 /** 'light' or 'dark' — null means "no explicit choice yet", so the default applies. */
