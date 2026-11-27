@@ -59,6 +59,22 @@ export function mixHex(a, b, t) {
   return `#${x.map((c, i) => hex2(c + (y[i] - c) * t)).join('')}`;
 }
 
+/**
+ * The veil over a background picture and how much of the page colour the panel keeps over it, per theme. The same
+ * numbers as --look-dim and --look-panel in public.css (test/publicLook.readability.test.js reads the style sheet and
+ * fails when they differ).
+ */
+export const LOOK_VEIL = Object.freeze({ dark: ['#000000', 0.58], light: ['#f5f5f7', 0.5] });
+export const LOOK_PANEL = Object.freeze({ dark: 0.9, light: 0.99 });
+
+/** The panel colour over the darkest and over the lightest picture a server could choose. */
+export function panelSurfaces(theme) {
+  const [veil, alpha] = LOOK_VEIL[theme];
+  return ['#000000', '#ffffff'].map((picture) =>
+    mixHex(mixHex(picture, veil, alpha), PAGE[theme], LOOK_PANEL[theme])
+  );
+}
+
 /** The accent as a text colour in a theme (the same rule as the server: 4.5:1 on card, page and both tinted). */
 export function accentText(accent, theme) {
   const backs = [
@@ -66,6 +82,8 @@ export function accentText(accent, theme) {
     PAGE[theme],
     mixHex(CARD[theme], accent, 0.14),
     mixHex(PAGE[theme], accent, 0.14),
+    // Over a background picture the panel is not fully opaque: the darkest and the lightest picture show through.
+    ...panelSurfaces(theme).flatMap((s) => [s, mixHex(s, accent, 0.14)]),
   ];
   const ok = (c) => backs.every((b) => contrast(c, b) >= MIN_TEXT_CONTRAST);
   if (ok(accent)) return accent;

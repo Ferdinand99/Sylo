@@ -10,8 +10,11 @@ import {
   CARD,
   PAGE,
   accentHover,
+  LOOK_PANEL,
+  LOOK_VEIL,
   accentText,
   contrast,
+  panelSurfaces,
   effectiveAccentText,
   lookCss,
   mixHex,
@@ -251,3 +254,41 @@ for (const [where, sheets] of Object.entries(surfaces)) {
     }
   }
 }
+
+test('accent text keeps 4.5:1 on the panel and its pill over the lightest and the darkest background picture', () => {
+  for (const c of colours) {
+    for (const theme of ['dark', 'light']) {
+      const text = accentText(c, theme);
+      for (const surface of panelSurfaces(theme)) {
+        for (const [name, back] of [
+          ['panel', surface],
+          ['pill on the panel', mixHex(surface, c, 0.14)],
+        ]) {
+          assert.ok(
+            contrast(text, back) >= 4.5,
+            `${c} as ${theme} text on the ${name}: ${text} ${contrast(text, back)}`
+          );
+        }
+      }
+    }
+  }
+  // the reported case: blurple on the light theme over a picture was 4.45:1 on the active period pill
+  const text = accentText('#5865f2', 'light');
+  for (const surface of panelSurfaces('light')) {
+    assert.ok(contrast(text, mixHex(surface, '#5865f2', 0.14)) >= 4.5);
+  }
+});
+
+test("the panel numbers the accent rule uses are the style sheet's own", () => {
+  const sheet = { dark: tokens(publicCss, ':root'), light: tokens(publicCss, ":root[data-theme='light']") };
+  for (const theme of ['dark', 'light']) {
+    const dim = /rgba\((\d+), (\d+), (\d+), ([\d.]+)\)/.exec(sheet[theme]['--look-dim']);
+    assert.equal(
+      hex([Number(dim[1]), Number(dim[2]), Number(dim[3])]),
+      LOOK_VEIL[theme][0],
+      `${theme} veil colour`
+    );
+    assert.equal(Number(dim[4]), LOOK_VEIL[theme][1], `${theme} veil strength`);
+    assert.equal(Number.parseFloat(sheet[theme]['--look-panel']) / 100, LOOK_PANEL[theme], `${theme} panel`);
+  }
+});
