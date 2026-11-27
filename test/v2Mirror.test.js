@@ -80,6 +80,9 @@ test('the owner of the Discord server asks; the owner of the Fluxer server agree
     ['discord', true, null, true]
   );
   assert.ok(!('candidates' in empty), 'the Fluxer servers come from their own route');
+  assert.equal(empty.beta, true); // Mirror is a beta page: the page and the app show the Beta mark
+  const overview = await (await anna.get(`/guilds/${D_GUILD}/overview`)).json();
+  assert.deepEqual(overview.betaPages, ['mirror']);
 
   const res = await anna.post(`/guilds/${D_GUILD}/mirror/request`, { targetGuildId: F_GUILD });
   assert.equal(res.status, 200);

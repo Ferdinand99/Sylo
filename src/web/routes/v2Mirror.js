@@ -16,6 +16,7 @@ import { splitPlatformGuildId, makePlatformGuildId } from '../../lib/platformId.
 import { PAIR_STATUS, pairsOfGuild, updatePair } from '../../db/mirror.js';
 import { recordAudit } from '../../db/audit.js';
 import { accessRouter } from '../middleware/access.js';
+import { isBeta } from '../../modules/registry.js';
 import { adminGuildIds, currentUser, userIdForGuild } from '../middleware/auth.js';
 import { identityFor } from '../lib/accountAuth.js';
 import { isGuildOwner } from '../lib/guildOwner.js';
@@ -141,6 +142,8 @@ async function stateOf(req) {
     progress: found ? await mirror.progress(found.pair) : null,
     defaults: DEFAULT_OPTIONS,
     limits: { emoji: FLUXER_LIMITS.emoji, stickers: FLUXER_LIMITS.stickers },
+    // Mirror is a beta page (BETA_PAGES in registry.js): the page and the Sylo app show the same Beta mark.
+    beta: isBeta('mirror'),
   };
 }
 

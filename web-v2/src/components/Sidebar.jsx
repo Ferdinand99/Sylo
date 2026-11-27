@@ -5,6 +5,7 @@ import { useOverview } from '../OverviewContext.jsx';
 import { useOperator } from '../useOperator.js';
 import { navModel } from '../overviewModel.js';
 import { Icon } from './icons.jsx';
+import { BetaTag } from './Beta.jsx';
 
 // Below this width the sidebar is an off-canvas drawer (styles.css).
 const DRAWER_QUERY = '(max-width: 860px)';
@@ -55,6 +56,7 @@ function NavLinks({ items, pathname, onClose, title, separated = false }) {
           >
             <Icon name={it.icon} />
             <span>{it.label}</span>
+            {it.beta ? <BetaTag className="v2-sidebar-beta-pill" /> : null}
             {it.count ? (
               <span className="v2-sidebar-count" aria-label={`${it.count} waiting`}>
                 {it.count > 99 ? '99+' : it.count}
@@ -186,12 +188,7 @@ export default function Sidebar({ activeGuildId, open, onClose, returnFocusRef }
                     aria-current={pathname === card.href ? 'page' : undefined}
                     onClick={onClose}
                   >
-                    {card.name}{' '}
-                    {card.beta ? (
-                      <span className="v2-sidebar-beta-pill" title="New module — behavior may still change">
-                        Beta
-                      </span>
-                    ) : null}
+                    {card.name} {card.beta ? <BetaTag className="v2-sidebar-beta-pill" /> : null}
                   </Link>
                 ))}
               </div>

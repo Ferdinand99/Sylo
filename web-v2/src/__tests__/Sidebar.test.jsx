@@ -48,6 +48,25 @@ afterEach(() => {
 });
 
 describe('Sidebar', () => {
+  it('draws a Beta pill on the Mirror entry and on a beta module, and nowhere else', () => {
+    const d = data('Welcome & leave', 0);
+    d.betaPages = ['mirror'];
+    d.groups[0].cards.push({
+      id: 'bridge',
+      name: 'Bridge',
+      hasToggle: true,
+      enabled: true,
+      beta: true,
+      lines: [],
+    });
+    useOverview.mockReturnValue({ data: d, dataGuildId: A });
+    renderAt(`/guilds/${A}`, A);
+    expect(within(screen.getByRole('link', { name: /Mirror to Fluxer/ })).getByText('Beta')).toBeTruthy();
+    expect(within(screen.getByRole('link', { name: /Bridge/ })).getByText('Beta')).toBeTruthy();
+    expect(within(screen.getByRole('link', { name: /Welcome & leave/ })).queryByText('Beta')).toBeNull();
+    expect(within(screen.getByRole('link', { name: 'Server settings' })).queryByText('Beta')).toBeNull();
+  });
+
   it('leaves out the server groups until a server is chosen', () => {
     useOverview.mockReturnValue({ data: null, dataGuildId: null });
     renderAt('/', null);

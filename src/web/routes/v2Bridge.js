@@ -11,6 +11,7 @@ import { currentUser, userIdForGuild } from '../middleware/auth.js';
 import { clientKey, platformActionLimit, rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { GuildOwnerError, isGuildOwner, requireGuildOwner } from '../lib/guildOwner.js';
+import { isBeta } from '../../modules/registry.js';
 import { sweepMap } from '../../lib/sweepMap.js';
 import {
   BridgeError,
@@ -83,6 +84,8 @@ const noteWrong = (req) => {
 const overview = async (req) => ({
   ...(await bridgeOverview(req.guild.id)),
   owner: isGuildOwner(req, req.guild.id),
+  // Bridge is a beta module (registry.js): the page and the Sylo app show the same Beta mark.
+  beta: isBeta('bridge'),
 });
 
 // The person must be able to view, read and send in the channel themselves (Edit access alone is not enough:

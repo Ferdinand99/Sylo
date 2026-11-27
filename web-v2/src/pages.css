@@ -986,6 +986,17 @@ a.v2-stat.is-link:focus-visible {
   vertical-align: middle;
 }
 
+/* The one-line note at the top of a beta page. */
+.v2-beta-note {
+  margin: 0 0 12px;
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
 /* ---------- Infractions: the warn form ---------- */
 .v2-warn-fields {
   align-items: flex-start;

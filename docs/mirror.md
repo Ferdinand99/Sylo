@@ -1,4 +1,6 @@
-# Mirror to Fluxer
+# Mirror to Fluxer (beta)
+
+**Beta.** This feature is new and may still have rough edges. Report problems in the Sylo Discord.
 
 A server that lives on Discord can get a copy on Fluxer. Sylo reads the Discord server and builds the same
 categories, channels, roles, emoji and stickers on a Fluxer server you made, then keeps the copy in step when you

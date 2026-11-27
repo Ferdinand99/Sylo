@@ -98,6 +98,22 @@ beforeEach(() => {
 });
 
 describe('Mirror: the Discord server', () => {
+  it('marks the page as beta with a short note, only when the server says so', async () => {
+    api.getMirror.mockResolvedValue(state({ beta: true }));
+    api.getMirrorFluxerServers.mockResolvedValue(choices([choice()]));
+    const first = renderAtGuild(<Mirror />, GUILD);
+    expect(await screen.findByRole('heading', { name: 'Mirror to Fluxer Beta' })).toBeTruthy();
+    expect(screen.getByTestId('beta-note').textContent).toBe(
+      'Beta: this feature is new and may still have rough edges. Report problems in the Sylo Discord.'
+    );
+    first.unmount();
+
+    api.getMirror.mockResolvedValue(state({ beta: false }));
+    renderAtGuild(<Mirror />, GUILD);
+    expect(await screen.findByRole('heading', { name: 'Mirror to Fluxer' })).toBeTruthy();
+    expect(screen.queryByTestId('beta-note')).toBeNull();
+  });
+
   it('asks for a mirror with the id of the Fluxer server, and shows the one-time code that comes back', async () => {
     api.getMirror.mockResolvedValue(state());
     api.getMirrorFluxerServers.mockResolvedValue(choices([choice()]));

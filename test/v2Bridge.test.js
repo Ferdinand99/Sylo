@@ -172,6 +172,7 @@ test('the overview lists channels, shows what is set up, and says when the modul
   assert.equal(data.enabled, true);
   assert.deepEqual(data.limits, { links: 100, requests: 5 });
   assert.deepEqual(data.links, []);
+  assert.equal(data.beta, true); // Bridge is a beta module: the page and the app show the Beta mark
   assert.deepEqual(
     data.channels.map((c) => [c.name, c.ageRestricted, c.taken]),
     [
