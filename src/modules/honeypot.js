@@ -93,16 +93,39 @@ function canManageBait(channel, me) {
   return Boolean(channel.permissionsFor(me)?.has(BAIT_PERMS));
 }
 
-/** The trap message's embed — a "Catches" field labeled by the row's own
- * punishment action (e.g. "Bans: 14") so it reflects what actually happens
- * here, not a generic counter. */
-function baitEmbed(row) {
+/** The "Catches" text for one channel: the bait message row's count plus the
+ * channel-trap row's count for the same channel, since both catch members in
+ * that channel. One "Kicks: 3" line per action that has catches (the bait
+ * row's action first). The two row kinds keep separate stored counts; the dashboard reads
+ * those, so only the embed adds them together. */
+function catchesText(messageRow, channelRow) {
+  const totals = new Map();
+  for (const r of [messageRow, channelRow]) {
+    if (!r) continue;
+    const act = ACTION_LABELS[r.action] ? r.action : 'kick';
+    totals.set(act, (totals.get(act) ?? 0) + (r.triggerCount || 0));
+  }
+  // An action with no catches is left out (a second trap that never fired is
+  // noise on a public message); a fresh trap still reads "Kicks: 0".
+  const lines = [...totals].filter(([, n]) => n > 0);
+  const shown = lines.length ? lines : [[[...totals.keys()][0], 0]];
+  return shown.map(([act, n]) => `${ACTION_LABELS[act]}: ${n}`).join('\n');
+}
+
+/** The trap message's embed — a "Catches" field labeled by the punishment
+ * action (e.g. "Bans: 14") so it reflects what actually happens here, not a
+ * generic counter. Counts every catch in the channel: the bait row's, plus the
+ * channel-trap row's when the same channel is also a trap channel. */
+function baitEmbed(row, channelRow) {
   return new EmbedBuilder()
     .setColor(0xed4245)
     .setTitle('🍯 Do not send messages / react here')
     .setDescription(row.bait || '​')
-    .addFields({ name: 'Catches', value: `${ACTION_LABELS[row.action]}: ${row.triggerCount ?? 0}` });
+    .addFields({ name: 'Catches', value: catchesText(row, channelRow) });
 }
+
+const channelRowFor = (config, channelId) =>
+  (Array.isArray(config?.channels) ? config.channels : []).find((c) => c.channelId === channelId);
 
 /** Apply the configured punishment, log a case, and post to the mod-log.
  * @returns {string|null} a short description of what happened, or null if
@@ -160,57 +183,120 @@ async function punish(guild, member, entry, reason) {
 // bumpHoneypotStat does a read-modify-write (fetch config, bump the count,
 // save it back) — two triggers landing close enough together could both read
 // before either writes and lose an increment. Chaining each call onto the
-// previous one for the same row, instead of letting them run concurrently,
-// closes that without needing a real lock.
+// previous one for the same guild, instead of letting them run concurrently,
+// closes that without needing a real lock. The whole honeypot config is one
+// stored value, so a channel-trap bump and a bait-message bump (separate rows)
+// must queue behind each other too, not just bumps of the same row. Only the
+// read-modify-write sits in the queue; the Discord calls that refresh the bait
+// message run after it (see renderBait), so a slow edit never holds up the
+// next catch's count.
 const honeypotBumpQueue = new Map();
 
 export async function bumpHoneypotStat(guild, kind, channelId) {
-  const key = `${guildKey(guild)}:${kind}:${channelId}`;
+  const key = guildKey(guild);
   const run = (honeypotBumpQueue.get(key) ?? Promise.resolve()).then(() =>
-    bumpHoneypotStatOnce(guild, kind, channelId)
+    persistHoneypotBump(guild, kind, channelId)
   );
   // Swallow here so one failed bump doesn't jam the queue for the next
-  // caller on the same row — this call's own `await` still sees the rejection.
+  // bump in the same guild — this call's own `await` still sees the rejection.
   honeypotBumpQueue.set(
     key,
     run.catch(() => {})
   );
-  return run;
+  const hasBait = await run;
+  if (hasBait) await renderBait(guild, channelId);
 }
 
 /**
  * Bumps a row's triggerCount and persists it — re-reads the config fresh
  * (not the stale copy the dispatch handler was called with) so a rapid
- * back-to-back trigger on the same row doesn't clobber the other's count.
- * For a message row, also re-renders the live trap message so the visible
- * "Bans: N" (or Kicks/Timeouts) count is never stale.
+ * back-to-back trigger doesn't clobber the other's count.
+ * @returns {boolean} whether the channel has a live bait message to refresh,
+ *   whichever kind of row was bumped.
  */
-async function bumpHoneypotStatOnce(guild, kind, channelId) {
+async function persistHoneypotBump(guild, kind, channelId) {
   const fresh = (await getGuildModule(guildKey(guild), 'honeypot')).config;
   const list = Array.isArray(fresh[kind]) ? fresh[kind] : [];
   const row = list.find((r) => r.channelId === channelId);
-  if (!row) return;
+  if (!row) return false;
   row.triggerCount = (row.triggerCount || 0) + 1;
   await setGuildModule(guildKey(guild), 'honeypot', { config: { ...fresh, [kind]: list } });
+  return Boolean(baitRowFor(fresh, channelId)?.messageId);
+}
 
-  if (kind !== 'messages' || !row.messageId) return;
+const baitRowFor = (config, channelId) =>
+  (Array.isArray(config?.messages) ? config.messages : []).find((m) => m.channelId === channelId);
+
+// One refresh of a channel's bait message at a time. A catch that lands while a
+// refresh is running does not start a second one: it asks the running one to go
+// round again, which re-reads the stored counts, so a burst of catches costs a
+// few edits instead of one per catch and the last edit always shows the total.
+const baitRenders = new Map();
+
+function renderBait(guild, channelId) {
+  const key = `${guildKey(guild)}:${channelId}`;
+  const running = baitRenders.get(key);
+  if (running) {
+    running.again = true;
+    return running.done;
+  }
+  const state = { again: false, done: null };
+  state.done = (async () => {
+    try {
+      do {
+        state.again = false;
+        await renderBaitOnce(guild, channelId);
+      } while (state.again);
+    } catch (err) {
+      log.error('module:honeypot', 'updating the live catch count failed:', err.message);
+    } finally {
+      baitRenders.delete(key);
+    }
+  })();
+  baitRenders.set(key, state);
+  return state.done;
+}
+
+// The "missing permissions" warning repeats on every catch in a raid, so it is
+// logged at most once an hour per channel.
+const PERM_WARN_INTERVAL_MS = 3_600_000;
+const permWarnedAt = new Map();
+
+/** Test hook: forget which channels already logged the permission warning. */
+export function resetBaitPermWarnings() {
+  permWarnedAt.clear();
+}
+
+/**
+ * Re-renders the channel's live bait message from the stored counts, so its
+ * visible "Bans: N" (or Kicks/Timeouts) count — the bait row's plus the
+ * channel-trap row's — is never stale.
+ */
+async function renderBaitOnce(guild, channelId) {
+  const fresh = (await getGuildModule(guildKey(guild), 'honeypot')).config;
+  const baitRow = baitRowFor(fresh, channelId);
+  if (!baitRow?.messageId) return;
   const channel =
     guild.channels.cache.get(channelId) ?? (await guild.channels.fetch(channelId).catch(() => null));
   if (!channel?.isTextBased()) return;
   if (!canManageBait(channel, guild.members.me)) {
-    log.warn(
-      'module:honeypot',
-      `missing permissions (need ${BAIT_PERMS.join(', ')}) to update the live catch count in #${channel.name ?? channelId}`
-    );
+    const warnKey = `${guildKey(guild)}:${channelId}`;
+    if (Date.now() - (permWarnedAt.get(warnKey) ?? -Infinity) >= PERM_WARN_INTERVAL_MS) {
+      permWarnedAt.set(warnKey, Date.now());
+      log.warn(
+        'module:honeypot',
+        `missing permissions (need ${BAIT_PERMS.join(', ')}) to update the live catch count in #${channel.name ?? channelId}`
+      );
+    }
     return;
   }
-  const existing = await channel.messages.fetch(row.messageId).catch((err) => {
+  const existing = await channel.messages.fetch(baitRow.messageId).catch((err) => {
     log.error('module:honeypot', 'fetching the bait message failed:', err.message);
     return null;
   });
   if (!existing) return;
   await existing
-    .edit({ embeds: [baitEmbed(row)] })
+    .edit({ embeds: [baitEmbed(baitRow, channelRowFor(fresh, channelId))] })
     .catch((err) => log.error('module:honeypot', 'updating the live catch count failed:', err.message));
 }
 
@@ -257,15 +343,17 @@ export async function ensureHoneypotMessages(guild, config) {
       }
       if (existing) {
         await existing
-          .edit({ embeds: [baitEmbed(row)] })
+          .edit({ embeds: [baitEmbed(row, channelRowFor(config, row.channelId))] })
           .catch((err) => log.error('module:honeypot', 'updating the bait message failed:', err.message));
         continue;
       }
     }
-    const posted = await channel.send({ embeds: [baitEmbed(row)] }).catch((err) => {
-      log.error('module:honeypot', 'posting the bait message failed:', err.message);
-      return null;
-    });
+    const posted = await channel
+      .send({ embeds: [baitEmbed(row, channelRowFor(config, row.channelId))] })
+      .catch((err) => {
+        log.error('module:honeypot', 'posting the bait message failed:', err.message);
+        return null;
+      });
     if (posted) {
       row.messageId = posted.id;
       changed = true;

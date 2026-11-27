@@ -10,6 +10,7 @@ import Announcement from './Announcement.jsx';
 import ServerSwitcher from './ServerSwitcher.jsx';
 import Sidebar from './Sidebar.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
+import UpdateBadge from './UpdateBadge.jsx';
 import AccountMenu from './AccountMenu.jsx';
 import CommandPalette, { isApplePlatform, isPaletteShortcut } from './CommandPalette.jsx';
 import { Icon } from './icons.jsx';
@@ -100,7 +101,7 @@ function SignedInShell() {
   const { guilds, loading, error } = state;
 
   return (
-    <AccessProvider guildId={lastGuildId}>
+    <AccessProvider guildId={lastGuildId} hint={guilds.find((g) => g.id === lastGuildId)?.access}>
       <div className="v2-shell">
         <header ref={topbarRef} className="v2-topbar">
           <button
@@ -127,6 +128,7 @@ function SignedInShell() {
             onRefresh={refreshGuilds}
           />
           <AccessBadge />
+          <UpdateBadge />
           <button
             type="button"
             className="v2-palette-trigger"

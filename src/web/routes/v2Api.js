@@ -58,6 +58,7 @@ import guildDataRouter from './v2GuildData.js';
 import configImportRouter from './v2ConfigImport.js';
 import duplicateRouter from './v2Duplicate.js';
 import healthRouter, { dropHealthOnWrite } from './v2Health.js';
+import updateRouter from './v2Update.js';
 import { moduleIcon } from '../lib/moduleIcons.js';
 import eventsRouter from './v2Events.js';
 import suggestionsRouter from './v2Suggestions.js';
@@ -331,7 +332,9 @@ import {
   openBackup,
   isBackupName,
   inspectDbFile,
+  restoreConfirmationError,
 } from '../../db/backup.js';
+import { roleRisks, lastRolePrivileges, ROLE_DOCS_URL } from '../../db/dbRole.js';
 import { offsiteBackupStatus } from '../../db/offsiteBackup.js';
 import { MODULES, getModule } from '../../modules/registry.js';
 import { timeAgo, formatUptime, formatBytes } from '../lib/format.js';
@@ -527,6 +530,8 @@ function loadGuildJson(req, res, next) {
 // sits before the access guard below and does its own access check (v2ShopMember.js).
 // Every /guilds/:guildId route after the guard needs the level src/web/lib/routeAccess.js gives it
 // (view, inbox or edit; edit when it gives none), checked by the access router (access.js).
+// The operators' update notice and Wise Wren's "Update now" (v2Update.js): operator routes, not per server.
+router.use(updateRouter);
 router.use('/shop/:guildId', shopMemberRouter);
 // The web form of an application (/apply/<server>/<form>): the same kind of page, the same access rule.
 router.use('/apply/:guildId', applyMemberRouter);
@@ -2820,6 +2825,9 @@ router.get(
         size: formatBytes(dbInfo.size),
         wal: dbInfo.wal === null ? null : formatBytes(dbInfo.wal),
         postgres: Boolean(config.databaseUrl),
+        // Rights of the database role that are more than Sylo needs (empty when fine, or on SQLite).
+        roleRisks: roleRisks(lastRolePrivileges()),
+        roleDocsUrl: ROLE_DOCS_URL,
         intervalHours: config.backupIntervalHours,
         retention: config.backupRetention,
         offsite: offsiteBackupStatus(),
@@ -2924,6 +2932,13 @@ router.post(
     const name = req.params.name;
     const full = resolveBackup(name);
     if (!full) return res.status(404).json({ error: 'no such backup' });
+    // A confirmation that is sent has to be the right one. An uploaded Postgres dump is restored by
+    // running the SQL in it with the rights of the database role, so for that one the request must
+    // name the snapshot and say that it knows (the dashboard sends both after its own warning).
+    // Other snapshots stay restorable without a body, as the app sends it.
+    const problem = restoreConfirmationError(name, req.body, { postgres: Boolean(config.databaseUrl) });
+    if (problem) return res.status(400).json({ error: problem });
+
     const check = await inspectDbFile(full);
     if (!check.ok) return res.status(400).json({ error: check.error });
 

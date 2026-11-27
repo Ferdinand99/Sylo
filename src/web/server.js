@@ -135,6 +135,36 @@ export function routeLabel(req) {
   return `${mount}${req.route?.path ?? '(unmatched)'}`;
 }
 
+// Central error handler — keep the server up, record the error for the dashboard.
+// Express recognises an error handler by its 4-arg signature, so `_next` must
+// be present even though it is unused.
+export function centralErrorHandler(err, req, res, _next) {
+  // The person's own doing, not a server error: a per-server ceiling (src/lib/limits.js) or a
+  // role they may not hand out (src/web/middleware/roleGrants.js). The reason reaches them as
+  // JSON or an error page.
+  if (err instanceof LimitError || err instanceof RoleGrantError) {
+    const status = err.status;
+    const heading = err instanceof LimitError ? 'Limit reached' : 'Role not allowed';
+    if (req.originalUrl.startsWith('/api/') || !req.accepts('html')) {
+      return res.status(status).json({ error: err.message });
+    }
+    return res.status(status).render('error', { title: heading, heading, message: err.message });
+  }
+  // A request the client got wrong, not a server fault: a body over the cap (413) or one that
+  // does not parse (400), from the body parsers. Anyone can send these, so they must not reach
+  // log.error (dev-log channel, operators' phones, /health): answer and move on.
+  const status = err?.status ?? err?.statusCode;
+  if (err?.expose === true && Number.isInteger(status) && status >= 400 && status < 500) {
+    log.debug('web', `${req.method} ${routeLabel(req)} ${status} ${err.type ?? ''}`.trim());
+    if (res.headersSent) return res.end();
+    return res.status(status).json({ error: status === 413 ? 'Payload too large' : 'Bad request' });
+  }
+  // The route pattern, never the raw path: the path is the caller's to choose (a unique message
+  // per request) and in a webhook URL it holds a secret token.
+  log.error('web', `${req.method} ${routeLabel(req)}`, err);
+  res.status(500).json({ error: 'Internal server error' });
+}
+
 /** Build (but do not start) the Express app. Exposed for testing. */
 export function createApp() {
   const app = express();
@@ -286,35 +316,7 @@ export function createApp() {
     });
   });
 
-  // Central error handler — keep the server up, record the error for the dashboard.
-  // Express recognises an error handler by its 4-arg signature, so `_next` must
-  // be present even though it is unused.
-  app.use((err, req, res, _next) => {
-    // The person's own doing, not a server error: a per-server ceiling (src/lib/limits.js) or a
-    // role they may not hand out (src/web/middleware/roleGrants.js). The reason reaches them as
-    // JSON or an error page.
-    if (err instanceof LimitError || err instanceof RoleGrantError) {
-      const status = err.status;
-      const heading = err instanceof LimitError ? 'Limit reached' : 'Role not allowed';
-      if (req.originalUrl.startsWith('/api/') || !req.accepts('html')) {
-        return res.status(status).json({ error: err.message });
-      }
-      return res.status(status).render('error', { title: heading, heading, message: err.message });
-    }
-    // A request the client got wrong, not a server fault: a body over the cap (413) or one that
-    // does not parse (400), from the body parsers. Anyone can send these, so they must not reach
-    // log.error (dev-log channel, operators' phones, /health): answer and move on.
-    const status = err?.status ?? err?.statusCode;
-    if (err?.expose === true && Number.isInteger(status) && status >= 400 && status < 500) {
-      log.debug('web', `${req.method} ${routeLabel(req)} ${status} ${err.type ?? ''}`.trim());
-      if (res.headersSent) return res.end();
-      return res.status(status).json({ error: status === 413 ? 'Payload too large' : 'Bad request' });
-    }
-    // The route pattern, never the raw path: the path is the caller's to choose (a unique message
-    // per request) and in a webhook URL it holds a secret token.
-    log.error('web', `${req.method} ${routeLabel(req)}`, err);
-    res.status(500).json({ error: 'Internal server error' });
-  });
+  app.use(centralErrorHandler);
 
   return app;
 }

@@ -48,7 +48,7 @@ table in as `warn` cases.)
 | `/warn add\|list\|remove\|clear` | Issue and manage warnings. Escalation runs after `add`. |
 | `/ban`, `/unban` | Ban a member or a user id; `/ban duration:2h` schedules an auto-unban. |
 | `/kick`, `/timeout`, `/untimeout` | Standard actions; `/timeout` takes `10m`, `2h`, `1d` (max 28d). |
-| `/purge` | Delete up to 100 messages younger than 14 days. |
+| `/purge <amount> [user]` | Delete up to 100 recent messages, of any age (see below). |
 | `/slowmode` | Per-user rate limit on a channel; `0` disables. |
 | `/lock`, `/unlock` | Deny/restore @everyone's send permissions on a channel. `/unlock` restores the exact prior overwrite. |
 | `/lockdown start\|end` | Lock or unlock every text channel at once. |
@@ -56,3 +56,25 @@ table in as `warn` cases.)
 
 The **Infractions** tab lists every case with edit-reason and soft-delete/restore
 controls, alongside active bans, channel locks and pending temporary bans.
+
+### Purging messages
+
+`/purge` deletes up to 100 messages in the channel it is run in, optionally only those from one
+user. It needs Manage Messages for the person who runs it and for Sylo in that channel, and every
+purge that deletes something is written to the mod log.
+
+- **Discord:** messages younger than 14 days are deleted in bulk. Older messages cannot be bulk
+  deleted, so Sylo deletes them one at a time at the pace Discord allows (about one per second, and
+  it waits whenever Discord asks it to slow down). While that runs, the reply is updated
+  ("Deleted 40 of 100...") and has a **Stop** button. The reply is private to the person who ran the
+  command, and only they can press Stop. A purge that would run past Discord's 15-minute reply limit
+  ends early with "Timed out"; run `/purge` again for the rest.
+- **Fluxer:** Fluxer's bulk delete has no age limit, so every message is deleted in one go and
+  there is nothing to wait for.
+- Only one purge runs per channel at a time; a second `/purge` there is refused until the first has
+  finished or been stopped.
+- Pinned messages: young pinned messages are deleted, as they always were. Pinned messages older than
+  14 days are kept (they were never deleted before either, and the reply says how many were kept).
+  Unpin them first if they should go too.
+- The final reply says how many messages were deleted and how many could not be (for example
+  already deleted by someone else, or a missing permission).
