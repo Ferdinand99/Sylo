@@ -151,11 +151,15 @@ struct BetaNote: View {
     var body: some View {
         if ModuleBeta.isBeta(moduleID, in: overview) {
             Section {
-                Label {
+                // Not a Label: its icon slot is a fixed width and squeezed the pill into "B / et / a".
+                // The pill keeps its own size on one line; only the sentence wraps, at any Dynamic Type size.
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    BetaBadge()
+                        .lineLimit(1)
+                        .fixedSize()
                     Text(verbatim: ModuleBeta.note)
                         .font(.footnote)
-                } icon: {
-                    BetaBadge()
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .accessibilityElement(children: .combine)
             }

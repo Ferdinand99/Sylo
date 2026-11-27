@@ -72,6 +72,15 @@ struct Sylo53ParitySourceTests {
         #expect(try Self.code("sylo-ios/Views/Servers/ModuleRow.swift").contains("if card.isBeta"))
     }
 
+    @Test("The Beta note keeps its pill on one line instead of squeezing it into a Label's icon slot")
+    func betaNoteLayout() throws {
+        let gate = try Self.code("sylo-ios/Views/Shared/DashboardAccessGate.swift")
+        let note = try #require(gate.components(separatedBy: "struct BetaNote: View").last)
+        #expect(note.contains("HStack(alignment: .firstTextBaseline"))
+        #expect(note.contains(".fixedSize()"))
+        #expect(!note.contains("Label {"))
+    }
+
     @Test("The shop list shows an item's description in full, with its line breaks")
     func shopDescription() throws {
         let shop = try Self.code("sylo-ios/Views/ModuleSettings/Modules/Shop/ShopItemsView.swift")
