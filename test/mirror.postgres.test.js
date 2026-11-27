@@ -37,6 +37,18 @@ test(
       assert.equal((await db.pairsOfGuild(B)).length, 1);
     });
 
+    await t.test('the time of the last error is a number and clears with the error', async () => {
+      const pair = await db.getPairBySource(A);
+      const failed = await db.updatePair(pair.id, {
+        lastError: 'Fluxer could not be reached',
+        lastErrorAt: 1_800_000_000_500,
+      });
+      assert.equal(failed.lastErrorAt, 1_800_000_000_500);
+      assert.equal(typeof failed.lastErrorAt, 'number');
+      const cleared = await db.updatePair(pair.id, { lastError: '', lastErrorAt: 0 });
+      assert.deepEqual([cleared.lastError, cleared.lastErrorAt], ['', 0]);
+    });
+
     await t.test('the id map upserts and deletes', async () => {
       const pair = await db.getPairBySource(A);
       await db.putMapping({

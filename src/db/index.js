@@ -1772,6 +1772,18 @@ export const MIGRATIONS = [
       CREATE UNIQUE INDEX IF NOT EXISTS idx_mirror_links_link ON mirror_links (link_id);
     `);
   },
+
+  // The mirror's next migration (after its tables above): when a pair's last error happened, so the Mirror page can
+  // say so and a pause because Fluxer could not be reached knows when to check again (src/db/mirror.js adds the same
+  // column on Postgres).
+  // It looks before it adds, so it can run twice.
+  (database) => {
+    const has = database
+      .prepare('PRAGMA table_info(mirror_pairs)')
+      .all()
+      .some((c) => c.name === 'last_error_at');
+    if (!has) database.exec('ALTER TABLE mirror_pairs ADD COLUMN last_error_at INTEGER NOT NULL DEFAULT 0;');
+  },
 ];
 
 /** Highest schema version this build knows how to run. */

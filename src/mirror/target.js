@@ -7,7 +7,7 @@
 // `me` is the Fluxer server's own Sylo member: the engine checks its permissions before anything is created
 // and clamps role positions under Sylo's own highest role.
 import { FLUXER_LIMITS } from './spec.js';
-import { isNotFound } from './errors.js';
+import { MirrorError, isNotFound } from './errors.js';
 
 const get = (collection, id) => collection?.get?.(id) ?? collection?.cache?.get?.(id) ?? null;
 const list = (collection) => [...(collection?.values?.() ?? collection?.cache?.values?.() ?? [])];
@@ -97,6 +97,13 @@ export function createFluxerTarget(guild) {
     id: String(guild.id),
     name: String(guild.name ?? ''),
     limits: () => FLUXER_LIMITS,
+
+    /** A small request to Fluxer, to see whether it answers at all (a paused mirror checks this before it goes on). */
+    async ping() {
+      if (typeof guild.client?.rest?.get !== 'function')
+        throw new MirrorError('The Fluxer client is not connected.', 'transient');
+      await guild.client.rest.get(`/guilds/${guild.id}`);
+    },
 
     /** The permissions of Sylo's role on the server that the mirror needs and Sylo lacks. */
     missingPermissions() {

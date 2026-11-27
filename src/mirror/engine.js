@@ -104,6 +104,7 @@ function sniffMime(buf) {
  *   sourceGuild: (key: string) => any, targetGuild: (key: string) => any, makeTarget: (guild: any) => any,
  *   fetchImage: (url: string, opts: { maxBytes: number }) => Promise<{ bytes: Buffer, mime: string }>,
  *   clientsReady: () => boolean, linkMirroredChannels: (pairId: number) => Promise<{ linked: number, reason?: string }>,
+ *   unreachableRetryMs: number,
  * }>} [overrides]
  */
 export function createEngine(overrides = {}) {
@@ -130,6 +131,9 @@ export function createEngine(overrides = {}) {
     // More than this many deletes on Discord in this many ms pause the mirror until its owner confirms them.
     deleteBurst: { max: 5, windowMs: 10 * 60_000 },
     maxWorkers: 3,
+    // A mirror paused because Fluxer could not be reached checks this often whether it can be reached again, and goes
+    // on by itself once it can (a self-hosted instance on a home connection comes back on a new address).
+    unreachableRetryMs: 5 * 60_000,
     ...overrides,
   };
 
@@ -140,6 +144,8 @@ export function createEngine(overrides = {}) {
   let lastPrune = 0;
   let lastLinkSweep = 0;
   let stopped = false;
+  /** Pairs paused as unreachable whose check is running right now. */
+  const probing = new Set();
 
   const stateOf = (pairId) => {
     if (!state.has(pairId)) state.set(pairId, { limitReached: new Set(), blockedUntil: 0 });
@@ -345,7 +351,14 @@ export function createEngine(overrides = {}) {
     state.delete(pair.id);
     pair = await store.updatePair(
       pair.id,
-      { status: PAIR_STATUS.COPYING, copyRun: run, lastError: '', failures: 0, resumeStatus: '' },
+      {
+        status: PAIR_STATUS.COPYING,
+        copyRun: run,
+        lastError: '',
+        lastErrorAt: 0,
+        failures: 0,
+        resumeStatus: '',
+      },
       deps.now()
     );
     touchHealth(pair);
@@ -1121,8 +1134,9 @@ export function createEngine(overrides = {}) {
   // --- the worker --------------------------------------------------------------------------------------
 
   /**
-   * Pause a pair with the reason. `kind` says what resuming has to deal with ('failure', 'deletes', 'ownership',
-   * 'hierarchy', 'owner'); `by` is who paused it ('system', 'source' or 'target'): only that side can resume it.
+   * Pause a pair with the reason. `kind` says what resuming has to deal with ('failure', 'unreachable', 'deletes',
+   * 'ownership', 'hierarchy', 'owner'); `by` is who paused it ('system', 'source' or 'target'): only that side can
+   * resume it. An 'unreachable' pause ends by itself once Fluxer answers again (see retryUnreachable).
    */
   async function pausePair(pair, message, { kind = 'failure', by = 'system' } = {}) {
     const next = await store.updatePair(
@@ -1131,6 +1145,7 @@ export function createEngine(overrides = {}) {
         status: PAIR_STATUS.PAUSED,
         resumeStatus: pair.status === PAIR_STATUS.PAUSED ? pair.resumeStatus : pair.status,
         lastError: String(message).slice(0, 500),
+        lastErrorAt: deps.now(),
         pauseKind: kind,
         pausedBy: by,
       },
@@ -1162,7 +1177,10 @@ export function createEngine(overrides = {}) {
       jobCtx.sets = copiedSets(jobCtx.source, ctx.options);
       const res = await perform(jobCtx, job);
       await store.finishJob(job.id, res.status, res.detail, res.notes, deps.now());
-      if (pair.failures > 0) pair = await store.updatePair(pair.id, { failures: 0 }, deps.now());
+      // A success settles the trouble before it: the page stops showing the last error.
+      if (pair.failures > 0 || pair.lastError) {
+        pair = await store.updatePair(pair.id, { failures: 0, lastError: '', lastErrorAt: 0 }, deps.now());
+      }
       return { pair, remote: res.remote };
     } catch (err) {
       const c = classifyError(err);
@@ -1193,14 +1211,19 @@ export function createEngine(overrides = {}) {
       // Only trouble that is not about one item counts toward pausing the pair.
       if (c.kind === 'transient' || c.kind === 'permission') {
         const failures = pair.failures + 1;
-        pair = await store.updatePair(pair.id, { failures, lastError: c.message.slice(0, 300) }, now);
+        pair = await store.updatePair(
+          pair.id,
+          { failures, lastError: c.message.slice(0, 300), lastErrorAt: now },
+          now
+        );
         if (failures >= deps.pauseAfterFailures) {
-          pair = await pausePair(
-            pair,
+          pair =
             c.kind === 'permission'
-              ? `Fluxer refused Sylo: ${c.message}. Check Sylo's permissions on the Fluxer server, then resume.`
-              : `Fluxer could not be reached: ${c.message}`
-          );
+              ? await pausePair(
+                  pair,
+                  `Fluxer refused Sylo: ${c.message}. Check Sylo's permissions on the Fluxer server, then resume.`
+                )
+              : await pausePair(pair, `Fluxer could not be reached: ${c.message}`, { kind: 'unreachable' });
         }
       }
       return { pair, remote: true };
@@ -1296,6 +1319,14 @@ export function createEngine(overrides = {}) {
       lastLinkSweep = now;
       for (const pair of await store.listAllPairs()) await linksFollow(pair);
     }
+    // A mirror paused because Fluxer could not be reached checks now and then whether it can go on.
+    if (deps.clientsReady()) {
+      for (const pair of await store.listPairsIn(PAIR_STATUS.PAUSED)) {
+        if (pair.pauseKind !== 'unreachable' || probing.has(pair.id)) continue;
+        if (now - (pair.lastErrorAt || pair.updatedAt) < deps.unreachableRetryMs) continue;
+        retryUnreachable(pair).catch((err) => log.warn('mirror', `check of pair ${pair.id} failed:`, err));
+      }
+    }
     for (const status of [PAIR_STATUS.COPYING, PAIR_STATUS.LIVE]) {
       for (const pair of await store.listPairsIn(status)) {
         if (active.has(pair.id)) continue;
@@ -1305,6 +1336,51 @@ export function createEngine(overrides = {}) {
         if (due === null && pair.status === PAIR_STATUS.LIVE) continue;
         runPair(pair.id).catch((err) => log.error('mirror', `worker for pair ${pair.id} failed:`, err));
       }
+    }
+  }
+
+  /**
+   * Ask Fluxer something small for a mirror paused as unreachable. Any answer (even a refusal: the jobs deal with
+   * that) means it can be reached, and the mirror resumes as if its owner had pressed Resume. No answer keeps it
+   * paused with the new error and time. Deletes that waited past the burst limit still need the owner's
+   * confirmation: the pause then turns into a 'deletes' pause, which the page shows.
+   */
+  async function retryUnreachable(pair) {
+    probing.add(pair.id);
+    try {
+      const { tg } = guildsOf(pair);
+      if (!tg) return;
+      try {
+        await deps.makeTarget(tg).ping();
+      } catch (err) {
+        const c = classifyError(err);
+        if (c.kind === 'transient') {
+          await store.updatePair(
+            pair.id,
+            { lastError: `Fluxer could not be reached: ${c.message}`.slice(0, 500), lastErrorAt: deps.now() },
+            deps.now()
+          );
+          return;
+        }
+      }
+      try {
+        await resume(pair.id, { side: 'system' });
+        log.info('mirror', `pair ${pair.id}: Fluxer can be reached again, the mirror goes on`);
+      } catch (err) {
+        if (err?.code !== 'confirm-needed' && err?.code !== 'fluxer-owner-only') throw err;
+        const next = await store.updatePair(
+          pair.id,
+          {
+            pauseKind: 'deletes',
+            lastError: 'Fluxer can be reached again. Things deleted on Discord wait for your confirmation.',
+            lastErrorAt: deps.now(),
+          },
+          deps.now()
+        );
+        touchHealth(next);
+      }
+    } finally {
+      probing.delete(pair.id);
     }
   }
 
@@ -1430,6 +1506,7 @@ export function createEngine(overrides = {}) {
         status: pair.resumeStatus || PAIR_STATUS.LIVE,
         resumeStatus: '',
         lastError: '',
+        lastErrorAt: 0,
         failures: 0,
         pauseKind: '',
         pausedBy: '',
