@@ -47,8 +47,15 @@ test('the public 404s have no dashboard button, a generic error still has one', 
   assert.match(lb, /No leaderboard here/);
   assert.doesNotMatch(lb, /Back to the dashboard/);
   assert.match(lb, /Go to the dashboard/);
-  assert.doesNotMatch(lb, /sylobot\.com/, 'never the hosted product, a self-hosted instance has its own');
-  assert.match(lb, /Powered by Sylo/);
+  // The button goes to this instance's own dashboard, never to the hosted one; the one link to the product site is
+  // the "Powered by Sylo" line.
+  assert.doesNotMatch(
+    lb,
+    /app\.sylobot\.com/,
+    'never the hosted dashboard, a self-hosted instance has its own'
+  );
+  assert.match(lb, /<a class="btn btn-ghost" href="\/v2\/">Go to the dashboard<\/a>/);
+  assert.match(lb, /<a href="https:\/\/sylobot\.com" rel="noopener noreferrer">Powered by Sylo<\/a>/);
 
   const q = await (await get('/quotes/not-a-server')).text();
   assert.doesNotMatch(q, /Back to the dashboard/);

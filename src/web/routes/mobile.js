@@ -316,6 +316,8 @@ export const mobileApiRouter = Router();
 // moderation tools); the app can follow it with `access` from GET /api/v2/guilds.
 // `update-notice`: operators only, GET /api/v2/update (a newer Sylo release, optionally what Wise Wren sees)
 // and, with Wise Wren set up, POST /api/v2/update/wren/approve and GET /api/v2/update/wren/runs/:id.
+// `public-page-look`: GET/POST /api/v2/guilds/:id/public-page-look (the server's accent colour and background
+// on its public member pages), its picture upload and the invite-background check.
 const FEATURES = Object.freeze([
   'app-login',
   'live-access',
@@ -334,6 +336,7 @@ const FEATURES = Object.freeze([
   'message-move',
   'moderator-view',
   'update-notice',
+  'public-page-look',
 ]);
 
 // Public and ahead of the open-mode guard: the app calls it before anyone signs in, and an open-mode

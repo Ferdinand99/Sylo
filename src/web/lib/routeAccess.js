@@ -262,6 +262,12 @@ export const ROUTE_ACCESS = Object.freeze({
   'POST /guilds/:guildId/modules/economy/shop/items/:id/delete': 'edit',
   'POST /guilds/:guildId/modules/economy/shop/items/:id/image': 'edit',
   'POST /guilds/:guildId/modules/economy/shop/items/:id/image/delete': 'edit',
+  // v2PublicLook.js: the server's look on its public pages. Edit only, the read too.
+  'GET /guilds/:guildId/public-page-look': 'edit',
+  'POST /guilds/:guildId/public-page-look': 'edit',
+  'POST /guilds/:guildId/public-page-look/image': 'edit',
+  'POST /guilds/:guildId/public-page-look/image/delete': 'edit',
+  'POST /guilds/:guildId/public-page-look/splash/refresh': 'edit',
   'GET /guilds/:guildId/modules/economy/members/:userId/inventory': 'view',
   'POST /guilds/:guildId/modules/economy/members/:userId/inventory/grant': 'edit',
   'POST /guilds/:guildId/modules/economy/members/:userId/inventory/:rowId/revoke': 'edit',

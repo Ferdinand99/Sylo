@@ -5,10 +5,14 @@
 :root {
   /* Text on an accent fill: near-black on the bright dark-theme cyan, white on the deeper light-theme one. */
   --on-accent: #04141a;
+  /* The accent as text; a server's look sets its own per theme (src/lib/publicLook.js). Declared in both themes so
+     a look that only has a dark block never leaks its text colour into the light one. */
+  --accent-text: var(--accent);
   --accent-hover: color-mix(in srgb, var(--accent) 86%, #fff);
 }
 :root[data-theme='light'] {
   --on-accent: #ffffff;
+  --accent-text: var(--accent);
   --accent-hover: color-mix(in srgb, var(--accent) 88%, #000);
 }
 

@@ -65,6 +65,7 @@ import './welcomeSent.js';
 import './applications.js';
 import './economy.js';
 import './economyShop.js';
+import './publicLook.js';
 
 // Tables keyed directly by guild_id. A test in test/guildTables.test.js checks
 // this stays in sync with the schema so new guild data can't escape /forget or
@@ -121,6 +122,8 @@ export const GUILD_TABLES = [
   'economy_items',
   'economy_inventory',
   'collectible_images',
+  'guild_public_look',
+  'public_look_images',
 ];
 
 const simpleStmts = GUILD_TABLES.map((t) => prepare(`DELETE FROM ${t} WHERE guild_id = ?`));
