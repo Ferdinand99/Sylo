@@ -565,6 +565,24 @@ a {
   right: 8px;
   border-top: 1px solid var(--border-subtle);
 }
+/* "Refresh server list" sits last, under a hairline; its answer shows as a small note. */
+.v2-switch-refresh {
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-subtle);
+}
+.v2-switch-menu .v2-switch-refresh button {
+  color: var(--text-muted);
+}
+.v2-switch-menu .v2-switch-refresh button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.v2-switch-refresh-note {
+  margin: 2px 8px 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
 @media (pointer: coarse) {
   .v2-switch-menu a,
   .v2-switch-menu button {

@@ -438,7 +438,12 @@ difference is how server access is checked:
 - Both use the server list stored at login. The bot keeps it current: when it
   sees someone gain or lose Manage Server or Administrator, or become the owner,
   that server is added to or removed from their list. Neither the dashboard nor
-  the app sends anyone through the platform login again to refresh it.
+  the app sends anyone through the platform login again to refresh it. A server the
+  bot joins later is looked for once on each signed-in person's list (their next
+  request), and the dashboard's **Refresh server list** action
+  (`POST /api/v2/account/refresh-guilds`, once per 30 seconds per account, the
+  caller's own sign-ins only) does the same on demand. Both read the person's
+  rights through the bot, never through their platform login.
 - The web dashboard trusts that list for 10 minutes after login, then checks
   live through the bot, like the app.
 - For app requests Sylo checks **live, through the bot, on every request**:

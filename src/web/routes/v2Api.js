@@ -30,6 +30,7 @@ import {
   currentUser,
   sessionUserId,
   botInviteUrls,
+  refreshServerLists,
 } from '../middleware/auth.js';
 import {
   checkLevelRewardGrants,
@@ -49,7 +50,7 @@ import {
   accountGuildAccess,
   checksLive,
 } from '../middleware/access.js';
-import { limitWhen, platformActionLimit, rateLimit } from '../middleware/rateLimit.js';
+import { clientKey, limitWhen, platformActionLimit, rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { changelogHandler } from '../lib/changelogFeed.js';
 import { ticketsRouter, staffRouter } from './v2Staff.js';
@@ -444,6 +445,25 @@ router.post(
     const ok = await revokeApiToken(req.account.id, req.params.id);
     if (!ok) return res.status(404).json({ error: 'That device was already signed out.' });
     res.json({ ok: true });
+  })
+);
+
+// "Refresh server list": look again for servers the bot joined since sign-in, for this account's own
+// identities only. Each look can cost the platform a member lookup, so once per 30 seconds per account.
+const refreshGuildsLimit = rateLimit({
+  windowMs: 30_000,
+  max: 1,
+  message: 'The server list was just refreshed. Wait a few seconds and try again.',
+  keyFn: (req) => `refresh-guilds|${req.account?.id ?? clientKey(req)}`,
+});
+
+router.post(
+  '/account/refresh-guilds',
+  refreshGuildsLimit,
+  asyncHandler(async (req, res) => {
+    // Open mode lists every server already.
+    if (!req.account) return res.json({ ok: true, added: 0 });
+    res.json({ ok: true, added: await refreshServerLists(req.account) });
   })
 );
 
