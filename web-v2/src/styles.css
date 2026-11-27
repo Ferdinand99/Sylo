@@ -1108,11 +1108,20 @@ a.v2-row:active {
   text-overflow: clip;
   margin-top: 6px;
 }
+/* A shop item's description: shown in full, with the line breaks the admin typed (runs of spaces still
+   collapse). pages/Shop.jsx and the shop list of the Economy page. */
+.v2-row-main p.v2-shop-text {
+  display: block;
+  white-space: pre-line;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
 /* Phones: a description gets two lines before the ellipsis, so a module's
    one-line summary isn't cut to a couple of words. Text that must be read
-   in full (.is-wrap, warnings) keeps wrapping freely. */
+   in full (.is-wrap, warnings, a shop description) keeps wrapping freely. */
 @media (max-width: 600px) {
-  .v2-row-main p:not(.is-wrap, .v2-row-warn) {
+  .v2-row-main p:not(.is-wrap, .v2-row-warn, .v2-shop-text) {
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
