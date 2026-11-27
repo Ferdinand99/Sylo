@@ -185,6 +185,12 @@ describe('navModel', () => {
     expect(nav.server.map((i) => i.label)).toEqual(['Server settings', 'Commands', 'Mirror to Fluxer']);
   });
 
+  it('marks the Mirror entry as beta when the overview lists it as a beta page', () => {
+    const mirror = (d) => navModel({ guildId: G, data: d, operator: false }).server.find((i) => i.key === 'mirror');
+    expect(mirror(data).beta).toBe(false);
+    expect(mirror({ ...data, betaPages: ['mirror'] }).beta).toBe(true);
+  });
+
   it('opens the Applications entry on the queue when applications wait, and on the page default when none do', () => {
     const href = (d) =>
       navModel({ guildId: G, data: d, operator: false }).inbox.find((i) => i.key === 'applications').href;

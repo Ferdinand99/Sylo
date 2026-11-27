@@ -15,6 +15,7 @@ import SetupOffer from '../components/SetupOffer.jsx';
 import { needsSetupOffer } from '../setupModel.js';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { Icon } from '../components/icons.jsx';
+import { BetaTag } from '../components/Beta.jsx';
 import {
   attentionItems,
   cardSummaryParts,
@@ -39,16 +40,6 @@ import { useAccess } from '../access.jsx';
 const IN_SIDEBAR = new Set(['general', 'commands']);
 
 const isNarrow = () => Boolean(globalThis.matchMedia?.('(max-width: 600px)')?.matches);
-
-// A newly-added module gets this next to its name until it's had enough
-// real-world use to drop registry.js's `beta` flag.
-function BetaTag() {
-  return (
-    <span className="v2-beta-tag" title="New module — behavior may still change">
-      Beta
-    </span>
-  );
-}
 
 // The panel at the top: what is waiting for a person and what is switched on but not set up. Each item
 // goes to the page where it is dealt with; with nothing to do the panel says so in one calm line.

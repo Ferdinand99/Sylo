@@ -36,7 +36,7 @@ note.
 - **A server selection follows you** onto bot-wide pages (Bot Personalizer,
   Health) that aren't scoped to any one server, instead of clearing when you
   navigate there.
-- **Mirror to Fluxer.** A page in the Server group of the sidebar that copies a Discord
+- **Mirror to Fluxer (beta).** A page in the Server group of the sidebar that copies a Discord
   server to a Fluxer server and keeps it in step: ask, agree on both servers, preview,
   copy, then pause or stop. See [Mirror to Fluxer](mirror.md).
 - **A setup wizard for new servers.** A server with fewer than three modules

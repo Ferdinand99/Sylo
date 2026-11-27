@@ -334,7 +334,7 @@ import {
   inspectDbFile,
 } from '../../db/backup.js';
 import { offsiteBackupStatus } from '../../db/offsiteBackup.js';
-import { MODULES, getModule } from '../../modules/registry.js';
+import { BETA_PAGES, MODULES, getModule } from '../../modules/registry.js';
 import { timeAgo, formatUptime, formatBytes } from '../lib/format.js';
 import { log } from '../../lib/log.js';
 import { refreshPagePosts } from '../../modules/events.js';
@@ -587,7 +587,9 @@ router.get(
       buildOverview(req.guild, { owner: isOwner(req), modules }),
       buildAttention(req.guild, { owner: isOwner(req), modules, openTickets, openAppeals }),
     ]);
-    res.json({ guild, openTickets, openAppeals, groups, attention });
+    // `betaPages`: ids of dashboard pages that are not modules but carry the Beta mark (today: "mirror").
+    // A module's own mark is `beta` on its card in `groups`.
+    res.json({ guild, openTickets, openAppeals, groups, attention, betaPages: BETA_PAGES });
   })
 );
 

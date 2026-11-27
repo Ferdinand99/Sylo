@@ -1,5 +1,7 @@
 # Bridge (beta)
 
+**Beta.** This module is new and may still have rough edges. Report problems in the Sylo Discord.
+
 Share one conversation between a channel on **Discord** and a channel on **Fluxer**. Members on both
 sides write as they always do; Sylo shows each message on the other side with the author's name and
 picture, and carries replies, files, edits and deletes along.

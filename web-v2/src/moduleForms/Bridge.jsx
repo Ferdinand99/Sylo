@@ -13,6 +13,7 @@ import { useApiData } from '../useApiData.js';
 import LoadError from '../components/LoadError.jsx';
 import HowItWorks from '../components/HowItWorks.jsx';
 import Callout from '../components/Callout.jsx';
+import { BetaNote, BetaTag } from '../components/Beta.jsx';
 import CopyButton from '../components/CopyButton.jsx';
 import EmptyList from '../components/EmptyList.jsx';
 import RowActions from '../components/RowActions.jsx';
@@ -180,7 +181,10 @@ export default function Bridge() {
 
   return (
     <>
-      <h1 className="v2-section-title">Bridge</h1>
+      <h1 className="v2-section-title">
+        Bridge {data.beta ? <BetaTag /> : null}
+      </h1>
+      {data.beta ? <BetaNote /> : null}
       <p className="v2-field-hint">
         One conversation between a channel here on {here} and a channel on {other}. Members on both sides
         write as they always do, and Sylo shows each message on the other side with the author&apos;s name and

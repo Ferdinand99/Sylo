@@ -21,6 +21,7 @@ import Field from '../components/Field.jsx';
 import Switch from '../components/Switch.jsx';
 import Time from '../components/Time.jsx';
 import CopyButton from '../components/CopyButton.jsx';
+import { BetaNote, BetaTag } from '../components/Beta.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { initial } from '../util.js';
 import {
@@ -99,7 +100,10 @@ export default function Mirror() {
 
   return (
     <Reveal>
-      <h1 className="v2-section-title">Mirror to Fluxer</h1>
+      <h1 className="v2-section-title">
+        Mirror to Fluxer {data.beta ? <BetaTag /> : null}
+      </h1>
+      {data.beta ? <BetaNote what="feature" /> : null}
       <OwnerContext.Provider value={data.isOwner !== false}>
         {data.platform === 'discord' ? (
           <SourceView

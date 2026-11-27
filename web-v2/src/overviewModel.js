@@ -203,6 +203,7 @@ const SETTINGS_SUFFIX = new Set(['tickets', 'appeals']);
 export function navModel({ guildId, data, operator }) {
   const g = (path) => (guildId ? `/guilds/${guildId}${path}` : null);
   const waiting = data?.attention?.waiting ?? {};
+  const betaPages = data?.betaPages ?? [];
   const count = (n) => (Number(n) > 0 ? Number(n) : 0);
   const top = [{ key: 'overview', label: 'Overview', icon: 'grid', href: g('') }];
   const ticketCount = data?.attention ? waiting.tickets : data?.openTickets;
@@ -268,7 +269,7 @@ export function navModel({ guildId, data, operator }) {
     { key: 'settings', label: 'Server settings', icon: 'gear', href: g('/settings') },
     { key: 'commands', label: 'Commands', icon: 'terminal', href: g('/moderation/commands') },
     // Copy this Discord server to a Fluxer server and keep it in step (the page works on the Fluxer side too).
-    { key: 'mirror', label: 'Mirror to Fluxer', icon: 'copy', href: g('/mirror') },
+    { key: 'mirror', label: 'Mirror to Fluxer', icon: 'copy', href: g('/mirror'), beta: betaPages.includes('mirror') },
   ];
   const more = [
     { key: 'command-list', label: 'Command list', icon: 'list', href: '/commands' },

@@ -60,6 +60,21 @@ beforeEach(() => {
 });
 
 describe('Bridge page', () => {
+  it('marks Bridge as beta with a short note, only when the server says so', async () => {
+    api.getBridge.mockResolvedValue(overview({ beta: true }));
+    const first = renderAtGuild(<Bridge />, GUILD);
+    expect(await screen.findByRole('heading', { name: 'Bridge Beta' })).toBeTruthy();
+    expect(screen.getByTestId('beta-note').textContent).toBe(
+      'Beta: this module is new and may still have rough edges. Report problems in the Sylo Discord.'
+    );
+    first.unmount();
+
+    api.getBridge.mockResolvedValue(overview({ beta: false }));
+    renderAtGuild(<Bridge />, GUILD);
+    expect(await screen.findByRole('heading', { name: 'Bridge' })).toBeTruthy();
+    expect(screen.queryByTestId('beta-note')).toBeNull();
+  });
+
   it('says there is nothing bridged yet and offers the two ways to start', async () => {
     renderAtGuild(<Bridge />, GUILD);
     expect(await screen.findByRole('heading', { name: 'Bridge' })).toBeTruthy();
