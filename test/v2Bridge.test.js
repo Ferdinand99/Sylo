@@ -170,7 +170,7 @@ test('the overview lists channels, shows what is set up, and says when the modul
   assert.equal(data.platform, 'discord');
   assert.equal(data.bothPlatforms, true);
   assert.equal(data.enabled, true);
-  assert.deepEqual(data.limits, { links: 10, requests: 5 });
+  assert.deepEqual(data.limits, { links: 100, requests: 5 });
   assert.deepEqual(data.links, []);
   assert.deepEqual(
     data.channels.map((c) => [c.name, c.ageRestricted, c.taken]),

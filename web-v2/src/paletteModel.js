@@ -70,10 +70,11 @@ const ALIASES = { tickets: 'modmail' };
  * Every place the palette can open for the picked server: the pages of the sidebar, every module page (also a
  * module that is switched off: the person may be looking for where to switch it on), and the other servers.
  * An item is `{ key, group, label, hint, href, icon, keywords }`; `href` is relative to the dashboard base.
- * @param {{ guildId: string|null, data: object|null, operator: boolean, guilds?: Array<{id: string, name: string}> }} src
+ * In the focused moderator view (`focused`) it lists only what that view's sidebar shows, and no module pages.
+ * @param {{ guildId: string|null, data: object|null, operator: boolean, focused?: boolean, guilds?: Array<{id: string, name: string}> }} src
  */
-export function paletteItems({ guildId, data, operator, guilds = [] }) {
-  const nav = navModel({ guildId, data, operator });
+export function paletteItems({ guildId, data, operator, guilds = [], focused = false }) {
+  const nav = navModel({ guildId, data, operator, focused });
   const items = [];
   const seen = new Set();
   const add = (item) => {
@@ -97,7 +98,7 @@ export function paletteItems({ guildId, data, operator, guilds = [] }) {
   }
 
   const problems = new Set((data?.attention?.problems ?? []).map((p) => p.id));
-  for (const grp of data?.groups ?? []) {
+  for (const grp of focused ? [] : (data?.groups ?? [])) {
     for (const card of grp.cards ?? []) {
       const href = guildId ? v2Href(card, guildId) : null;
       const tone = cardTone(card, problems);
@@ -137,6 +138,7 @@ export function paletteItems({ guildId, data, operator, guilds = [] }) {
       label: `Switch to ${g.name}`,
       icon: 'grid',
       href: `/guilds/${g.id}`,
+      access: g.access,
       keywords: `server ${g.name}`,
     });
   }

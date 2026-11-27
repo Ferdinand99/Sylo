@@ -1,9 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import {
   acceptMirror,
   allowMirrorDeletes,
   getMirror,
+  getMirrorFluxerServers,
   getMirrorPreview,
   getMirrorReport,
   mirrorAction,
@@ -21,6 +22,7 @@ import Switch from '../components/Switch.jsx';
 import Time from '../components/Time.jsx';
 import CopyButton from '../components/CopyButton.jsx';
 import { confirmDialog } from '../components/ConfirmDialog.jsx';
+import { initial } from '../util.js';
 import {
   OPTION_HINTS,
   OPTION_ROWS,
@@ -30,6 +32,7 @@ import {
   deleteSummary,
   groupNotes,
   isBusy,
+  memberCountText,
   progressText,
   statusOf,
   stepOf,
@@ -292,7 +295,7 @@ function SourceView({ guildId, state, onState, code }) {
         of the Fluxer server, can set up and run a mirror.
       </p>
       <Stepper step={step} />
-      {!pair ? <AskStep guildId={guildId} state={state} onState={onState} /> : null}
+      {!pair ? <AskStep key={guildId} guildId={guildId} state={state} onState={onState} /> : null}
       {pair?.status === 'pending' ? (
         <AgreeStep guildId={guildId} pair={pair} onState={onState} code={code} />
       ) : null}
@@ -304,8 +307,151 @@ function SourceView({ guildId, state, onState, code }) {
   );
 }
 
+/** One Fluxer server in the picker: icon, name, members, and what Sylo still needs there. */
+function ServerChoice({ server, selected, onPick }) {
+  const id = `mirror-pick-${server.id}`;
+  return (
+    <li className={`v2-mirror-choice${selected ? ' is-selected' : ''}${server.inUse ? ' is-taken' : ''}`}>
+      <input
+        id={id}
+        type="radio"
+        name="mirror-fluxer-server"
+        checked={selected}
+        disabled={server.inUse}
+        onChange={() => onPick(server.id)}
+      />
+      <label htmlFor={id}>
+        <span className="v2-mirror-choice-icon" aria-hidden="true">
+          {server.icon ? <img src={server.icon} alt="" /> : initial(server.name)}
+        </span>
+        <span className="v2-mirror-choice-text">
+          <strong>{server.name}</strong>
+          <span className="v2-field-hint">{memberCountText(server.memberCount)}</span>
+        </span>
+      </label>
+      {server.inUse ? (
+        <p className="v2-note v2-row-warn v2-mirror-choice-note">This server is already part of a mirror.</p>
+      ) : null}
+      {server.notes.map((n) => (
+        <p key={n.code} className="v2-note v2-row-warn v2-mirror-choice-note">
+          {n.message}
+        </p>
+      ))}
+    </li>
+  );
+}
+
+/**
+ * Which Fluxer server to mirror to: a list of the ones the signed-in person owns on Fluxer and Sylo is in, or, behind
+ * "Enter an id instead", an id typed in (for a Fluxer server somebody else owns: its owner then agrees with a code).
+ */
+function ServerPicker({ guildId, state, target, setTarget }) {
+  const canList = state.isOwner !== false && state.fluxerConnected;
+  const [manual, setManual] = useState(false);
+  // 'loading' | 'ready' | 'failed'
+  const [list, setList] = useState({ status: canList ? 'loading' : 'failed', data: null });
+
+  useEffect(() => {
+    if (!canList) return undefined;
+    let live = true;
+    getMirrorFluxerServers(guildId)
+      .then((data) => live && setList({ status: 'ready', data }))
+      .catch(() => live && setList({ status: 'failed', data: null }));
+    return () => {
+      live = false;
+    };
+  }, [guildId, canList]);
+
+  const servers = list.data?.servers ?? [];
+  const connected = list.data?.connected !== false;
+  const showManual = manual || !canList || list.status === 'failed';
+
+  if (showManual) {
+    return (
+      <>
+        {list.status === 'failed' && canList ? (
+          <p className="v2-field-hint">Your Fluxer servers could not be listed just now.</p>
+        ) : null}
+        <Field
+          label="Fluxer server id"
+          hint="Paste the id of the Fluxer server (copy it with Developer Mode on)."
+        >
+          <input
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+            placeholder="Server id"
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </Field>
+        {manual && canList && list.status === 'ready' ? (
+          <p className="v2-field-hint">
+            If you do not own that Fluxer server, its owner agrees with a code you give them.{' '}
+            <button
+              type="button"
+              className="v2-mirror-linkbtn"
+              onClick={() => {
+                setManual(false);
+                setTarget('');
+              }}
+            >
+              Pick from my Fluxer servers instead
+            </button>
+          </p>
+        ) : null}
+      </>
+    );
+  }
+
+  return (
+    <div role="radiogroup" aria-labelledby="mirror-pick-title" className="v2-mirror-pick">
+      <h3 id="mirror-pick-title" className="v2-mirror-subtitle">
+        Pick the Fluxer server
+      </h3>
+      {list.status === 'loading' ? <p className="v2-field-hint">Looking for your Fluxer servers…</p> : null}
+      {list.status === 'ready' && !connected ? (
+        <Callout tone="info" title="Fluxer is not connected to your account">
+          <Link to="/account">Connect Fluxer under Account</Link> to pick your Fluxer servers.
+        </Callout>
+      ) : null}
+      {list.status === 'ready' && connected && servers.length === 0 ? (
+        <p className="v2-field-hint">
+          No Fluxer server was found where Sylo is a member and you are the owner. Invite Sylo to your server
+          first, or enter an id instead.
+        </p>
+      ) : null}
+      {servers.length ? (
+        <ul className="v2-mirror-choices">
+          {servers.map((server) => (
+            <ServerChoice
+              key={server.id}
+              server={server}
+              selected={target === server.id}
+              onPick={setTarget}
+            />
+          ))}
+        </ul>
+      ) : null}
+      {list.status === 'ready' ? (
+        <p className="v2-field-hint">
+          <button
+            type="button"
+            className="v2-mirror-linkbtn"
+            onClick={() => {
+              setManual(true);
+              setTarget('');
+            }}
+          >
+            Enter an id instead
+          </button>
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 function AskStep({ guildId, state, onState }) {
-  const [target, setTarget] = useState(state.candidates[0]?.id ?? '');
+  const [target, setTarget] = useState('');
   const { working, act } = useAct(onState);
   const valid = validTargetId(target);
 
@@ -322,35 +468,12 @@ function AskStep({ guildId, state, onState }) {
       ) : null}
       <ol className="v2-mirror-todo">
         <li>On Fluxer, create an empty server for the mirror.</li>
-        <li>Invite Sylo to it and give Sylo's role the Administrator permission.</li>
-        <li>Enter the id of that Fluxer server below.</li>
+        <li>Invite Sylo to it and give Sylo's role the Administrator permission, at the top of the roles.</li>
+        <li>Pick that Fluxer server below.</li>
       </ol>
       <Limits limits={state.limits} />
       <OwnerOnly note>
-        <Field
-          label="Fluxer server"
-          hint={
-            state.candidates.length
-              ? 'The Fluxer servers you manage where Sylo is a member are listed. You can also paste a server id.'
-              : 'Paste the id of the Fluxer server (copy it with Developer Mode on).'
-          }
-        >
-          <input
-            list="mirror-candidates"
-            value={target}
-            onChange={(e) => setTarget(e.target.value)}
-            placeholder="Server id"
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </Field>
-        <datalist id="mirror-candidates">
-          {state.candidates.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </datalist>
+        <ServerPicker guildId={guildId} state={state} target={target} setTarget={setTarget} />
         <div className="v2-setup-actions">
           <button
             type="button"

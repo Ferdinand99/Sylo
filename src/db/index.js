@@ -1595,11 +1595,38 @@ export const MIGRATIONS = [
       database.exec('ALTER TABLE appeals ADD COLUMN decided_by_user_id TEXT;');
   },
 
-  // Versions 81 and 82 are taken by other 5.3 changes (the look of the public member pages, and the
-  // tickets index). Their branches add their own steps here; until they are merged these two stay empty,
-  // so the Bridge below keeps the version it was given (83) and a database never skips a step.
-  () => {},
-  () => {},
+  // The server's own look on the public member pages (src/db/publicLook.js, which bootstraps the same tables
+  // on Postgres): an accent colour and a background choice per server, and the picture of the background
+  // (an upload, or a copy of the server's invite splash that Sylo keeps itself). One picture per source.
+  (database) => {
+    database.exec(`
+      CREATE TABLE guild_public_look (
+        guild_id   TEXT PRIMARY KEY,
+        accent     TEXT NOT NULL DEFAULT '',
+        background TEXT NOT NULL DEFAULT 'none',
+        updated_at INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE public_look_images (
+        guild_id   TEXT NOT NULL,
+        source     TEXT NOT NULL,
+        hash       TEXT NOT NULL,
+        mime       TEXT NOT NULL,
+        bytes      INTEGER NOT NULL,
+        data       BLOB NOT NULL,
+        origin     TEXT NOT NULL DEFAULT '',
+        checked_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (guild_id, source)
+      );
+    `);
+  },
+  // 82: the open tickets of one user across servers (the DM ticket lookup asks for them first). Postgres
+  // creates the same index in its bootstrap (db/tickets.js).
+  (database) => {
+    database.exec(
+      `CREATE INDEX IF NOT EXISTS idx_tickets_user_open ON tickets (user_id) WHERE status = 'open';`
+    );
+  },
 
   // Bridge (src/db/bridge.js, which bootstraps the same tables on Postgres): the links between a Discord
   // channel and a Fluxer channel, the one-time codes that start one (only the hash is kept) and the map

@@ -85,6 +85,13 @@ export function createFluxerTarget(guild) {
 
   const gone = () => Object.assign(new Error('Unknown channel or role'), { statusCode: 404 });
 
+  // The SDK's REST client, for the routes whose SDK method does not fit Fluxer's answer.
+  const rest = () => {
+    const client = guild.client?.rest;
+    if (typeof client?.patch !== 'function') throw new Error('The Fluxer REST client is not available.');
+    return client;
+  };
+
   return {
     kind: 'fluxer',
     id: String(guild.id),
@@ -188,8 +195,18 @@ export function createFluxerTarget(guild) {
       if (!role) throw gone();
       await role.delete('Mirrored from the Discord server');
     },
+    /**
+     * PATCH /guilds/{id}/roles with `[{ id, position }]`. Fluxer answers 204 No Content; the SDK's
+     * guild.setRolePositions() maps over the answer as if it were the role list (Discord's answer) and throws on it
+     * after the order was set, so the route is called through the SDK's REST client instead. The new positions reach
+     * the role cache through the gateway (GUILD_ROLE_UPDATE_BULK).
+     * @param {Array<{ id: string, position: number }>} updates
+     */
     async setRolePositions(updates) {
-      await guild.setRolePositions(updates);
+      await rest().patch(`/guilds/${guild.id}/roles`, {
+        body: updates.map((u) => ({ id: String(u.id), position: Number(u.position) })),
+        auth: true,
+      });
     },
 
     // --- channels ---
@@ -210,8 +227,23 @@ export function createFluxerTarget(guild) {
       if (!channel) throw gone();
       await channel.delete({ reason: 'Mirrored from the Discord server' });
     },
+    /**
+     * PATCH /guilds/{id}/channels with `[{ id, position, parent_id, lock_permissions }]` (Fluxer answers 204). Fluxer
+     * applies the items one by one, in the order sent: `position` is the index among the channel's new siblings at
+     * that moment, and a move that leaves a voice channel above a text channel in a category is refused (400). The
+     * engine sends them in an order that keeps every step valid (see channelPositionUpdates in plan.js).
+     * @param {Array<{ id: string, position: number, parentId: string | null }>} updates
+     */
     async setChannelPositions(updates) {
-      await guild.setChannelPositions(updates);
+      await rest().patch(`/guilds/${guild.id}/channels`, {
+        body: updates.map((u) => ({
+          id: String(u.id),
+          position: Number(u.position),
+          parent_id: u.parentId == null ? null : String(u.parentId),
+          lock_permissions: false,
+        })),
+        auth: true,
+      });
     },
 
     // --- emoji and stickers ---

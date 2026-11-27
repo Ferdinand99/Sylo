@@ -43,11 +43,24 @@ export function isNotFound(err) {
 }
 
 /**
+ * What Fluxer said about the fields of a refused request. A 400 says only "Invalid form body." in its message; the
+ * reasons are in `errors` ([{ path, message, code }]), which the SDK keeps on the error.
+ */
+function fieldErrors(err) {
+  const list = Array.isArray(err?.errors) ? err.errors : [];
+  const parts = list
+    .slice(0, 3)
+    .map((e) => [e?.path, e?.message ?? e?.code].filter(Boolean).join(': '))
+    .filter(Boolean);
+  return parts.length ? ` (${parts.join('; ')})` : '';
+}
+
+/**
  * @param {any} err
  * @returns {{ kind: ErrorKind, retryAfterMs?: number, message: string }}
  */
 export function classifyError(err) {
-  const message = String(err?.message ?? err ?? 'Unknown error').slice(0, 300);
+  const message = `${String(err?.message ?? err ?? 'Unknown error')}${fieldErrors(err)}`.slice(0, 300);
   if (err instanceof MirrorError) return { kind: err.kind, message };
   // The SDK wraps a failed look-up in an error that keeps the HTTP status only in `cause`.
   const status = Number(err?.statusCode ?? err?.status ?? err?.cause?.statusCode ?? err?.cause?.status ?? 0);

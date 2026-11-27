@@ -79,7 +79,7 @@ test('the owner of the Discord server asks; the owner of the Fluxer server agree
     [empty.platform, empty.canMirror, empty.pair, empty.isOwner],
     ['discord', true, null, true]
   );
-  assert.equal(empty.candidates.length, 0, 'this person owns no Fluxer server');
+  assert.ok(!('candidates' in empty), 'the Fluxer servers come from their own route');
 
   const res = await anna.post(`/guilds/${D_GUILD}/mirror/request`, { targetGuildId: F_GUILD });
   assert.equal(res.status, 200);
@@ -216,9 +216,9 @@ test('the same person who owns both servers agrees on both sides at once', async
   await reset();
   const both = await person({ discord: true, fluxer: true });
   owners({ discord: both.ids.discord, fluxer: both.ids.fluxer });
-  const state = await (await both.get(`/guilds/${D_GUILD}/mirror`)).json();
+  const list = await (await both.get(`/guilds/${D_GUILD}/mirror/fluxer-servers`)).json();
   assert.deepEqual(
-    state.candidates.map((c) => c.id),
+    list.servers.map((c) => c.id),
     [F_KEY],
     'the Fluxer servers this person owns are offered'
   );
@@ -244,8 +244,8 @@ test('an owner of one server who is only an Administrator of the other is not en
   await reset();
   const mixed = await person({ discord: true, fluxer: true });
   owners({ discord: mixed.ids.discord, fluxer: 'someone-else' }); // owns Discord, is not the Fluxer owner
-  const state = await (await mixed.get(`/guilds/${D_GUILD}/mirror`)).json();
-  assert.deepEqual(state.candidates, [], 'a Fluxer server they do not own is not offered');
+  const list = await (await mixed.get(`/guilds/${D_GUILD}/mirror/fluxer-servers`)).json();
+  assert.deepEqual(list.servers, [], 'a Fluxer server they do not own is not offered');
   const res = await mixed.post(`/guilds/${D_GUILD}/mirror/request`, {
     targetGuildId: F_KEY,
     options: { mirrorDeletes: true },
@@ -446,4 +446,167 @@ test('signed out and without a CSRF token, nothing works', async () => {
   });
   assert.ok([401, 403].includes(noToken.status));
   assert.equal((await anna.get(`/guilds/${D_GUILD}/mirror`)).status, 200);
+});
+
+// ---- the picker of the Fluxer servers ------------------------------------------------------------------
+
+const F_OTHER_OWNER = '900000000000000204'; // Fluxer says it is theirs (OAuth), the gateway says it is somebody else's
+const F_NOT_LISTED = '900000000000000205'; // the gateway says they own it, their login does not list it
+const SYLO_ROLE = '900000000000000301';
+
+/** Add servers to the fake Fluxer bot, run `fn`, and take them away again. */
+async function withFluxerGuilds(extra, fn) {
+  const cache = runtime.clients.fluxer.guilds.cache;
+  for (const g of extra) cache.set(g.id, g);
+  try {
+    return await fn();
+  } finally {
+    for (const g of extra) cache.delete(g.id);
+  }
+}
+const copyOfF = (id, name, ownerId) => ({ ...fGuild, id, name, ownerId });
+
+/** Sylo's own member on a fake Fluxer server: its permissions and where its role stands among `roles`. */
+function syloIs(guild, { administrator = true, roles = [] } = {}) {
+  guild.members = {
+    ...guild.members,
+    me: {
+      permissions: { has: () => administrator },
+      roles: { highest: { id: SYLO_ROLE, position: 5 } },
+    },
+  };
+  guild.roles = { cache: new Map(roles.map((r) => [r.id, r])) };
+}
+
+test('the picker lists the Fluxer servers the person owns and Sylo is in, with a note for what Sylo lacks there', async () => {
+  await reset();
+  const both = await person({ discord: true, fluxer: true });
+  owners({ discord: both.ids.discord, fluxer: both.ids.fluxer });
+  const saved = { members: fGuild.members, roles: fGuild.roles, memberCount: fGuild.memberCount };
+  try {
+    // Sylo is not the top role, and lacks Administrator.
+    syloIs(fGuild, {
+      administrator: false,
+      roles: [
+        { id: SYLO_ROLE, name: 'Sylo', position: 5 },
+        { id: '900000000000000302', name: 'Admins', position: 9 },
+      ],
+    });
+    fGuild.memberCount = 42;
+    const res = await both.get(`/guilds/${D_GUILD}/mirror/fluxer-servers`);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('cache-control'), 'no-store');
+    const body = await res.json();
+    assert.equal(body.connected, true);
+    assert.equal(body.servers.length, 1);
+    const [one] = body.servers;
+    assert.deepEqual(
+      [one.id, one.name, one.memberCount, one.inUse, one.icon],
+      [F_KEY, 'F-main', 42, false, null]
+    );
+    assert.deepEqual(one.notes.map((n) => n.code).sort(), ['role-hierarchy', 'target-permissions']);
+
+    // Sylo is the top role with Administrator: no notes.
+    syloIs(fGuild, { roles: [{ id: SYLO_ROLE, name: 'Sylo', position: 5 }] });
+    const clean = (await (await both.get(`/guilds/${D_GUILD}/mirror/fluxer-servers`)).json()).servers[0];
+    assert.deepEqual(clean.notes, []);
+
+    // A server that is already part of a mirror says so.
+    await both.post(`/guilds/${D_GUILD}/mirror/request`, { targetGuildId: F_KEY });
+    const taken = (await (await both.get(`/guilds/${D_GUILD}/mirror/fluxer-servers`)).json()).servers[0];
+    assert.equal(taken.inUse, true);
+  } finally {
+    Object.assign(fGuild, saved);
+    await reset();
+  }
+});
+
+test('the picker never names a Fluxer server the person does not own', async () => {
+  await reset();
+  const other = copyOfF(F_OTHER_OWNER, 'Secret-other-server', 'somebody-else');
+  const unlisted = copyOfF(F_NOT_LISTED, 'Secret-unlisted-server', 'placeholder');
+  await withFluxerGuilds([other, unlisted], async () => {
+    setProfiles();
+    profiles.fluxer.guilds = [
+      { id: F_GUILD, owner: true },
+      { id: F_OTHER_OWNER, owner: true },
+    ];
+    const b = own();
+    await signIn(b, 'discord');
+    await signIn(b, 'fluxer', { connect: true });
+    const get = (path) => b.get(`/api/v2${path}`, { headers: { accept: 'application/json' } });
+    dGuild.ownerId = profiles.discord.id;
+    fGuild.ownerId = 'somebody-else';
+    other.ownerId = 'somebody-else';
+    unlisted.ownerId = profiles.fluxer.id;
+
+    const text = await (await get(`/guilds/${D_GUILD}/mirror/fluxer-servers`)).text();
+    const body = JSON.parse(text);
+    assert.deepEqual(body.servers, [], 'no server they own: an empty list');
+    for (const secret of [
+      'F-main',
+      'Secret-other-server',
+      'Secret-unlisted-server',
+      F_GUILD,
+      F_OTHER_OWNER,
+      F_NOT_LISTED,
+    ]) {
+      assert.ok(!text.includes(secret), `${secret} is not in the answer`);
+    }
+
+    // Now they own the first one only: the other two stay out.
+    fGuild.ownerId = profiles.fluxer.id;
+    const mine = await (await get(`/guilds/${D_GUILD}/mirror/fluxer-servers`)).json();
+    assert.deepEqual(
+      mine.servers.map((x) => x.id),
+      [F_KEY]
+    );
+  });
+});
+
+test('the picker says when no Fluxer login is connected, and only the owner of the Discord server may ask', async () => {
+  await reset();
+  const discordOnly = await person({ discord: true });
+  owners({ discord: discordOnly.ids.discord, fluxer: discordOnly.ids.fluxer });
+  const none = await (await discordOnly.get(`/guilds/${D_GUILD}/mirror/fluxer-servers`)).json();
+  assert.deepEqual([none.connected, none.servers], [false, []]);
+
+  const admin = await person({ discord: true, fluxer: true, admin: true });
+  owners({ discord: 'somebody-else', fluxer: admin.ids.fluxer });
+  const refused = await admin.get(`/guilds/${D_GUILD}/mirror/fluxer-servers`);
+  assert.equal(refused.status, 403);
+  const refusedBody = await refused.json();
+  assert.equal(refusedBody.code, 'owner-only');
+  assert.ok(!JSON.stringify(refusedBody).includes('F-main'));
+
+  const onFluxer = await person({ discord: true, fluxer: true });
+  owners({ discord: onFluxer.ids.discord, fluxer: onFluxer.ids.fluxer });
+  assert.equal((await onFluxer.get(`/guilds/${F_KEY}/mirror/fluxer-servers`)).status, 400);
+
+  const out = own();
+  assert.ok(
+    [401, 403].includes(
+      (
+        await out.get(`/api/v2/guilds/${D_GUILD}/mirror/fluxer-servers`, {
+          headers: { accept: 'application/json' },
+        })
+      ).status
+    ),
+    'signed out'
+  );
+});
+
+test('the picker is rate limited and classified in the access table', async () => {
+  await reset();
+  const { ROUTE_ACCESS } = await import('../src/web/lib/routeAccess.js');
+  assert.equal(ROUTE_ACCESS['GET /guilds/:guildId/mirror/fluxer-servers'], 'edit');
+  const both = await person({ discord: true, fluxer: true });
+  owners({ discord: both.ids.discord, fluxer: both.ids.fluxer });
+  let last = 0;
+  for (let i = 0; i < 14; i++) last = (await both.get(`/guilds/${D_GUILD}/mirror/fluxer-servers`)).status;
+  assert.equal(last, 429);
+  // Another person has a budget of their own.
+  const next = await person({ discord: true, fluxer: true });
+  owners({ discord: next.ids.discord, fluxer: next.ids.fluxer });
+  assert.equal((await next.get(`/guilds/${D_GUILD}/mirror/fluxer-servers`)).status, 200);
 });

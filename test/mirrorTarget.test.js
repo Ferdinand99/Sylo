@@ -26,7 +26,10 @@ function sdkGuild({ perms = [], admin = false, top = 7 } = {}) {
         roles: { highest: { id: '810000000000000000', position: top } },
       },
     },
-    client: { channels: { fetch: async () => null } },
+    client: {
+      channels: { fetch: async () => null },
+      rest: { patch: async (route, opts) => log.push(['rest.patch', route, opts.body]) },
+    },
     createRole: async (body) => {
       log.push(['createRole', body]);
       const role = entity('role', { id: '810000000000000001', name: body.name, type: 'role' });
@@ -47,8 +50,6 @@ function sdkGuild({ perms = [], admin = false, top = 7 } = {}) {
       log.push(['createSticker', body]),
       entity('sticker', { id: '840000000000000001' })
     ),
-    setRolePositions: async (u) => log.push(['setRolePositions', u]),
-    setChannelPositions: async (u) => log.push(['setChannelPositions', u]),
     edit: async (b) => log.push(['guild.edit', b]),
     fetchRole: async () => {
       throw Object.assign(new Error('Unknown Role'), { statusCode: 404 });
@@ -163,7 +164,11 @@ test('a channel keeps its overwrites as bigint allow and deny; only text and ann
   assert.deepEqual(log.at(-1), ['channel.delete', id, { reason: 'Mirrored from the Discord server' }]);
   await assert.rejects(target.deleteChannel('820000000000000099'), (e) => classifyError(e).kind === 'gone');
   await target.setChannelPositions([{ id, position: 1, parentId: null }]);
-  assert.equal(log.at(-1)[0], 'setChannelPositions');
+  assert.deepEqual(log.at(-1), [
+    'rest.patch',
+    `/guilds/${guild.id}/channels`,
+    [{ id, position: 1, parent_id: null, lock_permissions: false }],
+  ]);
 });
 
 test('emoji, stickers, positions and the server itself go through the SDK with data URIs', async () => {
@@ -182,7 +187,7 @@ test('emoji, stickers, positions and the server itself go through the SDK with d
     { name: 'hi', description: 'Hello', tags: ['a'], image: 'data:image/png;base64,AQID' },
   ]);
   await target.setRolePositions([{ id: '1', position: 2 }]);
-  assert.deepEqual(log.at(-1), ['setRolePositions', [{ id: '1', position: 2 }]]);
+  assert.deepEqual(log.at(-1), ['rest.patch', `/guilds/${guild.id}/roles`, [{ id: '1', position: 2 }]]);
   await target.editGuild({ name: 'New', icon: 'data:image/png;base64,AQID' });
   assert.deepEqual(log.at(-1), ['guild.edit', { name: 'New', icon: 'data:image/png;base64,AQID' }]);
   await assert.rejects(

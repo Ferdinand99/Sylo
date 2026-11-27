@@ -5,7 +5,9 @@ import { dirname, resolve } from 'node:path';
 import { resolveSessionSecret } from './lib/sessionSecret.js';
 import { normalisePrivateKey } from './lib/appStoreConnect.js';
 import { checkPigeonUrl } from './lib/pigeonUrl.js';
+import { readWrenSettings } from './lib/wiseWren.js';
 import { commandPrefixError } from './lib/commandPrefix.js';
+import { parseBridgeMaxLinks } from './lib/bridgeLimit.js';
 
 /**
  * Read a required string env var, or exit with a clear message.
@@ -242,6 +244,16 @@ if (optionalOrNull('PIGEON_URL')) {
     console.error(`[config] PIGEON_URL is not usable (${err.message}); push through Pigeon is off.`);
   }
 }
+// The operators' update notice: Sylo asks GitHub for its newest release (cached, no account, no
+// data about this instance is sent). UPDATE_CHECK=off turns it off; nothing is requested then.
+const updateCheck = !/^(0|false|no|off)$/i.test(process.env.UPDATE_CHECK?.trim() ?? '');
+// Optional: Wise Wren (https://github.com/Ferdinand99/Wise-Wren) updates this instance from the
+// dashboard's "Update now". All three settings are needed; the token is a secret.
+const { settings: wiseWren, problem: wiseWrenProblem } = readWrenSettings(process.env);
+if (wiseWrenProblem) console.error(`[config] ${wiseWrenProblem}`);
+// Without a dashboard login nobody is signed in, so "Update now" would be open to everyone who can reach
+// the dashboard. It is refused there unless this says it is wanted anyway.
+const wiseWrenAllowOpenMode = optionalBool('WISE_WREN_ALLOW_OPEN_MODE', false);
 const kickClientSecret = optionalOrNull('KICK_CLIENT_SECRET');
 // Signs session cookies and short-lived tokens (e.g. verification links), so it
 // must always exist. SESSION_SECRET wins; otherwise a generated secret is kept in
@@ -282,6 +294,13 @@ if (commandPrefixProblem) {
   process.exit(1);
 }
 
+// The most bridged channels one server can have (the Bridge module and the server mirror share it).
+const bridgeMaxLinks = parseBridgeMaxLinks(process.env.BRIDGE_MAX_LINKS);
+if (bridgeMaxLinks.error) {
+  console.error(`[config] ${bridgeMaxLinks.error}`);
+  process.exit(1);
+}
+
 export const config = Object.freeze({
   // Discord (null when this install does not run on Discord)
   discordToken,
@@ -294,6 +313,7 @@ export const config = Object.freeze({
   fluxerWebUrl,
   fluxerApiUrl,
   commandPrefix,
+  bridgeMaxLinks: bridgeMaxLinks.value,
   // Optional: register slash commands to these guild(s) for instant availability
   // during development (one id, or a comma/space-separated list). When empty,
   // commands are registered globally (can take up to ~1 hour to propagate).
@@ -370,6 +390,10 @@ export const config = Object.freeze({
   pushRelayUrl,
   // Postal Pigeon (see above); null = off.
   pigeonUrl,
+  // The update notice (see above), and Wise Wren's address, token and target id (null = off).
+  updateCheck,
+  wiseWren,
+  wiseWrenAllowOpenMode,
   // URLs that server admins type in (RSS feeds, the welcome card background) are fetched by
   // the server, so private, loopback and link-local addresses are refused (src/lib/safeFetch.js).
   // A self-hosted instance that wants feeds from its own network can allow them.
@@ -408,3 +432,10 @@ export const config = Object.freeze({
   // Misc
   nodeEnv: optional('NODE_ENV', 'development'),
 });
+
+if (config.wiseWren && !config.authEnabled && !config.wiseWrenAllowOpenMode) {
+  console.error(
+    '[config] Wise Wren is set up, but the dashboard has no login (open mode), so "Update now" is off: ' +
+      'anyone who can reach the dashboard could use it. Set up a login, or set WISE_WREN_ALLOW_OPEN_MODE=true to allow it.'
+  );
+}

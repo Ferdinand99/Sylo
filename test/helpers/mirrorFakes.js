@@ -247,7 +247,8 @@ export function fakeFluxer({
         name: spec.name,
         type: spec.type,
         parentId: spec.parentId ?? null,
-        position: 0,
+        // a new channel goes to the end
+        position: Math.max(0, ...[...guild.channels.values()].map((c) => c.position ?? 0)) + 1,
       });
       done('createChannel', { spec, id: cid });
       return cid;
@@ -264,8 +265,11 @@ export function fakeFluxer({
       if (!guild.channels.delete(cid)) throw gone('channel');
       done('deleteChannel', { id: cid });
     },
+    // Like Fluxer (ChannelOperationsService.updateChannelPositionsByList): the moves are applied one at a time, and a
+    // move that leaves a voice channel above a text channel in a category is refused with a 400.
     async setChannelPositions(updates) {
       begin('setChannelPositions');
+      for (const u of updates) moveChannel(guild, u);
       done('setChannelPositions', { updates });
     },
     async createEmoji({ name, image }) {
@@ -313,6 +317,75 @@ export function fakeFluxer({
     failAfterCreate: (op, error) => afterFailures.set(op, error),
     ops: (op) => calls.filter((c) => c.op === op),
   };
+}
+
+// --- Fluxer's channel ordering (packages/schema GuildChannelOrdering.ts and ChannelOperationsService.ts) -----------
+
+const F_TEXT_LIKE = new Set([0, 5, 15, 16, 998]);
+const fRank = (c) => (F_TEXT_LIKE.has(c.type) ? 0 : c.type === 2 ? 1 : 2);
+const fByPosition = (a, b) =>
+  (a.position ?? 0) - (b.position ?? 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+/** Fluxer's list order: the top level by position, each category followed by its channels, text-like ones first. */
+export function fluxerChannelList(channels) {
+  const all = [...channels.values()];
+  const byId = new Map(all.map((c) => [c.id, c]));
+  const roots = all.filter((c) => !c.parentId || !byId.has(c.parentId)).sort(fByPosition);
+  const out = [];
+  for (const root of roots) {
+    out.push(root);
+    if (root.type !== 4) continue;
+    out.push(
+      ...all.filter((c) => c.parentId === root.id).sort((a, b) => fRank(a) - fRank(b) || fByPosition(a, b))
+    );
+  }
+  out.push(...all.filter((c) => !out.includes(c)).sort(fByPosition));
+  return out;
+}
+
+const invalidForm = (path, code) =>
+  Object.assign(new Error('Invalid form body.'), {
+    statusCode: 400,
+    code: 'INVALID_FORM_BODY',
+    errors: [{ path, message: code, code }],
+  });
+
+/** One move of PATCH /guilds/{id}/channels, as Fluxer applies it. */
+function moveChannel(guild, u) {
+  const target = guild.channels.get(u.id);
+  if (!target) throw invalidForm('id', 'CHANNEL_NOT_FOUND');
+  const parent = u.parentId === undefined ? (target.parentId ?? null) : u.parentId;
+  if (parent && guild.channels.get(parent)?.type !== 4)
+    throw invalidForm('parent_id', 'INVALID_PARENT_CHANNEL');
+  if (target.type === 4 && parent) throw invalidForm('parent_id', 'CATEGORIES_CANNOT_HAVE_PARENTS');
+  const ordered = fluxerChannelList(guild.channels);
+  const block = new Set([target.id]);
+  if (target.type === 4) for (const c of ordered) if (c.parentId === target.id) block.add(c.id);
+  const siblings = ordered.filter((c) => (c.parentId ?? null) === parent && !block.has(c.id));
+  const index = Math.min(Math.max(u.position ?? siblings.length, 0), siblings.length);
+  const preceding = index === 0 ? null : siblings[index - 1];
+  const rest = ordered.filter((c) => !block.has(c.id));
+  let at;
+  if (preceding?.type === 4) {
+    at = rest.findIndex((c) => c.id === preceding.id) + 1;
+    while (at < rest.length && rest[at].parentId === preceding.id) at += 1;
+  } else if (preceding) at = rest.findIndex((c) => c.id === preceding.id) + 1;
+  else at = parent ? rest.findIndex((c) => c.id === parent) + 1 : 0;
+  const moved = ordered.filter((c) => block.has(c.id));
+  const final = [...rest.slice(0, at), ...moved, ...rest.slice(at)];
+  const parentOf = (c) => (c.id === target.id ? parent : (c.parentId ?? null));
+  if (parent) {
+    const group = final.filter((c) => parentOf(c) === parent);
+    const i = group.findIndex((c) => c.id === target.id);
+    const wrong =
+      (target.type === 2 && group[i + 1] && F_TEXT_LIKE.has(group[i + 1].type)) ||
+      (F_TEXT_LIKE.has(target.type) && group[i - 1]?.type === 2);
+    if (wrong) throw invalidForm('preceding_sibling_id', 'VOICE_CHANNELS_CANNOT_BE_ABOVE_TEXT_CHANNELS');
+  }
+  final.forEach((c, i) => {
+    c.parentId = parentOf(c);
+    c.position = i + 1;
+  });
 }
 
 /** A fake clock and a sleep that moves it, so spacing and backoff are checked without waiting. */

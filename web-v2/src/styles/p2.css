@@ -1,0 +1,107 @@
+/* The operators' update notice: the pill in the top bar and the "Updates" section of the Health page
+   (components/UpdateBadge.jsx, components/UpdateNotice.jsx). The release notes reuse the What's new list
+   styles (.v2-cl-section). Colours are the status tokens. */
+
+/* ---- Top bar --------------------------------------------------------------------------------------- */
+.v2-update-badge {
+  flex: none;
+  text-decoration: none;
+}
+.v2-update-badge:hover {
+  filter: brightness(1.1);
+  text-decoration: underline;
+}
+/* An arrow marks it as a link, unlike the static status pills. */
+.v2-update-badge::after {
+  content: '\2192';
+  font-weight: 600;
+}
+/* Below the drawer breakpoint the top bar is tight: the pill keeps to a short label. */
+@media (max-width: 600px) {
+  .v2-update-badge {
+    padding: 2px 8px;
+  }
+}
+
+/* ---- Health page ----------------------------------------------------------------------------------- */
+/* Everything in the section is read in full: `.v2-row-main p` otherwise cuts a paragraph to one line with
+   an ellipsis, which hid the environment variable names in the Wise Wren tip and the open-mode reason. */
+#update .v2-row-main p,
+#update .v2-callout p {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+/* The main message first: the headline is the section's lead line, not muted row text. */
+#update .v2-upd-headline {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  line-height: 1.4;
+}
+/* "Check again" stays at the top of the row when the notes are open. */
+#update .v2-row-actions {
+  align-self: flex-start;
+}
+.v2-upd-retry {
+  margin-top: 8px;
+}
+.v2-upd-notes {
+  margin-top: 10px;
+}
+.v2-upd-notes summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.v2-upd-notes .v2-cl-section {
+  margin-top: 8px;
+}
+.v2-upd-notes-text {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.v2-upd-command {
+  margin-top: 12px;
+}
+.v2-upd-command-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.v2-upd-command-row code {
+  padding: 4px 8px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+
+.v2-upd-progress {
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+}
+.v2-upd-progress.is-working {
+  border-left-color: var(--warn);
+}
+.v2-upd-progress.is-success {
+  border-left-color: var(--success);
+}
+.v2-upd-progress.is-failure {
+  border-left-color: var(--danger);
+}
+.v2-upd-progress p {
+  margin: 0 0 6px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.v2-upd-step {
+  color: var(--text-muted);
+}

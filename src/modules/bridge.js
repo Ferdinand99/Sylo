@@ -36,8 +36,9 @@ import { createWebhookTransport } from '../platform/webhooks.js';
 import { isAgeRestricted as ageOf, jumpUrl } from './quoteBoard.js';
 import { safeFetch } from '../lib/safeFetch.js';
 import { log } from '../lib/log.js';
+import { config } from '../config.js';
 import { sweepMap } from '../lib/sweepMap.js';
-import { BridgeQueueError, classifyError, createRelayQueue } from './lib/bridgeQueue.js';
+import { BridgeQueueError, classifyError, createRelayQueue, relayGapMs } from './lib/bridgeQueue.js';
 import {
   FILE_BYTES_LIMIT,
   escapeMarkdown,
@@ -60,11 +61,22 @@ import {
 
 // The module has no settings of its own (modules/limits.js lists none); these are its ceilings, sent to the
 // page with the overview.
-/** The most links a server can have, and the most requests it can have waiting. */
-export const MAX_LINKS = 10;
+/**
+ * The most links a server can have, by hand and through a server mirror alike (src/mirror/bridgeLink.js links
+ * every copied text channel). The operator sets it with BRIDGE_MAX_LINKS (default 100, 1 to 500, see
+ * src/lib/bridgeLimit.js); tests replace it through useBridgeParts.
+ */
+let maxLinks = config.bridgeMaxLinks;
+export const getMaxLinks = () => maxLinks;
+/** The most requests a server can have waiting. */
 export const MAX_REQUESTS = 5;
-/** The ceiling for a server that is mirrored (src/mirror/bridgeLink.js links every copied text channel). */
-export const MAX_MIRROR_LINKS = 50;
+/** The refusal for a server that is at the ceiling (the operator raises it with BRIDGE_MAX_LINKS). */
+const limitError = (code = '') =>
+  new BridgeError(
+    `This server has reached its limit of ${maxLinks} bridged channels. The operator of this Sylo instance can raise it with BRIDGE_MAX_LINKS.`,
+    409,
+    code
+  );
 
 /** How many failed deliveries in a row stop a link. */
 export const FAIL_THRESHOLD = 5;
@@ -85,7 +97,7 @@ export class BridgeError extends Error {
 // --- wiring that tests replace -----------------------------------------------------------------------
 
 let transport = createWebhookTransport();
-let queue = createRelayQueue();
+let queue = createRelayQueue({ platformGaps: true });
 let download = (url, maxBytes) => safeFetch(url, { maxBytes, timeoutMs: 15_000 });
 
 // One budget for every file download of the process, across all servers: files are held in memory until
@@ -106,9 +118,10 @@ function releaseDownload(size) {
 }
 
 /** Use other parts (tests): a transport, a queue, a downloader, a download budget. No arguments: the real ones. */
-export function useBridgeParts({ transport: t, queue: q, download: d, budget: b } = {}) {
+export function useBridgeParts({ transport: t, queue: q, download: d, budget: b, maxLinks: m } = {}) {
+  maxLinks = m ?? config.bridgeMaxLinks;
   transport = t ?? createWebhookTransport();
-  queue = q ?? createRelayQueue();
+  queue = q ?? createRelayQueue({ platformGaps: true });
   download = d ?? ((url, maxBytes) => safeFetch(url, { maxBytes, timeoutMs: 15_000 }));
   budget = { ...DEFAULT_BUDGET, ...b };
 }
@@ -138,6 +151,8 @@ const hookOf = (link, side) =>
 const sideOf = (link, key) => (link.guildA === key ? 'a' : link.guildB === key ? 'b' : null);
 const platformOf = (key) => splitPlatformGuildId(key)?.platform ?? 'discord';
 const laneKey = (link, side) => `${link.id}|${side}`;
+/** The pause the platform that owns the webhook on `side` needs between two calls (see relayGapMs). */
+const gapOf = (link, side, op) => relayGapMs(platformOf(guildOf(link, side)), op);
 const TEXT_TYPES = new Set([ChannelType.GuildText, ChannelType.GuildAnnouncement]);
 
 const channelIn = (key, channelId) => guildByKey(key)?.channels?.cache?.get?.(channelId) ?? null;
@@ -363,9 +378,7 @@ export async function requestLink({ guildKey, channelId, options, actor }) {
   if (await store.channelHasPendingCode(guildKey, channelId)) {
     throw new BridgeError('That channel already has a request waiting. Cancel it to make a new one.', 409);
   }
-  if ((await store.linkCount(guildKey)) >= MAX_LINKS) {
-    throw new BridgeError(`A server can have at most ${MAX_LINKS} bridged channels.`, 409);
-  }
+  if ((await store.linkCount(guildKey)) >= maxLinks) throw limitError('limit');
   if ((await store.pendingCodeCount(guildKey)) >= MAX_REQUESTS) {
     throw new BridgeError(`At most ${MAX_REQUESTS} requests can wait at once. Cancel one first.`, 409);
   }
@@ -408,9 +421,7 @@ export async function acceptLink({ guildKey, channelId, code, options, actor }) 
   const mine = checkChannel(guildKey, channelId);
   if (await store.linkForChannel(guildKey, channelId))
     throw new BridgeError('That channel is already bridged.', 409);
-  if ((await store.linkCount(guildKey)) >= MAX_LINKS) {
-    throw new BridgeError(`A server can have at most ${MAX_LINKS} bridged channels.`, 409);
-  }
+  if ((await store.linkCount(guildKey)) >= maxLinks) throw limitError('limit');
 
   const request = await store.peekCode(code);
   if (!request) throw new BridgeError(INVALID_CODE, 404);
@@ -439,6 +450,14 @@ export async function acceptLink({ guildKey, channelId, code, options, actor }) 
   }
   if (await store.linkForChannel(request.guildId, request.channelId)) {
     throw new BridgeError('The other channel was bridged in the meantime.', 409);
+  }
+  // The server that asked may have filled its limit since it made the request.
+  if ((await store.linkCount(request.guildId)) >= maxLinks) {
+    throw new BridgeError(
+      'The server that made this request has reached its limit of bridged channels, so it cannot take another. Ask the operator of this Sylo instance to raise BRIDGE_MAX_LINKS, or unlink a channel there.',
+      409,
+      'limit'
+    );
   }
   checkAge(guildKey, mine.channel, request.guildId, theirs.channel);
 
@@ -733,9 +752,7 @@ export async function createMirrorLink({ source, target, members = {}, open = fa
     throw new BridgeError('One of the channels is already bridged.', 409, 'exists');
   }
   for (const key of [source.guildKey, target.guildKey]) {
-    if ((await store.linkCount(key)) >= MAX_MIRROR_LINKS) {
-      throw new BridgeError(`A server can have at most ${MAX_MIRROR_LINKS} bridged channels.`, 409, 'limit');
-    }
+    if ((await store.linkCount(key)) >= maxLinks) throw limitError('limit');
   }
   checkAge(source.guildKey, a.channel, target.guildKey, b.channel);
   // A channel only some members can see is linked only to a channel that is as closed: nothing private is
@@ -1371,7 +1388,7 @@ export async function handleMessage(message, _config, key) {
   };
   track(
     queue
-      .enqueue(laneKey(link, target), job, { op: 'send' })
+      .enqueue(laneKey(link, target), job, { op: 'send', gapMs: gapOf(link, target, 'send') })
       .catch((err) => noteFailure(link, target, err))
       .finally(() => built?.release?.())
   );
@@ -1425,7 +1442,9 @@ export async function handleUpdate({ new: updated }, _config, key) {
     return map.counterpartId;
   };
   track(
-    queue.enqueue(laneKey(link, target), job, { op: 'edit' }).catch((err) => noteFailure(link, target, err))
+    queue
+      .enqueue(laneKey(link, target), job, { op: 'edit', gapMs: gapOf(link, target, 'edit') })
+      .catch((err) => noteFailure(link, target, err))
   );
 }
 
@@ -1456,7 +1475,7 @@ async function deleteCopies(link, side, ids) {
   };
   track(
     queue
-      .enqueue(laneKey(link, target), job, { op: 'delete' })
+      .enqueue(laneKey(link, target), job, { op: 'delete', gapMs: gapOf(link, target, 'delete') })
       .catch((err) =>
         log.debug('bridge', `a delete was not carried across (link ${link.id}): ${err?.message ?? err}`)
       )
@@ -1517,7 +1536,7 @@ export async function handleJoin(member, _config, key) {
             if (!current || current.status !== 'active') return null;
             return (await withHook(current, target, (hook) => sendCopy(dstKey, hook, payload))).value;
           },
-          { op: 'send' }
+          { op: 'send', gapMs: gapOf(link, target, 'send') }
         )
         .catch((err) => noteFailure(link, target, err))
     );
@@ -1634,7 +1653,7 @@ export async function bridgeOverview(key) {
     platform: platformOf(key),
     bothPlatforms: Boolean(runtime.clients.discord && runtime.clients.fluxer),
     enabled: (await getGuildModule(key, 'bridge')).enabled,
-    limits: { links: MAX_LINKS, requests: MAX_REQUESTS },
+    limits: { links: maxLinks, requests: MAX_REQUESTS },
     links: await Promise.all(links.map(async (l) => linkView(l, key, await mirrorHold(l)))),
     requests: requests.map((r) => ({
       id: r.id,
