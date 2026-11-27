@@ -1,17 +1,21 @@
-// Posts (or edits) one Discord message that shows how far the next release is.
+// Posts (or edits) Discord messages that show how far the next releases are, one message per milestone.
 //
-// It reads a GitHub milestone, counts its pull requests (done = merged) and issues (done = closed),
+// It reads each GitHub milestone, counts its pull requests (done = merged) and issues (done = closed),
 // builds a Discord embed and sends it to a webhook. Run by .github/workflows/roadmap.yml; it needs no
 // dependencies, only Node's built-in fetch.
 //
 // Environment:
 //   GITHUB_TOKEN, GITHUB_REPOSITORY   set by GitHub Actions
 //   ROADMAP_WEBHOOK_URL               the Discord webhook (a secret, never printed)
-//   ROADMAP_MILESTONE                 milestone title, default "5.3"
-//   ROADMAP_VARS                      the repo variables as JSON; ROADMAP_MESSAGE_ID_<version> is this version's message
-//   ROADMAP_MESSAGE_ID                optional fallback when ROADMAP_VARS has no id (local runs)
-//   ROADMAP_ALLOW_POST                "true" on a manual run that ticked "post": may create the message
-//   GITHUB_STEP_SUMMARY               set by GitHub Actions; the new message id is written here
+//   ROADMAP_MILESTONE                 milestone title, or a comma-separated list ("5.3, iOS 1.3"); default "5.3".
+//                                     Each one is updated in turn; one failing does not stop the others, but the
+//                                     run exits non-zero at the end
+//   ROADMAP_VARS                      the repo variables as JSON; ROADMAP_MESSAGE_ID_<slug> is that milestone's message
+//                                     ("5.3" -> ROADMAP_MESSAGE_ID_5_3, "iOS 1.3" -> ROADMAP_MESSAGE_ID_IOS_1_3)
+//   ROADMAP_MESSAGE_ID                optional fallback when ROADMAP_VARS has no id (local runs, one milestone only)
+//   ROADMAP_ALLOW_POST                "true" on a manual run that ticked "post": may create a message, but only
+//                                     for a milestone that has no saved id
+//   GITHUB_STEP_SUMMARY               set by GitHub Actions; new message ids are written here
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
@@ -165,8 +169,8 @@ export function toItems(apiItems) {
   return items;
 }
 
-// "5.3" -> "ROADMAP_MESSAGE_ID_5_3": every version keeps its own message, so the id lives in a
-// repo variable per milestone. (The workflow derives the same name.)
+// "5.3" -> "ROADMAP_MESSAGE_ID_5_3", "iOS 1.3" -> "ROADMAP_MESSAGE_ID_IOS_1_3": every milestone keeps its
+// own message, so the id lives in a repo variable per milestone.
 export function messageVarName(milestoneTitle) {
   return `ROADMAP_MESSAGE_ID_${String(milestoneTitle)
     .replace(/[^A-Za-z0-9]+/g, '_')
@@ -181,6 +185,25 @@ export function countsLine(items) {
   if (n('test')) parts.push(`${n('test')} waiting for test`);
   if (n('progress')) parts.push(`${n('progress')} to go`);
   return parts.join(' · ');
+}
+
+// "5.3, iOS 1.3" -> ["5.3", "iOS 1.3"]. Blank entries and repeats are dropped; an empty value means "5.3".
+export function parseMilestones(value) {
+  const list = [
+    ...new Set(
+      String(value ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    ),
+  ];
+  return list.length ? list : ['5.3'];
+}
+
+// The name shown in the embed title: "5.3" -> "Sylo 5.3", "iOS 1.3" -> "Sylo iOS app 1.3".
+export function milestoneHeading(milestoneTitle) {
+  const ios = /^ios\s+(.+)$/i.exec(String(milestoneTitle).trim());
+  return ios ? `Sylo iOS app ${ios[1]}` : `Sylo ${String(milestoneTitle).trim()}`;
 }
 
 export function buildEmbed(milestoneTitle, items, { released = false } = {}) {
@@ -202,7 +225,7 @@ export function buildEmbed(milestoneTitle, items, { released = false } = {}) {
   }
 
   return {
-    title: `Sylo ${milestoneTitle} — ${released ? 'released' : 'progress'}`,
+    title: `${milestoneHeading(milestoneTitle)} — ${released ? 'released' : 'progress'}`,
     description,
     color: EMBED_COLOR,
     footer: { text: 'Updated automatically' },
@@ -274,6 +297,46 @@ function summary(markdown) {
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown + '\n');
 }
 
+// Updates the message of one milestone. `messageFallback` (ROADMAP_MESSAGE_ID) only applies to a run
+// with a single milestone.
+async function updateMilestone(title, { env, webhook, repoVars, messageFallback }) {
+  const varName = messageVarName(title);
+  const { milestone, items } = await loadMilestone(env.GITHUB_REPOSITORY, title, env.GITHUB_TOKEN);
+  const embed = buildEmbed(title, items, { released: milestone.state === 'closed' });
+  const { points, max } = progressOf(items);
+  const pct = percent(points, max);
+  const stats = `${pct}%, ${items.filter((i) => stageOf(i) === 'done').length}/${items.length} done`;
+
+  // The id of this milestone's message comes from the repo variable ROADMAP_MESSAGE_ID_<slug>. A saved
+  // id always means "edit": a message that already exists is never posted a second time.
+  const messageId = String(repoVars[varName] ?? messageFallback ?? '').trim();
+  const result = await sendToDiscord(webhook, messageId, embed, {
+    allowPost: env.ROADMAP_ALLOW_POST === 'true',
+  });
+  if (result.action === 'skipped') {
+    console.log(
+      `No ${varName} is set, so nothing was posted for ${title}. To post its message, run this ` +
+        `workflow manually with "post" ticked (and "milestone" set to ${title}), then save the message id as ${varName}.`
+    );
+  } else if (result.action === 'missing') {
+    console.log(
+      `::notice::The progress message ${result.id} for ${title} no longer exists, so nothing was updated or posted. ` +
+        `Set ${varName} to the id of the message that is still there, or clear ${varName} and run the workflow ` +
+        'manually with "post" ticked to create a new one.'
+    );
+  } else if (result.action === 'posted') {
+    console.log(`Posted a new progress message ${result.id} for ${title} (${stats}).`);
+    summary(
+      `### Progress message posted for ${title}\n\nMessage id: \`${result.id}\`\n\n` +
+        `Save it as the repository variable \`${varName}\` so later runs edit this message ` +
+        'instead of posting a new one.'
+    );
+  } else {
+    console.log(`Edited the progress message ${result.id} for ${title} (${stats}).`);
+    summary(`### Progress message edited for ${title}\n\nMessage id: \`${result.id}\` · ${stats}`);
+  }
+}
+
 async function main() {
   const env = process.env;
   const webhook = env.ROADMAP_WEBHOOK_URL;
@@ -284,41 +347,23 @@ async function main() {
   }
   console.log(`::add-mask::${webhook}`);
 
-  const title = env.ROADMAP_MILESTONE || '5.3';
-  const varName = messageVarName(title);
-  const { milestone, items } = await loadMilestone(env.GITHUB_REPOSITORY, title, env.GITHUB_TOKEN);
-  const embed = buildEmbed(title, items, { released: milestone.state === 'closed' });
-  const { points, max } = progressOf(items);
-  const pct = percent(points, max);
-  const stats = `${pct}%, ${items.filter((i) => stageOf(i) === 'done').length}/${items.length} done`;
-
-  // The id of this version's message comes from the repo variable ROADMAP_MESSAGE_ID_<version>.
+  const milestones = parseMilestones(env.ROADMAP_MILESTONE);
   const repoVars = JSON.parse(env.ROADMAP_VARS || '{}');
-  const messageId = String(repoVars[varName] ?? env.ROADMAP_MESSAGE_ID ?? '').trim();
-  const result = await sendToDiscord(webhook, messageId, embed, {
-    allowPost: env.ROADMAP_ALLOW_POST === 'true',
-  });
-  if (result.action === 'skipped') {
-    console.log(
-      `No ${varName} is set, so nothing was posted. To post the message for ${title}, run this ` +
-        `workflow manually with "post" ticked, then save the message id as ${varName}.`
-    );
-  } else if (result.action === 'missing') {
-    console.log(
-      `::notice::The progress message ${result.id} no longer exists, so nothing was updated or posted. ` +
-        `Set ${varName} to the id of the message that is still there, or run the workflow ` +
-        'manually with "post" ticked to create a new one.'
-    );
-  } else if (result.action === 'posted') {
-    console.log(`Posted a new progress message ${result.id} for ${title} (${stats}).`);
-    summary(
-      `### Progress message posted\n\nMessage id: \`${result.id}\`\n\n` +
-        `Save it as the repository variable \`${varName}\` so later runs edit this message ` +
-        'instead of posting a new one.'
-    );
-  } else {
-    console.log(`Edited the progress message ${result.id} for ${title} (${stats}).`);
-    summary(`### Progress message edited\n\nMessage id: \`${result.id}\` · ${stats}`);
+  const messageFallback = milestones.length === 1 ? env.ROADMAP_MESSAGE_ID : undefined;
+
+  // One milestone failing must not stop the others; the run still fails at the end.
+  const failed = [];
+  for (const title of milestones) {
+    try {
+      await updateMilestone(title, { env, webhook, repoVars, messageFallback });
+    } catch (err) {
+      failed.push(title);
+      console.error(`::error::roadmap: ${title}: ${err.message}`);
+    }
+  }
+  if (failed.length) {
+    console.error(`roadmap: failed for ${failed.join(', ')}`);
+    process.exitCode = 1;
   }
 }
 
