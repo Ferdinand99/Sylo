@@ -127,6 +127,48 @@ describe('the web form of an application', () => {
     expect(screen.getByText('Hobbies').parentElement.textContent).toMatch(/optional/);
   });
 
+  it('shows the intro with its **bold** words as bold text, never as raw markdown or HTML', async () => {
+    api.getWebApply.mockResolvedValue(
+      view({
+        form: {
+          id: FORM,
+          name: 'Staff',
+          description: 'Join the team',
+          version: 100,
+          intro:
+            'Applying for **Streamer role** in **Pixel Harbor**. See [the rules](https://example.com/r) <b>x</b>.',
+        },
+      })
+    );
+    const { container } = renderPage();
+    const bold = await screen.findByText('Streamer role');
+    expect(bold.tagName).toBe('STRONG');
+    expect(screen.getByText('Pixel Harbor').tagName).toBe('STRONG');
+    expect(container.textContent).not.toContain('**');
+    expect(screen.getByRole('link', { name: 'the rules' }).getAttribute('href')).toBe(
+      'https://example.com/r'
+    );
+    expect(container.querySelector('b')).toBeNull();
+  });
+
+  it('keeps the line breaks of the intro', async () => {
+    api.getWebApply.mockResolvedValue(
+      view({
+        form: {
+          id: FORM,
+          name: 'Staff',
+          description: '',
+          version: 100,
+          intro: 'First line.\nSecond **line**.',
+        },
+      })
+    );
+    renderPage();
+    const intro = (await screen.findByText('line')).closest('p');
+    expect(intro.textContent).toBe('First line.\nSecond line.');
+    expect(intro.style.whiteSpace).toBe('pre-line');
+  });
+
   it('checks required answers in the browser first and sends nothing until they are fine', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Submit application' }));

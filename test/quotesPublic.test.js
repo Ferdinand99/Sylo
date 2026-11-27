@@ -114,7 +114,10 @@ test('no ids leak: not the author, the saver, the channel or the message, and no
     assert.ok(!html.includes(secret), `the page must not contain ${secret}`);
   }
   assert.doesNotMatch(html, /\/channels\//);
-  assert.doesNotMatch(html, /<a [^>]*href="https?:/i, 'no outward links at all');
+  // The one outward link every public page has: "Powered by Sylo", with rel="noreferrer".
+  const poweredBy = /<a href="https:\/\/sylobot\.com" rel="noopener noreferrer">Powered by Sylo<\/a>/;
+  assert.match(html, poweredBy);
+  assert.doesNotMatch(html.replace(poweredBy, ''), /<a [^>]*href="https?:/i, 'no outward links but that one');
   // nothing that looks like a snowflake besides the server's own id
   assert.doesNotMatch(html.replaceAll(GID, ''), /\b\d{17,20}\b/);
 });

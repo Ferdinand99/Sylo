@@ -6,8 +6,9 @@
   <title>Ban appeal — Sylo</title>
   <script src="/theme.js"></script>
   <link rel="stylesheet" href="/public.css" />
+<%- include('partials/look') %>
 </head>
-<body>
+<body<%- typeof look !== 'undefined' && look ? (look.imageUrl ? ' class="has-look has-look-image"' : ' class="has-look"') : '' %>>
   <main class="verify-wrap">
     <div class="pub-brand"><img src="/favicon.svg" alt="" width="28" height="28" /><span>Sylo</span></div>
     <div class="card">
@@ -28,7 +29,7 @@
           <% questions.forEach(function (q, i) { %>
             <%# The questions this form shows, so the server can tell if they changed meanwhile. %>
             <input type="hidden" name="q" value="<%= q %>" />
-            <label for="appeal-a-<%= i %>"><%= q %><% if (single) { %> <span class="muted small">(required)</span><% } %></label>
+            <label for="appeal-a-<%= i %>" class="u-pre-line"><%= q %><% if (single) { %> <span class="muted small">(required)</span><% } %></label>
             <textarea id="appeal-a-<%= i %>" name="a" rows="3" maxlength="2000" aria-describedby="appeal-hint"<%= single ? ' required' : '' %>><%= (typeof answers !== 'undefined' && answers[i]) || '' %></textarea>
           <% }) %>
           <div class="u-mt-3"><button type="submit" class="btn">Submit appeal</button></div>
@@ -49,7 +50,7 @@
         <% if (verdict === 'accepted') { %>
           <h1 class="page-title">✅ Appeal accepted</h1>
           <p>Your ban appeal<% if (guildName) { %> for <strong><%= guildName %></strong><% } %> was accepted.</p>
-          <p><strong>Note from the moderators:</strong> <%= decisionReason %></p>
+          <p class="u-pre-line"><strong>Note from the moderators:</strong> <%= decisionReason %></p>
           <% if (rejoinInvite) { %>
             <p class="u-mt-4"><a class="btn" href="<%= rejoinInvite %>">Rejoin<% if (guildName) { %> <%= guildName %><% } %> &rarr;</a></p>
             <p class="muted small">This invite is single-use — don't share it.</p>
@@ -59,13 +60,13 @@
         <% } else if (verdict === 'denied') { %>
           <h1 class="page-title">❌ Appeal denied</h1>
           <p>Your ban appeal<% if (guildName) { %> for <strong><%= guildName %></strong><% } %> was denied.</p>
-          <p><strong>Reason:</strong> <%= decisionReason %></p>
+          <p class="u-pre-line"><strong>Reason:</strong> <%= decisionReason %></p>
           <% if (reappealDays > 0) { %>
             <p class="muted small">You can submit a new appeal in about <%= reappealDays %> day(s) — reopen this link then.</p>
           <% } %>
         <% } else { %>
           <h1 class="page-title">Nothing to appeal</h1>
-          <p class="muted"><%= decisionReason %></p>
+          <p class="muted u-pre-line"><%= decisionReason %></p>
         <% } %>
 
       <% } else { %>
@@ -73,7 +74,7 @@
         <p><%= message %></p>
       <% } %>
     </div>
-    <p class="lb-foot muted small">Powered by Sylo</p>
+<%- include('partials/powered', { cls: 'lb-foot' }) %>
   </main>
 </body>
 </html>

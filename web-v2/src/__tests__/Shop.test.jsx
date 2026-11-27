@@ -255,3 +255,13 @@ describe('the web shop page', () => {
     expect(screen.getByText('Nothing yet.')).toBeTruthy();
   });
 });
+
+describe('the web shop page: line breaks in a description', () => {
+  it('shows the whole description, with the line breaks the admin typed', async () => {
+    api.getWebShop.mockResolvedValue(view({ items: [item({ description: 'On stream\nFor ten minutes' })] }));
+    renderAtGuild(<Shop />, GUILD);
+    const text = await screen.findByText((_, el) => el.tagName === 'P' && /On stream/.test(el.textContent));
+    expect(text.textContent).toBe('On stream\nFor ten minutes');
+    expect(text.classList.contains('v2-shop-text')).toBe(true);
+  });
+});

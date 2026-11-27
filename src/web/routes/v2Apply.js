@@ -20,6 +20,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { guildByKey, guildKey } from '../../platform/platformOf.js';
 import { isPlatformGuildId, splitPlatformGuildId } from '../../lib/platformId.js';
 import { identityFor } from '../lib/accountAuth.js';
+import { lookRef } from '../lib/publicLook.js';
 import { isModuleEnabled } from '../../db/modules.js';
 import { pendingSubmission } from '../../db/applications.js';
 import {
@@ -108,9 +109,12 @@ const publicQuestion = (q) => ({
 
 /** The page's data: the form and its questions, or why this member cannot fill it in now. */
 async function formView({ guild, key, member, form, own, limited }) {
+  // the server's own look (accent colour, background), see lib/publicLook.js
+  const look = await lookRef(key);
   if (limited) {
     return {
       guild: { name: guild.name, id: key },
+      look,
       viewer: member.id,
       form: { id: own.formId, name: own.formName, description: '', version: 0, intro: '' },
       pending: { id: own.id, createdAt: own.createdAt },
@@ -125,6 +129,7 @@ async function formView({ guild, key, member, form, own, limited }) {
   const pending = await pendingSubmission(key, form.id, member.id);
   const base = {
     guild: { name: guild.name, id: key },
+    look,
     // whose draft the page may restore (drafts are kept in the browser, per person)
     viewer: member.id,
     form: {
