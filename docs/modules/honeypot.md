@@ -68,7 +68,13 @@ channel or message trap, the action taken and how long ago.
 5. In a channel honeypot, the triggering message is deleted if that option is on.
 
 A message honeypot's trap message carries a live **Catches** field named after
-its action, for example "Bans: 14". Sylo edits it after every catch.
+its action, for example "Bans: 14". Sylo edits it after every catch in that
+channel: a reaction on the trap message and a message posted in the same channel
+when it is also a channel honeypot both count. If the two honeypots use different
+actions, the field shows one line per action that has catches, for example
+"Kicks: 3" and "Bans: 1" on separate lines. An action with no catches yet is left
+out, and a trap with no catches at all shows its own action with 0. The trap
+counters in the settings stay separate.
 
 Sylo posts the trap message when you save the settings. If someone deletes it,
 the next save posts a new one. Sylo edits the existing message in place when the

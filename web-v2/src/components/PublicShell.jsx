@@ -1,5 +1,6 @@
 import { Suspense, useRef } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import PoweredBy from './PoweredBy.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
 import Toasts from './Toasts.jsx';
 import useLabelLinks from './useLabelLinks.js';
@@ -40,6 +41,7 @@ export default function PublicShell() {
           <Outlet context={{ guilds: [], guildsLoading: false, guildsError: null }} />
         </Suspense>
       </main>
+      <PoweredBy />
       <Toasts />
     </div>
   );
