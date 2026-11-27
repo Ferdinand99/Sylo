@@ -9,6 +9,7 @@ be a real bottleneck. If that's not you, skip this page —
 - [Should you use this?](#should-you-use-this)
 - [Enabling Postgres for a new install](#enabling-postgres-for-a-new-install)
 - [Moving an existing SQLite install over](#moving-an-existing-sqlite-install-over)
+- [Least-privilege database role](#least-privilege-database-role)
 - [Backups and restore on Postgres](#backups-and-restore-on-postgres)
 - [Rolling back](#rolling-back)
 - [Troubleshooting](#troubleshooting)
@@ -35,7 +36,8 @@ Set `DATABASE_URL` before the first start:
 DATABASE_URL=postgres://user:pass@host:5432/dbname
 ```
 
-That's the whole setup. On first connect, Sylo creates every table it needs
+Use a database role with few rights for this, not a superuser: see
+[Least-privilege database role](#least-privilege-database-role). That's the whole setup. On first connect, Sylo creates every table it needs
 automatically — no separate schema step, no migration to run by hand. Leave
 `DATABASE_URL` unset (the default) and nothing changes: Sylo uses
 `DATABASE_PATH` exactly as it always has.
@@ -121,6 +123,52 @@ giveaway's entries) stay intact — confirmed by inserting a new row through
 Sylo's own code right after a migration and checking it didn't collide with
 a copied one.
 
+## Least-privilege database role
+
+The role in `DATABASE_URL` should own the Sylo database and have no other rights. The reason is
+backup import. A Postgres dump is a file of SQL, and **restoring one (including a file an operator
+uploaded on the Health page) runs that SQL with the rights of the role Sylo connects as**:
+`pg_restore` sends every statement in the file to the database as that role. Inside Sylo's own
+database that adds nothing an operator cannot already do, because a restore replaces the whole
+database. With a superuser role, or a role that is a member of `pg_execute_server_program`,
+`pg_read_server_files` or `pg_write_server_files`, the SQL can also reach the database server's
+own system (`COPY ... PROGRAM`, server files). Sylo cannot change the role from code, so set it up
+once when you create the database. At start-up Sylo reads the role and logs one warning if it has
+`SUPERUSER`, `CREATEROLE`, `CREATEDB` or one of those three memberships; the Health page shows the
+same note.
+
+Create the database and the role as an administrator of the Postgres server (with the official
+`postgres` image that is its `POSTGRES_USER`, which is a superuser: use it for this setup only,
+never in `DATABASE_URL`):
+
+```sql
+CREATE ROLE sylo LOGIN PASSWORD 'choose-a-long-random-password'
+  NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+CREATE DATABASE sylo OWNER sylo;
+REVOKE ALL ON DATABASE sylo FROM PUBLIC;
+-- then, connected to the new database (\c sylo):
+ALTER SCHEMA public OWNER TO sylo;
+```
+
+Then point Sylo at it: `DATABASE_URL=postgres://sylo:choose-a-long-random-password@host:5432/sylo`.
+Sylo creates its tables itself on first start, so the role owns them, and `pg_restore --clean`
+can drop and recreate them without extra rights. To check an existing setup, connect with the same
+credentials Sylo uses and run:
+
+```sql
+SELECT rolsuper, rolcreaterole, rolcreatedb FROM pg_roles WHERE rolname = current_user;
+SELECT pg_has_role(current_user, 'pg_execute_server_program', 'MEMBER') AS exec_program,
+       pg_has_role(current_user, 'pg_read_server_files', 'MEMBER') AS read_files,
+       pg_has_role(current_user, 'pg_write_server_files', 'MEMBER') AS write_files;
+```
+
+Every value should be `f`. Restores are never blocked because of the role. Before it restores an
+uploaded dump the Health page says that its SQL runs with the role's rights, and the server does
+not restore one unless the request names the snapshot (`confirm`) and sets `acknowledgeSql: true`
+(the dashboard sends both after its warning; other clients of the API must do the same). Even with a least-privilege role, a restored dump can still do anything that role may do
+inside the Sylo database (create functions and triggers, change or delete any row), so restore only
+files you made or trust.
+
 ## Backups and restore on Postgres
 
 The Health page's backup/restore works the same way on both drivers — same
@@ -138,6 +186,10 @@ off-site shipping (WebDAV / Discord webhook) if configured. A snapshot only
 restores onto the driver it came from — trying to restore a `.dump` while
 running on SQLite (or vice versa) fails with a clear error instead of doing
 something destructive.
+
+A restore runs the SQL in the dump with the rights of the database role Sylo connects as, so
+use the [least-privilege role](#least-privilege-database-role) above and restore only dumps you
+made or trust.
 
 `pg_dump`/`pg_restore` are bundled in the Docker image, pinned to the newest
 supported Postgres major version — that covers dumping from and restoring to

@@ -23,6 +23,7 @@ const {
   pollRetry,
 } = pollErrors;
 const { startSchedules, stopSchedules } = await import('../src/modules/schedule.js');
+const { createQuarantine, fetchIsolated } = await import('../src/modules/lib/batchIsolation.js');
 const twitch = await import('../src/modules/twitchAlerts.js');
 const kick = await import('../src/modules/kickAlerts.js');
 
@@ -741,6 +742,177 @@ test('the poll callbacks hand their tick to the scheduler: a tick that is still 
   } finally {
     globalThis.fetch = realFetch;
   }
+});
+
+// --- composition with the batch isolation of rejected values ---------------------------------
+
+for (const p of PLATFORMS) {
+  // a different rejected value per test: a quarantined one is left out of the next poll
+  const poisonFor = (n) => (p.name === 'twitch' ? '_poison' : '-poison') + n;
+  const names = (u) =>
+    p.name === 'twitch'
+      ? u.searchParams.getAll(u.pathname.endsWith('/users') ? 'login' : 'user_login')
+      : u.searchParams.getAll('slug');
+  const saveTwo = (value, poison) =>
+    p.name === 'twitch'
+      ? setGuildModule(GUILD, 'twitch-alerts', {
+          enabled: true,
+          config: {
+            alerts: [
+              { login: poison, channelId: CH_A },
+              { login: value, channelId: CH_A },
+            ],
+          },
+        })
+      : setGuildModule(GUILD, 'kick-alerts', {
+          enabled: true,
+          config: {
+            alerts: [
+              { slug: poison, channelId: CH_A },
+              { slug: value, channelId: CH_A },
+            ],
+          },
+        });
+
+  test(`${p.name} tick: a blip and a rejected value in the same poll: retried, isolated, victim announced`, async (t) => {
+    const sent = [];
+    installClient(sent);
+    const poison = poisonFor('a');
+    p.mod.pollHealth.reset();
+    p.mod._resetToken();
+    recordSleep(t);
+    const warn = t.mock.method(log, 'warn', () => {});
+    const error = t.mock.method(log, 'error', () => {});
+    await saveTwo('victimblip', poison);
+    await withFakeFetch(
+      p.host,
+      (u, n) => {
+        if (n === 1) return Promise.reject(fetchFailed('ECONNRESET'));
+        if (names(u).includes(poison)) return new Response('{}', { status: 400 });
+        return p.liveAnswer(u, 'victimblip');
+      },
+      async () => {
+        await p.mod.tick();
+      }
+    );
+    assert.equal(sent.length, 1, 'the victim is announced');
+    assert.equal(error.mock.callCount(), 0);
+    assert.equal(warn.mock.callCount(), 1, 'only the warning about the rejected value');
+    assert.match(warn.mock.calls[0].arguments[1], /rejected 1 of the/);
+    assert.equal(p.mod.pollHealth.failures, 0);
+  });
+
+  test(`${p.name} tick: a network error while values are being isolated fails the poll as a network failure, nothing is quarantined`, async (t) => {
+    const sent = [];
+    installClient(sent);
+    const poison = poisonFor('b');
+    p.mod.pollHealth.reset();
+    p.mod._resetToken();
+    recordSleep(t);
+    const warn = t.mock.method(log, 'warn', () => {});
+    const error = t.mock.method(log, 'error', () => {});
+    await saveTwo('victimdown', poison);
+    const quarantine = p.name === 'twitch' ? p.mod.rejectedLogins : p.mod.rejectedSlugs;
+    const before = quarantine.size;
+    const asked = [];
+    await withFakeFetch(
+      p.host,
+      (u) => {
+        asked.push(names(u));
+        // the value known to be good (the canary) is still answered, so the search starts
+        if (names(u).length === 1 && names(u)[0] === quarantine.lastGood)
+          return p.liveAnswer(u, quarantine.lastGood);
+        if (names(u).length === 2) return new Response('{}', { status: 400 });
+        if (names(u).includes(poison)) return new Response('{}', { status: 400 });
+        return Promise.reject(fetchFailed('UND_ERR_CONNECT_TIMEOUT'));
+      },
+      async () => {
+        await p.mod.tick();
+      }
+    );
+    assert.deepEqual(asked[0].sort(), [poison, 'victimdown'].sort(), 'both values were asked together first');
+    assert.ok(
+      asked.some((names) => names.length === 1 && names[0] === poison),
+      'the search got to the rejected value'
+    );
+    assert.ok(
+      asked.some((names) => names.length === 1 && names[0] === 'victimdown'),
+      'and was cut short by the network error'
+    );
+    assert.equal(sent.length, 0);
+    assert.equal(error.mock.callCount(), 0);
+    assert.equal(warn.mock.callCount(), 0, 'one failed poll is not logged');
+    assert.equal(p.mod.pollHealth.failures, 1);
+    assert.equal(quarantine.size, before, 'a network error is not a value fault');
+  });
+}
+
+test('fetchIsolated: a network failure of the canary fails the poll as that failure and keeps the canary', async () => {
+  const quarantine = createQuarantine();
+  quarantine.setGood('known-good');
+  const refused = (status) => Object.assign(new Error(`refused ${status}`), { status });
+  await assert.rejects(
+    fetchIsolated(
+      ['a', 'b'],
+      2,
+      async (batch) => {
+        if (batch[0] === 'known-good') throw fetchFailed('ECONNRESET');
+        throw refused(400);
+      },
+      { quarantine }
+    ),
+    (err) => err.message === 'fetch failed',
+    'not the 400 of the first batch'
+  );
+  assert.equal(quarantine.lastGood, 'known-good', 'the canary was not thrown away');
+  assert.equal(quarantine.size, 0);
+});
+
+test('fetchIsolated: a network failure of the canary while the platform flaps quarantines nothing and remembers the value for the next poll', async () => {
+  const quarantine = createQuarantine();
+  quarantine.setGood('known-good');
+  const out = await fetchIsolated(
+    ['fine1', 'flaky'],
+    1,
+    async (batch) => {
+      if (batch[0] === 'flaky') throw Object.assign(new Error('refused 404'), { status: 404 });
+      if (batch[0] === 'known-good') throw fetchFailed('ETIMEDOUT');
+      return batch;
+    },
+    { quarantine }
+  );
+  assert.deepEqual(out.results, ['fine1']);
+  assert.equal(quarantine.size, 0, 'a value is not quarantined on the word of a failing request');
+  assert.ok(out.unresolved.has('flaky'));
+  assert.ok(quarantine.suspects.has('flaky'), 'it is batched apart from the clean values next time');
+});
+
+test('twitch tick: a failed user lookup is neither retried nor logged, the stream is still announced', async (t) => {
+  const sent = [];
+  installClient(sent);
+  twitch.pollHealth.reset();
+  const waits = recordSleep(t);
+  const warn = t.mock.method(log, 'warn', () => {});
+  const error = t.mock.method(log, 'error', () => {});
+  await PLATFORMS[0].save('nousers');
+  let userCalls = 0;
+  await withFakeFetch(
+    'api.twitch.tv',
+    (u) => {
+      if (u.pathname.endsWith('/users')) {
+        userCalls += 1;
+        return Promise.reject(fetchFailed('ECONNRESET'));
+      }
+      return PLATFORMS[0].liveAnswer(u, 'nousers');
+    },
+    async () => {
+      await twitch.tick();
+    }
+  );
+  assert.equal(sent.length, 1);
+  assert.equal(userCalls, 1);
+  assert.deepEqual(waits, []);
+  assert.equal(warn.mock.callCount() + error.mock.callCount(), 0);
 });
 
 test.after(() => {

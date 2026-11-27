@@ -78,3 +78,31 @@ test('/api/v2/health names the module an error came from', async () => {
     runtime.errors.splice(0, runtime.errors.length, ...saved);
   }
 });
+
+// The iOS app tells that a server asks for the restore confirmation (`confirm` + `acknowledgeSql`)
+// by `db.roleRisks` being an array in this report, next to the backups list. Keep both in place.
+test('/api/v2/health carries db.roleRisks as an array next to the backups', async () => {
+  const { config } = await import('../src/config.js');
+  const { checkDatabaseRole, lastRolePrivileges, roleRisks } = await import('../src/db/dbRole.js');
+  await checkDatabaseRole({ warn() {} });
+  const { accountId } = await signInIdentity({
+    platform: 'discord',
+    platformUserId: '111111111111111111',
+    username: 'u',
+    avatar: null,
+    guildIds: [],
+  });
+  const { token } = await createApiToken(accountId, { deviceName: 'iPhone', ttlMs: 60_000 });
+  const res = await browser().get('/api/v2/health', { headers: { authorization: `Bearer ${token}` } });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.ok(Array.isArray(body.backups), 'the report lists backups');
+  assert.ok(Array.isArray(body.db.roleRisks), 'db.roleRisks is an array, never missing or null');
+  assert.deepEqual(body.db.roleRisks, roleRisks(lastRolePrivileges()));
+  if (!config.databaseUrl) {
+    assert.deepEqual(body.db.roleRisks, [], 'SQLite has no database role, so no risks');
+  } else if (lastRolePrivileges()?.superuser) {
+    // The test database role is the Postgres superuser: the risks are listed, not hidden.
+    assert.ok(body.db.roleRisks.includes('SUPERUSER'));
+  }
+});

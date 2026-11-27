@@ -16,6 +16,7 @@ import { plural } from '../components/Meta.jsx';
 import { formatCount } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
 import UpdateNotice from '../components/UpdateNotice.jsx';
+import Callout from '../components/Callout.jsx';
 import { Icon } from '../components/icons.jsx';
 
 // Plain names for the error sources that are not a module (a module's own name comes from the server).
@@ -73,6 +74,44 @@ function Sparkline({ history }) {
         {lo}–{hi} ms over the last {plural(history.length, 'minute')}
       </p>
     </>
+  );
+}
+
+/** The name an imported backup is stored under (src/db/backup.js). */
+export const isImportedBackup = (name) => /^sylo-imported-/.test(name);
+
+/**
+ * Said before an uploaded Postgres dump is restored: the SQL in the file is run by the database
+ * with the rights of the role Sylo connects as.
+ */
+function UploadedSqlWarning({ risks = [] }) {
+  return (
+    <Callout tone="warning" title="This file was uploaded" className="v2-restore-warning">
+      <p>
+        A Postgres dump holds SQL. Restoring it runs that SQL with the rights of the database role Sylo
+        connects as. Restore only a file you made or trust.
+      </p>
+      {risks.length ? (
+        <>
+          <p>{roleSentence(risks)}</p>
+          <RoleDetails risks={risks} />
+        </>
+      ) : null}
+    </Callout>
+  );
+}
+
+/** The short version of what is wrong with the role: a superuser says it all, the rest is listed. */
+const roleSentence = (risks) =>
+  risks.includes('SUPERUSER') ? 'This role is a superuser.' : 'This role has more rights than it needs.';
+
+/** The full list of the role's extra rights, folded away. */
+function RoleDetails({ risks }) {
+  return (
+    <details className="v2-role-details">
+      <summary>Details</summary>
+      <p>Rights: {risks.join(', ')}</p>
+    </details>
   );
 }
 
@@ -175,8 +214,11 @@ export default function Health() {
       title: 'Restore the database?',
       body: (
         <>
-          All current data is replaced with <strong className="v2-break">{name}</strong> and the bot restarts.
-          A <code>prerestore</code> snapshot is taken first.
+          <p>
+            All current data is replaced with <strong className="v2-break">{name}</strong> and the bot
+            restarts. A <code>prerestore</code> snapshot is taken first.
+          </p>
+          {d.db.postgres && isImportedBackup(name) ? <UploadedSqlWarning risks={d.db.roleRisks} /> : null}
         </>
       ),
       confirmLabel: 'Restore and restart',
@@ -184,7 +226,7 @@ export default function Health() {
     });
     if (!ok) return;
     const result = await run(
-      () => restoreBackup(name),
+      () => restoreBackup(name, { acknowledgeSql: Boolean(d.db.postgres && isImportedBackup(name)) }),
       () => 'Restoring…'
     );
     if (result?.ok) setRestoring(name);
@@ -200,6 +242,13 @@ export default function Health() {
         <>
           <strong className="v2-break">{file.name}</strong> is stored as a snapshot. Nothing is restored until
           you press Restore on its row.
+          {d.db.postgres ? (
+            <>
+              {' '}
+              Restoring a Postgres dump runs the SQL in it with the rights of Sylo's database role, so import
+              only files you made or trust.
+            </>
+          ) : null}
         </>
       ),
       confirmLabel: 'Import',
@@ -405,6 +454,29 @@ export default function Health() {
 
       <div className="v2-group">
         <h2 className="v2-group-title">Database &amp; backups</h2>
+        {/* First in the section: it is about the database itself, and a restore below runs with this role. */}
+        {d.db.postgres && d.db.roleRisks?.length ? (
+          <Callout
+            tone="warning"
+            title="The database role has more rights than Sylo needs"
+            className="v2-role-warning"
+          >
+            <p>
+              {d.db.roleRisks.includes('SUPERUSER')
+                ? 'The role Sylo connects as is a superuser.'
+                : 'The role Sylo connects as has rights Sylo does not need.'}{' '}
+              A restored dump runs its SQL with those rights.
+            </p>
+            <RoleDetails risks={d.db.roleRisks} />
+            {d.db.roleDocsUrl ? (
+              <p>
+                <a href={d.db.roleDocsUrl} target="_blank" rel="noreferrer">
+                  How to set up a role with few rights
+                </a>
+              </p>
+            ) : null}
+          </Callout>
+        ) : null}
         <p className="v2-note">
           Database <strong>{d.db.size}</strong>
           {d.db.wal !== null ? ` (WAL ${d.db.wal})` : ''}.{' '}
