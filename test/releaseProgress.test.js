@@ -157,7 +157,7 @@ test('release progress: buildEmbed groups the checklist, non-code steps last, wi
   assert.match(buildEmbed('5.3', []).description, /Nothing is planned yet/);
 });
 
-test('release progress: stages - tested counts three quarters, ready two, and tested wins over ready', () => {
+test('release progress: stages - tested counts five sixths, ready four, and tested wins over ready', () => {
   const api = (number, state, labels, merged) => ({
     number,
     title: 'feat: x' + number,
@@ -175,21 +175,21 @@ test('release progress: stages - tested counts three quarters, ready two, and te
     { number: 4, title: 'Release it', state: 'open', labels: [] },
   ]);
   assert.deepEqual(items.map(stageOf), ['done', 'test', 'progress', 'tested', 'tested', 'done', 'progress']);
-  assert.deepEqual(progressOf(items), { points: 4 + 2 + 0 + 3 + 3 + 4 + 0, max: 28 });
+  assert.deepEqual(progressOf(items), { points: 6 + 4 + 0 + 5 + 5 + 6 + 0, max: 42 });
   assert.deepEqual(progressOf([]), { points: 0, max: 0 });
   const lines = buildEmbed('5.3', items).description.split('\n');
-  assert.equal(lines[0], '▰▰▰▰▰▱▱▱▱▱ **57%** · 2 done · 2 tested · 1 waiting for test · 2 to go');
+  assert.equal(lines[0], '▰▰▰▰▰▰▱▱▱▱ **61%** · 2 done · 2 tested · 1 waiting for test · 2 to go');
   assert.ok(lines.includes('🧪 X2'));
   assert.ok(lines.includes('☑️ X5'));
   const waiting = [{ kind: 'pr', number: 1, title: 'feat: a', stage: 'test' }];
   assert.equal(
     buildEmbed('5.3', waiting).description.split('\n')[0],
-    '▰▰▰▰▰▱▱▱▱▱ **50%** · 0 done · 1 waiting for test'
+    '▰▰▰▰▰▰▱▱▱▱ **66%** · 0 done · 1 waiting for test'
   );
   const tested = [{ kind: 'pr', number: 1, title: 'feat: a', stage: 'tested' }];
   assert.equal(
     buildEmbed('5.3', tested).description.split('\n')[0],
-    '▰▰▰▰▰▰▰▱▱▱ **75%** · 0 done · 1 tested'
+    '▰▰▰▰▰▰▰▰▱▱ **83%** · 0 done · 1 tested'
   );
 });
 

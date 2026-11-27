@@ -89,11 +89,11 @@ export function shortName(item) {
 
 // Where an item is: 'done' (PR merged, issue closed), 'tested' (an open PR with the tested label: tried
 // on the test bot, waiting for merge), 'test' (built and reviewed, waiting for a test: an open PR with
-// the ready label) or 'progress'. Counted in quarters: done 4, tested 3, test 2, progress 0. When a PR
+// the ready label) or 'progress'. Counted in sixths: done 6, tested 5, test 4, progress 0. When a PR
 // carries both labels, tested wins.
 export const READY_LABEL = 'ready-for-test';
 export const TESTED_LABEL = 'tested';
-export const STAGE_POINTS = { done: 4, tested: 3, test: 2, progress: 0 };
+export const STAGE_POINTS = { done: 6, tested: 5, test: 4, progress: 0 };
 export const STAGE_ICON = { done: '✅', tested: '☑️', test: '🧪', progress: '🔨' };
 export const LEGEND = '✅ done · ☑️ tested · 🧪 waiting for test · 🔨 in progress';
 
