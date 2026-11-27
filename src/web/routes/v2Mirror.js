@@ -17,6 +17,7 @@ import { PAIR_STATUS, pairsOfGuild, updatePair } from '../../db/mirror.js';
 import { recordAudit } from '../../db/audit.js';
 import { accessRouter } from '../middleware/access.js';
 import { adminGuildIds, currentUser, userIdForGuild } from '../middleware/auth.js';
+import { identityFor } from '../lib/accountAuth.js';
 import { isGuildOwner } from '../lib/guildOwner.js';
 import { platformActionKey, rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
@@ -25,6 +26,7 @@ import { mirror } from '../../mirror/index.js';
 import { ConsentError, acceptMirror, requestMirror } from '../../mirror/consent.js';
 import { MirrorError } from '../../mirror/errors.js';
 import { DEFAULT_OPTIONS, FLUXER_LIMITS, normaliseOptions } from '../../mirror/spec.js';
+import { createFluxerTarget } from '../../mirror/target.js';
 import { invalidateHealth } from '../../lib/healthCache.js';
 
 const router = accessRouter('/guilds/:guildId', { mergeParams: true });
@@ -53,6 +55,13 @@ const startLimit = rateLimit({
   max: 4,
   message: 'The copy was started several times just now. Wait a few minutes.',
   keyFn: (req) => `mirror-start|${platformActionKey(req)}`,
+});
+// The list of the person's Fluxer servers reads each one's roles; it is asked for when the page opens.
+const listLimit = rateLimit({
+  windowMs: 60_000,
+  max: 12,
+  message: 'The list of Fluxer servers was asked for too often. Wait a minute.',
+  keyFn: (req) => `mirror-servers|${platformActionKey(req)}`,
 });
 const controlLimit = rateLimit({
   windowMs: 60_000,
@@ -118,13 +127,6 @@ function pairView(pair, side) {
 async function stateOf(req) {
   const platform = platformOfGuild(req.guild);
   const found = await pairOf(req);
-  const candidates =
-    platform === 'discord' && isGuildOwner(req, req.guild.id)
-      ? [...adminGuildIds(req)]
-          .filter((k) => splitPlatformGuildId(k)?.platform === 'fluxer')
-          .filter((k) => isGuildOwner(req, k))
-          .map((k) => ({ id: k, name: guildByKey(k)?.name ?? k }))
-      : [];
   return {
     platform,
     canMirror: platform === 'discord',
@@ -133,7 +135,6 @@ async function stateOf(req) {
     isOwner: isGuildOwner(req, req.guild.id),
     pair: found ? pairView(found.pair, found.side) : null,
     progress: found ? await mirror.progress(found.pair) : null,
-    candidates,
     defaults: DEFAULT_OPTIONS,
     limits: { emoji: FLUXER_LIMITS.emoji, stickers: FLUXER_LIMITS.stickers },
   };
@@ -144,6 +145,77 @@ router.get(
   asyncHandler(async (req, res) => {
     res.set('Cache-Control', 'no-store');
     res.json(await stateOf(req));
+  })
+);
+
+/** How many of a person's Fluxer servers the list names at most. */
+const MAX_FLUXER_CHOICES = 100;
+
+/**
+ * What the picker says about one Fluxer server, checked as the preview checks it (src/mirror/engine.js): Sylo's role
+ * needs Administrator there (or the four permissions the copy uses) and has to be the highest role. These are
+ * notes, not blockers: the preview is where they stop a copy.
+ */
+async function choiceOf(key, guild) {
+  const notes = [];
+  try {
+    const target = createFluxerTarget(guild);
+    if (target.missingPermissions().length) {
+      notes.push({
+        code: 'target-permissions',
+        message: "Sylo's role needs the Administrator permission on this server.",
+      });
+    }
+    const above = target.rolesAboveSylo([]);
+    if (above === null) {
+      notes.push({ code: 'role-hierarchy', message: "Sylo's own role on this server could not be read." });
+    } else if (above.length > 0) {
+      notes.push({
+        code: 'role-hierarchy',
+        message: `Sylo's role is not the highest on this server (${above.length} ${above.length === 1 ? 'role ranks' : 'roles rank'} above or level with it). Drag it to the top under Server Settings, then Roles.`,
+      });
+    }
+  } catch {
+    notes.push({ code: 'unreadable', message: 'Sylo could not read the roles on this server just now.' });
+  }
+  const busy = (await pairsOfGuild(key)).length > 0;
+  const members = Number(guild.memberCount ?? guild.members?.cache?.size ?? 0);
+  return {
+    id: key,
+    name: String(guild.name ?? key),
+    icon: guild.iconURL?.({ size: 64 }) ?? null,
+    memberCount: Number.isFinite(members) && members > 0 ? members : null,
+    inUse: busy,
+    notes,
+  };
+}
+
+// The Fluxer servers to pick the mirror's target from: those Sylo is a member of and the signed-in person owns
+// according to their own connected Fluxer login (the owner id Fluxer reports, never a list the browser sends). A
+// server they do not own is never named. Only the owner of this Discord server may ask, as for the request itself.
+router.get(
+  '/mirror/fluxer-servers',
+  listLimit,
+  asyncHandler(async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    if (platformOfGuild(req.guild) !== 'discord') {
+      return fail(res, 'Only a Discord server can be mirrored. Ask for the mirror on the Discord server.');
+    }
+    if (!needOwner(req, res, 'pick a Fluxer server for a mirror')) return;
+    // Open mode has no logins, so there is no identity to look for (and every server counts as the caller's).
+    const connected = !config.authEnabled || Boolean(identityFor(req.account, 'fluxer'));
+    const servers = [];
+    if (config.fluxerEnabled && connected) {
+      const keys = [...adminGuildIds(req)]
+        .filter((k) => splitPlatformGuildId(k)?.platform === 'fluxer')
+        .filter((k) => isGuildOwner(req, k));
+      for (const key of keys.slice(0, MAX_FLUXER_CHOICES)) {
+        const guild = guildByKey(key);
+        if (guild) servers.push(await choiceOf(key, guild));
+      }
+      servers.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    res.json({ fluxerConnected: config.fluxerEnabled, connected, servers });
   })
 );
 

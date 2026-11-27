@@ -523,6 +523,9 @@ export const applySetup = (guildId, body) => postJson(`/api/v2/guilds/${gid(guil
 export const getMirror = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/mirror`);
 export const getMirrorPreview = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/mirror/preview`);
 export const getMirrorReport = (guildId) => apiFetch(`/api/v2/guilds/${gid(guildId)}/mirror/report`);
+// The Fluxer servers the signed-in person owns and Sylo is in: the choices for the mirror's target.
+export const getMirrorFluxerServers = (guildId) =>
+  apiFetch(`/api/v2/guilds/${gid(guildId)}/mirror/fluxer-servers`);
 export const requestMirror = (guildId, targetGuildId, options) =>
   postJson(`/api/v2/guilds/${gid(guildId)}/mirror/request`, {
     targetGuildId,

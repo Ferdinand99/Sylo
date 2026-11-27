@@ -192,6 +192,7 @@ const GETS_ABOVE_VIEW = {
   'GET /guilds/:guildId/applications/export': 'inbox',
   'GET /guilds/:guildId/export': 'edit',
   'GET /guilds/:guildId/public-page-look': 'edit',
+  'GET /guilds/:guildId/mirror/fluxer-servers': 'edit',
 };
 
 test('every /api/v2 route declares its access level, and every declaration has a route', () => {

@@ -339,6 +339,8 @@ export const ROUTE_ACCESS = Object.freeze({
   'GET /guilds/:guildId/mirror': 'view',
   'GET /guilds/:guildId/mirror/preview': 'view',
   'GET /guilds/:guildId/mirror/report': 'view',
+  // The picker of the Fluxer servers the person owns is part of asking: Edit, and the server owner (checked in the route).
+  'GET /guilds/:guildId/mirror/fluxer-servers': 'edit',
   'POST /guilds/:guildId/mirror/request': 'edit',
   'POST /guilds/:guildId/mirror/accept': 'edit',
   'POST /guilds/:guildId/mirror/options': 'edit',

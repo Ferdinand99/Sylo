@@ -6,6 +6,7 @@ import { renderAtGuild } from './routerHarness.jsx';
 vi.mock('../api.js', () => ({
   ApiError: class ApiError extends Error {},
   getMirror: vi.fn(),
+  getMirrorFluxerServers: vi.fn(),
   allowMirrorDeletes: vi.fn(),
   getMirrorPreview: vi.fn(),
   getMirrorReport: vi.fn(),
@@ -62,7 +63,6 @@ const state = (over = {}) => ({
   fluxerConnected: true,
   pair: null,
   progress: null,
-  candidates: [{ id: FLUXER, name: 'Fluxer copy' }],
   defaults: OPTIONS,
   limits: { emoji: 50, stickers: 50 },
   ...over,
@@ -78,23 +78,37 @@ const progress = (over = {}) => ({
   waitingChanges: 0,
   ...over,
 });
-const fluxerState = (p) => state({ platform: 'fluxer', canMirror: false, candidates: [], pair: p });
+const fluxerState = (p) => state({ platform: 'fluxer', canMirror: false, pair: p });
+
+const choice = (over = {}) => ({
+  id: FLUXER,
+  name: 'Fluxer copy',
+  icon: null,
+  memberCount: 12,
+  inUse: false,
+  notes: [],
+  ...over,
+});
+const choices = (servers, over = {}) => ({ fluxerConnected: true, connected: true, servers, ...over });
 
 beforeEach(() => {
   vi.resetAllMocks();
   confirmDialog.mockResolvedValue(true);
+  api.getMirrorFluxerServers.mockResolvedValue(choices([]));
 });
 
 describe('Mirror: the Discord server', () => {
   it('asks for a mirror with the id of the Fluxer server, and shows the one-time code that comes back', async () => {
     api.getMirror.mockResolvedValue(state());
+    api.getMirrorFluxerServers.mockResolvedValue(choices([choice()]));
     api.requestMirror.mockResolvedValue({
       ...state({ pair: pair({ status: 'pending', otherName: null, codeExpiresAt: Date.now() + 3_000_000 }) }),
       code: 'K7QW-H2NP',
     });
     renderAtGuild(<Mirror />, GUILD);
     const button = await screen.findByRole('button', { name: 'Ask for the mirror' });
-    const input = screen.getByLabelText('Fluxer server');
+    fireEvent.click(await screen.findByRole('button', { name: 'Enter an id instead' }));
+    const input = screen.getByLabelText('Fluxer server id');
     fireEvent.change(input, { target: { value: 'nonsense' } });
     expect(button.disabled).toBe(true);
     fireEvent.change(input, { target: { value: FLUXER } });
@@ -229,6 +243,91 @@ describe('Mirror: the Discord server', () => {
   });
 });
 
+describe('Mirror: picking the Fluxer server', () => {
+  it('lists the Fluxer servers the person owns with name, members and notes, and picking one fills the request', async () => {
+    api.getMirror.mockResolvedValue(state());
+    api.getMirrorFluxerServers.mockResolvedValue(
+      choices([
+        choice({
+          notes: [
+            {
+              code: 'target-permissions',
+              message: "Sylo's role needs the Administrator permission on this server.",
+            },
+            {
+              code: 'role-hierarchy',
+              message: "Sylo's role is not the highest on this server (1 role ranks above or level with it).",
+            },
+          ],
+        }),
+        choice({
+          id: 'fluxer:323456789012345678',
+          name: 'Second',
+          memberCount: 1204,
+          icon: 'https://cdn.test/i.png',
+        }),
+        choice({ id: 'fluxer:423456789012345678', name: 'Busy', memberCount: null, inUse: true }),
+      ])
+    );
+    api.requestMirror.mockResolvedValue(state({ pair: pair({ status: 'pending', otherName: null }) }));
+    renderAtGuild(<Mirror />, GUILD);
+    const button = await screen.findByRole('button', { name: 'Ask for the mirror' });
+    expect(api.getMirrorFluxerServers).toHaveBeenCalledWith(GUILD);
+    expect(await screen.findByText('Fluxer copy')).toBeTruthy();
+    expect(screen.getByText('12 members')).toBeTruthy();
+    expect(screen.getByText('1,204 members')).toBeTruthy();
+    expect(screen.getByText(/needs the Administrator permission/)).toBeTruthy();
+    expect(screen.getByText(/not the highest on this server/)).toBeTruthy();
+    expect(screen.getByText(/already part of a mirror/)).toBeTruthy();
+    expect(screen.getByLabelText(/Busy/).disabled).toBe(true);
+    expect(screen.queryByLabelText('Fluxer server id')).toBeNull();
+    // Nothing is picked for the person.
+    expect(button.disabled).toBe(true);
+    fireEvent.click(screen.getByLabelText(/Fluxer copy/));
+    expect(button.disabled).toBe(false);
+    fireEvent.click(button);
+    await waitFor(() => expect(api.requestMirror).toHaveBeenCalledWith(GUILD, FLUXER));
+  });
+
+  it('keeps the manual id field behind "Enter an id instead", and back', async () => {
+    api.getMirror.mockResolvedValue(state());
+    api.getMirrorFluxerServers.mockResolvedValue(choices([choice()]));
+    renderAtGuild(<Mirror />, GUILD);
+    fireEvent.click(await screen.findByLabelText(/Fluxer copy/));
+    fireEvent.click(screen.getByRole('button', { name: 'Enter an id instead' }));
+    const input = screen.getByLabelText('Fluxer server id');
+    expect(input.value).toBe('');
+    expect(screen.getByRole('button', { name: 'Ask for the mirror' }).disabled).toBe(true);
+    expect(screen.getByText(/If you do not own that Fluxer server/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Pick from my Fluxer servers instead' }));
+    expect(screen.queryByLabelText('Fluxer server id')).toBeNull();
+    expect(screen.getByLabelText(/Fluxer copy/)).toBeTruthy();
+  });
+
+  it('says to connect Fluxer under Account when the person has no Fluxer login', async () => {
+    api.getMirror.mockResolvedValue(state());
+    api.getMirrorFluxerServers.mockResolvedValue(choices([], { connected: false }));
+    renderAtGuild(<Mirror />, GUILD);
+    const link = await screen.findByRole('link', { name: 'Connect Fluxer under Account' });
+    expect(link.getAttribute('href')).toBe('/account');
+    expect(screen.getByText(/to pick your Fluxer servers/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Enter an id instead' })).toBeTruthy();
+  });
+
+  it('says so when no Fluxer server is found, and falls back to the id field when the list fails', async () => {
+    api.getMirror.mockResolvedValue(state());
+    const { unmount } = renderAtGuild(<Mirror />, GUILD);
+    expect(
+      await screen.findByText(/No Fluxer server was found where Sylo is a member and you are the owner/)
+    ).toBeTruthy();
+    unmount();
+    api.getMirrorFluxerServers.mockRejectedValue(new Error('boom'));
+    renderAtGuild(<Mirror />, GUILD);
+    expect(await screen.findByLabelText('Fluxer server id')).toBeTruthy();
+    expect(screen.getByText(/could not be listed/)).toBeTruthy();
+  });
+});
+
 describe('Mirror: the Fluxer server', () => {
   it('explains how to start when there is no mirror', async () => {
     api.getMirror.mockResolvedValue(fluxerState(null));
@@ -265,11 +364,12 @@ describe('Mirror: the Fluxer server', () => {
 
 describe('Mirror: only the owner, and the pauses', () => {
   it('lets people without ownership look, but not change anything', async () => {
-    api.getMirror.mockResolvedValue(state({ isOwner: false, candidates: [] }));
+    api.getMirror.mockResolvedValue(state({ isOwner: false }));
     renderAtGuild(<Mirror />, GUILD);
     expect(await screen.findByText(/Only the server owner can do this/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Ask for the mirror' }).matches(':disabled')).toBe(true);
-    expect(screen.getByLabelText('Fluxer server').matches(':disabled')).toBe(true);
+    expect(screen.getByLabelText('Fluxer server id').matches(':disabled')).toBe(true);
+    expect(api.getMirrorFluxerServers).not.toHaveBeenCalled();
   });
 
   it('shows the status and the stop button as locked for a non-owner on a running mirror', async () => {
