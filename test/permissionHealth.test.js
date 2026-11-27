@@ -16,6 +16,13 @@ import {
   roleBlock,
 } from '../src/web/lib/permissionHealth.js';
 import { invalidateHealth, resetHealthCache } from '../src/lib/healthCache.js';
+import {
+  FEED_DEAD_AFTER_MS,
+  FeedUnavailableError,
+  _resetFeedHealthForTests,
+  recordFeedFailure,
+  recordFeedSuccess,
+} from '../src/modules/lib/youtubeFeedHealth.js';
 
 const G = '700000000000000888';
 const CH = '111111111111111111';
@@ -627,5 +634,77 @@ test('on a keyed Fluxer guild the @everyone role is the raw id, not the "fluxer:
     assert.equal(targets.roles.blocked[G], undefined, '@everyone is never offered by a picker');
   } finally {
     runtime.clients.fluxer = null;
+  }
+});
+
+// --- YouTube feed that has been missing for a day ----------------------------------------------
+
+const YT = 'UC' + 'a'.repeat(22);
+const ytAlert = (extra = {}) => ({ ytChannelId: YT, name: 'Some Channel', discordChannelId: CH, ...extra });
+const DAY = 24 * 60 * 60 * 1000;
+const failFeed = (status, at) => recordFeedFailure(YT, new FeedUnavailableError('x', status), 180_000, at);
+
+test('a YouTube feed that has answered 404 for a day is a warning on the YouTube alerts module', async () => {
+  _resetFeedHealthForTests();
+  failFeed(404, Date.now() - FEED_DEAD_AFTER_MS - 60_000);
+  failFeed(404, Date.now());
+  const { checks } = await build(stubGuild(), [on('youtube-alerts', { alerts: [ytAlert()] })]);
+  assert.equal(checks.length, 1);
+  const [c] = checks;
+  assert.equal(c.module, 'youtube-alerts');
+  assert.equal(c.severity, 'warning');
+  assert.equal(c.code, 'youtube-feed-not-found');
+  assert.equal(c.targetId, YT);
+  assert.equal(c.message, "YouTube can't find the feed for Some Channel.");
+  assert.equal(c.fix, 'Check that the channel still exists, or update its id.');
+  assert.ok(c.href.endsWith('/m/youtube-alerts'));
+  assert.equal(reportFor({ checks, available: true }).summary.warnings, 1);
+  _resetFeedHealthForTests();
+});
+
+test('a failing YouTube feed is not reported before a day, for a 5xx, once it answers, or when it is not watched', async () => {
+  const run = async (alert = ytAlert()) =>
+    (await build(stubGuild(), [on('youtube-alerts', { alerts: [alert] })])).checks;
+
+  _resetFeedHealthForTests();
+  failFeed(404, Date.now() - DAY + 60_000);
+  failFeed(404, Date.now());
+  assert.deepEqual(await run(), [], 'under a day');
+
+  _resetFeedHealthForTests();
+  failFeed(503, Date.now() - 2 * DAY);
+  assert.deepEqual(await run(), [], 'a 5xx is YouTube, not the channel');
+
+  _resetFeedHealthForTests();
+  failFeed(404, Date.now() - 2 * DAY);
+  failFeed(503, Date.now() - 60_000);
+  assert.deepEqual(await run(), [], 'a 5xx in between starts the count again');
+
+  _resetFeedHealthForTests();
+  failFeed(404, Date.now() - 2 * DAY);
+  assert.deepEqual(await run(ytAlert({ onVideo: false })), [], 'announcements for new videos are off');
+  assert.equal((await run()).length, 1);
+  recordFeedSuccess(YT);
+  assert.deepEqual(await run(), [], 'the feed answers again');
+  _resetFeedHealthForTests();
+});
+
+test('the YouTube feed warning also reaches a Fluxer server', async () => {
+  const fluxer = { isReady: () => true };
+  runtime.clients.fluxer = fluxer;
+  _resetFeedHealthForTests();
+  try {
+    failFeed(404, Date.now() - 2 * DAY);
+    const guild = keyedGuild(stubGuild({ client: fluxer }));
+    const { checks, platform } = await build(guild, [on('youtube-alerts', { alerts: [ytAlert()] })]);
+    assert.equal(platform, 'fluxer');
+    assert.deepEqual(
+      checks.map((c) => c.code),
+      ['youtube-feed-not-found']
+    );
+    assert.equal(checks[0].href, `/v2/guilds/fluxer:${G}/m/youtube-alerts`);
+  } finally {
+    runtime.clients.fluxer = null;
+    _resetFeedHealthForTests();
   }
 });
