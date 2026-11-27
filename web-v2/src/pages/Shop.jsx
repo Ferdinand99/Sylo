@@ -102,7 +102,7 @@ export default function Shop() {
                   {item.emoji ? `${item.emoji} ` : ''}
                   {item.name}
                 </h3>
-                {item.description ? <p>{item.description}</p> : null}
+                {item.description ? <p className="v2-shop-text">{item.description}</p> : null}
                 <p className="v2-field-hint">
                   <Meta
                     items={[
