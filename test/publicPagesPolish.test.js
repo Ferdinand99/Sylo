@@ -147,8 +147,8 @@ test('the appeal form ties each label to its box and says what is required and h
   assert.match(html, /<h1 class="page-title">Appeal your ban<\/h1>/);
   assert.match(html, /<p class="pub-callout">Bookmark this page: the decision will appear here\.<\/p>/);
   // The server takes any one answer, so with several questions none is required on its own.
-  assert.match(html, /<label for="appeal-a-0">Why were you banned\?<\/label>/);
-  assert.match(html, /<label for="appeal-a-1">Why should we lift the ban\?<\/label>/);
+  assert.match(html, /<label for="appeal-a-0" class="u-pre-line">Why were you banned\?<\/label>/);
+  assert.match(html, /<label for="appeal-a-1" class="u-pre-line">Why should we lift the ban\?<\/label>/);
   assert.match(
     html,
     /<textarea id="appeal-a-0" name="a" rows="3" maxlength="2000" aria-describedby="appeal-hint"><\/textarea>/
@@ -159,7 +159,7 @@ test('the appeal form ties each label to its box and says what is required and h
   const single = await render('appeal.ejs', { ...SAMPLES['appeal-form'].data, questions: ['Why?'] });
   assert.match(
     single,
-    /<label for="appeal-a-0">Why\? <span class="muted small">\(required\)<\/span><\/label>/
+    /<label for="appeal-a-0" class="u-pre-line">Why\? <span class="muted small">\(required\)<\/span><\/label>/
   );
   assert.match(single, /aria-describedby="appeal-hint" required><\/textarea>/);
 });

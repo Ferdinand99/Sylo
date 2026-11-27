@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TicketsInbox from '../pages/TicketsInbox.jsx';
 import TicketView from '../pages/TicketView.jsx';
 import AppealsReview from '../pages/AppealsReview.jsx';
+import { AccessProvider } from '../access.jsx';
 
 vi.mock('../api.js', () => ({
   ApiError: class ApiError extends Error {},
@@ -15,6 +16,7 @@ vi.mock('../api.js', () => ({
   ticketTranscriptUrl: (g, id) => `/api/v2/guilds/${g}/tickets/${id}/transcript`,
   getAppealsReview: vi.fn(),
   decideAppeal: vi.fn(),
+  getGuildAccess: vi.fn(),
 }));
 vi.mock('../notify.js', () => ({ notify: vi.fn() }));
 vi.mock('../components/ConfirmDialog.jsx', () => ({ confirmDialog: vi.fn().mockResolvedValue(true) }));
@@ -59,6 +61,21 @@ describe('TicketsInbox', () => {
     renderAt(`/guilds/${GUILD}/tickets`, 'guilds/:guildId/tickets', <TicketsInbox />);
     const link = await screen.findByRole('link', { name: /settings/i });
     expect(link.getAttribute('href')).toBe(`/guilds/${GUILD}/m/tickets`);
+  });
+
+  it('has no link to the ticket settings for Inbox access: that page is locked for them', async () => {
+    api.getGuildAccess.mockResolvedValue({ level: 'inbox' });
+    api.getTickets.mockResolvedValue({ open: [], closed: [] });
+    renderAt(
+      `/guilds/${GUILD}/tickets`,
+      'guilds/:guildId/tickets',
+      <AccessProvider guildId={GUILD} hint="inbox">
+        <TicketsInbox />
+      </AccessProvider>
+    );
+    await screen.findByRole('heading', { name: 'Tickets' });
+    await waitFor(() => expect(api.getGuildAccess).toHaveBeenCalled());
+    expect(screen.queryByRole('link', { name: /settings/i })).toBeNull();
   });
 });
 
@@ -132,5 +149,26 @@ describe('AppealsReview', () => {
     expect(screen.getByRole('link', { name: /Appeal settings/ }).getAttribute('href')).toBe(
       `/guilds/${GUILD}/m/appeals`
     );
+  });
+
+  it('has no link to the appeal settings for Inbox access, and tells them who can set it up', async () => {
+    api.getGuildAccess.mockResolvedValue({ level: 'inbox' });
+    api.getAppealsReview.mockResolvedValue({
+      moduleEnabled: true,
+      configured: false,
+      open: 0,
+      appeals: [],
+    });
+    renderAt(
+      `/guilds/${GUILD}/appeals`,
+      'guilds/:guildId/appeals',
+      <AccessProvider guildId={GUILD} hint="inbox">
+        <AppealsReview />
+      </AccessProvider>
+    );
+    await screen.findByText(/No appeal questions are set up yet/);
+    await waitFor(() => expect(api.getGuildAccess).toHaveBeenCalled());
+    expect(screen.queryByRole('link', { name: /Appeal settings/ })).toBeNull();
+    expect(screen.getByText(/Ask a server admin to set it up\./)).toBeTruthy();
   });
 });

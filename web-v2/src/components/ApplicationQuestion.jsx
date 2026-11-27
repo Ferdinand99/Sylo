@@ -85,11 +85,11 @@ export default function ApplicationQuestion({ q, value, onChange, error, disable
 
   return (
     <div className="v2-field">
-      <label id={`${id}-label`} htmlFor={q.type === 'text' ? id : undefined}>
+      <label id={`${id}-label`} className="v2-pre-line" htmlFor={q.type === 'text' ? id : undefined}>
         {q.label}
         {optional}
       </label>
-      {q.help ? <p className="v2-field-hint">{q.help}</p> : null}
+      {q.help ? <p className="v2-field-hint v2-pre-line">{q.help}</p> : null}
       {input}
       {error ? (
         <p id={`${id}-error`} className="v2-field-error" role="alert">

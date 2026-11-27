@@ -6,7 +6,7 @@ import LoadError from '../components/LoadError.jsx';
 import { formatCount } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
 import Time from '../components/Time.jsx';
-import { NeedsInbox } from '../access.jsx';
+import { NeedsInbox, useAccess } from '../access.jsx';
 
 function TicketRow({ ticket, guildId }) {
   const preview = `${ticket.previewKind === 'staff' ? 'You: ' : ''}${ticket.preview || '(no text)'}`;
@@ -33,6 +33,8 @@ function TicketRow({ ticket, guildId }) {
 export default function TicketsInbox() {
   const { guildId } = useParams();
   const { data, error } = useApiData(() => getTickets(guildId), [guildId]);
+  // The settings page needs Edit access: an Inbox person is not sent to a page they cannot open.
+  const canEdit = useAccess().can('edit');
 
   if (error) return <LoadError error={error} what="the tickets" />;
   if (!data) return <p className="v2-state">Loading…</p>;
@@ -41,9 +43,11 @@ export default function TicketsInbox() {
     <Reveal>
       <div className="v2-page-head">
         <h1 className="v2-section-title">Tickets</h1>
-        <Link className="v2-row-arrow" to={`/guilds/${guildId}/m/tickets`}>
-          Ticket settings →
-        </Link>
+        {canEdit ? (
+          <Link className="v2-row-arrow" to={`/guilds/${guildId}/m/tickets`}>
+            Ticket settings →
+          </Link>
+        ) : null}
       </div>
       <p className="v2-field-hint">
         Members open a ticket by sending the bot a DM. Replies you write here reach them as an anonymous

@@ -42,6 +42,7 @@ import { bearerToken, isTokenRequest } from '../lib/bearer.js';
 import { enabledProviders, fluxerOrigins, providers, adminGuildIdsFromOAuth } from '../lib/oauthProviders.js';
 import { buildBotInvites } from '../lib/botInvites.js';
 import { adminKeysOf, identityFor, isOperator, primaryUserId, sessionUserLabel } from '../lib/accountAuth.js';
+import { refreshAfterJoins, refreshAccountGuilds } from '../lib/guildListRefresh.js';
 import { clientKey, rateLimit } from './rateLimit.js';
 import { hasValidCsrfToken } from './csrf.js';
 import { log } from '../../lib/log.js';
@@ -250,6 +251,23 @@ export async function serverRightsLive(key, userId, fetchMember) {
   return { right, member };
 }
 
+/** The live rights check the server-list refresh uses: the bot's cache, else one member lookup. */
+const rightsLive = (key, userId) => serverRightsLive(key, userId, fetchMemberFromGuild);
+
+/**
+ * The account with its server lists brought up to date for servers the bot has joined since (see
+ * src/web/lib/guildListRefresh.js); the same account when nothing changed.
+ */
+async function withJoinedServers(account) {
+  const { changed, looked } = await refreshAfterJoins(account, rightsLive);
+  // `guildListLooked`: whom this request already looked at, so "Refresh server list" does not repeat it.
+  const base = changed ? { ...account, identities: await identitiesOf(account.id) } : account;
+  return looked.size ? { ...base, guildListLooked: looked } : base;
+}
+
+/** "Refresh server list": look at every server the bot joined for this account now. Resolves to the servers added. */
+export const refreshServerLists = (account) => refreshAccountGuilds(account, rightsLive);
+
 /**
  * Does this person own the guild or hold Manage Server (or Administrator) in it right now? The
  * live check the dashboard access levels rely on, minus the bot-master role: for what only real server
@@ -355,7 +373,10 @@ async function attachAccount(req, _res, next) {
     if (token !== null) {
       const record = await findApiToken(token);
       if (record) {
-        req.account = { id: record.accountId, identities: await identitiesOf(record.accountId) };
+        req.account = await withJoinedServers({
+          id: record.accountId,
+          identities: await identitiesOf(record.accountId),
+        });
         req.viaToken = true;
         req.apiTokenId = record.id;
         touchApiToken(record, { ttlMs: API_TOKEN_TTL_MS }).catch((err) =>
@@ -368,7 +389,10 @@ async function attachAccount(req, _res, next) {
     if (sid) {
       const session = await getSession(sid);
       if (session) {
-        req.account = { id: session.accountId, identities: await identitiesOf(session.accountId) };
+        req.account = await withJoinedServers({
+          id: session.accountId,
+          identities: await identitiesOf(session.accountId),
+        });
       } else {
         req.session.sid = undefined; // expired or unknown
       }
