@@ -314,6 +314,8 @@ export const mobileApiRouter = Router();
 // /api/v2/guilds/:id/access. `message-move`: a posted message moves to its new channel on publish.
 // `moderator-view`: the web dashboard's focused view for Inbox-level access (landing on the inbox, only the
 // moderation tools); the app can follow it with `access` from GET /api/v2/guilds.
+// `update-notice`: operators only, GET /api/v2/update (a newer Sylo release, optionally what Wise Wren sees)
+// and, with Wise Wren set up, POST /api/v2/update/wren/approve and GET /api/v2/update/wren/runs/:id.
 const FEATURES = Object.freeze([
   'app-login',
   'live-access',
@@ -331,6 +333,7 @@ const FEATURES = Object.freeze([
   'message-templates',
   'message-move',
   'moderator-view',
+  'update-notice',
 ]);
 
 // Public and ahead of the open-mode guard: the app calls it before anyone signs in, and an open-mode

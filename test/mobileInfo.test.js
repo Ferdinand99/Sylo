@@ -52,6 +52,7 @@ test('GET /api/mobile/info describes a server with login on, without a cookie or
   }
   assert.ok(info.features.includes('message-move'), 'a posted message moves when its channel changes');
   assert.ok(info.features.includes('moderator-view'), 'the focused moderator view for Inbox access');
+  assert.ok(info.features.includes('update-notice'), 'GET /api/v2/update for operators');
   assert.ok(info.features.every((f) => typeof f === 'string'));
 });
 

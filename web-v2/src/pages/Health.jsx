@@ -15,6 +15,7 @@ import { confirmDialog } from '../components/ConfirmDialog.jsx';
 import { plural } from '../components/Meta.jsx';
 import { formatCount } from '../util.js';
 import Reveal from '../components/Reveal.jsx';
+import UpdateNotice from '../components/UpdateNotice.jsx';
 import { Icon } from '../components/icons.jsx';
 
 // Plain names for the error sources that are not a module (a module's own name comes from the server).
@@ -272,6 +273,8 @@ export default function Health() {
           </div>
         ) : null}
       </div>
+
+      <UpdateNotice />
 
       {d.sessionSecret === 'generated-ephemeral' ? (
         <div className="v2-group">
