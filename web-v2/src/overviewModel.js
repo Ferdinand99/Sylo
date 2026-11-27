@@ -269,7 +269,13 @@ export function navModel({ guildId, data, operator }) {
     { key: 'settings', label: 'Server settings', icon: 'gear', href: g('/settings') },
     { key: 'commands', label: 'Commands', icon: 'terminal', href: g('/moderation/commands') },
     // Copy this Discord server to a Fluxer server and keep it in step (the page works on the Fluxer side too).
-    { key: 'mirror', label: 'Mirror to Fluxer', icon: 'copy', href: g('/mirror'), beta: betaPages.includes('mirror') },
+    {
+      key: 'mirror',
+      label: 'Mirror to Fluxer',
+      icon: 'copy',
+      href: g('/mirror'),
+      beta: betaPages.includes('mirror'),
+    },
   ];
   const more = [
     { key: 'command-list', label: 'Command list', icon: 'list', href: '/commands' },

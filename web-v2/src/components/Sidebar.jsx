@@ -156,10 +156,7 @@ export default function Sidebar({ activeGuildId, open, onClose, returnFocusRef }
                     aria-current={pathname === card.href ? 'page' : undefined}
                     onClick={onClose}
                   >
-                    {card.name}{' '}
-                    {card.beta ? (
-                      <BetaTag className="v2-sidebar-beta-pill" />
-                    ) : null}
+                    {card.name} {card.beta ? <BetaTag className="v2-sidebar-beta-pill" /> : null}
                   </Link>
                 ))}
               </div>

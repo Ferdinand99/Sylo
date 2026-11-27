@@ -181,9 +181,7 @@ export default function Bridge() {
 
   return (
     <>
-      <h1 className="v2-section-title">
-        Bridge {data.beta ? <BetaTag /> : null}
-      </h1>
+      <h1 className="v2-section-title">Bridge {data.beta ? <BetaTag /> : null}</h1>
       {data.beta ? <BetaNote /> : null}
       <p className="v2-field-hint">
         One conversation between a channel here on {here} and a channel on {other}. Members on both sides

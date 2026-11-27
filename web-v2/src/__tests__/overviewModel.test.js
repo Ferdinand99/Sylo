@@ -186,7 +186,8 @@ describe('navModel', () => {
   });
 
   it('marks the Mirror entry as beta when the overview lists it as a beta page', () => {
-    const mirror = (d) => navModel({ guildId: G, data: d, operator: false }).server.find((i) => i.key === 'mirror');
+    const mirror = (d) =>
+      navModel({ guildId: G, data: d, operator: false }).server.find((i) => i.key === 'mirror');
     expect(mirror(data).beta).toBe(false);
     expect(mirror({ ...data, betaPages: ['mirror'] }).beta).toBe(true);
   });

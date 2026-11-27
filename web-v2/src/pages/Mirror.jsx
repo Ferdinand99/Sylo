@@ -100,9 +100,7 @@ export default function Mirror() {
 
   return (
     <Reveal>
-      <h1 className="v2-section-title">
-        Mirror to Fluxer {data.beta ? <BetaTag /> : null}
-      </h1>
+      <h1 className="v2-section-title">Mirror to Fluxer {data.beta ? <BetaTag /> : null}</h1>
       {data.beta ? <BetaNote what="feature" /> : null}
       <OwnerContext.Provider value={data.isOwner !== false}>
         {data.platform === 'discord' ? (
