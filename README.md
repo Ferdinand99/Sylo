@@ -204,6 +204,16 @@ off the ones you don't need with `INTENT_GUILD_MEMBERS=false` /
 logging, push) is optional and listed in [`.env.example`](.env.example) and the
 [environment variable table](docs/self-hosting.md#environment-variables).
 
+### Updating Sylo
+
+Update with `docker compose pull && docker compose up -d`. Operators (the accounts in `OWNER_IDS`)
+see an **Update available** note in the dashboard when a newer release is out, with its release
+notes and this command; set `UPDATE_CHECK=off` to turn the check off. With
+[Wise Wren](https://github.com/Ferdinand99/Wise-Wren) set up (`WISE_WREN_URL`, `WISE_WREN_TOKEN`,
+`WISE_WREN_TARGET_ID`) the same page has an **Update now** button, and Sylo never needs access to
+the Docker socket. Details in
+[docs/self-hosting.md](docs/self-hosting.md#update-notice-and-update-now).
+
 ### Backups and monitoring
 
 Sylo snapshots its database to `<data>/backups` before every schema migration

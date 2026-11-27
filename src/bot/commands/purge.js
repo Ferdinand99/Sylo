@@ -1,17 +1,40 @@
-// /purge <amount> [user] — bulk-delete recent messages in the current channel.
+// /purge <amount> [user] — delete recent messages in the current channel, of any age.
+//
+// Messages younger than 14 days go through the bulk route; older ones (Discord only: its bulk route
+// refuses them) are deleted one at a time at a pace the platform accepts. Fluxer's bulk route has no
+// age limit, so everything goes through it there. See bot/lib/purgeMessages.js.
 import {
   SlashCommandBuilder,
   PermissionFlagsBits,
   InteractionContextType,
   MessageFlags,
   EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ComponentType,
 } from 'discord.js';
 import { MOD_COLOR, replyWithoutGuild } from '../lib/moderation.js';
 import { postModLog } from '../lib/modlog.js';
+import {
+  INTERACTION_BUDGET_MS,
+  acquirePurgeLock,
+  canStopPurge,
+  purgeMessages,
+  selectPurgeTargets,
+  splitByAge,
+} from '../lib/purgeMessages.js';
+import { respondSafely } from '../../lib/discordErrors.js';
+import { guildKey, platformOfGuild } from '../../platform/platformOf.js';
+import { log } from '../../lib/log.js';
+
+export const STOP_CUSTOM_ID = 'purge:stop';
+/** Edit the progress reply at most this often (Discord allows 5 webhook edits per 5 s). */
+export const PROGRESS_EDIT_MS = 2500;
 
 export const data = new SlashCommandBuilder()
   .setName('purge')
-  .setDescription('Delete recent messages in this channel (max 100, younger than 14 days).')
+  .setDescription('Delete recent messages in this channel, of any age (max 100).')
   .setContexts(InteractionContextType.Guild)
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
   .addIntegerOption((o) =>
@@ -23,6 +46,60 @@ export const data = new SlashCommandBuilder()
       .setMaxValue(100)
   )
   .addUserOption((o) => o.setName('user').setDescription('Only delete messages from this user'));
+
+const plural = (n) => `**${n}** message${n === 1 ? '' : 's'}`;
+
+/** "2 already gone, 1 missing permission" for the failures that happened. */
+export function describeFailures(failures) {
+  return [
+    failures.gone && `${failures.gone} already gone`,
+    failures.permission && `${failures.permission} missing permission`,
+    failures.other && `${failures.other} failed for another reason`,
+  ]
+    .filter(Boolean)
+    .join(', ');
+}
+
+/** The reply during a long purge. */
+export function progressText({ deleted, failed, total }) {
+  return `🧹 Deleted **${deleted}** of **${total}**…${failed ? ` (${failed} could not be deleted)` : ''}`;
+}
+
+/** The final reply. */
+export function summaryText(result, user, keptPinned = 0) {
+  const from = user ? ` from ${user.tag}` : '';
+  const lines = [];
+  if (result.timedOut) {
+    lines.push(
+      `⏱️ Timed out. Deleted ${plural(result.deleted)}${from} of **${result.total}**; **${result.remaining}** left untouched. Run /purge again for the rest.`
+    );
+  } else if (result.stopped) {
+    lines.push(
+      `⏹️ Stopped. Deleted ${plural(result.deleted)}${from} of **${result.total}**; **${result.remaining}** left untouched.`
+    );
+  } else {
+    lines.push(`🧹 Deleted ${plural(result.deleted)}${from}.`);
+  }
+  if (result.failed) {
+    lines.push(`⚠️ ${plural(result.failed)} could not be deleted (${describeFailures(result.failures)}).`);
+  }
+  if (keptPinned) {
+    lines.push(
+      `📌 ${plural(keptPinned)} older than 14 days ${keptPinned === 1 ? 'was' : 'were'} pinned and kept.`
+    );
+  }
+  return lines.join('\n');
+}
+
+function stopRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(STOP_CUSTOM_ID)
+      .setEmoji('🛑')
+      .setLabel('Stop')
+      .setStyle(ButtonStyle.Danger)
+  );
+}
 
 /** @param {import('discord.js').ChatInputCommandInteraction} interaction */
 export async function execute(interaction) {
@@ -40,29 +117,119 @@ export async function execute(interaction) {
     return;
   }
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  // One purge at a time per channel; taken before anything is awaited, so two commands cannot both pass.
+  const release = acquirePurgeLock(`${guildKey(interaction.guild)}:${channel.id}`, interaction.user.id);
+  if (!release) {
+    await interaction.reply({
+      content: '⚠️ A purge is already running in this channel. Wait for it to finish.',
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
 
-  let messages = await channel.messages.fetch({ limit: amount });
-  if (user) messages = messages.filter((m) => m.author.id === user.id);
+  let collector = null;
+  try {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-  const deleted = await channel.bulkDelete(messages, true); // true = ignore messages older than 14 days
+    let messages = await channel.messages.fetch({ limit: amount });
+    if (user) messages = messages.filter((m) => m.author.id === user.id);
+    const { targets, keptPinned } = selectPurgeTargets([...messages.values()]);
 
-  await interaction.editReply(
-    `🧹 Deleted **${deleted.size}** message${deleted.size === 1 ? '' : 's'}${user ? ` from ${user.tag}` : ''}.` +
-      (deleted.size < messages.size ? ' (some were too old to bulk-delete)' : '')
-  );
+    const platform = platformOfGuild(interaction.guild);
+    // Only a Discord purge with messages past the bulk limit takes long enough for progress and a Stop button.
+    const longRun = platform !== 'fluxer' && splitByAge(targets).old.length > 0;
 
-  if (deleted.size > 0) {
-    const embed = new EmbedBuilder()
-      .setColor(MOD_COLOR)
-      .setTitle('Messages purged')
-      .addFields(
-        { name: 'Channel', value: `${channel}` },
-        { name: 'Count', value: String(deleted.size) },
-        { name: 'Moderator', value: interaction.user.tag },
-        ...(user ? [{ name: 'Filtered to', value: user.tag }] : [])
-      )
-      .setTimestamp(Date.now());
-    await postModLog(interaction.guild, embed);
+    // The interaction token lives 15 minutes; nothing is started or waited for past this.
+    const deadline = (interaction.createdTimestamp ?? Date.now()) + INTERACTION_BUDGET_MS;
+    let stopRequested = false;
+    let pending = Promise.resolve();
+    let lastEdit = 0;
+    const edit = (payload) => {
+      pending = pending
+        .then(() => interaction.editReply(payload))
+        .catch((err) => log.warn('bot', '/purge progress update failed:', err?.message ?? err));
+    };
+
+    if (longRun) {
+      await interaction.editReply({
+        content: progressText({ deleted: 0, failed: 0, total: targets.length }),
+        components: [stopRow()],
+      });
+      const message = await interaction.fetchReply();
+      collector = message?.createMessageComponentCollector?.({
+        componentType: ComponentType.Button,
+        time: Math.max(1000, deadline - Date.now()) + 5000,
+      });
+      collector?.on('collect', (i) =>
+        respondSafely('bot', '/purge stop', async () => {
+          const allowed = canStopPurge({
+            userId: i.user.id,
+            starterId: interaction.user.id,
+            permissions: i.memberPermissions,
+            administrator: PermissionFlagsBits.Administrator,
+          });
+          if (!allowed) {
+            await i.reply({
+              content: 'Only the person who ran this purge can stop it.',
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+          stopRequested = true;
+          await i.update({ content: '⏹️ Stopping…', components: [] });
+        })
+      );
+    }
+
+    const result = await purgeMessages(channel, targets, {
+      platform,
+      deadline,
+      isStopped: () => stopRequested,
+      onProgress: (p) => {
+        if (!longRun || stopRequested) return;
+        const now = Date.now();
+        if (now - lastEdit < PROGRESS_EDIT_MS) return;
+        lastEdit = now;
+        edit({ content: progressText(p) });
+      },
+    });
+
+    collector?.stop('done');
+    await pending;
+
+    // The mod log first: the deletions happened, so they are audited even if the final reply fails
+    // (an expired token, a Discord hiccup).
+    if (result.deleted > 0) {
+      const embed = new EmbedBuilder()
+        .setColor(MOD_COLOR)
+        .setTitle('Messages purged')
+        .addFields(
+          { name: 'Channel', value: `${channel}` },
+          { name: 'Count', value: String(result.deleted) },
+          ...(result.failed ? [{ name: 'Failed', value: String(result.failed) }] : []),
+          ...(result.stopped || result.timedOut
+            ? [
+                {
+                  name: result.timedOut ? 'Timed out' : 'Stopped early',
+                  value: `${result.remaining} left untouched`,
+                },
+              ]
+            : []),
+          { name: 'Moderator', value: interaction.user.tag },
+          ...(user ? [{ name: 'Filtered to', value: user.tag }] : [])
+        )
+        .setTimestamp(Date.now());
+      await postModLog(interaction.guild, embed);
+    }
+
+    await interaction
+      .editReply({
+        content: summaryText(result, user, keptPinned),
+        ...(longRun ? { components: [] } : {}),
+      })
+      .catch((err) => log.warn('bot', '/purge final reply failed:', err?.message ?? err));
+  } finally {
+    collector?.stop('done');
+    release();
   }
 }

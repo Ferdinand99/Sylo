@@ -295,6 +295,11 @@ export const clearPersonalizerAnnouncement = () => postJson('/api/v2/personalize
 
 export const getHealth = () => apiFetch('/api/v2/health');
 export const getStats = () => apiFetch('/api/v2/stats');
+// The operators' update notice (GET /api/v2/update): a newer Sylo release, and what Wise Wren sees when it is set up.
+export const getUpdate = ({ refresh = false } = {}) =>
+  apiFetch(`/api/v2/update${refresh ? '?refresh=1' : ''}`);
+export const approveUpdate = () => postJson('/api/v2/update/wren/approve', {});
+export const getUpdateRun = (id) => apiFetch(`/api/v2/update/wren/runs/${encodeURIComponent(id)}`);
 // A snapshot download is a plain link (the browser saves the file), not a fetch.
 export const backupDownloadUrl = (name) => `/api/v2/health/backups/${encodeURIComponent(name)}`;
 export const sendDevLogTest = () => postJson('/api/v2/health/dev-log-test', {});
