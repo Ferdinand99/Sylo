@@ -47,6 +47,47 @@ Settings and only for operator accounts: Health with the database backups
 Personalizer, the stats cache and the roadmap admin. See
 [Health and the dev log (operators)](#health-and-the-dev-log-operators).
 
+The app follows the Sylo 5.3 additions where the server announces them (each is
+hidden on an older Sylo, and the app never sends a key the server did not send):
+
+- `moderator-view`: a person whose level in a server is Inbox gets the focused
+  moderator view, as in the dashboard: the server opens on its first inbox that is
+  switched on, and the tabs are Tickets, Tools (applications, suggestions and
+  member data) and Moderation (infractions and appeals, no commands). No modules,
+  settings, audit log, insights or leaderboard. "Show everything" brings back the
+  full, still locked, app on that device. View keeps the full read-only app and
+  Edit is unchanged. Operator screens live in Settings and are not affected.
+- `public-page-look`: Server settings, then Public Pages (Edit only), for the
+  accent colour (with the contrast note of the server) and the background (none,
+  a picture from the photo library, or the invite background), with a preview.
+- `update-notice` (operators): Settings, then Operator, then Updates shows a newer
+  release with its notes and the command to copy and, when the instance runs Wise
+  Wren, Update now with the progress of the run while Sylo restarts.
+- Restoring an uploaded Postgres dump: Health, then Backups. A server whose health
+  report has `db.roleRisks` (5.3) is sent `confirm` and, for a dump that was
+  uploaded, `acknowledgeSql: true`, after the app explains that the SQL runs with
+  the rights of the database role. An older server is sent no body.
+- `bridge`: the Bridge module has its own screen (Modules, then Bridge): the
+  bridged channels with their state and what this server shares, the requests
+  that wait, asking the other server for a link (the one-time code to copy) and
+  using a code. Everyone with access reads it; only the server owner changes
+  anything (the page's `owner`), as on the web.
+- `mirror`: Server tools, then Mirror to Fluxer, on both servers of a pair. The
+  owner of the Discord server picks one of their Fluxer servers (or types an id),
+  asks, looks at the preview and starts the copy; the owner of the Fluxer server
+  agrees with the code and may allow real deletion. Pause, resume (with the
+  deletions to confirm), stop, copy again and the report are there too. Controls
+  are switched off unless the state's `isOwner` is true.
+- The bridge and the mirror are Beta: their rows carry a Beta badge and their
+  screens a one-line Beta note. The app reads `beta` from the overview cards and,
+  when a server does not send it, treats `bridge` and `mirror` as Beta.
+- Pulling the server list (or Refresh on iPad) first calls
+  `POST /api/v2/account/refresh-guilds`, so a server the bot joined after sign-in
+  shows up. An older Sylo answers 404 and the list simply loads, as before.
+- A note on an appeal and an application's reason are typed in a field of
+  several lines, and a shop item's description is shown in full in the shop
+  list; their line breaks reach the member as typed.
+
 What stays on the web is only what is not an administrator's job: the public
 pages (the web shop, the application forms, event and quote pages) that members
 open in a browser. The app can copy or open the address of a public page; it

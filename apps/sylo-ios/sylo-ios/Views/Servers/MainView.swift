@@ -42,13 +42,14 @@ struct MainView: View {
                 .safeAreaInset(edge: .top) { AnnouncementBanner(server: server, session: session) }
                 .navigationTitle("Servers")
                 .toolbar {
-                    // iPad: a hardware keyboard and room in the bar; iPhone pulls to refresh.
+                    // iPad: a hardware keyboard and room in the bar; iPhone pulls to refresh. Both ask the server to
+                    // look again for servers the bot joined since sign-in (Sylo 5.3), then load the list.
                     if horizontalSizeClass == .regular {
                         ToolbarItem(placement: .topBarTrailing) {
                             Button {
-                                Task { await servers.load() }
+                                Task { await servers.refresh() }
                             } label: {
-                                Label("Refresh", systemImage: "arrow.clockwise")
+                                Label("Refresh Server List", systemImage: "arrow.clockwise")
                             }
                             .keyboardShortcut("r")
                             .disabled(servers.isLoading)
@@ -176,6 +177,11 @@ private struct ServerSidebar: View {
                     StatusMessage(message, kind: .error)
                 }
             }
+            if let note = servers.refreshNote {
+                Section {
+                    StatusMessage(note, kind: .notice)
+                }
+            }
             ForEach(servers.sections) { section in
                 Section(section.platform.displayName) {
                     ForEach(section.servers) { server in
@@ -203,7 +209,8 @@ private struct ServerSidebar: View {
             }
         }
         .overlay { placeholder }
-        .refreshable { await servers.load() }
+        // A pull asks the server to look for servers the bot joined since sign-in, then loads the list.
+        .refreshable { await servers.refresh() }
     }
 
     @ViewBuilder

@@ -179,6 +179,12 @@ private struct ShopItemRow: View {
                         RarityBadge(key: rarity, tiers: tiers)
                     }
                 }
+                // In full, with the line breaks the admin typed (Sylo 5.3 keeps them), as the dashboard's list shows it.
+                if !item.description.isEmpty {
+                    Text(verbatim: item.description)
+                        .font(.subheadline)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Text(verbatim: details)
                     .font(.footnote)
                     .foregroundStyle(.secondary)

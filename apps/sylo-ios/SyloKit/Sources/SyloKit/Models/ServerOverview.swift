@@ -149,7 +149,8 @@ public struct OverviewCard: Decodable, Sendable, Hashable, Identifiable {
         description = try c.decodeIfPresent(String.self, forKey: .description)
         hasToggle = try c.decodeIfPresent(Bool.self, forKey: .hasToggle) ?? false
         isEnabled = try c.decodeIfPresent(Bool.self, forKey: .enabled)
-        isBeta = try c.decodeIfPresent(Bool.self, forKey: .beta) ?? false
+        // The server's `beta` wins when it is sent; a server that does not send it falls back to the app's list.
+        isBeta = (try? c.decodeIfPresent(Bool.self, forKey: .beta)) ?? ModuleBeta.isBeta(id)
         missingIntents = try c.decodeIfPresent([String].self, forKey: .missingIntents) ?? []
         status = try c.decodeIfPresent(ModuleStatus.self, forKey: .status) ?? .other("")
         lines = try c.decodeLossyArray(of: StatusLine.self, forKey: .lines)
@@ -190,4 +191,24 @@ public struct ModuleToggleResult: Decodable, Sendable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         isEnabled = try c.decode(Bool.self, forKey: .enabled)
     }
+}
+
+/// Which modules are marked Beta. The server says so per card (`beta` in the overview, set in its module registry);
+/// a server that does not send the field uses this list, which holds the parts Sylo 5.3 ships as Beta: the Discord and
+/// Fluxer bridge and the server mirror.
+public enum ModuleBeta {
+    /// The ids that are Beta when the server does not say: the Bridge module and Mirror to Fluxer.
+    public static let fallbackIDs: Set<String> = ["bridge", "mirror"]
+
+    /// Whether the module or page `id` is Beta by the fallback list.
+    public static func isBeta(_ id: String) -> Bool { fallbackIDs.contains(id) }
+
+    /// Whether `id` is Beta: the server's flag when the overview has its card, else the fallback list.
+    public static func isBeta(_ id: String, in overview: ServerOverview?) -> Bool {
+        if let card = overview?.groups.flatMap(\.cards).first(where: { $0.id == id }) { return card.isBeta }
+        return isBeta(id)
+    }
+
+    /// The line at the top of a Beta screen, as in the dashboard.
+    public static let note = "Beta: this module is new and may still have rough edges. Report problems in the Sylo Discord."
 }

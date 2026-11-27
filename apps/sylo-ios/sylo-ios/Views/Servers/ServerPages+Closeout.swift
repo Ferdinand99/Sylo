@@ -7,5 +7,7 @@ extension ServerPages {
         // The Insights module's card has a switch and no settings, so it opens the page like the
         // web card does (the Server tools section opens the same screen).
         ServerPage("insights") { server, session in InsightsView(server: server, session: session) },
+        // Mirror to Fluxer (Sylo 5.3), should the overview ever list it as a card; the Server tools section opens it.
+        ServerPage("mirror") { server, session in MirrorView(server: server, session: session) },
     ]
 }

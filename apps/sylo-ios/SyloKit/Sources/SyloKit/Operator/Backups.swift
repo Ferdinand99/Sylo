@@ -42,13 +42,20 @@ extension Endpoints {
     }
 
     /// `POST /api/v2/health/backups/:name/restore`: replaces the live database with the backup and
-    /// restarts the bot (the server answers first, then exits).
+    /// restarts the bot (the server answers first, then exits). A Sylo 5.3 server wants the snapshot's name
+    /// as `confirm`, and `acknowledgeSql` for an uploaded Postgres dump (see ``RestorePlan``); an older server
+    /// takes no body, and gets none.
     public struct RestoreBackup: APIEndpoint {
         public typealias Response = OKResponse
         public let name: String
-        public init(name: String) { self.name = name }
+        public let confirmation: RestoreConfirmation?
+        public init(name: String, confirmation: RestoreConfirmation? = nil) {
+            self.name = name
+            self.confirmation = confirmation
+        }
         public var path: String { "/api/v2/health/backups/\(name.encodedPathSegment)/restore" }
         public var method: HTTPMethod { .post }
+        public var body: (any Encodable & Sendable)? { confirmation }
     }
 
     /// `POST /api/v2/health/backups/import`: a raw body, sent as `application/octet-stream` and streamed
@@ -73,6 +80,61 @@ extension Endpoints {
         public init(name: String) { self.name = name }
         public var path: String { "/api/v2/health/backups/\(name.encodedPathSegment)" }
         public var isLargeDownload: Bool { true }
+    }
+}
+
+/// What a restore request says besides the snapshot in its address (Sylo 5.3, src/db/backup.js
+/// `restoreConfirmationError`). `confirm` is the snapshot's name. `acknowledgeSql` is `true` for a Postgres dump
+/// that was uploaded (its name starts with `sylo-imported-`): restoring it runs the SQL in the file with the rights
+/// of the database role Sylo connects as, and the server refuses it (400) unless the request says the person knows.
+/// A key that is not set is not sent.
+public struct RestoreConfirmation: Encodable, Sendable, Equatable {
+    public let confirm: String
+    public let acknowledgeSql: Bool?
+
+    public init(confirm: String, acknowledgeSql: Bool? = nil) {
+        self.confirm = confirm
+        self.acknowledgeSql = acknowledgeSql
+    }
+}
+
+/// What the app asks and sends for a restore of one snapshot.
+public struct RestorePlan: Sendable, Equatable {
+    /// The snapshot is an uploaded Postgres dump: restoring it runs the SQL in the file. The app explains that and
+    /// wants the person to say they know, whatever the server's version.
+    public let isUploadedSqlDump: Bool
+    /// The body to send; nil for a server that did not say it wants one (Sylo 5.2 and older, which take none).
+    public let confirmation: RestoreConfirmation?
+
+    public init(isUploadedSqlDump: Bool, confirmation: RestoreConfirmation?) {
+        self.isUploadedSqlDump = isUploadedSqlDump
+        self.confirmation = confirmation
+    }
+
+    /// The name an uploaded snapshot is stored under (`sylo-imported-...`).
+    public static func isImported(_ name: String) -> Bool { name.hasPrefix("sylo-imported-") }
+
+    /// The plan for `name` on a server whose health report has this `database`. The 5.3 server sends `roleRisks`
+    /// (an empty list when the role is fine); a server without it is not sent the new keys.
+    public static func make(name: String, database: HealthReport.Database?) -> RestorePlan {
+        let sql = database?.isPostgres == true && isImported(name)
+        let wantsConfirmation = database?.roleRisks != nil
+        return RestorePlan(
+            isUploadedSqlDump: sql,
+            confirmation: wantsConfirmation ? RestoreConfirmation(confirm: name, acknowledgeSql: sql ? true : nil) : nil)
+    }
+}
+
+/// What the app says before it restores an uploaded Postgres dump, in the dashboard's words.
+public enum UploadedDumpNotice {
+    public static let title = "This file was uploaded"
+    public static let message = "A Postgres dump holds SQL, and restoring it runs that SQL with the rights of the database role Sylo connects as. Inside Sylo's own database that adds nothing an operator cannot already do, because a restore replaces the whole database. A role with more rights can also reach the database server's own system. Restore only a file you made or trust."
+    public static let acknowledgement = "I made this file or I trust it"
+
+    /// The role's extra rights as a sentence, nil when there are none.
+    public static func roleSentence(_ risks: [String]?) -> String? {
+        guard let risks, !risks.isEmpty else { return nil }
+        return "The database role Sylo connects as has more rights than it needs: \(risks.joined(separator: ", ")). A restored dump runs its SQL with those rights."
     }
 }
 
@@ -162,13 +224,19 @@ public final class BackupsModel {
     /// it had), which the session handles like any other 401.
     /// - Returns: Whether the server took the restore.
     @discardableResult
-    public func restore(_ name: String, typed: String) async -> Bool {
+    public func restore(_ name: String, typed: String, acknowledgedSql: Bool = false) async -> Bool {
         guard confirmed(.restore(backup: name), typed) else { return false }
+        // An uploaded Postgres dump runs its SQL with the database role's rights: the person has to say they know.
+        let plan = RestorePlan.make(name: name, database: report?.database)
+        if plan.isUploadedSqlDump, !acknowledgedSql {
+            actionError = "Confirm that you made this file or trust it before it is restored."
+            return false
+        }
         // Where the old process stands, to tell it from a restarted one afterwards.
         let before = await uptimeBeforeRestore()
         let logBaseline = await newestErrorID()
         let started = await change { generation in
-            _ = try await self.session.send(Endpoints.RestoreBackup(name: name))
+            _ = try await self.session.send(Endpoints.RestoreBackup(name: name, confirmation: plan.confirmation))
             guard self.session.generation == generation else { return }
             self.restoring = name
         }

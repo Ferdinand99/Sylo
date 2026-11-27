@@ -156,7 +156,7 @@ private struct ThisVersionBadge: View {
 
 /// A group's label, such as "New" or "Fixes". Breaking changes are red and keep their own symbol,
 /// so they never stand out by colour alone.
-private struct KindLabel: View {
+struct KindLabel: View {
     let section: ChangelogSection
 
     var body: some View {
@@ -196,7 +196,7 @@ private struct KindLabel: View {
 
 /// One change: its scope, the text (inline Markdown: `code`, links, bold) and the issues behind
 /// it. VoiceOver reads it as one element, with every link it holds as an action.
-private struct ChangeRow: View {
+struct ChangeRow: View {
     let scope: String?
     let text: AttributedString
     /// "#266, #270", each a link when the server sent an address.
@@ -262,7 +262,7 @@ private struct ChangeRow: View {
 }
 
 /// A link in a change, offered to VoiceOver as an action.
-private struct ChangeLink: Hashable {
+struct ChangeLink: Hashable {
     let label: String
     let url: URL
 }

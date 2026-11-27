@@ -14,11 +14,21 @@ private struct ServerPlatformKey: EnvironmentKey {
     static let defaultValue: Platform? = nil
 }
 
+private struct ServerOverviewKey: EnvironmentKey {
+    static let defaultValue: ServerOverview? = nil
+}
+
 extension EnvironmentValues {
     /// The signed-in person's level in the server being shown.
     var dashboardAccess: DashboardAccess {
         get { self[DashboardAccessKey.self] }
         set { self[DashboardAccessKey.self] = newValue }
+    }
+
+    /// The overview of the server being shown, once loaded (for the server's Beta flags); nil when not known.
+    var serverOverview: ServerOverview? {
+        get { self[ServerOverviewKey.self] }
+        set { self[ServerOverviewKey.self] = newValue }
     }
 
     /// The platform of the server being shown (Discord or Fluxer); nil outside a server screen.
@@ -128,5 +138,31 @@ extension View {
     /// Switches this part off for a person below `level`, without a sentence.
     func disabledBelow(_ level: DashboardAccess = .edit) -> some View {
         modifier(AccessLock(required: level, notice: false, disables: true))
+    }
+}
+
+/// The line at the top of a Beta module's screen (Sylo 5.3: the bridge and the server mirror), as in the dashboard.
+/// Shown when the server's overview marks the module Beta, or, when the overview does not say, by the app's list
+/// (``ModuleBeta``).
+struct BetaNote: View {
+    let moduleID: String
+    @Environment(\.serverOverview) private var overview
+
+    var body: some View {
+        if ModuleBeta.isBeta(moduleID, in: overview) {
+            Section {
+                // Not a Label: its icon slot is a fixed width and squeezed the pill into "B / et / a".
+                // The pill keeps its own size on one line; only the sentence wraps, at any Dynamic Type size.
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    BetaBadge()
+                        .lineLimit(1)
+                        .fixedSize()
+                    Text(verbatim: ModuleBeta.note)
+                        .font(.footnote)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityElement(children: .combine)
+            }
+        }
     }
 }

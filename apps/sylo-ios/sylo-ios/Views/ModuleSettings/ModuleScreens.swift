@@ -16,6 +16,7 @@ enum ModuleScreens {
         "events", "suggestions", "temp-roles", "auto-threads", "quote-board",
         "introductions", "economy", "applications",
         "reminders", "channel-cleanup", "github", "game-stats",
+        "bridge",
     ]
 
     /// The modules whose screen also holds work for the Inbox level (the suggestions to decide on, the
@@ -75,6 +76,7 @@ enum ModuleScreens {
         case "temp-voice": TempVoiceSettingsView(server: server, session: session)
         case "server-stats": ServerStatsSettingsView(server: server, session: session)
         case "auto-threads": AutoThreadsSettingsView(server: server, session: session)
+        case "bridge": BridgeView(server: server, session: session)
         // Alerts
         case "twitch-alerts": TwitchAlertsSettingsView(server: server, session: session)
         case "kick-alerts": KickAlertsSettingsView(server: server, session: session)

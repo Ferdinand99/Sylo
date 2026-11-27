@@ -199,7 +199,9 @@ struct AppealView: View {
         .refreshable { await model.load() }
         .onAppear { isVisible = true }
         .onDisappear { isVisible = false }
-        .reasonPrompt(
+        // The note may run over several lines: the member sees its line breaks (the public appeal page keeps them
+        // since Sylo 5.3), as with the dashboard's text area.
+        .multilineReasonPrompt(
             decision == .accept ? "Accept and Unban?" : "Deny This Appeal?",
             message: decision == .accept
                 ? "The member is unbanned and told by direct message. Your note is added to it."
@@ -207,7 +209,7 @@ struct AppealView: View {
             isPresented: $isAsking,
             confirmTitle: decision == .accept ? "Accept and Unban" : "Deny",
             confirmRole: decision == .deny ? .destructive : nil,
-            reasonLabel: "Note to the member (optional)"
+            reasonLabel: "Note to the member (optional)", limit: AppealsReviewModel.maxReasonLength
         ) { reason in
             guard let appeal = model.review?.appeals.first(where: { $0.id == appealID }) else { return }
             let chosen = decision

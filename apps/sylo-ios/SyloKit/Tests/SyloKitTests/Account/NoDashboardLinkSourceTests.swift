@@ -103,6 +103,11 @@ struct NoDashboardLinkSourceTests {
         "sylo-ios/Views/Server/Tickets/TicketThreadView.swift": 1,
         // A reference in a release note (an issue or a pull request).
         "sylo-ios/Views/Settings/ChangelogView.swift": 1,
+        // The operators' update notice: the new release on GitHub, and the Wise Wren project page.
+        "sylo-ios/Views/Settings/UpdateView.swift": 2,
+        // The docs on a Postgres role with few rights (the restore of an uploaded dump), in the Backups list and in
+        // the restore sheet.
+        "sylo-ios/Views/Operator/BackupsView.swift": 2,
         // "Open Dashboard" for anyone who wants it, the platform's add-to-server pages, the public
         // What's New page for a Sylo that does not send its changelog, the privacy policy, the
         // terms, and the system settings of the app.

@@ -82,3 +82,64 @@ private struct ReasonPromptModifier: ViewModifier {
             }
     }
 }
+
+extension View {
+    /// Like ``reasonPrompt(_:message:isPresented:confirmTitle:confirmRole:reasonLabel:reasonRequired:onConfirm:)``,
+    /// but in a sheet with a field of several lines, for a note that reaches a member as it was typed: the line breaks
+    /// stay (a Discord or Fluxer message, and the public appeal page since Sylo 5.3, show them). An alert's field
+    /// holds one line only.
+    /// - Parameter limit: The most characters the server keeps (counted in UTF-16, like the server).
+    func multilineReasonPrompt(
+        _ title: LocalizedStringKey, message: LocalizedStringKey, isPresented: Binding<Bool>,
+        confirmTitle: LocalizedStringKey, confirmRole: ButtonRole? = nil,
+        reasonLabel: LocalizedStringKey = "Reason (optional)", limit: Int,
+        onConfirm: @escaping (String) -> Void
+    ) -> some View {
+        sheet(isPresented: isPresented) {
+            ReasonSheet(
+                title: title, message: message, confirmTitle: confirmTitle, confirmRole: confirmRole,
+                reasonLabel: reasonLabel, limit: limit, onConfirm: onConfirm)
+        }
+    }
+}
+
+/// The sheet of ``View/multilineReasonPrompt(_:message:isPresented:confirmTitle:confirmRole:reasonLabel:limit:onConfirm:)``:
+/// what happens, the note (Return starts a new line), and the confirming button. It starts empty every time.
+private struct ReasonSheet: View {
+    let title: LocalizedStringKey
+    let message: LocalizedStringKey
+    let confirmTitle: LocalizedStringKey
+    let confirmRole: ButtonRole?
+    let reasonLabel: LocalizedStringKey
+    let limit: Int
+    let onConfirm: (String) -> Void
+
+    @State private var reason = ""
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    LimitedTextField(title: reasonLabel, text: $reason, limit: limit, lines: 3...10)
+                } footer: {
+                    Text(message)
+                }
+                Section {
+                    Button(confirmTitle, role: confirmRole) {
+                        onConfirm(reason.trimmingCharacters(in: .whitespacesAndNewlines))
+                        dismiss()
+                    }
+                }
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+}

@@ -256,9 +256,11 @@ struct ApplicationSubmissionView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load() }
         .refreshable { await model.load() }
-        .reasonPrompt(
+        // The reason may run over several lines, as in the dashboard's text area; the direct message keeps them.
+        .multilineReasonPrompt(
             alertTitle, message: "The applicant is told by direct message. The reason is added to it.",
-            isPresented: $isAsking, confirmTitle: alertButton, confirmRole: action == .deny ? .destructive : nil
+            isPresented: $isAsking, confirmTitle: alertButton, confirmRole: action == .deny ? .destructive : nil,
+            limit: ApplicationSubmissionModel.maxReasonLength
         ) { reason in
             let decision = action
             Task { await model.decide(decision, reason: reason) }
