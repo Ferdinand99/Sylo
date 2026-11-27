@@ -16,6 +16,8 @@ import ChipPicker from '../components/ChipPicker.jsx';
 import { notify } from '../notify.js';
 import Reveal from '../components/Reveal.jsx';
 import ConfigImport from '../components/ConfigImport.jsx';
+import PublicPagesSettings from '../components/PublicPagesSettings.jsx';
+import { usePublicLookForm } from '../components/usePublicLookForm.js';
 import { useCanSetUp } from '../setupAccess.js';
 import { AccessLock, useAccess } from '../access.jsx';
 
@@ -100,6 +102,9 @@ export default function Settings() {
       afterSave: (_result, sent) => sent,
     }
   );
+  // The "Public pages" section below keeps its edits here, so they count towards the one save bar and its
+  // leave-the-page warning like the form above.
+  const look = usePublicLookForm(guildId);
   const [resettingColor, setResettingColor] = useState(false);
   const [exporting, setExporting] = useState(false);
   useEffect(() => {
@@ -115,6 +120,18 @@ export default function Settings() {
         <p className="v2-state">Loading…</p>
       </Reveal>
     );
+
+  // The bar saves both: the settings above, then the public pages. If the settings cannot be saved, the public
+  // pages stay unsaved (and the bar stays up) rather than half the page being written.
+  async function saveEverything(e) {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
+    if (dirty && !(await save())) return false;
+    return look.save();
+  }
+  const resetEverything = () => {
+    reset();
+    look.reset();
+  };
 
   // Saves the form as it stands plus the colour reset, then reads back the
   // default colour — so afterwards everything on the page is saved.
@@ -284,6 +301,9 @@ export default function Settings() {
         </form>
       </AccessLock>
 
+      {/* The server's own accent colour and background on its public member pages (Edit access only). */}
+      <PublicPagesSettings look={look} />
+
       <div className="v2-group v2-section-gap">
         <h2 className="v2-group-title">Server data</h2>
         <div className="v2-list">
@@ -344,7 +364,12 @@ export default function Settings() {
           </Link>
         </div>
       </div>
-      <SaveBar dirty={dirty} saving={saving || resettingColor} onSave={save} onReset={reset} />
+      <SaveBar
+        dirty={dirty || look.dirty}
+        saving={saving || resettingColor || look.busy}
+        onSave={saveEverything}
+        onReset={resetEverything}
+      />
     </Reveal>
   );
 }

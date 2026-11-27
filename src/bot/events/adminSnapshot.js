@@ -1,11 +1,16 @@
 // Discord side of src/bot/lib/adminSnapshot.js: a member's roles change, or the server changes
-// owner, and the signed-in person's list of servers they run follows.
+// owner, and the signed-in person's list of servers they run follows. Joining a server is noted too, so
+// the dashboard looks for it on the lists of the people who run it (src/web/lib/guildListRefresh.js).
 import { Events } from 'discord.js';
 import { guildKey } from '../../platform/platformOf.js';
 import { syncAdminSnapshot, syncNewOwner } from '../lib/adminSnapshot.js';
+import { noteGuildJoin } from '../lib/guildJoins.js';
 
 /** @param {import('discord.js').Client} client */
 export function register(client) {
+  client.on(Events.GuildCreate, (guild) => {
+    noteGuildJoin('discord', guildKey(guild), guild, { ready: client.isReady() });
+  });
   client.on(Events.GuildMemberUpdate, (_old, member) => {
     if (member?.guild) void syncAdminSnapshot('discord', guildKey(member.guild), member.guild, member);
   });

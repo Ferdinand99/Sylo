@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { Link, Outlet, ScrollRestoration, useLocation, useParams } from 'react-router-dom';
-import { getGuilds, getPublicSession } from '../api.js';
+import { getGuilds, getPublicSession, refreshGuildList } from '../api.js';
 import { readLastGuildId, writeLastGuildId } from '../util.js';
 import { isPublicPath } from '../publicRoutes.js';
 import { OverviewProvider } from '../OverviewContext.jsx';
@@ -10,6 +10,7 @@ import Announcement from './Announcement.jsx';
 import ServerSwitcher from './ServerSwitcher.jsx';
 import Sidebar from './Sidebar.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
+import UpdateBadge from './UpdateBadge.jsx';
 import AccountMenu from './AccountMenu.jsx';
 import CommandPalette, { isApplePlatform, isPaletteShortcut } from './CommandPalette.jsx';
 import { Icon } from './icons.jsx';
@@ -70,6 +71,12 @@ function SignedInShell() {
       .catch((error) => setState({ loading: false, guilds: [], error }));
   }, []);
 
+  // The switcher's "Refresh server list": the server looks again for servers the bot joined, then the list is read again.
+  async function refreshGuilds() {
+    await refreshGuildList();
+    setState({ loading: false, guilds: await getGuilds(), error: null });
+  }
+
   useEffect(() => {
     if (guildId) {
       setLastGuildId(guildId);
@@ -94,7 +101,7 @@ function SignedInShell() {
   const { guilds, loading, error } = state;
 
   return (
-    <AccessProvider guildId={lastGuildId}>
+    <AccessProvider guildId={lastGuildId} hint={guilds.find((g) => g.id === lastGuildId)?.access}>
       <div className="v2-shell">
         <header ref={topbarRef} className="v2-topbar">
           <button
@@ -114,8 +121,14 @@ function SignedInShell() {
             <img className="v2-brand-mark" src="/favicon.svg" alt="" width="28" height="28" />
             <span>Sylo</span>
           </Link>
-          <ServerSwitcher guilds={guilds} activeGuildId={lastGuildId} onSelectGuild={selectGuild} />
+          <ServerSwitcher
+            guilds={guilds}
+            activeGuildId={lastGuildId}
+            onSelectGuild={selectGuild}
+            onRefresh={refreshGuilds}
+          />
           <AccessBadge />
+          <UpdateBadge />
           <button
             type="button"
             className="v2-palette-trigger"

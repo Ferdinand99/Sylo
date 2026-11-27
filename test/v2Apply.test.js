@@ -493,3 +493,66 @@ test('a Fluxer server works with the Fluxer login, and a Discord login is not lo
   assert.equal((await discordOnly.get(path(FKEY, formId))).status, 404);
   assert.equal(profiles.discord.id, ME);
 });
+
+// --- the server's own look (accent colour, background) in the page's data ------------------------------------
+
+test("the page carries the server's look when it chose one, and null when it did not", async () => {
+  const { setPublicLook, putLookImage } = await import('../src/db/publicLook.js');
+  const { imageHashOf } = await import('../src/lib/publicLook.js');
+  await enable();
+  const me = await signedIn('A');
+  memberOf(dGuild, ME);
+  const formId = await makeForm(D_GUILD);
+  assert.equal((await (await me.get(path(D_GUILD, formId))).json()).look, null);
+
+  await setPublicLook(D_GUILD, { accent: '#5865f2', background: 'none' });
+  const accentOnly = (await (await me.get(path(D_GUILD, formId))).json()).look;
+  assert.match(accentOnly.css, new RegExp(`^/look/${D_GUILD}\\.[0-9a-f]{16}\\.css$`));
+  assert.equal(accentOnly.image, false);
+  const sheet = await browser().get(accentOnly.css);
+  assert.equal(sheet.status, 200);
+  assert.match(await sheet.text(), /--accent: #5865f2;/);
+
+  const data = Buffer.from('RIFF....WEBPVP8 not a real picture but the route does not decode');
+  await putLookImage(D_GUILD, 'upload', { hash: imageHashOf(data), mime: 'image/webp', data });
+  await setPublicLook(D_GUILD, { accent: '#5865f2', background: 'upload' });
+  const withImage = (await (await me.get(path(D_GUILD, formId))).json()).look;
+  assert.equal(withImage.image, true);
+  assert.notEqual(withImage.css, accentOnly.css, 'a new picture is a new address');
+  // the not-found answer never carries a look
+  const closed = await me.get(path('900000000000099999', formId));
+  assert.deepEqual(await closed.json(), { error: 'Not found' });
+});
+
+test('a Fluxer server takes its look end to end: the page data, the fluxer-<id> files and the picture', async () => {
+  const { setPublicLook, putLookImage } = await import('../src/db/publicLook.js');
+  const { imageHashOf } = await import('../src/lib/publicLook.js');
+  await enable(FKEY);
+  const formId = await makeForm(FKEY);
+  ME = nextId('30000000000001');
+  FME = nextId('40000000000001');
+  setProfiles({ discordId: ME, fluxerId: FME });
+  const b = browser();
+  await signIn(b, 'fluxer');
+  const headers = { accept: 'application/json' };
+  memberOf(fGuild, FME);
+
+  const data = Buffer.from('RIFF....WEBPVP8 stand-in bytes');
+  await putLookImage(FKEY, 'upload', { hash: imageHashOf(data), mime: 'image/webp', data });
+  await setPublicLook(FKEY, { accent: '#5865f2', background: 'upload' });
+
+  const page = await (await b.get(`/api/v2${path(FKEY, formId)}`, { headers })).json();
+  assert.match(page.look.css, new RegExp(`^/look/fluxer-${F_GUILD}\\.[0-9a-f]{16}\\.css$`));
+  assert.equal(page.look.image, true);
+  const sheet = await browser().get(page.look.css);
+  assert.equal(sheet.status, 200);
+  const css = await sheet.text();
+  assert.match(css, /--accent: #5865f2;/);
+  const imageUrl = /url\('([^']+)'\)/.exec(css)[1];
+  assert.match(imageUrl, new RegExp(`^/look/fluxer-${F_GUILD}\\.[0-9a-f]{16}\\.webp$`));
+  const picture = await browser().get(imageUrl);
+  assert.equal(picture.status, 200);
+  assert.equal(picture.headers.get('cache-control'), 'public, max-age=86400');
+  // the Discord address of the same digits is another server: nothing there
+  assert.equal((await browser().get(imageUrl.replace(`fluxer-${F_GUILD}`, F_GUILD))).status, 404);
+});

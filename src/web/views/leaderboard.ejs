@@ -7,8 +7,9 @@
   <% if (typeof canonical !== 'undefined' && canonical) { %><link rel="canonical" href="<%= canonical %>" /><% } %>
   <script src="/theme.js"></script>
   <link rel="stylesheet" href="/public.css" />
+<%- include('partials/look') %>
 </head>
-<body>
+<body<%- typeof look !== 'undefined' && look ? (look.imageUrl ? ' class="has-look has-look-image"' : ' class="has-look"') : '' %>>
   <main class="lb-wrap">
     <div class="pub-brand"><img src="/favicon.svg" alt="" width="28" height="28" /><span>Sylo</span></div>
     <header class="lb-head">
@@ -64,7 +65,7 @@
       <% } %>
     <% } %>
 
-    <p class="lb-foot muted small">Powered by Sylo</p>
+<%- include('partials/powered', { cls: 'lb-foot' }) %>
   </main>
 </body>
 </html>

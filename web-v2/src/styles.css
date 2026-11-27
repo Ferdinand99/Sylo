@@ -174,7 +174,7 @@ h4 {
 }
 
 a {
-  color: var(--accent);
+  color: var(--accent-text, var(--accent));
   text-decoration: none;
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
@@ -564,6 +564,24 @@ a {
   left: 8px;
   right: 8px;
   border-top: 1px solid var(--border-subtle);
+}
+/* "Refresh server list" sits last, under a hairline; its answer shows as a small note. */
+.v2-switch-refresh {
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-subtle);
+}
+.v2-switch-menu .v2-switch-refresh button {
+  color: var(--text-muted);
+}
+.v2-switch-menu .v2-switch-refresh button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.v2-switch-refresh-note {
+  margin: 2px 8px 4px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 @media (pointer: coarse) {
   .v2-switch-menu a,
@@ -1108,11 +1126,20 @@ a.v2-row:active {
   text-overflow: clip;
   margin-top: 6px;
 }
+/* A shop item's description: shown in full, with the line breaks the admin typed (runs of spaces still
+   collapse). pages/Shop.jsx and the shop list of the Economy page. */
+.v2-row-main p.v2-shop-text {
+  display: block;
+  white-space: pre-line;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
 /* Phones: a description gets two lines before the ellipsis, so a module's
    one-line summary isn't cut to a couple of words. Text that must be read
-   in full (.is-wrap, warnings) keeps wrapping freely. */
+   in full (.is-wrap, warnings, a shop description) keeps wrapping freely. */
 @media (max-width: 600px) {
-  .v2-row-main p:not(.is-wrap, .v2-row-warn) {
+  .v2-row-main p:not(.is-wrap, .v2-row-warn, .v2-shop-text) {
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
@@ -2403,6 +2430,11 @@ textarea:disabled {
   line-height: 1.45;
   text-wrap: pretty;
   margin: 4px 0 0;
+}
+/* Text a server admin typed with line breaks (a form's description, a question, its help): the breaks
+   are kept, runs of spaces still collapse. pages/Apply.jsx and the forms editor's preview. */
+.v2-pre-line {
+  white-space: pre-line;
 }
 /* ChipPicker.jsx — replaces a native <select multiple> (needs ctrl/cmd-
    click to pick more than one, not discoverable) with removable chips

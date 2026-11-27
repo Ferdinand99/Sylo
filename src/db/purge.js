@@ -66,6 +66,7 @@ import './welcomeSent.js';
 import './applications.js';
 import './economy.js';
 import './economyShop.js';
+import './publicLook.js';
 import { purgeBridgeGuild } from './bridge.js';
 
 // Tables keyed directly by guild_id. A test in test/guildTables.test.js checks
@@ -123,6 +124,8 @@ export const GUILD_TABLES = [
   'economy_items',
   'economy_inventory',
   'collectible_images',
+  'guild_public_look',
+  'public_look_images',
   // The requests nobody has accepted yet. The links name two servers (guild_a, guild_b), so they go
   // through purgeBridgeGuild() in purgeGuild() below.
   'bridge_codes',

@@ -645,3 +645,127 @@ test(
     }
   }
 );
+
+// --- 5.2 -> this branch: the server look tables (migration 81) ------------------------------------------------
+
+const RELEASE_5_2_MIGRATIONS = 80;
+
+test('SQLite: a database from the 5.2 release boots, gets the public look tables and keeps its rows', () => {
+  assert.ok(
+    MIGRATIONS.length > RELEASE_5_2_MIGRATIONS,
+    'the server look is migration 81, after the 5.2 release'
+  );
+  const dir = mkdtempSync(join(tmpdir(), 'sylo-upgrade52-'));
+  try {
+    const old = join(dir, 'old.db');
+    const db = new Database(old);
+    for (let v = 0; v < RELEASE_5_2_MIGRATIONS; v += 1) {
+      db.transaction(() => MIGRATIONS[v](db))();
+    }
+    db.pragma(`user_version = ${RELEASE_5_2_MIGRATIONS}`);
+    for (const table of ['guild_public_look', 'public_look_images']) {
+      assert.equal(
+        db.prepare('SELECT name FROM sqlite_master WHERE name = ?').get(table),
+        undefined,
+        `5.2 has no ${table}`
+      );
+    }
+    db.close();
+
+    boot({ DATABASE_PATH: old });
+    const fresh = join(dir, 'fresh.db');
+    boot({ DATABASE_PATH: fresh });
+    const upgraded = sqliteShape(old);
+    assert.equal(upgraded.version, MIGRATIONS.length);
+    assert.deepEqual(upgraded.shape, sqliteShape(fresh).shape);
+    assert.deepEqual(upgraded.shape['table guild_public_look'], [
+      "accent TEXT 1 '' 0",
+      "background TEXT 1 'none' 0",
+      'guild_id TEXT 0 null 1',
+      'updated_at INTEGER 1 0 0',
+    ]);
+
+    // usable: the pictures keep every byte, one per source and server, a replace overwrites
+    const writable = new Database(old);
+    const bytes = Buffer.from(Array.from({ length: 256 }, (_, i) => i));
+    const put = writable.prepare(`INSERT INTO public_look_images
+      (guild_id, source, hash, mime, bytes, data, origin, checked_at, created_at) VALUES (?, ?, ?, ?, ?, ?, '', 1, 1)
+      ON CONFLICT (guild_id, source) DO UPDATE SET hash = excluded.hash, data = excluded.data`);
+    put.run('g', 'upload', 'a'.repeat(16), 'image/webp', bytes.length, bytes);
+    put.run('g', 'splash', 'b'.repeat(16), 'image/webp', bytes.length, bytes);
+    put.run('g', 'upload', 'c'.repeat(16), 'image/webp', bytes.length, Buffer.from('new'));
+    const rows = writable.prepare('SELECT source, hash, data FROM public_look_images ORDER BY source').all();
+    writable.close();
+    assert.deepEqual(
+      rows.map((r) => [r.source, r.hash]),
+      [
+        ['splash', 'b'.repeat(16)],
+        ['upload', 'c'.repeat(16)],
+      ]
+    );
+    assert.ok(Buffer.from(rows[0].data).equals(bytes), 'a picture comes back as it went in');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test(
+  'Postgres: a 5.2 database gets the public look tables from the bootstrap, usable and with the same shape as a fresh one',
+  { skip: !url && 'DATABASE_URL not set (sqlite-only run)' },
+  async (t) => {
+    const postgres = (await import('postgres')).default;
+    const admin = postgres(url);
+    const urlFor = (db) => {
+      const u = new URL(url);
+      u.pathname = `/${db}`;
+      return u.toString();
+    };
+    const made = [];
+    const create = async (suffix) => {
+      const db = `sylo_upgrade52_${suffix}_${process.pid}_${Date.now()}`;
+      await admin.unsafe(`CREATE DATABASE "${db}"`);
+      made.push(db);
+      return db;
+    };
+    t.after(async () => {
+      for (const db of made) await admin.unsafe(`DROP DATABASE IF EXISTS "${db}" WITH (FORCE)`);
+      await admin.end({ timeout: 1 });
+    });
+    const sqliteFile = join(mkdtempSync(join(tmpdir(), 'sylo-upgrade52-pg-')), 'x.db');
+    const pgBoot = (db) => boot({ DATABASE_URL: urlFor(db), DATABASE_PATH: sqliteFile });
+
+    const freshDb = await create('fresh');
+    pgBoot(freshDb);
+    const oldDb = await create('old');
+    pgBoot(oldDb);
+    const old = postgres(urlFor(oldDb));
+    await old.unsafe(`
+      DROP TABLE IF EXISTS guild_public_look;
+      DROP TABLE IF EXISTS public_look_images;
+      DELETE FROM schema_migrations;
+      INSERT INTO schema_migrations (version) VALUES (${RELEASE_5_2_MIGRATIONS});
+    `);
+    const [gone] = await old`SELECT to_regclass('public.public_look_images') AS t`;
+    assert.equal(gone.t, null, 'the 5.2 shape has no look tables');
+    await old.end({ timeout: 1 });
+
+    pgBoot(oldDb);
+
+    const a = postgres(urlFor(freshDb));
+    const b = postgres(urlFor(oldDb));
+    try {
+      assert.deepEqual(await pgShape(b), await pgShape(a));
+      const bytes = Buffer.from(Array.from({ length: 256 }, (_, i) => i));
+      await b`INSERT INTO public_look_images (guild_id, source, hash, mime, bytes, data, origin, checked_at, created_at)
+        VALUES ('g', 'upload', ${'a'.repeat(16)}, 'image/webp', ${bytes.length}, ${bytes}, '', 1, 1)`;
+      const [stored] = await b`SELECT data FROM public_look_images`;
+      assert.ok(Buffer.from(stored.data).equals(bytes), 'a picture comes back as it went in');
+      await b`INSERT INTO guild_public_look (guild_id, accent, background, updated_at) VALUES ('g', '#5865f2', 'upload', 1)`;
+      const [look] = await b`SELECT accent, background FROM guild_public_look`;
+      assert.deepEqual([look.accent, look.background], ['#5865f2', 'upload']);
+    } finally {
+      await a.end({ timeout: 1 });
+      await b.end({ timeout: 1 });
+    }
+  }
+);
