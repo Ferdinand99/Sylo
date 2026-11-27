@@ -44,8 +44,25 @@ const stockText = (item) => {
   return left === 0 ? ' · sold out' : ` · ${left} left`;
 };
 
+// An embed description holds 4096 characters; keep a margin under it for the item lines and the gaps.
+const LIST_BUDGET = 3900;
+const MIN_DESC = 40;
+
+/**
+ * An item's description for the list: its line breaks stay (a blank line becomes a plain one, so it does
+ * not look like the gap between two items), cut to `max` characters with an ellipsis.
+ */
+export function descriptionText(description, max = Infinity) {
+  const text = String(description ?? '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/\n{2,}/g, '\n')
+    .trim();
+  if (!text) return '';
+  return text.length > max ? `${text.slice(0, Math.max(0, max - 1)).trimEnd()}…` : text;
+}
+
 /** One line of the list. A lock means a required role the member does not have. */
-function lineOf(item, number, roleIds, config) {
+function lineOf(item, number, roleIds, config, descMax = Infinity) {
   const lock = requirementsMet(item, roleIds) ? '' : '🔒 ';
   const kind =
     item.type === 'temp_role'
@@ -55,7 +72,8 @@ function lineOf(item, number, roleIds, config) {
         : item.type === 'collectible'
           ? ` (collectible${rarityLabel(item.rarity) ? `, ${rarityLabel(item.rarity)}` : ''})`
           : '';
-  const text = item.description ? `\n${item.description}` : '';
+  const desc = descriptionText(item.description, descMax);
+  const text = desc ? `\n${desc}` : '';
   return `**${number}.** ${lock}${itemLabel(item)}${kind} — ${formatMoney(item.price, config)}${stockText(item)}${text}`;
 }
 
@@ -69,12 +87,21 @@ export async function buildShop({ guild, guildId, config, page, callerId, roleId
   const at = Math.min(pages, Math.max(1, Math.floor(Number(page)) || 1));
   const shown = items.slice((at - 1) * PAGE_SIZE, at * PAGE_SIZE);
   const bal = await balanceOf(guildId, callerId);
+  // Long descriptions share what is left of the embed after the item lines, so a full page still fits.
+  const first = (at - 1) * PAGE_SIZE + 1;
+  const bare = shown.reduce(
+    (sum, item, i) => sum + lineOf({ ...item, description: '' }, first + i, roleIds, config).length,
+    0
+  );
+  const room = LIST_BUDGET - bare - 2 * Math.max(0, shown.length - 1) - shown.length;
+  const wanted = shown.reduce((sum, item) => sum + descriptionText(item.description).length, 0);
+  const descMax = wanted <= room ? Infinity : Math.max(MIN_DESC, Math.floor(room / shown.length));
   const embed = new EmbedBuilder()
     .setColor(0xf1c40f)
     .setTitle(`Shop of ${guild?.name ?? 'this server'}`)
     .setDescription(
       shown.length
-        ? shown.map((item, i) => lineOf(item, (at - 1) * PAGE_SIZE + i + 1, roleIds, config)).join('\n\n')
+        ? shown.map((item, i) => lineOf(item, first + i, roleIds, config, descMax)).join('\n\n')
         : 'The shop is empty.'
     )
     .addFields({ name: 'Your cash', value: formatMoney(bal.cash, config) })

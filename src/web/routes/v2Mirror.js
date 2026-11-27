@@ -119,6 +119,10 @@ function pairView(pair, side) {
     pausedBy: pair.status === PAIR_STATUS.PAUSED ? pair.pausedBy : '',
     codeExpiresAt: pair.status === PAIR_STATUS.PENDING ? pair.codeExpiresAt : 0,
     lastError: pair.lastError,
+    // When the last error happened (a pause from before the time was kept falls back to when it was paused).
+    lastErrorAt: pair.lastError
+      ? pair.lastErrorAt || (pair.status === PAIR_STATUS.PAUSED ? pair.updatedAt : 0)
+      : 0,
     copiedAt: pair.copiedAt,
     copyRun: pair.copyRun,
     createdAt: pair.createdAt,

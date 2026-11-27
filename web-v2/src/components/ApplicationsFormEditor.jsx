@@ -358,7 +358,7 @@ function FormPreview({ draft, roles }) {
   return (
     <div className="v2-group" aria-label="Preview of the form">
       <h3 className="v2-group-title">{draft.name || 'Untitled form'}</h3>
-      {draft.description ? <p>{draft.description}</p> : null}
+      {draft.description ? <p className="v2-pre-line">{draft.description}</p> : null}
       {questions.length === 0 ? <p className="v2-field-hint">Add a question to see it here.</p> : null}
       {questions.map((q) => (
         <ApplicationQuestion

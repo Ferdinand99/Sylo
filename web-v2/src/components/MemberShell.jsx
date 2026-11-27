@@ -1,5 +1,6 @@
 import { Suspense, useRef } from 'react';
 import { Outlet } from 'react-router-dom';
+import PoweredBy from './PoweredBy.jsx';
 import ThemeToggle from './ThemeToggle.jsx';
 import Toasts from './Toasts.jsx';
 import useLabelLinks from './useLabelLinks.js';
@@ -30,6 +31,7 @@ export default function MemberShell() {
           <Outlet />
         </Suspense>
       </main>
+      <PoweredBy />
       <Toasts />
     </div>
   );

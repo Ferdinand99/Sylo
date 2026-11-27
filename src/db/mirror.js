@@ -43,11 +43,14 @@ registerPostgresBootstrap(`
     copied_at         BIGINT NOT NULL DEFAULT 0,
     failures          INTEGER NOT NULL DEFAULT 0,
     last_error        TEXT NOT NULL DEFAULT '',
+    last_error_at     BIGINT NOT NULL DEFAULT 0,
     created_at        BIGINT NOT NULL,
     updated_at        BIGINT NOT NULL
   );
   CREATE UNIQUE INDEX IF NOT EXISTS idx_mirror_pairs_source ON mirror_pairs (source_guild);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_mirror_pairs_target ON mirror_pairs (target_guild);
+  -- A database made before the column existed (the SQLite migration after the mirror's tables adds the same).
+  ALTER TABLE mirror_pairs ADD COLUMN IF NOT EXISTS last_error_at BIGINT NOT NULL DEFAULT 0;
 
   CREATE TABLE IF NOT EXISTS mirror_ids (
     pair_id    INTEGER NOT NULL,
@@ -148,6 +151,7 @@ const toPair = (row) =>
         copiedAt: num(row.copied_at),
         failures: num(row.failures),
         lastError: row.last_error,
+        lastErrorAt: num(row.last_error_at),
         createdAt: num(row.created_at),
         updatedAt: num(row.updated_at),
       }
@@ -342,6 +346,7 @@ const COLUMNS = {
   copiedAt: 'copied_at',
   failures: 'failures',
   lastError: 'last_error',
+  lastErrorAt: 'last_error_at',
 };
 
 /**

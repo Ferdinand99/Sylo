@@ -211,6 +211,28 @@ describe('Mirror: the Discord server', () => {
     await waitFor(() => expect(api.mirrorAction).toHaveBeenCalledWith(GUILD, 'resume', {}));
   });
 
+  it('says when Fluxer could not be reached, and that the mirror goes on by itself', async () => {
+    api.getMirror.mockResolvedValue(
+      state({
+        pair: pair({
+          status: 'paused',
+          resumeStatus: 'live',
+          copyRun: 1,
+          pauseKind: 'unreachable',
+          lastError: 'Fluxer could not be reached: fetch failed: connect EHOSTUNREACH 192.0.2.1:443',
+          lastErrorAt: Date.now() - 5 * 60_000,
+        }),
+        progress: progress({ total: 4, done: 4, waiting: 0, percent: 100 }),
+      })
+    );
+    renderAtGuild(<Mirror />, GUILD);
+    expect(await screen.findByText(/Fluxer could not be reached/)).toBeTruthy();
+    const when = document.querySelector('time');
+    expect(when).toBeTruthy();
+    expect(screen.getByText(/goes on by itself once Fluxer answers again/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Resume' })).toBeTruthy();
+  });
+
   it('stops the mirror only after a confirmation', async () => {
     api.getMirror.mockResolvedValue(
       state({

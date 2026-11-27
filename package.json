@@ -1,6 +1,6 @@
 {
   "name": "sylo",
-  "version": "5.2.0",
+  "version": "5.2.2",
   "description": "Multi-function Discord bot with a web dashboard and an extensible game-stats module (starting with the Battlefield series).",
   "type": "module",
   "main": "src/index.js",
@@ -33,6 +33,7 @@
   "dependencies": {
     "@fluxerjs/collection": "3.0.0",
     "@fluxerjs/core": "3.3.0",
+    "@fluxerjs/rest": "3.1.0",
     "@napi-rs/canvas": "^1.1.0",
     "better-sqlite3": "^13.0.3",
     "cookie-session": "^2.1.1",

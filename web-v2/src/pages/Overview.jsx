@@ -47,7 +47,7 @@ const isNarrow = () => Boolean(globalThis.matchMedia?.('(max-width: 600px)')?.ma
 // rows after it and the button on a wider screen).
 const PHONE_ROWS = 3;
 
-function NeedsAttention({ items }) {
+function NeedsAttention({ items, canFix = true }) {
   const [all, setAll] = useState(false);
   if (!items.length) {
     return (
@@ -106,7 +106,7 @@ function NeedsAttention({ items }) {
                 </span>
               )}
             </div>
-            {item.href ? (
+            {item.href && (canFix || item.kind === 'waiting') ? (
               <Link
                 className="v2-attention-go"
                 to={item.href}
@@ -114,6 +114,9 @@ function NeedsAttention({ items }) {
               >
                 {item.kind === 'waiting' ? 'Open' : 'Fix'}
               </Link>
+            ) : item.href ? (
+              // The page that fixes it is a settings page this person cannot open.
+              <span className="v2-attention-ask">Ask a server admin</span>
             ) : null}
           </li>
         ))}
@@ -377,7 +380,7 @@ export default function Overview() {
       </div>
 
       {needsSetupOffer(groups, problemIds) ? <SetupOffer guildId={guildId} /> : null}
-      <NeedsAttention items={attention} />
+      <NeedsAttention items={attention} canFix={canEdit} />
 
       <div className="v2-field-row v2-search-row">
         <input

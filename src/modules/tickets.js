@@ -1,13 +1,16 @@
 // Ticket / modmail helpers. Users DM the bot; staff reply from the dashboard.
 // The bot relays messages both ways. Staff replies are anonymous ("Staff").
-import { allGuilds, clientOfGuild, guildByKey, guildKey } from '../platform/platformOf.js';
+import { allGuilds, clientOfGuild, guildByKey, guildKey, platformOfClient } from '../platform/platformOf.js';
 import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import { config } from '../config.js';
 import { idList } from '../web/lib/idList.js';
 import { clampRetentionDays } from './lib/retentionDays.js';
 import { isModuleEnabled, getGuildModule } from '../db/modules.js';
 import { notifyTicketActivity } from '../lib/push.js';
+import { sweepMap } from '../lib/sweepMap.js';
 import {
+  getOpenTicket,
+  openTicketGuildKeys,
   openOrCreateTicket,
   getTicket,
   addTicketMessage,
@@ -152,18 +155,298 @@ ${bubbles}
   return { filename: `ticket-${ticket.id}-transcript.html`, html };
 }
 
+// --- Which ticket servers is a DM sender in? --------------------------------------------------
+// Any account can DM the bot, so the lookup must cost little however many servers the instance
+// has. Order of work:
+//  1. The servers where the user has an open ticket come from the database (they survive a
+//     restart) and are checked first. They are not counted against the caps below: a user has few,
+//     and a follow-up must reach the server it belongs to.
+//  2. Members already in the cache cost nothing. When the member cache of a server is known to be
+//     complete (GuildMembers intent on and every member cached) a miss means "not a member".
+//  3. Only the rest need a REST member fetch. Those are capped per DM, per user per minute and per
+//     minute for the whole bot, remembered when the member does not exist (or the fetch is
+//     refused), and tried first where the user was found before, then where asked longest ago.
+// Without the GuildMembers intent the member caches are sparse, so step 3 is the only way to find
+// a member who has no open ticket: it still works, a few servers per message. A lookup that the
+// caps cut short is `incomplete`; the DM handler then never opens a new ticket from it, it asks the
+// member to send again, and the retry continues with the servers not yet checked.
+
+/** Most REST member fetches one DM may cause. */
+export const MEMBER_PROBES_PER_DM = 8;
+/** Most REST member fetches one user may cause per minute. */
+export const MEMBER_PROBES_PER_USER_PER_MINUTE = 16;
+/** Most REST member fetches all users together may cause per minute (open tickets are not counted). */
+export const MEMBER_PROBES_PER_MINUTE = 120;
 /**
- * Guilds where the tickets module is enabled and the user is a member. Pass the client the
- * DM arrived on to look only at that platform's servers.
+ * The last part of the shared minute is kept for users who have used little of it, so a few users
+ * cannot leave everyone else with "send again": above SHARED_OPEN_LIMIT a user may only take
+ * fetches while they have used fewer than STARTER_PROBES of their own.
  */
-export async function ticketGuildsForUser(user, client) {
-  const out = [];
-  for (const guild of client ? [...client.guilds.cache.values()] : allGuilds()) {
-    if (!(await isModuleEnabled(guildKey(guild), 'tickets'))) continue;
-    const member = await guild.members.fetch(user.id).catch(() => null);
-    if (member) out.push(guild);
+export const SHARED_OPEN_LIMIT = 90;
+export const STARTER_PROBES = 4;
+/** Most fetches for the servers where the member has an open ticket: per DM, and per user per minute. */
+export const OPEN_PROBES_PER_DM = 5;
+export const OPEN_PROBES_PER_USER_PER_MINUTE = 10;
+/** A "not a member" answer is remembered this long (a join event clears it where Sylo gets one). */
+export const NOT_MEMBER_TTL_MS = 3 * 60_000;
+/**
+ * A refused fetch (403 / 50001: the bot may not look in that server) and a member who left a
+ * server where they had an open ticket are remembered this long.
+ */
+export const LONG_MEMORY_TTL_MS = 10 * 60_000;
+/** A complete answer for one sender is reused this long (a per-user cooldown on the lookup). */
+export const LOOKUP_REUSE_MS = 10_000;
+const HINT_TTL_MS = 24 * 60 * 60_000;
+
+/** `${userId}|${guildKey}` -> expiry of a "not a member" answer. @type {Map<string, number>} */
+const notMember = new Map();
+/** `${userId}|${guildKey}` -> when the user was last looked up there, so that unchecked servers go first. */
+const checkedAt = new Map();
+/** userId -> servers the user was found in lately; only decides the order of the fetches. */
+const foundBefore = new Map();
+/** `${platform}|${userId}` -> { at, result } (result is a promise while the lookup runs). */
+const lookups = new Map();
+/** userId -> { start, count }: the user's fetches in the current minute (shared budget). */
+const userWindows = new Map();
+/** userId -> { start, count }: the user's fetches for open tickets and menu picks in the current minute. */
+const openWindows = new Map();
+let probeWindow = { start: 0, count: 0 };
+sweepMap(notMember, (until, now) => until <= now);
+sweepMap(checkedAt, (at, now) => now - at > HINT_TTL_MS);
+sweepMap(foundBefore, (h, now) => now - h.at > HINT_TTL_MS);
+sweepMap(lookups, (l, now) => now - l.at > LOOKUP_REUSE_MS);
+sweepMap(userWindows, (w, now) => now - w.start >= 60_000, 60_000);
+sweepMap(openWindows, (w, now) => now - w.start >= 60_000, 60_000);
+
+/** Test hook: forget every remembered answer and the probe budgets. */
+export function _resetTicketLookup() {
+  notMember.clear();
+  foundBefore.clear();
+  checkedAt.clear();
+  lookups.clear();
+  userWindows.clear();
+  openWindows.clear();
+  probeWindow = { start: 0, count: 0 };
+}
+
+const cachedMember = (guild, userId) => {
+  const m = guild.members.cache?.get(userId);
+  return m && !m.partial ? m : null;
+};
+
+/** Is every member of the server in the cache, so that a miss means "not a member"? */
+function memberCacheComplete(guild) {
+  if (platformOfClient(guild.client) !== 'discord' || !config.intentGuildMembers) return false;
+  return Number.isFinite(guild.memberCount) && (guild.members.cache?.size ?? 0) >= guild.memberCount;
+}
+
+/** Count one more in a user's minute window; false (and no count) when `limit` is reached. */
+function takeWindow(map, userId, limit) {
+  const now = Date.now();
+  let w = map.get(userId);
+  if (!w || now - w.start >= 60_000) {
+    w = { start: now, count: 0 };
+    map.set(userId, w);
   }
-  return out;
+  if (w.count >= limit) return false;
+  w.count++;
+  return true;
+}
+
+/** A member of a server joined: forget that they were found not to be one (Discord, intent on). */
+export function forgetNotMember(userId, key) {
+  notMember.delete(`${userId}|${key}`);
+}
+
+/**
+ * Take one REST member fetch from the user's and the bot's per-minute budgets; false when either
+ * is used up, or when the shared minute is nearly used and this user already had their share.
+ */
+function takeProbe(userId) {
+  const now = Date.now();
+  if (now - probeWindow.start >= 60_000) probeWindow = { start: now, count: 0 };
+  const used = userWindows.get(userId);
+  const mine = used && now - used.start < 60_000 ? used.count : 0;
+  if (probeWindow.count >= MEMBER_PROBES_PER_MINUTE) return false;
+  if (probeWindow.count >= SHARED_OPEN_LIMIT && mine >= STARTER_PROBES) return false;
+  if (!takeWindow(userWindows, userId, MEMBER_PROBES_PER_USER_PER_MINUTE)) return false;
+  probeWindow.count++;
+  return true;
+}
+
+/**
+ * One REST member fetch.
+ * @param {{ ttl?: number }} [o]  how long "not a member" is remembered (a refusal is always
+ *   remembered for LONG_MEMORY_TTL_MS)
+ * @returns {Promise<boolean | null>} true member; false not a member, or the platform refuses to
+ *   say (remembered, so it is not asked again at once); null unknown (a rate limit or a network
+ *   error: not remembered)
+ */
+async function probeMember(guild, userId, { ttl = NOT_MEMBER_TTL_MS } = {}) {
+  const remember = (ms) => {
+    const key = `${userId}|${guildKey(guild)}`;
+    notMember.set(key, Math.max(notMember.get(key) ?? 0, Date.now() + ms));
+  };
+  checkedAt.set(`${userId}|${guildKey(guild)}`, Date.now());
+  try {
+    // A platform may answer "no such member" with null instead of an error.
+    if (await guild.members.fetch(userId)) {
+      notMember.delete(`${userId}|${guildKey(guild)}`); // they are a member after all
+      return true;
+    }
+    remember(ttl);
+    return false;
+  } catch (err) {
+    // 403 / 50001: the bot may not look in this server: skip it for a long while.
+    if (err?.code === 50001 || err?.status === 403) {
+      remember(LONG_MEMORY_TTL_MS);
+      return false;
+    }
+    // 10007 / 10013: unknown member / user.
+    if ([10007, 10013].includes(err?.code) || err?.status === 404) {
+      remember(ttl);
+      return false;
+    }
+    return null;
+  }
+}
+
+async function findTicketGuilds(user, client) {
+  const found = [];
+  const openGuilds = [];
+  const byKey = new Map();
+  for (const guild of client ? [...client.guilds.cache.values()] : allGuilds())
+    byKey.set(guildKey(guild), guild);
+
+  // 1. Open tickets, from the database: complete, and kept across restarts.
+  let openComplete = true;
+  let openRemembered = false;
+  const rememberedGuilds = [];
+  let openProbes = 0;
+  const handled = new Set();
+  for (const key of await openTicketGuildKeys(user.id)) {
+    const guild = byKey.get(key);
+    if (!guild) continue; // another platform, or Sylo left the server
+    handled.add(key);
+    if (!(await isModuleEnabled(key, 'tickets'))) continue;
+    let isMember = cachedMember(guild, user.id) ? true : null;
+    if (isMember === null) {
+      if ((notMember.get(`${user.id}|${key}`) ?? 0) > Date.now()) {
+        isMember = false; // left, or refused: remembered
+        openRemembered = true; // not a fresh answer: the member may have come back
+        rememberedGuilds.push(guild);
+      } else if (
+        openProbes >= OPEN_PROBES_PER_DM ||
+        !takeWindow(openWindows, user.id, OPEN_PROBES_PER_USER_PER_MINUTE)
+      ) {
+        openComplete = false; // not checked this time: the DM handler asks again or shows the picker
+      } else {
+        openProbes++;
+        // A member with an open ticket who is gone has most likely left: remember it for long.
+        isMember = await probeMember(guild, user.id, { ttl: LONG_MEMORY_TTL_MS });
+      }
+    }
+    if (isMember) {
+      found.push(guild);
+      openGuilds.push(guild);
+    } else if (isMember === null) openComplete = false;
+  }
+
+  // 2. The cache.
+  const toProbe = [];
+  const now = Date.now();
+  for (const [key, guild] of byKey) {
+    if (handled.has(key)) continue;
+    if (cachedMember(guild, user.id)) {
+      if (await isModuleEnabled(key, 'tickets')) found.push(guild);
+      continue;
+    }
+    if (memberCacheComplete(guild)) continue;
+    if ((notMember.get(`${user.id}|${key}`) ?? 0) > now) continue;
+    toProbe.push(guild);
+  }
+
+  // 3. REST fetches, servers where this user was found before first.
+  // Then the ones not asked about yet, the longest ago first: with more servers than one minute's
+  // budget covers, the answers of the first minute may have expired before the last are reached.
+  const hint = foundBefore.get(user.id)?.guilds;
+  const asked = (g) => checkedAt.get(`${user.id}|${guildKey(g)}`) ?? 0;
+  toProbe.sort(
+    (a, b) =>
+      Number(hint?.has(guildKey(b)) ?? false) - Number(hint?.has(guildKey(a)) ?? false) || asked(a) - asked(b)
+  );
+  let probes = 0;
+  let incomplete = !openComplete;
+  for (const guild of toProbe) {
+    if (!(await isModuleEnabled(guildKey(guild), 'tickets'))) continue;
+    if (probes >= MEMBER_PROBES_PER_DM || !takeProbe(user.id)) {
+      incomplete = true;
+      break;
+    }
+    probes++;
+    const isMember = await probeMember(guild, user.id);
+    if (isMember) found.push(guild);
+    else if (isMember === null) incomplete = true;
+  }
+
+  if (found.length) {
+    foundBefore.set(user.id, { guilds: new Set(found.map(guildKey)), at: Date.now() });
+  }
+  return { guilds: found, openGuilds, openComplete, openRemembered, rememberedGuilds, incomplete };
+}
+
+/**
+ * Where can this sender open or continue a ticket? `guilds`: servers with tickets on that the user
+ * is a member of; `openGuilds`: those where the user has an open ticket, and `openComplete`: that
+ * list is certain; `openRemembered`: an open ticket server was skipped on the strength of an
+ * earlier answer ("left"), not a fresh one, and `rememberedGuilds` are those servers; `incomplete`: some servers could not be checked yet (the caps), so `guilds` may
+ * be missing some. Pass the client the DM arrived on to look only at that platform's servers.
+ * A complete answer for one user is reused for a few seconds, so a burst of DMs does the work
+ * once; an incomplete one is not reused, so a retry makes progress.
+ * @returns {Promise<{ guilds: import('discord.js').Guild[], openGuilds: import('discord.js').Guild[], openComplete: boolean, openRemembered: boolean, rememberedGuilds: import('discord.js').Guild[], incomplete: boolean }>}
+ */
+export function lookupTicketGuilds(user, client) {
+  const key = `${client ? platformOfClient(client) : 'all'}|${user.id}`;
+  const recent = lookups.get(key);
+  if (recent && Date.now() - recent.at < LOOKUP_REUSE_MS) return recent.result;
+  const result = findTicketGuilds(user, client);
+  const entry = { at: Date.now(), result };
+  lookups.set(key, entry);
+  result.then(
+    (r) => {
+      if (r.incomplete && lookups.get(key) === entry) lookups.delete(key);
+    },
+    () => {
+      if (lookups.get(key) === entry) lookups.delete(key);
+    }
+  );
+  return result;
+}
+
+/**
+ * Can this user open a ticket in this one server (tickets on, user a member)? Cheap: the member
+ * cache, or the DM lookup that just ran, or one fetch. The server was one the bot offered in a
+ * menu a moment ago, so that one fetch is not counted against the shared budget.
+ */
+export async function canOpenTicketIn(user, guild) {
+  if (!(await isModuleEnabled(guildKey(guild), 'tickets'))) return false;
+  if (cachedMember(guild, user.id)) return true;
+  const recent = lookups.get(`${platformOfClient(guild.client)}|${user.id}`);
+  if (recent && Date.now() - recent.at < LOOKUP_REUSE_MS) {
+    const { guilds } = await recent.result.catch(() => ({ guilds: [] }));
+    if (guilds.some((g) => guildKey(g) === guildKey(guild))) return true;
+  }
+  if (memberCacheComplete(guild)) return false;
+  // A server the member left (or that refuses lookups) stays refused for a while, and a pick costs
+  // at most one fetch from the user's own small allowance: clicking the menu again and again is
+  // bounded.
+  // The one exception is a server where the member has an open ticket: it was offered in the menu
+  // because they may have come back, and the pick asks Discord once to find out.
+  if ((notMember.get(`${user.id}|${guildKey(guild)}`) ?? 0) > Date.now()) {
+    if (!(await getOpenTicket(guildKey(guild), user.id))) return false;
+  }
+  if (!takeWindow(openWindows, user.id, OPEN_PROBES_PER_USER_PER_MINUTE)) return false;
+  return (await probeMember(guild, user.id)) === true;
 }
 
 const ALERT_MESSAGE_MAX = 1000;

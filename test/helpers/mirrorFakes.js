@@ -160,6 +160,10 @@ export function fakeFluxer({
       bitrateMax: 96000,
     }),
     missingPermissions: () => missing,
+    async ping() {
+      begin('ping');
+      done('ping');
+    },
     // The roles that rank above Sylo's own (Fluxer's order: position, then the older id), like the real adapter.
     rolesAboveSylo: (ignore = []) =>
       rolesAbove(guild.roles.get(SYLO_ROLE), [...guild.roles.values()], new Set([id, ...ignore])),

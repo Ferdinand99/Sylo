@@ -247,7 +247,7 @@ export default function EconomyShopAdmin({ guildId, currency }) {
                     </span>
                   ) : null}
                 </h3>
-                {item.description ? <p className="v2-shop-desc">{item.description}</p> : null}
+                {item.description ? <p className="v2-shop-desc v2-shop-text">{item.description}</p> : null}
                 <p className="v2-field-hint">
                   <Meta
                     items={[

@@ -11,6 +11,9 @@ import { linkMirroredChannels } from '../src/mirror/bridgeLink.js';
 import { dChannel, engineFor } from './helpers/mirrorFakes.js';
 import { drain, names, scenario } from './helpers/mirrorScenario.js';
 
+/** Let the checks tick() starts without waiting for them run to the end. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+
 test('the dry run creates nothing and lists everything with what cannot be carried over', async () => {
   const s = await scenario();
   const preview = await s.engine.previewPair(s.pair);
@@ -529,6 +532,74 @@ test('when Fluxer keeps failing the pair pauses with the reason, and resumes whe
   assert.equal((await db.getPair(s.pair.id)).lastError, '');
   assert.equal((await drain(s)).status, 'live');
   assert.equal(s.fluxer.ops('createRole').length, 2);
+});
+
+test('a pause because Fluxer could not be reached says when, and goes on by itself once Fluxer answers', async () => {
+  const s = await scenario({ withExpressions: false, engineOpts: { unreachableRetryMs: 60_000 } });
+  await s.engine.startCopy(s.pair.id);
+  const unreachable = () =>
+    Object.assign(new Error('fetch failed: connect EHOSTUNREACH 192.0.2.1:443'), { code: 'EHOSTUNREACH' });
+  s.fluxer.failOn('*', unreachable(), 999);
+  await s.engine.runPair(s.pair.id);
+  let pair = await db.getPair(s.pair.id);
+  assert.equal(pair.status, 'paused');
+  assert.equal(pair.pauseKind, 'unreachable');
+  assert.match(pair.lastError, /could not be reached: fetch failed: connect EHOSTUNREACH/);
+  assert.ok(pair.lastErrorAt > 0 && pair.lastErrorAt <= s.clock.now, 'the page can say when it happened');
+
+  // Too soon: no check yet.
+  await s.engine.tick();
+  await settle();
+  assert.equal(s.fluxer.attempted.filter((o) => o === 'ping').length, 0);
+
+  // Still unreachable: it stays paused, with the time of the new attempt.
+  s.clock.now += 60_000;
+  const checkedAt = s.clock.now;
+  await s.engine.tick();
+  await settle();
+  pair = await db.getPair(s.pair.id);
+  assert.equal(s.fluxer.attempted.filter((o) => o === 'ping').length, 1);
+  assert.equal(pair.status, 'paused');
+  assert.equal(pair.lastErrorAt, checkedAt);
+
+  // The address changed and the name follows: Fluxer answers, and the mirror goes on where it stopped.
+  s.fluxer.clearFailures();
+  s.clock.now += 60_000;
+  await s.engine.tick();
+  await settle();
+  pair = await db.getPair(s.pair.id);
+  assert.equal(pair.status, 'copying');
+  assert.deepEqual([pair.lastError, pair.lastErrorAt, pair.failures, pair.pauseKind], ['', 0, 0, '']);
+  assert.equal((await drain(s)).status, 'live');
+  assert.equal(s.fluxer.ops('createRole').length, 2);
+});
+
+test('the last error of a running mirror clears with the next success', async () => {
+  const s = await scenario({ withExpressions: false });
+  await s.engine.startCopy(s.pair.id);
+  s.fluxer.failOn('*', Object.assign(new Error('fetch failed'), { code: 'ECONNREFUSED' }), 1);
+  await s.engine.runPair(s.pair.id, { maxJobs: 1 });
+  let pair = await db.getPair(s.pair.id);
+  assert.equal(pair.status, 'copying');
+  assert.equal(pair.failures, 1);
+  assert.ok(pair.lastErrorAt > 0 && pair.lastErrorAt <= s.clock.now);
+  s.clock.now += 60_000;
+  await s.engine.runPair(s.pair.id, { maxJobs: 1 });
+  pair = await db.getPair(s.pair.id);
+  assert.deepEqual([pair.failures, pair.lastError, pair.lastErrorAt], [0, '', 0]);
+});
+
+test('a pause Sylo cannot end by itself is not checked again', async () => {
+  const s = await scenario({ withExpressions: false, engineOpts: { unreachableRetryMs: 1 } });
+  await s.engine.startCopy(s.pair.id);
+  s.fluxer.failOn('createChannel', Object.assign(new Error('Missing Permissions'), { statusCode: 403 }), 99);
+  await s.engine.runPair(s.pair.id);
+  assert.equal((await db.getPair(s.pair.id)).pauseKind, 'failure');
+  s.clock.now += 60_000;
+  await s.engine.tick();
+  await settle();
+  assert.equal((await db.getPair(s.pair.id)).status, 'paused', 'a refusal waits for its owner');
+  assert.equal(s.fluxer.attempted.filter((o) => o === 'ping').length, 0);
 });
 
 test('a job that keeps failing is given up on after the attempts run out', async () => {

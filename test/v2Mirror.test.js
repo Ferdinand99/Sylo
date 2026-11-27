@@ -330,6 +330,35 @@ test('a server that changes hands pauses the mirror until its new owner confirms
   assert.equal(after.targetConsentUser, next.ids.fluxer);
 });
 
+test('the page gets when the last error happened, and nothing once it cleared', async () => {
+  await reset();
+  const owner = await person({ discord: true, fluxer: true });
+  owners({ discord: owner.ids.discord, fluxer: owner.ids.fluxer });
+  await owner.post(`/guilds/${D_GUILD}/mirror/request`, { targetGuildId: F_KEY });
+  await owner.post(`/guilds/${D_GUILD}/mirror/start`, { confirm: true });
+  const pair = await db.getPairBySource(D_GUILD);
+  await db.updatePair(pair.id, {
+    status: 'paused',
+    resumeStatus: 'live',
+    pauseKind: 'unreachable',
+    pausedBy: 'system',
+    lastError: 'Fluxer could not be reached: fetch failed',
+    lastErrorAt: 1_800_000_000_000,
+  });
+  const seen = await (await owner.get(`/guilds/${D_GUILD}/mirror`)).json();
+  assert.deepEqual(
+    [seen.pair.pauseKind, seen.pair.lastError, seen.pair.lastErrorAt],
+    ['unreachable', 'Fluxer could not be reached: fetch failed', 1_800_000_000_000]
+  );
+  // A pause from before the time was kept shows when it was paused.
+  const older = await db.updatePair(pair.id, { lastErrorAt: 0 }, 1_700_000_000_000);
+  const legacy = await (await owner.get(`/guilds/${D_GUILD}/mirror`)).json();
+  assert.equal(legacy.pair.lastErrorAt, older.updatedAt);
+  await db.updatePair(pair.id, { status: 'live', pauseKind: '', lastError: '', lastErrorAt: 0 });
+  const cleared = await (await owner.get(`/guilds/${D_GUILD}/mirror`)).json();
+  assert.deepEqual([cleared.pair.lastError, cleared.pair.lastErrorAt], ['', 0]);
+});
+
 test('another server cannot be reached: not by its id, not by a pair, not by a code', async () => {
   await reset();
   const anna = await person({ discord: true });

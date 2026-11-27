@@ -23,6 +23,9 @@ import './styles/mirror.css';
 import './styles/access.css';
 import './styles/history.css';
 import './styles/health.css';
+import './styles/moderator-view.css';
+import './styles/p2.css';
+import './styles/p3-look.css';
 import './styles/bridge.css';
 
 createRoot(document.getElementById('root')).render(
