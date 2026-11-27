@@ -13,6 +13,7 @@ import { attachPrefixCommands, isCommandMessage, prefixFor } from './framework/r
 import { installFluxerCompat } from '../platform/compat.js';
 import { setFluxerInstance } from '../platform/instance.js';
 import { installSendBridge } from '../platform/fluxerSendBridge.js';
+import { installConnectRetry } from '../platform/fluxerConnectRetry.js';
 import { registerFluxerModuleEvents } from './fluxerModuleEvents.js';
 import { register as registerDmTickets } from './events/dmTickets.js';
 import { fluxerReactionAdd } from '../platform/fluxerEvents.js';
@@ -61,6 +62,7 @@ export async function resolveInstance({ webUrl, apiUrl }, fetchImpl = fetch) {
  * @param {string} [opts.prefix]
  * @param {() => Promise<unknown>} [opts.loadModules]  registers every module's event handlers
  * @param {(sdk: any, deps: object) => void} [opts.installCompat]
+ * @param {() => void} [opts.installConnectRetry]  makes REST calls survive a changed instance address (tests skip it)
  * @param {{ Collection: any }} [opts.collection]
  */
 export async function startFluxerBot(opts = {}) {
@@ -79,6 +81,8 @@ export async function startFluxerBot(opts = {}) {
   const voice = createVoiceTracker({ Collection });
   (opts.installCompat ?? installFluxerCompat)(sdk, { Collection, voice });
   setFluxerInstance(instance);
+  // A self-hosted instance on a dynamic IP: a connect to an address that went away retries with a fresh look-up.
+  (opts.installConnectRetry ?? installConnectRetry)();
   // Before any message is sent: components become reactions, discord.js files are converted.
   installSendBridge({ channelClasses: [sdk.TextChannel, sdk.DMChannel], Message: sdk.Message });
 

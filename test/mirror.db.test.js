@@ -242,7 +242,7 @@ test('a job remembers when it was first taken, and a retry after a timeout is ma
 });
 
 test('the SQLite migration can run twice without failing (IF NOT EXISTS)', () => {
-  const step = MIGRATIONS[MIGRATIONS.length - 1];
+  const step = MIGRATIONS.find((m) => String(m).includes('CREATE TABLE IF NOT EXISTS mirror_pairs'));
   assert.doesNotThrow(() => step(sqlite));
   assert.doesNotThrow(() => step(sqlite));
   const tables = sqlite
@@ -250,6 +250,28 @@ test('the SQLite migration can run twice without failing (IF NOT EXISTS)', () =>
     .all()
     .map((r) => r.name);
   assert.deepEqual(tables, ['mirror_ids', 'mirror_jobs', 'mirror_links', 'mirror_pairs']);
+});
+
+test('the last_error_at migration adds the column once and can run twice', () => {
+  const step = MIGRATIONS.find((m) => String(m).includes('last_error_at'));
+  assert.ok(step, 'a migration adds last_error_at');
+  assert.doesNotThrow(() => step(sqlite));
+  assert.doesNotThrow(() => step(sqlite));
+  const cols = sqlite
+    .prepare('PRAGMA table_info(mirror_pairs)')
+    .all()
+    .filter((c) => c.name === 'last_error_at');
+  assert.equal(cols.length, 1);
+});
+
+test('a pair keeps when its last error happened', async () => {
+  const pair = await db.createPair({ sourceGuild: C, targetGuild: D, now: 1000 });
+  assert.equal(pair.lastErrorAt, 0);
+  const failed = await db.updatePair(pair.id, { lastError: 'Fluxer could not be reached', lastErrorAt: 4200 }, 4200);
+  assert.deepEqual([failed.lastError, failed.lastErrorAt], ['Fluxer could not be reached', 4200]);
+  const cleared = await db.updatePair(pair.id, { lastError: '', lastErrorAt: 0 }, 5000);
+  assert.deepEqual([cleared.lastError, cleared.lastErrorAt], ['', 0]);
+  await db.deletePair(pair.id);
 });
 
 test('the bridge links of a pair: one per Discord channel, found again by link, gone with the pair', async () => {

@@ -224,6 +224,19 @@ function PauseBlock({ guildId, pair, onState }) {
     <>
       <Callout tone="warning" title="The mirror is paused">
         {pair.lastError || 'It was paused.'}
+        {pair.lastError && pair.lastErrorAt ? (
+          <>
+            {' '}
+            <span className="v2-field-hint">
+              (<Time value={pair.lastErrorAt} relative />)
+            </span>
+          </>
+        ) : null}
+        {kind === 'unreachable' ? (
+          <p className="v2-field-hint">
+            Sylo checks every few minutes and goes on by itself once Fluxer answers again. You can also resume now.
+          </p>
+        ) : null}
       </Callout>
       <OwnerOnly>
         <div className="v2-setup-actions">
