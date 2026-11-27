@@ -45,3 +45,34 @@ test('bumpHoneypotStat: ten concurrent bumps all count', async () => {
   // The other row's count is untouched by the unrelated bumps.
   assert.equal(config.channels.find((r) => r.channelId === CHANNEL_ID).triggerCount, 2);
 });
+
+test('bumpHoneypotStat: concurrent bumps on different rows of one guild all count', async () => {
+  // The honeypot config is one stored value, so bumps of different rows (a channel trap and a
+  // bait message in the same channel, or two trap channels) must not read before the other has
+  // written. A queue keyed per row lets them lose each other's increments.
+  const other = CHANNEL_ID + '2';
+  await setGuildModule(GUILD_ID, 'honeypot', {
+    config: {
+      channels: [
+        { channelId: CHANNEL_ID, action: 'kick', triggerCount: 0 },
+        { channelId: other, action: 'kick', triggerCount: 0 },
+      ],
+      messages: [{ channelId: CHANNEL_ID, messageId: '', action: 'kick', triggerCount: 0 }],
+    },
+  });
+
+  const guild = { id: GUILD_ID };
+  await Promise.all([
+    bumpHoneypotStat(guild, 'channels', CHANNEL_ID),
+    bumpHoneypotStat(guild, 'messages', CHANNEL_ID),
+    bumpHoneypotStat(guild, 'channels', other),
+    bumpHoneypotStat(guild, 'channels', CHANNEL_ID),
+    bumpHoneypotStat(guild, 'channels', other),
+    bumpHoneypotStat(guild, 'messages', CHANNEL_ID),
+  ]);
+
+  const { config } = await getGuildModule(GUILD_ID, 'honeypot');
+  assert.equal(config.channels.find((r) => r.channelId === CHANNEL_ID).triggerCount, 2);
+  assert.equal(config.channels.find((r) => r.channelId === other).triggerCount, 2);
+  assert.equal(config.messages[0].triggerCount, 2);
+});
