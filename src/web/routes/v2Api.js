@@ -30,6 +30,7 @@ import {
   currentUser,
   sessionUserId,
   botInviteUrls,
+  refreshServerLists,
 } from '../middleware/auth.js';
 import {
   checkLevelRewardGrants,
@@ -49,7 +50,7 @@ import {
   accountGuildAccess,
   checksLive,
 } from '../middleware/access.js';
-import { limitWhen, platformActionLimit, rateLimit } from '../middleware/rateLimit.js';
+import { clientKey, limitWhen, platformActionLimit, rateLimit } from '../middleware/rateLimit.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { changelogHandler } from '../lib/changelogFeed.js';
 import { ticketsRouter, staffRouter } from './v2Staff.js';
@@ -57,6 +58,7 @@ import guildDataRouter from './v2GuildData.js';
 import configImportRouter from './v2ConfigImport.js';
 import duplicateRouter from './v2Duplicate.js';
 import healthRouter, { dropHealthOnWrite } from './v2Health.js';
+import updateRouter from './v2Update.js';
 import { moduleIcon } from '../lib/moduleIcons.js';
 import eventsRouter from './v2Events.js';
 import suggestionsRouter from './v2Suggestions.js';
@@ -64,11 +66,14 @@ import tempRolesRouter from './v2TempRoles.js';
 import quotesRouter from './v2Quotes.js';
 import searchRouter from './v2Search.js';
 import introRouter from './v2Intro.js';
+import bridgeRouter from './v2Bridge.js';
 import applicationsRouter from './v2Applications.js';
 import setupRouter from './v2Setup.js';
+import mirrorRouter from './v2Mirror.js';
 import applyMemberRouter from './v2Apply.js';
 import economyRouter from './v2Economy.js';
 import shopRouter from './v2Shop.js';
+import publicLookRouter from './v2PublicLook.js';
 import shopMemberRouter from './v2ShopMember.js';
 import { cancelIntroductionSessions } from '../../modules/introductions.js';
 import { cancelApplicationSessions } from '../../modules/applications.js';
@@ -330,9 +335,11 @@ import {
   openBackup,
   isBackupName,
   inspectDbFile,
+  restoreConfirmationError,
 } from '../../db/backup.js';
+import { roleRisks, lastRolePrivileges, ROLE_DOCS_URL } from '../../db/dbRole.js';
 import { offsiteBackupStatus } from '../../db/offsiteBackup.js';
-import { MODULES, getModule } from '../../modules/registry.js';
+import { BETA_PAGES, MODULES, getModule } from '../../modules/registry.js';
 import { timeAgo, formatUptime, formatBytes } from '../lib/format.js';
 import { log } from '../../lib/log.js';
 import { refreshPagePosts } from '../../modules/events.js';
@@ -444,6 +451,25 @@ router.post(
   })
 );
 
+// "Refresh server list": look again for servers the bot joined since sign-in, for this account's own
+// identities only. Each look can cost the platform a member lookup, so once per 30 seconds per account.
+const refreshGuildsLimit = rateLimit({
+  windowMs: 30_000,
+  max: 1,
+  message: 'The server list was just refreshed. Wait a few seconds and try again.',
+  keyFn: (req) => `refresh-guilds|${req.account?.id ?? clientKey(req)}`,
+});
+
+router.post(
+  '/account/refresh-guilds',
+  refreshGuildsLimit,
+  asyncHandler(async (req, res) => {
+    // Open mode lists every server already.
+    if (!req.account) return res.json({ ok: true, added: 0 });
+    res.json({ ok: true, added: await refreshServerLists(req.account) });
+  })
+);
+
 router.post(
   '/account/disconnect/:platform',
   asyncHandler(async (req, res) => {
@@ -507,6 +533,8 @@ function loadGuildJson(req, res, next) {
 // sits before the access guard below and does its own access check (v2ShopMember.js).
 // Every /guilds/:guildId route after the guard needs the level src/web/lib/routeAccess.js gives it
 // (view, inbox or edit; edit when it gives none), checked by the access router (access.js).
+// The operators' update notice and Wise Wren's "Update now" (v2Update.js): operator routes, not per server.
+router.use(updateRouter);
 router.use('/shop/:guildId', shopMemberRouter);
 // The web form of an application (/apply/<server>/<form>): the same kind of page, the same access rule.
 router.use('/apply/:guildId', applyMemberRouter);
@@ -545,14 +573,20 @@ router.use('/guilds/:guildId', tempRolesRouter);
 router.use('/guilds/:guildId', quotesRouter);
 // Introductions: settings, publish the prompt message (v2Intro.js).
 router.use('/guilds/:guildId', introRouter);
+// Bridge: links to a channel on the other platform, requests and codes, options (v2Bridge.js).
+router.use('/guilds/:guildId', bridgeRouter);
 // Economy: settings, members and their ledger, staff changes, reset (v2Economy.js).
 router.use('/guilds/:guildId', economyRouter);
 // Economy shop: items, a member's inventory, the activity log (v2Shop.js).
 router.use('/guilds/:guildId', shopRouter);
+// The server's own look on the public member pages: accent colour and background (v2PublicLook.js).
+router.use('/guilds/:guildId', publicLookRouter);
 // Applications: settings, forms, the panel, submissions, export (v2Applications.js).
 router.use('/guilds/:guildId', applicationsRouter);
 // Setup wizard: the proposal for the server and applying it (v2Setup.js).
 router.use('/guilds/:guildId', setupRouter);
+// Mirror to Fluxer: ask, agree, preview, copy, pause and stop (v2Mirror.js).
+router.use('/guilds/:guildId', mirrorRouter);
 // The command palette's lookup of an inbox item by number (v2Search.js).
 router.use('/guilds/:guildId', searchRouter);
 
@@ -581,7 +615,9 @@ router.get(
       buildOverview(req.guild, { owner: isOwner(req), modules }),
       buildAttention(req.guild, { owner: isOwner(req), modules, openTickets, openAppeals }),
     ]);
-    res.json({ guild, openTickets, openAppeals, groups, attention });
+    // `betaPages`: ids of dashboard pages that are not modules but carry the Beta mark (today: "mirror").
+    // A module's own mark is `beta` on its card in `groups`.
+    res.json({ guild, openTickets, openAppeals, groups, attention, betaPages: BETA_PAGES });
   })
 );
 
@@ -2800,6 +2836,9 @@ router.get(
         size: formatBytes(dbInfo.size),
         wal: dbInfo.wal === null ? null : formatBytes(dbInfo.wal),
         postgres: Boolean(config.databaseUrl),
+        // Rights of the database role that are more than Sylo needs (empty when fine, or on SQLite).
+        roleRisks: roleRisks(lastRolePrivileges()),
+        roleDocsUrl: ROLE_DOCS_URL,
         intervalHours: config.backupIntervalHours,
         retention: config.backupRetention,
         offsite: offsiteBackupStatus(),
@@ -2904,6 +2943,13 @@ router.post(
     const name = req.params.name;
     const full = resolveBackup(name);
     if (!full) return res.status(404).json({ error: 'no such backup' });
+    // A confirmation that is sent has to be the right one. An uploaded Postgres dump is restored by
+    // running the SQL in it with the rights of the database role, so for that one the request must
+    // name the snapshot and say that it knows (the dashboard sends both after its own warning).
+    // Other snapshots stay restorable without a body, as the app sends it.
+    const problem = restoreConfirmationError(name, req.body, { postgres: Boolean(config.databaseUrl) });
+    if (problem) return res.status(400).json({ error: problem });
+
     const check = await inspectDbFile(full);
     if (!check.ok) return res.status(400).json({ error: check.error });
 

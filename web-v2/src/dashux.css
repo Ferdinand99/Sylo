@@ -5,10 +5,14 @@
 :root {
   /* Text on an accent fill: near-black on the bright dark-theme cyan, white on the deeper light-theme one. */
   --on-accent: #04141a;
+  /* The accent as text; a server's look sets its own per theme (src/lib/publicLook.js). Declared in both themes so
+     a look that only has a dark block never leaks its text colour into the light one. */
+  --accent-text: var(--accent);
   --accent-hover: color-mix(in srgb, var(--accent) 86%, #fff);
 }
 :root[data-theme='light'] {
   --on-accent: #ffffff;
+  --accent-text: var(--accent);
   --accent-hover: color-mix(in srgb, var(--accent) 88%, #000);
 }
 
@@ -760,6 +764,10 @@ fieldset.v2-field > legend {
     -webkit-line-clamp: unset;
     line-clamp: none;
   }
+}
+/* The line breaks of a description stay (this rule must beat the one above, which sets normal). */
+.v2-shop-row .v2-row-main p.v2-shop-text {
+  white-space: pre-line;
 }
 .v2-shop-desc {
   color: var(--text);

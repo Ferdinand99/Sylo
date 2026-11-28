@@ -126,6 +126,7 @@ const READS = [
   '/settings',
   '/access',
   '/modules/afk/config',
+  '/modules/bridge/config',
   '/audit',
   '/tickets',
   '/appeals',
@@ -147,6 +148,10 @@ const WRITES = [
   ['/moderation/warnings/clear', { userId: '810000000000000001' }, 404],
   ['/access', { viewRoleIds: [VIEW, OTHER_ROLE] }, 200],
   ['/setup/apply', { items: [] }, 400],
+  ['/public-page-look', { accent: '', background: 'none' }, 200],
+  ['/public-page-look/image', {}, 415],
+  ['/public-page-look/image/delete', {}, 200],
+  ['/public-page-look/splash/refresh', {}, 200],
 ];
 
 async function expectLevel(client, level) {
@@ -186,6 +191,8 @@ const GETS_ABOVE_VIEW = {
   'GET /guilds/:guildId/applications/submissions/:id': 'inbox',
   'GET /guilds/:guildId/applications/export': 'inbox',
   'GET /guilds/:guildId/export': 'edit',
+  'GET /guilds/:guildId/public-page-look': 'edit',
+  'GET /guilds/:guildId/mirror/fluxer-servers': 'edit',
 };
 
 test('every /api/v2 route declares its access level, and every declaration has a route', () => {
@@ -665,4 +672,67 @@ test('below Edit: RSS feed URLs show only their origin; no config download, no i
   assert.equal((await view.web.get(g('/export'))).status, 403);
   assert.equal((await master.web.get(g('/export'))).status, 200);
   assert.equal((await view.web.post(g('/insights/refresh'))).status, 403);
+});
+
+test("the server's look on its public pages is Edit only, the read too, on the web and in the app", async () => {
+  for (const roles of [[VIEW], [INBOX]]) {
+    const { web, app } = await person({ roles });
+    for (const client of [web, app]) {
+      const read = await client.get(g('/public-page-look'));
+      assert.equal(read.status, 403, `${roles} may not read it`);
+      assert.equal((await read.json()).required, 'edit');
+      const write = await client.post(g('/public-page-look'), { accent: '#0a5c36', background: 'none' });
+      assert.equal(write.status, 403);
+      assert.equal((await write.json()).required, 'edit');
+    }
+  }
+  const master = await person({ roles: [MASTER] });
+  for (const client of [master.web, master.app]) {
+    assert.equal((await client.get(g('/public-page-look'))).status, 200);
+    const saved = await client.post(g('/public-page-look'), { accent: '#0a5c36', background: 'none' });
+    assert.equal(saved.status, 200);
+    assert.equal((await saved.json()).accent, '#0a5c36');
+  }
+  // Another server is another server: the same person gets nothing there.
+  const other = runtime.clients.discord.guilds.cache.get(OTHER_D_GUILD);
+  other.members.cache.set(master.id, fakeMember(master.id, { roles: [MASTER] }));
+  try {
+    for (const client of [master.web, master.app]) {
+      assert.equal((await client.get(`/guilds/${OTHER_D_GUILD}/public-page-look`)).status, 403);
+      assert.equal(
+        (await client.post(`/guilds/${OTHER_D_GUILD}/public-page-look`, { accent: '#0a5c36' })).status,
+        403
+      );
+    }
+  } finally {
+    other.members.cache.clear();
+  }
+  // Fluxer servers have the same routes behind the same guard.
+  const fluxer = await person({ platform: 'fluxer', roles: [VIEW] });
+  assert.equal((await fluxer.app.get(`/guilds/${F_KEY}/public-page-look`)).status, 403);
+});
+
+test("Fluxer: an Edit person saves the server's look, and its files answer at the fluxer-<id> address", async () => {
+  await setBotMasterRoles(F_KEY, [MASTER]);
+  const { app } = await person({ platform: 'fluxer', roles: [MASTER] });
+  const saved = await app.post(`/guilds/${F_KEY}/public-page-look`, {
+    accent: '#5865f2',
+    background: 'none',
+  });
+  assert.equal(saved.status, 200);
+  const look = await saved.json();
+  assert.equal(look.platform, 'fluxer');
+  assert.match(look.effective.css, new RegExp(`^/look/fluxer-${F_GUILD}\\.[0-9a-f]{16}\\.css$`));
+  const sheet = await browser().get(look.effective.css);
+  assert.equal(sheet.status, 200);
+  assert.match(await sheet.text(), /--accent: #5865f2;/);
+  // the Discord server with the same digits has no such look
+  assert.equal((await browser().get(look.effective.css.replace(`fluxer-${F_GUILD}`, F_GUILD))).status, 404);
+  // a page of that server renders it: the public leaderboard
+  await setGuildModule(F_KEY, 'leveling', { enabled: true, config: { publicLeaderboard: true } });
+  const page = await browser().get(`/leaderboard/${encodeURIComponent(F_KEY)}`);
+  assert.equal(page.status, 200);
+  const html = await page.text();
+  assert.ok(html.includes(look.effective.css));
+  assert.match(html, /<body class="has-look">/);
 });

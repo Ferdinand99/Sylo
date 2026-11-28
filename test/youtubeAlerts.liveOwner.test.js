@@ -5,9 +5,9 @@ import './helpers/tmpDb.js';
 import test, { beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { checkLive, runAlert } from '../src/modules/youtubeAlerts.js';
-import { _resetFeedHealthForTests } from '../src/modules/lib/youtubeFeedHealth.js';
 import { markLive, liveVideoId } from '../src/db/youtubeAlerts.js';
 import { runtime } from '../src/runtime.js';
+import { _resetFeedHealthForTests } from '../src/modules/lib/youtubeFeedHealth.js';
 
 const OWN = 'UC' + 'o'.repeat(22);
 const OTHER = 'UC' + 'z'.repeat(22);
@@ -222,7 +222,6 @@ test('runAlert: an owner that cannot be found posts nothing and leaves a running
 
   // A post that is already running stays: not verifiable is not "ended".
   await markLive(GUILD_ID, OWN, OWN_VIDEO, { channelId: DISCORD_CHANNEL, messageId: 'msg-running' });
-  _resetFeedHealthForTests();
   await withPage(unknown, () => runAlert(GUILD_ID, ALERT));
   assert.equal(await liveVideoId(GUILD_ID, OWN), OWN_VIDEO);
   assert.equal(sends.length, 0);

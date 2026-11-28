@@ -15,6 +15,7 @@ import {
   periodKeys,
 } from '../../db/leveling.js';
 import { levelProgress } from '../../modules/lib/levels.js';
+import { lookFor } from '../lib/publicLook.js';
 import { guildForVanity } from '../../db/leaderboardVanity.js';
 
 const PAGE_SIZE = 25;
@@ -139,6 +140,7 @@ async function renderLeaderboard(req, res, next, guildId, canonical) {
       })
     );
 
+    res.locals.look = await lookFor(guildId);
     res.render('leaderboard', {
       guild: { id: guild.id, name: guild.name, icon: guild.iconURL({ size: 64 }) },
       members,

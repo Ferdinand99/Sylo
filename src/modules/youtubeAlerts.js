@@ -350,6 +350,8 @@ function readLivePage(html, ytChannelId) {
 /**
  * Is the channel live? `live: null` means unknown: the page could not be read (an HTTP error, a
  * timeout, a body past the cap), which is not the same as "not live" and must not end a live post.
+ * It is also unknown when the page does not say whose video it shows (issue #377): nothing is
+ * announced then either.
  * The caller counts it (lib/youtubeFeedHealth.js) instead of a log line per failure.
  * @returns {Promise<{ live: boolean|null, videoId?: string, title?: string, status?: number, reason?: string }>}
  */

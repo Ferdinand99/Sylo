@@ -394,6 +394,17 @@ export const MODULES = [
     beta: true,
   },
   {
+    id: 'bridge',
+    name: 'Bridge',
+    description:
+      'Share one conversation between a Discord channel and a Fluxer channel. Both servers agree to a link with a one-time code, and either can unlink at any time.',
+    icon: '🌉',
+    requiredIntents: ['MessageContent'],
+    defaultEnabled: false,
+    configurable: true,
+    beta: true,
+  },
+  {
     id: 'economy',
     name: 'Economy',
     description:
@@ -439,6 +450,17 @@ const BY_ID = new Map(MODULES.map((m) => [m.id, m]));
 /** @param {string} id */
 export function getModule(id) {
   return BY_ID.get(id) ?? null;
+}
+
+/**
+ * Dashboard pages that are not modules (they have no switch of their own) but are new enough to carry the
+ * same "Beta" mark. Remove an id here once the feature has proven itself; a module uses `beta` on its def.
+ */
+export const BETA_PAGES = Object.freeze(['mirror']);
+
+/** Does this module id, or beta page id (see BETA_PAGES), carry the Beta mark? */
+export function isBeta(id) {
+  return BETA_PAGES.includes(id) || getModule(id)?.beta === true;
 }
 
 /** Whether every intent a module needs is currently enabled in config. */

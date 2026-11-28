@@ -1,9 +1,11 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { useAccess } from '../access.jsx';
 import { useOverview } from '../OverviewContext.jsx';
 import { useOperator } from '../useOperator.js';
 import { navModel } from '../overviewModel.js';
 import { Icon } from './icons.jsx';
+import { BetaTag } from './Beta.jsx';
 
 // Below this width the sidebar is an off-canvas drawer (styles.css).
 const DRAWER_QUERY = '(max-width: 860px)';
@@ -54,6 +56,7 @@ function NavLinks({ items, pathname, onClose, title, separated = false }) {
           >
             <Icon name={it.icon} />
             <span>{it.label}</span>
+            {it.beta ? <BetaTag className="v2-sidebar-beta-pill" /> : null}
             {it.count ? (
               <span className="v2-sidebar-count" aria-label={`${it.count} waiting`}>
                 {it.count > 99 ? '99+' : it.count}
@@ -109,7 +112,18 @@ export default function Sidebar({ activeGuildId, open, onClose, returnFocusRef }
   // Guild-scoped links need a selected server. Without one (a fresh visit to the picker) their groups
   // are left out.
   const operator = useOperator();
-  const nav = navModel({ guildId: activeGuildId, data, operator });
+  // An Inbox-level person gets the moderation tools only (access.jsx); a switch at the top of the
+  // sidebar changes to the full, still locked, navigation and back.
+  const { focused, canFocus, showEverything, setShowEverything, levelKnown } = useAccess();
+  // Until the level is known only the moderation tools are drawn: an Inbox person would otherwise see the
+  // full navigation flash and go, and for everyone else the rest is a pop-in once the level arrives.
+  const settling = Boolean(activeGuildId) && !levelKnown;
+  const nav = navModel({
+    guildId: activeGuildId,
+    data,
+    operator,
+    focused: Boolean(activeGuildId) && (focused || settling),
+  });
 
   return (
     <>
@@ -129,14 +143,34 @@ export default function Sidebar({ activeGuildId, open, onClose, returnFocusRef }
         aria-label="Dashboard"
         inert={isDrawer && !open}
       >
-        <NavLinks items={nav.top} pathname={pathname} onClose={onClose} />
+        {/* The switch is the first thing in the menu, in both views, so the way back is never at the end of a
+            long list of links. */}
+        {activeGuildId && canFocus ? (
+          <div className={`v2-sidebar-viewswitch${showEverything ? ' is-everything' : ''}`}>
+            <span className="v2-sidebar-viewswitch-label">
+              {showEverything ? 'Everything is shown' : 'Moderation view'}
+            </span>
+            <button
+              type="button"
+              className="v2-sidebar-focus-toggle"
+              onClick={() => setShowEverything(!showEverything)}
+            >
+              {showEverything ? 'Show only moderation' : 'Show everything'}
+            </button>
+          </div>
+        ) : null}
+        {nav.top.length ? <NavLinks items={nav.top} pathname={pathname} onClose={onClose} /> : null}
         {/* The groups that belong to a server only exist once one is chosen: before that they would be a
             long column of greyed-out links. */}
         {activeGuildId ? (
           <>
-            <NavLinks items={nav.inbox} pathname={pathname} onClose={onClose} title="Inbox" />
+            {nav.inbox.length ? (
+              <NavLinks items={nav.inbox} pathname={pathname} onClose={onClose} title="Inbox" />
+            ) : null}
             <NavLinks items={nav.people} pathname={pathname} onClose={onClose} title="Members & moderation" />
-            <NavLinks items={nav.server} pathname={pathname} onClose={onClose} title="Server" />
+            {nav.server.length ? (
+              <NavLinks items={nav.server} pathname={pathname} onClose={onClose} title="Server" />
+            ) : null}
           </>
         ) : null}
 
@@ -154,12 +188,7 @@ export default function Sidebar({ activeGuildId, open, onClose, returnFocusRef }
                     aria-current={pathname === card.href ? 'page' : undefined}
                     onClick={onClose}
                   >
-                    {card.name}{' '}
-                    {card.beta ? (
-                      <span className="v2-sidebar-beta-pill" title="New module — behavior may still change">
-                        Beta
-                      </span>
-                    ) : null}
+                    {card.name} {card.beta ? <BetaTag className="v2-sidebar-beta-pill" /> : null}
                   </Link>
                 ))}
               </div>
@@ -167,7 +196,9 @@ export default function Sidebar({ activeGuildId, open, onClose, returnFocusRef }
           </div>
         ) : null}
 
-        <NavLinks items={nav.more} pathname={pathname} onClose={onClose} title="More" separated />
+        {nav.more.length ? (
+          <NavLinks items={nav.more} pathname={pathname} onClose={onClose} title="More" separated />
+        ) : null}
         {nav.bot.length ? (
           <NavLinks items={nav.bot} pathname={pathname} onClose={onClose} title="Bot owner" />
         ) : null}

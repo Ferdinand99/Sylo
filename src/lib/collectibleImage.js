@@ -123,8 +123,11 @@ export const _decodeQueue = () => ({ running, waiting: waiting.length });
 /**
  * Check and re-encode an uploaded file.
  * @param {Buffer} buf  the bytes of the file
- * @param {{ queueTimeoutMs?: number, owner?: string, decodeTimeoutMs?: number, loadImage?: Function }} [opts]
+ * @param {{ queueTimeoutMs?: number, owner?: string, decodeTimeoutMs?: number, loadImage?: Function,
+ *   maxSide?: number, quality?: number }} [opts]
  *   `owner`: who asks (the server id), for the share of the queue. `loadImage` replaces the decoder (tests only).
+ *   `maxSide` and `quality`: the size and the WebP quality of what is stored (a collectible: 512 and 85; the
+ *   background of a public page asks for more, see db/publicLook.js). Every other check is the same.
  * @returns {Promise<{ data: Buffer, mime: string, width: number, height: number, kind: string }>}
  * @throws {ImageError}
  */
@@ -135,6 +138,8 @@ export async function processImage(
     owner = null,
     decodeTimeoutMs = DECODE_TIMEOUT_MS,
     loadImage = null,
+    maxSide = MAX_SIDE,
+    quality = WEBP_QUALITY,
   } = {}
 ) {
   if (!Buffer.isBuffer(buf) || buf.length === 0) throw new ImageError('Choose an image to upload.');
@@ -173,7 +178,7 @@ export async function processImage(
       if (!(w >= 1 && h >= 1) || w * h > MAX_SOURCE_PIXELS)
         throw new ImageError('That file is not a valid image.');
 
-      const scale = Math.min(1, MAX_SIDE / Math.max(w, h));
+      const scale = Math.min(1, maxSide / Math.max(w, h));
       const width = Math.max(1, Math.round(w * scale));
       const height = Math.max(1, Math.round(h * scale));
       const surface = mod.createCanvas(width, height);
@@ -181,7 +186,7 @@ export async function processImage(
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(img, 0, 0, width, height);
-      const data = await surface.encode('webp', WEBP_QUALITY);
+      const data = await surface.encode('webp', quality);
       if (sniffImage(data) !== 'webp')
         throw new ImageError('This server cannot process images right now.', 503);
       return { data, mime: STORED_MIME, width, height, kind };

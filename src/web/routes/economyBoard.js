@@ -8,6 +8,7 @@ import { guildByKey } from '../../platform/platformOf.js';
 import { isPlatformGuildId } from '../../lib/platformId.js';
 import { economySettings, formatNumber, leaderboardPage } from '../../modules/economy.js';
 import { notFound, pageProfiles } from './leaderboard.js';
+import { lookFor } from '../lib/publicLook.js';
 
 const PAGE_SIZE = 25;
 
@@ -37,6 +38,7 @@ router.get('/:guildId', async (req, res, next) => {
         total: formatNumber(r.total),
       };
     });
+    res.locals.look = await lookFor(guildId);
     res.render('economy-leaderboard', {
       guild: { id: guild.id, name: guild.name, icon: guild.iconURL({ size: 64 }) },
       members,

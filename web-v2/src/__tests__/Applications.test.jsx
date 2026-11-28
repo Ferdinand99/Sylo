@@ -287,7 +287,8 @@ describe('Applications form', () => {
     await screen.findByTestId('application-form-editor');
     fireEvent.click(screen.getByRole('button', { name: 'Preview the form' }));
     const preview = screen.getByLabelText('Preview of the form');
-    expect(within(preview).getByText('Join the team')).toBeTruthy();
+    // The description keeps the line breaks the admin typed (white-space: pre-line).
+    expect(within(preview).getByText('Join the team').classList.contains('v2-pre-line')).toBe(true);
     expect(within(preview).getByLabelText('Blue')).toBeTruthy();
     fireEvent.click(within(preview).getByLabelText('Blue'));
     expect(api.saveApplicationForm).not.toHaveBeenCalled();

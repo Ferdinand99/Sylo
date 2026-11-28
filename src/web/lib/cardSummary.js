@@ -86,6 +86,10 @@ const FORMAT = {
     noun(num(l, 'Saved quotes'), 'saved quote'),
     ...(isOn(l, 'Public page') ? ['public page'] : []),
   ],
+  bridge: (l) => [
+    ...count(l, 'Bridged channels', 'bridged channel'),
+    ...(num(l, 'Stopped') ? [`${num(l, 'Stopped')} stopped`] : []),
+  ],
   introductions: (l) => [
     ...(isOn(l, 'Channel') ? [value(l, 'Channel')] : ['No channel yet']),
     ...count(l, 'Introductions', 'introduction'),
@@ -187,6 +191,7 @@ const NEEDS_OWNER_KEYS = new Set(['twitch-alerts', 'kick-alerts', 'apple-connect
 /** What an empty module says it is missing, instead of the general "Not set up yet". */
 const EMPTY = {
   sticky: 'No sticky messages yet',
+  bridge: 'No bridged channels yet',
   'auto-threads': 'No channels yet',
   'auto-react': 'No rules yet',
   'custom-commands': 'No commands yet',
