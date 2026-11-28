@@ -1,5 +1,36 @@
 # Changelog
 
+## [5.3.0](https://github.com/Ferdinand99/Sylo/compare/v5.2.2...v5.3.0) (2026-11-28)
+
+
+### Features
+
+* **bridge:** link a Discord channel to a Fluxer channel ([#385](https://github.com/Ferdinand99/Sylo/issues/385)) ([4289302](https://github.com/Ferdinand99/Sylo/commit/4289302a595cab1f54319ca7499dddbcf71f596e))
+* **dashboard:** mark the bridge and the server mirror as beta ([#407](https://github.com/Ferdinand99/Sylo/issues/407)) ([db74bcc](https://github.com/Ferdinand99/Sylo/commit/db74bccc4a3c5be72f67ec6c8769a331798c9767))
+* **dashboard:** update notice for operators with an optional Update now through Wise Wren ([#366](https://github.com/Ferdinand99/Sylo/issues/366)) ([6acd69c](https://github.com/Ferdinand99/Sylo/commit/6acd69ce79a2adc7831951a484c42e9b9b6db481))
+* **db:** index a user's open tickets on SQLite too (migration 82) ([#383](https://github.com/Ferdinand99/Sylo/issues/383)) ([c82b2b0](https://github.com/Ferdinand99/Sylo/commit/c82b2b06a757c512afe62560c8a00eda8365410d))
+* **mirror:** link mirrored channels through the bridge ([#387](https://github.com/Ferdinand99/Sylo/issues/387)) ([2830f48](https://github.com/Ferdinand99/Sylo/commit/2830f48be6cb270674ab3dc0199b99998f6f77a3))
+* **mirror:** mirror a Discord server to Fluxer and keep it in step ([#386](https://github.com/Ferdinand99/Sylo/issues/386)) ([8766de7](https://github.com/Ferdinand99/Sylo/commit/8766de7702314777ab96325e25eede7b93f4e8bb))
+* **mirror:** pick the Fluxer server from a list; point the Bridge page to Mirror ([#389](https://github.com/Ferdinand99/Sylo/issues/389)) ([920a8c0](https://github.com/Ferdinand99/Sylo/commit/920a8c040846de4ab6d6b8c6e3057e3a6066d23d))
+* **public-pages:** the server's own accent colour and background on its public member pages ([#368](https://github.com/Ferdinand99/Sylo/issues/368)) ([c8e6f28](https://github.com/Ferdinand99/Sylo/commit/c8e6f2861b4c38cb9562dac4355701ad201ca12f))
+* **purge:** delete messages older than 14 days too ([#394](https://github.com/Ferdinand99/Sylo/issues/394)) ([4977375](https://github.com/Ferdinand99/Sylo/commit/497737572edb36c157b874bcb2ffc4ce5774c067))
+* **web:** focused moderator view for Inbox-level access ([#365](https://github.com/Ferdinand99/Sylo/issues/365)) ([de5b98f](https://github.com/Ferdinand99/Sylo/commit/de5b98f07970db959b70e935385ab37ded1531fa))
+
+
+### Bug Fixes
+
+* audit leftovers (live-alert batches, DM ticket lookups, event image cache, restore role warning) ([#367](https://github.com/Ferdinand99/Sylo/issues/367)) ([e7b9628](https://github.com/Ferdinand99/Sylo/commit/e7b9628cfe0d5252aa6ca0db656f55072e67324e))
+* **bridge:** one configurable link limit for the bridge and the mirror ([#390](https://github.com/Ferdinand99/Sylo/issues/390)) ([d3dbbf3](https://github.com/Ferdinand99/Sylo/commit/d3dbbf375d05a8dadd42c9a7090ec255b93b26cb))
+* **dashboard:** show servers the bot joins after sign-in, add Refresh server list ([#388](https://github.com/Ferdinand99/Sylo/issues/388)) ([8ca1681](https://github.com/Ferdinand99/Sylo/commit/8ca16812e5fa72cb56d49ee8c106f681d21a49ec))
+* **economy:** keep the line breaks of a shop item description ([#406](https://github.com/Ferdinand99/Sylo/issues/406)) ([0dba2ae](https://github.com/Ferdinand99/Sylo/commit/0dba2ae97929b98ad9cb069a4ad22003092cc234))
+* **kick-alerts:** always link to the channel's Kick page ([#380](https://github.com/Ferdinand99/Sylo/issues/380)) ([6e79df6](https://github.com/Ferdinand99/Sylo/commit/6e79df6c63a2916eac6473930e3656301597ec7e))
+* **mirror:** recover by itself when Fluxer comes back on a new address ([#408](https://github.com/Ferdinand99/Sylo/issues/408)) ([f418699](https://github.com/Ferdinand99/Sylo/commit/f418699141d17c352ad24a92ad84956020c39ca2))
+* **mirror:** role and channel order in the shape Fluxer takes ([#391](https://github.com/Ferdinand99/Sylo/issues/391)) ([e90f603](https://github.com/Ferdinand99/Sylo/commit/e90f60302166de4ded32a9d33ba9e43699c72ca3))
+* pick bridge and mirror codes without modulo bias ([#413](https://github.com/Ferdinand99/Sylo/issues/413)) ([ffb7760](https://github.com/Ferdinand99/Sylo/commit/ffb77601ba42b8c7d137462647a5212330a5544a))
+* **public-pages:** hold accent text to 4.5:1 on the panel over a background picture ([#410](https://github.com/Ferdinand99/Sylo/issues/410)) ([6b8b563](https://github.com/Ferdinand99/Sylo/commit/6b8b5631b29ed6b9c60543a66d37161e9c4c1419))
+* **public-pages:** keep the line breaks a server admin types in forms and appeals ([#403](https://github.com/Ferdinand99/Sylo/issues/403)) ([9087f99](https://github.com/Ferdinand99/Sylo/commit/9087f99e3cb9bdbdc91d47d61941b59a47df5824))
+* **youtube-alerts:** only announce a live stream owned by the watched channel (v5.3) ([#381](https://github.com/Ferdinand99/Sylo/issues/381)) ([1a6ed4f](https://github.com/Ferdinand99/Sylo/commit/1a6ed4f99b4aa0b5198459ec8a41798f166c505e))
+
 ## [5.2.2](https://github.com/Ferdinand99/Sylo/compare/v5.2.1...v5.2.2) (2026-11-16)
 
 
