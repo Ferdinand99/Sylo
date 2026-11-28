@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { parseInline } from '../../../src/lib/changelog.js';
 import { approveUpdate, ApiError, getUpdateRun } from '../api.js';
-import { describeRun, loadUpdateStatus, readStoredRun, syloIsDown, writeStoredRun } from '../updateModel.js';
+import {
+  describeRun,
+  describeWrenUpdate,
+  loadUpdateStatus,
+  readStoredRun,
+  syloIsDown,
+  writeStoredRun,
+} from '../updateModel.js';
 import Callout from './Callout.jsx';
 import CopyButton from './CopyButton.jsx';
 import { confirmDialog } from './ConfirmDialog.jsx';
@@ -68,16 +75,20 @@ function ReleaseNotes({ notes, notesText }) {
   );
 }
 
-// What Wise Wren says about its target, with the version it sees and where the target runs.
+// What Wise Wren says about its target: which containers of the stack have the update, and where it runs.
 function wrenSummary(wren) {
   const t = wren.target;
   if (!t) return 'Wise Wren is connected. Its token cannot read the target, so the check above decides.';
-  const where = t.server ? ` on ${t.server}` : '';
-  if (!wren.updateSeen) return `Wise Wren does not see an update for "${t.name}"${where} yet.`;
-  return t.latestVersion
-    ? `Wise Wren sees ${t.latestVersion} for "${t.name}"${where}.`
-    : `Wise Wren sees an update for "${t.name}"${where}.`;
+  if (!wren.updateSeen) {
+    const where = t.server ? ` on ${t.server}` : '';
+    return `Wise Wren does not see an update for "${t.name}"${where} yet.`;
+  }
+  return describeWrenUpdate(t, t.updates).text;
 }
+
+// A database in the update and no snapshot required: say how to get one.
+const needsSnapshotHint = (wren) =>
+  Boolean(wren.updateSeen && wren.target?.updates?.database?.length && wren.target.requireSnapshot === false);
 
 /**
  * Follows the Wise Wren run Sylo asked for. Sylo restarts in the middle of it: the polls then fail, and the
@@ -231,6 +242,7 @@ export default function UpdateNotice() {
   const d = state.data;
   if (!d) return null;
   const wren = d.wren;
+  const update = describeWrenUpdate(wren?.target ?? null, wren?.target?.updates);
 
   async function recheck() {
     setBusy(true);
@@ -243,15 +255,17 @@ export default function UpdateNotice() {
   }
 
   async function updateNow() {
+    // A database-only update is not Sylo's release: never name Sylo's version for it.
     const ok = await confirmDialog({
-      title: `Update Sylo to ${d.latest ?? 'the new version'}?`,
+      title: update.syloCurrent ? `${update.button}?` : `Update Sylo to ${d.latest ?? 'the new version'}?`,
       body: (
         <>
-          Wise Wren stops Sylo for a short while, takes a snapshot, starts the new version and rolls back if
-          it does not come up healthy. The dashboard and the bot are offline meanwhile.
+          Wise Wren stops {update.syloCurrent ? 'the stack' : 'Sylo'} for a short while, takes a snapshot,
+          starts the new version and rolls back if it does not come up healthy. The dashboard and the bot are
+          offline meanwhile.
         </>
       ),
-      confirmLabel: 'Update now',
+      confirmLabel: update.button,
       tone: 'default',
     });
     if (!ok) return;
@@ -345,6 +359,12 @@ export default function UpdateNotice() {
                   {wren.whyNot && (d.available || wren.updateSeen) ? (
                     <p className="v2-field-hint is-wrap">{wren.whyNot}</p>
                   ) : null}
+                  {needsSnapshotHint(wren) ? (
+                    <p className="v2-field-hint is-wrap">
+                      Wise Wren does not require a snapshot for this target. Turn on &quot;Require
+                      snapshot&quot; in Wise Wren so the database is backed up first.
+                    </p>
+                  ) : null}
                 </>
               )}
               {message ? <p className="v2-row-warn">{message}</p> : null}
@@ -357,7 +377,7 @@ export default function UpdateNotice() {
                   onClick={updateNow}
                   disabled={busy || !wren.canApprove}
                 >
-                  Update now
+                  {update.button}
                 </button>
               </div>
             ) : null}

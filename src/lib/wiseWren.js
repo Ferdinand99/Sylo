@@ -195,6 +195,36 @@ export function shapeRun(run) {
   };
 }
 
+const DATABASE_NAME = /postgres|mariadb|mysql|mongo|sqlite|database|(^|[-_.])db($|[-_.])/i;
+
+/**
+ * Which containers Wise Wren's `version_key` names. The key is `container=digest` entries joined by commas
+ * (and `version=<release>` when the target follows a release); a compose target is the whole stack, so the
+ * key can name only the database while Sylo itself is current. A container is Sylo's own when it is called
+ * `sylo` or like the target; a name that looks like a database is a database; anything else is `other`.
+ * Returns null when there is no key to read. Never includes a digest.
+ * @param {string | null | undefined} key
+ * @param {string} [targetName]
+ * @returns {{ sylo: boolean, database: string[], other: string[] } | null}
+ */
+export function parseVersionKey(key, targetName = '') {
+  if (typeof key !== 'string' || !key) return null;
+  const own = String(targetName).trim().toLowerCase();
+  const out = { sylo: false, database: [], other: [] };
+  for (const part of key.split(',')) {
+    const name = part.split('=')[0].trim().slice(0, 80);
+    if (!name) continue;
+    if (name === 'version' || name.toLowerCase() === 'sylo' || (own && name.toLowerCase() === own)) {
+      out.sylo = true;
+    } else if (DATABASE_NAME.test(name)) {
+      if (!out.database.includes(name)) out.database.push(name);
+    } else if (!out.other.includes(name)) out.other.push(name);
+  }
+  out.database = out.database.slice(0, 10);
+  out.other = out.other.slice(0, 10);
+  return out.sylo || out.database.length || out.other.length ? out : null;
+}
+
 /** The target as the dashboard needs it. */
 export function shapeTarget(t) {
   if (!t || typeof t !== 'object') return null;
@@ -205,6 +235,9 @@ export function shapeTarget(t) {
     server: str(t.server?.name, 120),
     status: ['update', 'current', 'unknown'].includes(t.status) ? t.status : 'unknown',
     versionKey: typeof t.version_key === 'string' && t.version_key.length <= 2000 ? t.version_key : null,
+    updates: parseVersionKey(t.version_key, str(t.name, 120)),
+    // null when this Wise Wren does not say
+    requireSnapshot: typeof t.require_snapshot === 'boolean' ? t.require_snapshot : null,
     installedVersion: str(t.installed_version, 80) || null,
     latestVersion: str(t.latest_version, 80) || null,
     mode: str(t.effective_mode, 20),

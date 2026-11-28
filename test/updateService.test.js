@@ -57,6 +57,7 @@ const reset = () => {
     effective_mode: 'approve',
     blocked_reason: null,
     version_key: 'sylo=sha256:4f90abcd',
+    require_snapshot: true,
   });
 };
 
@@ -348,4 +349,16 @@ test('a run of another target is not readable through Sylo', async () => {
   wren.state.targetToken = false;
   await assert.rejects(make().service.run(77), (e) => toUpdateError(e)?.status === 404);
   wren.state.targetToken = true;
+});
+
+test('the notice says which containers of the stack have the update (here only the database)', async () => {
+  reset();
+  wren.state.target.version_key = 'sylo-postgres=sha256:64c8abcd';
+  wren.state.target.require_snapshot = false;
+  const s = await make({ version: '5.3.0' }).service.status();
+  assert.equal(s.wren.updateSeen, true);
+  assert.deepEqual(s.wren.target.updates, { sylo: false, database: ['sylo-postgres'], other: [] });
+  assert.equal(s.wren.target.requireSnapshot, false);
+  // The digest and the key stay inside Sylo.
+  assert.doesNotMatch(JSON.stringify(s), /64c8abcd|version_key|versionKey/);
 });

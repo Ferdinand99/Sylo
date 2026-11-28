@@ -40,6 +40,56 @@ const STEP_LABELS = {
 
 export const stepLabel = (step) => STEP_LABELS[step] ?? String(step ?? '');
 
+const list = (names) => names.join(', ');
+
+/**
+ * What Wise Wren's update is for. The target is the whole stack (Sylo and, say, its database), so the
+ * words name the containers that have the update. `updates` is `{ sylo, database, other }` from the server
+ * (null when Wise Wren shows no key: then it is Sylo's, as before). `syloOnly` and `syloCurrent` tell the
+ * page whether Sylo is part of it, so it does not show Sylo's release for a database update.
+ * @param {{ name?: string, server?: string | null, latestVersion?: string | null } | null} target
+ * @param {{ sylo: boolean, database: string[], other: string[] } | null | undefined} updates
+ */
+export function describeWrenUpdate(target, updates) {
+  const where = target?.server ? ` on ${target.server}` : '';
+  const name = target?.name ?? 'sylo';
+  if (!updates) {
+    return {
+      syloOnly: true,
+      syloCurrent: false,
+      button: 'Update now',
+      text: target?.latestVersion
+        ? `Wise Wren sees ${target.latestVersion} for "${name}"${where}.`
+        : `Wise Wren sees an update for "${name}"${where}.`,
+    };
+  }
+  const { sylo, database, other } = updates;
+  const parts = [];
+  if (sylo) parts.push(`Sylo ("${name}")`);
+  if (database.length) parts.push(`the database container (${list(database)})`);
+  if (other.length) parts.push(`${other.length === 1 ? 'the container' : 'the containers'} ${list(other)}`);
+  const subject = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0];
+  const several = parts.length > 1 || database.length > 1 || other.length > 1;
+  if (sylo && !database.length && !other.length) {
+    return {
+      syloOnly: true,
+      syloCurrent: false,
+      button: 'Update now',
+      text: target?.latestVersion
+        ? `Wise Wren sees ${target.latestVersion} for "${name}"${where}.`
+        : `Wise Wren sees an update for Sylo ("${name}")${where}.`,
+    };
+  }
+  const text = `Wise Wren sees ${several ? 'updates' : 'an update'} for ${subject}${where}.`;
+  if (sylo) return { syloOnly: false, syloCurrent: false, button: 'Update now', text };
+  return {
+    syloOnly: false,
+    syloCurrent: true,
+    button: other.length ? 'Update containers' : 'Update the database',
+    text: `${text} Sylo itself is up to date.`,
+  };
+}
+
 /**
  * What to tell the operator about a Wise Wren run: `tone` is 'working', 'success' or 'failure', `text` the
  * sentence, `step` the step it is on (while it works).

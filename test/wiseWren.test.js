@@ -10,7 +10,9 @@ import {
   checkWrenUrl,
   createWrenClient,
   readWrenSettings,
+  parseVersionKey,
   shapeRun,
+  shapeTarget,
 } from '../src/lib/wiseWren.js';
 
 // The recommended token: limited to this one target (the run list and other targets answer 403).
@@ -29,6 +31,7 @@ const reset = () => {
     effective_mode: 'approve',
     blocked_reason: null,
     version_key: 'sylo=sha256:4f90abcd',
+    require_snapshot: true,
   });
 };
 const KEY = 'sylo=sha256:4f90abcd';
@@ -112,7 +115,7 @@ test('the target: what Wren sees, shaped, with the bearer token and no body', as
   const t = await client().target();
   assert.equal(t.status, 'update');
   assert.equal(t.name, 'sylo');
-  assert.equal(t.server, 'LANBox');
+  assert.equal(t.server, 'docker-1');
   assert.equal(t.versionKey, 'sylo=sha256:4f90abcd');
   assert.equal(t.mode, 'approve');
   assert.equal(t.blockedReason, null);
@@ -401,4 +404,36 @@ test('an answer that declares more than the cap is refused before it is read', a
   const err = await failure(c.target());
   assert.equal(err.kind, 'invalid');
   assert.ok(pulled <= 1, `pulled ${pulled} chunks`);
+});
+
+test('the version key names which containers have the update, never the digests', () => {
+  assert.deepEqual(parseVersionKey('sylo=sha256:4f90abcd', 'sylo'), { sylo: true, database: [], other: [] });
+  assert.deepEqual(parseVersionKey('sylo-postgres=sha256:64c8abcd', 'sylo'), {
+    sylo: false,
+    database: ['sylo-postgres'],
+    other: [],
+  });
+  assert.deepEqual(
+    parseVersionKey('version=5.3.0,sylo=sha256:1,sylo-postgres=sha256:2,cache=sha256:3', 'sylo'),
+    { sylo: true, database: ['sylo-postgres'], other: ['cache'] }
+  );
+  // A target with its own name: that container is the app.
+  assert.equal(parseVersionKey('web=sha256:1', 'web').sylo, true);
+  assert.equal(parseVersionKey('', 'sylo'), null);
+  assert.equal(parseVersionKey(null, 'sylo'), null);
+  assert.equal(parseVersionKey(',=,', 'sylo'), null);
+  assert.doesNotMatch(JSON.stringify(parseVersionKey('a=sha256:deadbeef')), /deadbeef/);
+});
+
+test('a target shows its parts and whether Wren requires a snapshot', () => {
+  const t = shapeTarget({
+    name: 'sylo',
+    status: 'update',
+    version_key: 'sylo-postgres=sha256:64c8abcd',
+    require_snapshot: false,
+  });
+  assert.deepEqual(t.updates, { sylo: false, database: ['sylo-postgres'], other: [] });
+  assert.equal(t.requireSnapshot, false);
+  assert.equal(shapeTarget({ name: 'sylo', status: 'current' }).requireSnapshot, null);
+  assert.equal(shapeTarget({ name: 'sylo', status: 'current' }).updates, null);
 });
