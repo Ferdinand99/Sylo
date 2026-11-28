@@ -1,5 +1,12 @@
 # Changelog
 
+## [5.3.1](https://github.com/Ferdinand99/Sylo/compare/v5.3.0...v5.3.1) (2026-11-28)
+
+
+### Bug Fixes
+
+* **update:** say which container Wise Wren has an update for ([#415](https://github.com/Ferdinand99/Sylo/issues/415)) ([d389647](https://github.com/Ferdinand99/Sylo/commit/d38964723a23169b9c3afe900c82b3cf96c0fffe))
+
 ## [5.3.0](https://github.com/Ferdinand99/Sylo/compare/v5.2.2...v5.3.0) (2026-11-28)
 
 
