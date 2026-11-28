@@ -24,7 +24,7 @@ const api = await import('../api.js');
 const { confirmDialog } = await import('../components/ConfirmDialog.jsx');
 const { default: UpdateNotice } = await import('../components/UpdateNotice.jsx');
 const { default: UpdateBadge } = await import('../components/UpdateBadge.jsx');
-const { describeRun, readStoredRun, resetUpdateStatusCache, syloIsDown, writeStoredRun } =
+const { describeRun, describeWrenUpdate, readStoredRun, resetUpdateStatusCache, syloIsDown, writeStoredRun } =
   await import('../updateModel.js');
 const { resetOperatorCache } = await import('../useOperator.js');
 
@@ -119,6 +119,41 @@ describe('the words for a Wise Wren run', () => {
   });
 });
 
+describe('the words for what Wise Wren has an update for', () => {
+  const target = { name: 'sylo', server: 'docker-1', latestVersion: null };
+  const parts = (over) => ({ sylo: false, database: [], other: [], ...over });
+
+  it('names the database container and says Sylo itself is current', () => {
+    const d = describeWrenUpdate(target, parts({ database: ['sylo-postgres'] }));
+    expect(d.text).toBe(
+      'Wise Wren sees an update for the database container (sylo-postgres) on docker-1. Sylo itself is up to date.'
+    );
+    expect(d.button).toBe('Update the database');
+    expect(d.syloCurrent).toBe(true);
+  });
+
+  it('names Sylo, or Sylo and the database, and keeps Update now', () => {
+    expect(describeWrenUpdate(target, parts({ sylo: true })).text).toBe(
+      'Wise Wren sees an update for Sylo ("sylo") on docker-1.'
+    );
+    const both = describeWrenUpdate(target, parts({ sylo: true, database: ['sylo-postgres'] }));
+    expect(both.text).toBe(
+      'Wise Wren sees updates for Sylo ("sylo") and the database container (sylo-postgres) on docker-1.'
+    );
+    expect(both.button).toBe('Update now');
+    expect(both.syloCurrent).toBe(false);
+  });
+
+  it('handles other containers, and a key it cannot read', () => {
+    const other = describeWrenUpdate(target, parts({ other: ['cache'] }));
+    expect(other.text).toMatch(/for the container cache on docker-1\. Sylo itself is up to date\.$/);
+    expect(other.button).toBe('Update containers');
+    expect(describeWrenUpdate({ ...target, latestVersion: '5.3.0' }, null).text).toBe(
+      'Wise Wren sees 5.3.0 for "sylo" on docker-1.'
+    );
+  });
+});
+
 describe('UpdateNotice', () => {
   it('says Sylo is up to date, with no command, and no Wise Wren section without it', async () => {
     api.getUpdate.mockResolvedValue(status({ available: false, latest: '5.2.0', notes: null }));
@@ -205,6 +240,76 @@ describe('UpdateNotice', () => {
     expect(await screen.findByText(/Waiting for the Wise Wren agent/)).toBeTruthy();
     expect(readStoredRun()).toEqual({ id: 12, from: '5.2.0' });
     expect(screen.queryByRole('button', { name: 'Update now' })).toBeNull();
+  });
+
+  it('says the update is for the database, not Sylo, and hints at the snapshot', async () => {
+    const updates = { sylo: false, database: ['sylo-postgres'], other: [] };
+    api.getUpdate.mockResolvedValue(
+      status({
+        current: '5.3.0',
+        available: false,
+        latest: '5.3.0',
+        notes: null,
+        wren: wrenState({
+          target: { name: 'sylo', server: 'docker-1', status: 'update', updates, requireSnapshot: false },
+        }),
+      })
+    );
+    api.approveUpdate.mockResolvedValue({ runId: 12, status: 'queued', from: '5.3.0' });
+    api.getUpdateRun.mockResolvedValue({
+      run: { id: 12, status: 'queued', finished: false, ok: false, steps: [] },
+    });
+    render(<UpdateNotice />);
+    expect(
+      await screen.findByText(
+        /for the database container \(sylo-postgres\) on docker-1\. Sylo itself is up to date\./
+      )
+    ).toBeTruthy();
+    expect(screen.getByText(/Turn on "Require snapshot" in Wise Wren/)).toBeTruthy();
+    expect(screen.queryByText("What's in this release")).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Update now' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Update the database' }));
+    await waitFor(() => expect(api.approveUpdate).toHaveBeenCalledTimes(1));
+    expect(confirmDialog.mock.calls[0][0].title).toBe('Update the database?');
+    expect(confirmDialog.mock.calls[0][0].confirmLabel).toBe('Update the database');
+  });
+
+  it('shows no snapshot hint when Wise Wren requires one, or when the update is only Sylo', async () => {
+    const dbOnly = { sylo: false, database: ['sylo-postgres'], other: [] };
+    api.getUpdate.mockResolvedValue(
+      status({
+        wren: wrenState({
+          target: {
+            name: 'sylo',
+            server: 'docker-1',
+            status: 'update',
+            updates: dbOnly,
+            requireSnapshot: true,
+          },
+        }),
+      })
+    );
+    const first = render(<UpdateNotice />);
+    await screen.findByText(/database container/);
+    expect(screen.queryByText(/Require snapshot/)).toBeNull();
+    first.unmount();
+    resetUpdateStatusCache();
+    api.getUpdate.mockResolvedValue(
+      status({
+        wren: wrenState({
+          target: {
+            name: 'sylo',
+            server: 'docker-1',
+            status: 'update',
+            updates: { sylo: true, database: [], other: [] },
+            requireSnapshot: false,
+          },
+        }),
+      })
+    );
+    render(<UpdateNotice />);
+    await screen.findByText(/an update for Sylo \("sylo"\)/);
+    expect(screen.queryByText(/Require snapshot/)).toBeNull();
   });
 
   it('does not start anything when the confirmation is declined', async () => {

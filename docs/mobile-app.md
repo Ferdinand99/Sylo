@@ -729,7 +729,7 @@ table below. Writes are rate limited (5 approvals a minute, 6 re-checks a minute
 - `wren` is `null` when Wise Wren is not set up. Otherwise it has `configured`, `error` (`null`, or
   `{ code, message }` when Wise Wren could not be asked or does not accept Sylo's token), `openMode` (the
   dashboard has no login, so Update now is off unless the operator allowed it), `target`
-  (`{ name, server, status, installedVersion, latestVersion, mode, lastCheckedAt }` or `null`),
+  (`{ name, server, status, installedVersion, latestVersion, mode, lastCheckedAt, updates, requireSnapshot }` or `null`; `updates` is `{ sylo, database, other }`, the containers of the stack Wise Wren has an update for, so a database-only update is not shown as Sylo's release, and `requireSnapshot` whether Wise Wren requires a snapshot before updating),
   `updateSeen` (Wise Wren sees an update), `canApprove`, `whyNot` (the reason when it cannot, in words), and
   `latestRun` (the run Sylo last approved, as below, or `null`; Sylo remembers it across its own restart).
   While `latestRun` is not `finished`, `canApprove` is false and the page or app should follow that run.

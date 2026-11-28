@@ -157,6 +157,10 @@ export function createUpdateService({
               server: w.target.server,
               status: w.target.status,
               installedVersion: w.target.installedVersion,
+              // Which containers of the stack have the update (names only), and whether Wren requires a
+              // snapshot before it updates.
+              updates: w.target.updates,
+              requireSnapshot: w.target.requireSnapshot,
               latestVersion: w.target.latestVersion,
               mode: w.target.mode,
               lastCheckedAt: w.target.lastCheckedAt,

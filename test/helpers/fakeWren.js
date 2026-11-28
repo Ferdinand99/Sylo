@@ -24,7 +24,7 @@ export async function startFakeWren({ targetId = 7, token = FAKE_TOKEN, targetTo
   const state = {
     target: {
       id: targetId,
-      server: { id: 1, name: 'LANBox' },
+      server: { id: 1, name: 'docker-1' },
       kind: 'compose',
       name: 'sylo',
       status: 'update',
@@ -32,6 +32,7 @@ export async function startFakeWren({ targetId = 7, token = FAKE_TOKEN, targetTo
       installed_version: '5.2.0',
       latest_version: '5.3.0',
       effective_mode: 'approve',
+      require_snapshot: true,
       blocked_reason: null,
       skipped: false,
       snoozed_until: null,
@@ -122,7 +123,7 @@ export async function startFakeWren({ targetId = 7, token = FAKE_TOKEN, targetTo
         const id = state.nextRunId++;
         state.runs.set(id, {
           id,
-          server: { id: 1, name: 'LANBox' },
+          server: { id: 1, name: 'docker-1' },
           target: { id: targetId, kind: 'compose', name: 'sylo' },
           kind: 'update',
           status: 'queued',
